@@ -50,13 +50,16 @@ touching at all.
 1. **The "view"** (`docs/view.md`): a private mount namespace overlaying
    the prefix onto `/usr /etc /var /opt`, live, so absolute paths compiled
    into a binary resolve against the prefix. Needs `unshare(CLONE_NEWUSER)`
-   + unprivileged overlayfs in that namespace. Most stock Android ROMs deny
-   `CLONE_NEWUSER` to the app/`untrusted_app` SELinux domain Termux runs
-   in, regardless of kernel `CONFIG_USER_NS`. This is the same wall
-   distrobox/podman-rootless users hit on Android. **Not verified on any
-   specific device yet — needs `unshare -Ur echo ok` + a look at `dmesg`/
-   `avc: denied` for the actual failure mode before ruling it out
-   entirely**, but assumed blocked for planning purposes.
+   + unprivileged overlayfs in that namespace. **Confirmed blocked on this
+   device, with the actual syscall error** (see
+   `design-manual-overlay.md`): `unshare(CLONE_NEWUSER)` fails with
+   `EINVAL` (not `EPERM`) — the kernel itself doesn't support unprivileged
+   user namespaces at all here, not merely an SELinux policy denial. Plain
+   `unshare(CLONE_NEWNS)` alone fails with `EPERM` as expected (needs
+   `CAP_SYS_ADMIN`). FUSE is also closed (`/dev/fuse`: permission denied,
+   no `fusermount`). Replaced by a userspace `LD_PRELOAD` path-redirect
+   shim instead — see `design-manual-overlay.md`, verified working against
+   a real package (`figlet`).
 
 2. **`prefix-sandbox`'s seccomp/namespace-based isolation** — depends
    entirely on the view above, so it goes with it.
@@ -66,13 +69,9 @@ touching at all.
    equivalent is `termux-services` (runit). See
    [`services-research.md`](services-research.md).
 
-## Open question this repo hasn't answered yet
+## Formerly-open question, now answered
 
-Whether `unshare(CLONE_NEWNS)` alone (mount namespace, *without* a new user
-namespace) is available to Termux without root. On desktop Linux this
-usually requires `CAP_SYS_ADMIN` unless paired with a user namespace that
-maps the caller to a namespace-root uid. If Termux's SELinux domain allows
-plain `CLONE_NEWNS` for a process that already has some other route to
-`CAP_SYS_ADMIN`-equivalent (it doesn't, normally), part of the view might
-be salvageable without overlayfs, using plain bind mounts instead. Untested
-— flagged as a possible fourth direction if 2 and 3 hit dead ends.
+~~Whether `unshare(CLONE_NEWNS)` alone... is available to Termux without
+root.~~ Answered: no — `EPERM`, confirmed by direct test and strace. See
+`design-manual-overlay.md` for the full data and the replacement mechanism
+(userspace `LD_PRELOAD` path redirection, no mount involved at all).

@@ -5,15 +5,19 @@ workflow** — real Debian `.deb` (glibc) packages on Termux/Android, without
 patching every binary by hand, and without the parts of the `sudo-less`
 approach that Android's kernel/SELinux won't allow.
 
-Status: **first working prototype, 2026-09-25.** A real Debian arm64
-`.deb` (`hello`, no maintainer scripts) installs and runs, end to end, via
-`scripts/prototype-install.sh` — see
-[`docs/findings-prototype-2026-09-25.md`](docs/findings-prototype-2026-09-25.md)
-for the full log, what it revealed (Termux already ships a curated glibc
-side-install with its own auto ELF-patcher, `grun` — a major correction to
-earlier design docs), and the two blockers still worked around with unsafe
-`--force-*` flags rather than properly solved (architecture-name mismatch,
-dependency-check bypass).
+Status: **working prototype, 2026-09-25.** A real Debian arm64 `.deb`
+(`hello`) installs and runs end to end via `scripts/prototype-install.sh`;
+a real dependency (`ciso`'s `zlib1g`) resolves natively against Termux's
+own glibc packages with zero files duplicated
+([`docs/design-native-deps.md`](docs/design-native-deps.md)); and a real
+hardcoded-path gap (`figlet`'s `/usr/share/figlet`, the exact case
+sudo-less's kernel-level "view" exists for) is solved with a userspace
+`LD_PRELOAD` shim instead, since neither the mount-namespace view nor FUSE
+works on this device — confirmed with the actual syscall errors, not a
+guess ([`docs/design-manual-overlay.md`](docs/design-manual-overlay.md)).
+See [`docs/findings-prototype-2026-09-25.md`](docs/findings-prototype-2026-09-25.md)
+for the first round's log and the still-open, still-unsafe workarounds
+(architecture-name mismatch via `--force-architecture`).
 
 ## Why this exists
 
@@ -46,7 +50,7 @@ have at all (no systemd on Termux).
 | apt/dpkg forked to run root-less in a prefix, patches for no-superuser-check/chown/ldconfig-check | **not needed as a fork** — this *is* what Termux's own apt/dpkg patches already do, they're just built for Bionic. Reusable directly. |
 | two-layer package db (host's `dpkg` status as read-only lower layer) | reusable idea: treat Termux's existing package set as the "already installed" layer, only fetch/install glibc leaf packages |
 | `prefix-wrap` heuristics (does a binary need path-resolution help: absolute symlink out of prefix, missing interpreter, `ldd`-missing lib, hardcoded `/usr|/etc|/opt` path) | reusable as detection logic, independent of how the fix is applied |
-| the "view": private mount ns + unprivileged overlayfs, live-patching path resolution at run time | **blocked on Android** (SELinux denies `unshare(CLONE_NEWUSER)` to Termux's app domain on most devices) — being replaced, see [Direction 2](docs/design-static-wrappers.md) |
+| the "view": private mount ns + unprivileged overlayfs, live-patching path resolution at run time | **confirmed blocked** — `unshare(CLONE_NEWUSER)` fails `EINVAL` (kernel has no unprivileged userns support at all here, not just a policy denial), FUSE is also closed. Replaced by a userspace `LD_PRELOAD` path-redirect shim, verified working — see [`docs/design-manual-overlay.md`](docs/design-manual-overlay.md) |
 | services via `systemd --user`, translated unit by unit | **doesn't exist on Termux** — being researched against `termux-services` (runit), see [Direction 3](docs/services-research.md) |
 
 Install path decision (no fork/patch of apt/dpkg needed — see

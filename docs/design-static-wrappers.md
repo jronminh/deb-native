@@ -28,26 +28,21 @@ Concretely, by failure mode (same table as sudo-less's `view.md`):
 | interpreter only searches compiled-in module paths (Python/Perl/Node/...) | wrapper sets the interpreter's own search-path env var (`PYTHONPATH`, `PERL5LIB`, `NODE_PATH`, ...) to the prefix's copy before `exec`ing — this is exactly the case sudo-less's own docs call out as **not** solvable by env vars *for the view's other cases*, but it's the right tool specifically for module search paths |
 | `ldd` can't find a library the package ships | wrapper sets `LD_LIBRARY_PATH` to the prefix's lib dir before `exec` — same caveat as above: fine for this one case, not a general substitute for the view |
 | ELF binary is a glibc build, needs glibc-runner | wrapper (or the binary's patched ELF interpreter directly, per the existing manual glibc-runner method) invokes it against the glibc side-install |
-| binary/script has a hardcoded absolute path to its own data (`/usr/share/figlet`, `/etc/redis/redis.conf`) it reads directly, not through a library call the above env vars cover | **no general fix without either patching the binary's compiled-in string, or a real path-virtualization layer.** This is the actual gap versus the view — see Limits below |
+| binary/script has a hardcoded absolute path to its own data (`/usr/share/figlet`, `/etc/redis/redis.conf`) it reads directly, not through a library call the above env vars cover | **solved** — see [`design-manual-overlay.md`](design-manual-overlay.md): an `LD_PRELOAD` shim (`native/path-redirect.c`) intercepts `open`/`openat`/`fopen`/`stat`/`fstatat` and rewrites the path, verified against `figlet`'s real `/usr/share/figlet` lookup |
 
-## What this does NOT solve (be honest about the gap)
+## What this used to not solve (now closed)
 
 The view's whole point is Debian packages assume `/` is real. A static
 wrapper only helps for the *specific, enumerable* ways a program looks
 things up (interpreter search paths, dynamic linker search paths,
 shebangs). A binary that does `open("/etc/foo.conf")` directly in its own
-C code, with no env var and no CLI flag to redirect it, has no static fix
-short of:
-
-- binary-patching the literal path string in the ELF (only works if the
-  replacement is the same length or shorter — a real constraint, not
-  theoretical);
-- or a real path-virtualization layer (`LD_PRELOAD` shim over `open`/
-  `openat`/`stat`/... rewriting `/etc/foo` → `$PREFIX/etc/foo`) — a much
-  bigger undertaking, effectively rebuilding `proot`'s `open()`-family
-  interception but via `LD_PRELOAD` instead of `ptrace` (faster, but only
-  intercepts dynamically-linked calls through libc, not static binaries or
-  direct syscalls).
+C code, with no env var and no CLI flag to redirect it, used to have no
+static fix short of binary-patching the literal path string (only works if
+the replacement is the same length or shorter) — **until
+`design-manual-overlay.md`'s `LD_PRELOAD` shim, now built and verified**.
+Binary-patching the string remains the fallback for a statically-linked
+binary (no dynamic libc calls to intercept), which the shim genuinely
+cannot reach.
 
 Per sudo-less's own survey (`survey-2026-09.md`, referenced from
 `view.md`): ~73% of packages need **no** path help at all and just run from
@@ -68,8 +63,13 @@ step gets triggered automatically after an install (apt's
       against a real sample of glibc arm64 `.deb`s to get an actual
       coverage number for "wrapper suffices" vs. "needs a path-virtualization
       layer neither direction handles yet".
-- [ ] Decide whether the `LD_PRELOAD` shim is worth building for the
-      remainder, or whether that remainder is small enough to just exclude
+- [x] ~~Decide whether the `LD_PRELOAD` shim is worth building~~ — built,
+      see `design-manual-overlay.md`.
+- [ ] Wire the shim's env vars (`TDB_REDIRECT_FROM`/`_TO`) into the
+      wrapper-script generation this doc describes, instead of setting
+      them by hand as done for the `figlet` test.
+- [ ] Decide whether the remainder (statically-linked binaries, unreachable
+      by any dynamic-call interception) is small enough to just exclude
       (same as sudo-less excludes root-only-maintainer-script packages).
 - [ ] Reuse or reimplement `prefix-wrap`'s wrapper-script generation
       (`$PREFIX/bin/<name>` script recorded per-package so it's removed
