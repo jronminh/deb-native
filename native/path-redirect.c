@@ -46,22 +46,49 @@
 #include <sys/time.h>
 #include <errno.h>
 
-static const char *PREFIXES[] = {"/usr", "/etc", "/var", "/opt", NULL};
+/* Cached once, at load. rewrite() is on the hot path of every intercepted
+ * open/stat/exec call, so it must not call getenv()/strlen() per call or
+ * snprintf() to build the result -- a plain branch + memcpy is enough and
+ * measurably faster (see docs/findings-shim-perf-2026-09-25.md). The env is
+ * fixed before exec by the launchers, so caching at construction is safe. */
+static const char *g_root;
+static size_t g_rootlen;
+static int g_debug;
+static const char *g_bionic_preload;
+static int g_init;
+
+static void dn_init(void) {
+  g_root = getenv("DN_INSTDIR");
+  g_rootlen = g_root ? strlen(g_root) : 0;
+  g_debug = getenv("DN_REDIRECT_DEBUG") != NULL;
+  g_bionic_preload = getenv("DN_BIONIC_PRELOAD");
+  g_init = 1;
+}
+__attribute__((constructor)) static void dn_ctor(void) { dn_init(); }
 
 static const char *rewrite(const char *path, char *buf, size_t bufsz) {
-  const char *root = getenv("DN_INSTDIR");
-  if (!root || !path || path[0] != '/') return path;
-  for (int i = 0; PREFIXES[i]; i++) {
-    size_t plen = strlen(PREFIXES[i]);
-    if (strncmp(path, PREFIXES[i], plen) == 0 &&
-        (path[plen] == '/' || path[plen] == '\0')) {
-      snprintf(buf, bufsz, "%s%s", root, path);
-      if (getenv("DN_REDIRECT_DEBUG"))
-        fprintf(stderr, "[path-redirect] %s -> %s\n", path, buf);
-      return buf;
-    }
+  if (!g_init) dn_init();
+  if (!g_root || !path || path[0] != '/') return path;
+
+  /* Only /usr, /etc, /var, /opt qualify; dispatch on the second byte so a
+   * non-matching path costs one compare instead of four strncmp()s. */
+  const char *pre;
+  switch (path[1]) {
+    case 'u': pre = "/usr"; break;
+    case 'e': pre = "/etc"; break;
+    case 'v': pre = "/var"; break;
+    case 'o': pre = "/opt"; break;
+    default: return path;
   }
-  return path;
+  if (strncmp(path, pre, 4) != 0) return path;
+  if (path[4] != '/' && path[4] != '\0') return path;
+
+  size_t plen = strlen(path);
+  if (g_rootlen + plen + 1 > bufsz) return path;
+  memcpy(buf, g_root, g_rootlen);
+  memcpy(buf + g_rootlen, path, plen + 1);
+  if (g_debug) fprintf(stderr, "[path-redirect] %s -> %s\n", path, buf);
+  return buf;
 }
 
 /* ---- execve dispatch ------------------------------------------------- */
@@ -81,7 +108,8 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
  */
 static char **bionic_env(char **envp) {
   if (!envp) return envp;
-  const char *b = getenv("DN_BIONIC_PRELOAD");
+  if (!g_init) dn_init();
+  const char *b = g_bionic_preload;
   int want = (b && *b);
   static char entry[8192];
   if (want) snprintf(entry, sizeof entry, "LD_PRELOAD=%s", b);
@@ -168,7 +196,8 @@ static int target_is_script(const char *path, char *interp, size_t isz,
 }
 
 static const char *map_shebang_interp(const char *in, char *buf, size_t sz) {
-  const char *root = getenv("DN_INSTDIR");
+  if (!g_init) dn_init();
+  const char *root = g_root;
   if (root) {
     if (!strcmp(in, "/bin/sh") || !strcmp(in, "/bin/dash") ||
         !strcmp(in, "/bin/bash") || !strcmp(in, "/usr/bin/sh") ||
@@ -176,7 +205,7 @@ static const char *map_shebang_interp(const char *in, char *buf, size_t sz) {
       snprintf(buf, sz, "%s/usr/bin/dn-shell", root);
       return buf;
     }
-    if (!strncmp(in, "/usr/bin/perl", 13) || !strncmp(in, "/usr/bin/perl", 13)) {
+    if (!strncmp(in, "/usr/bin/perl", 13) || !strncmp(in, "/bin/perl", 9)) {
       snprintf(buf, sz, "%s/usr/bin/dn-perl", root);
       return buf;
     }
