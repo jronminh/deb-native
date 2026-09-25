@@ -10,6 +10,10 @@ side-install — with a small **shim we build ourselves** that fakes the one
 thing Debian assumes and Android lacks: a writable `/usr`, `/etc`, `/var`,
 `/opt`.
 
+> **Caution:** this is an early prototype, built fast with AI assistance. It
+> still has bugs, and it installs software outside Termux's own package
+> management. Read the scripts before running, and use it at your own risk.
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/install.sh | sh
 ```
@@ -205,6 +209,7 @@ Next steps are tracked in [`TODO.md`](TODO.md).
   patches both projects build on originate in Termux.
 - Termux and `termux-pacman/glibc-packages` — the Bionic host and the glibc
   userland the fusion relies on.
+- Built with AI assistance — **Claude Opus 5.5** and **DeepSeek v4.1 Pro**.
 
 ## License
 
