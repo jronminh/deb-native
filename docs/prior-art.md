@@ -75,3 +75,40 @@ touching at all.
 root.~~ Answered: no — `EPERM`, confirmed by direct test and strace. See
 `design-manual-overlay.md` for the full data and the replacement mechanism
 (userspace `LD_PRELOAD` path redirection, no mount involved at all).
+
+## Related work found later: `proroot` (closed-source)
+
+[`coderredlab/proroot`](https://github.com/coderredlab/proroot) — a
+proprietary "drop-in `proot` replacement, zero ptrace overhead" for
+Android, 82 stars as of 2026-09. Its README (source not published) hints
+at the same class of mechanism as this repo's `design-manual-overlay.md`:
+separate `libproroot-linker.so` / `libproroot-stub-loader.so` /
+`libproroot-bridge.so` components suggest dynamic-linker/libc-call
+interception rather than `proot`'s `ptrace`-based one — and its own notice
+says "similar LD_PRELOAD-based tools have started appearing recently",
+i.e. this general direction (no ptrace, no kernel privilege) is an
+independently-emerging category, not unique to this repo.
+
+Two real differences from this project's approach, worth naming plainly:
+
+- **`proroot` fakes `uid=0`/`gid=0`** (`-0` flag, "proot-compatible
+  fakeroot"). This repo deliberately does *not* — see the
+  fakeroot/no-fakeroot discussion this doc's design decisions follow
+  (`design-install-path.md`): dpkg's own root-checks are removed rather
+  than faked, so files land owned by the real unprivileged uid, not a
+  faked `root:root`. Trade-off, not a strict improvement: a package that
+  genuinely checks ownership would be fooled by `proroot`'s fake identity
+  and not by this project's real one.
+- **`proroot` brings a whole guest rootfs** (tested against a full Ubuntu
+  arm64 glibc rootfs — Node, Python, Chromium, git), matching `proot`'s
+  own scope. This project's approach is deliberately lighter: no full
+  rootfs, no bundling what Termux's glibc side-install already provides
+  (`design-native-deps.md`). The cost of that lightness is coverage —
+  `proroot`'s full rootfs presumably "just works" for far more packages
+  out of the box, where this project has to be more selective about which
+  packages it can actually get working (per the low real success rate in
+  `findings-survey-2026-09-25.md`) rather than getting broad compatibility
+  for free.
+
+Being closed-source, `proroot` can't be inspected or reused directly —
+noted here as prior art / validation of direction, not a dependency.
