@@ -5,9 +5,15 @@ workflow** — real Debian `.deb` (glibc) packages on Termux/Android, without
 patching every binary by hand, and without the parts of the `sudo-less`
 approach that Android's kernel/SELinux won't allow.
 
-Status: **R&D, not functional yet.** No install path works end to end. This
-repo currently holds design notes and a comparison against prior art, not
-working code.
+Status: **first working prototype, 2026-09-25.** A real Debian arm64
+`.deb` (`hello`, no maintainer scripts) installs and runs, end to end, via
+`scripts/prototype-install.sh` — see
+[`docs/findings-prototype-2026-09-25.md`](docs/findings-prototype-2026-09-25.md)
+for the full log, what it revealed (Termux already ships a curated glibc
+side-install with its own auto ELF-patcher, `grun` — a major correction to
+earlier design docs), and the two blockers still worked around with unsafe
+`--force-*` flags rather than properly solved (architecture-name mismatch,
+dependency-check bypass).
 
 ## Why this exists
 
