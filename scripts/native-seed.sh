@@ -15,7 +15,7 @@
 
 set -eu
 ADMINDIR=${1:?usage: native-seed.sh ADMINDIR}
-GLIBC_ROOT=${TDB_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
+GLIBC_ROOT=${DN_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
 mkdir -p "$ADMINDIR"
 
 # Debian package name : Termux -glibc package (for Version:/Source: only —
@@ -62,7 +62,7 @@ Status: install ok installed
 Priority: optional
 Section: libs
 Installed-Size: 1
-Maintainer: termux-deb-bridge native-seed (satisfied by $termux_pkg, not duplicated)
+Maintainer: deb-native native-seed (satisfied by $termux_pkg, not duplicated)
 Architecture: arm64
 Multi-Arch: same
 Version: 9999:$termux_version

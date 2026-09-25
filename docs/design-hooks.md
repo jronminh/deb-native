@@ -49,23 +49,23 @@ hit the same gap and solved it the same way.
 ```
 # $NEWPREFIX/etc/apt/apt.conf.d/90wrap-glibc
 DPkg::Post-Invoke {
-    "test -n \"$TDB_DPKG_WRAPPER_RAN\" || $NEWPREFIX/lib/termux-deb-bridge/wrap-new-binaries";
+    "test -n \"$DN_DPKG_WRAPPER_RAN\" || $NEWPREFIX/lib/deb-native/wrap-new-binaries";
 };
 ```
 
 ```sh
 #!/bin/sh
 # $NEWPREFIX/bin/dpkg — wrapper, not a patch
-export TDB_DPKG_WRAPPER_RAN=1
-"$NEWPREFIX/lib/termux-deb-bridge/real-dpkg" "$@"
+export DN_DPKG_WRAPPER_RAN=1
+"$NEWPREFIX/lib/deb-native/real-dpkg" "$@"
 status=$?
-"$NEWPREFIX/lib/termux-deb-bridge/wrap-new-binaries"
+"$NEWPREFIX/lib/deb-native/wrap-new-binaries"
 exit "$status"
 ```
 
 (Names/paths illustrative — not yet decided where the real dpkg binary
 gets moved to so the wrapper can claim the `dpkg` name on `PATH`, likely
-`$NEWPREFIX/lib/termux-deb-bridge/real-dpkg` or similar, matching how
+`$NEWPREFIX/lib/deb-native/real-dpkg` or similar, matching how
 sudo-less relocates its own wrapped binary.)
 
 ## What "wrap-new-binaries" needs to know
@@ -75,7 +75,7 @@ to know what changed since the last run — sudo-less's `prefix-wrap` scopes
 itself to "each package installed or changed since the last run" via a
 stamp file. Same approach here: compare `$NEWPREFIX/var/lib/dpkg/status`
 mtime (or a package-list diff) against a stamp under
-`$NEWPREFIX/.termux-deb-bridge/wrap.stamp`, matching sudo-less's
+`$NEWPREFIX/.deb-native/wrap.stamp`, matching sudo-less's
 `$PREFIX/.sudo-less/view/mirror.stamp` pattern referenced in `view.md`.
 
 ## Open work

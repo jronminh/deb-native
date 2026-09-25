@@ -19,12 +19,12 @@
  * compiled-in absolute path /usr/share/figlet/standard.flf, with no
  * environment variable or CLI flag able to redirect it — exactly the case
  * sudo-less's own docs (view.md) cite as needing their view. With this
- * shim preloaded and TDB_REDIRECT_FROM=/usr/share/figlet
- * TDB_REDIRECT_TO=<prefix root> set, it prints the ASCII banner
+ * shim preloaded and DN_REDIRECT_FROM=/usr/share/figlet
+ * DN_REDIRECT_TO=<prefix root> set, it prints the ASCII banner
  * correctly, reading the font from wherever it was actually unpacked.
  *
- * Current limitation: ONE prefix mapping per process (TDB_REDIRECT_FROM /
- * TDB_REDIRECT_TO), not a general list — enough to prove the mechanism,
+ * Current limitation: ONE prefix mapping per process (DN_REDIRECT_FROM /
+ * DN_REDIRECT_TO), not a general list — enough to prove the mechanism,
  * not yet a real multi-package tool. See "Open work" in
  * docs/design-manual-overlay.md.
  */
@@ -38,11 +38,11 @@
 #include <stdarg.h>
 
 static const char *from_prefix(void) {
-  const char *p = getenv("TDB_REDIRECT_FROM");
+  const char *p = getenv("DN_REDIRECT_FROM");
   return p ? p : "";
 }
 static const char *to_prefix(void) {
-  const char *p = getenv("TDB_REDIRECT_TO");
+  const char *p = getenv("DN_REDIRECT_TO");
   return p ? p : "";
 }
 
@@ -51,7 +51,7 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
   size_t flen = strlen(from);
   if (flen && path && strncmp(path, from, flen) == 0) {
     snprintf(buf, bufsz, "%s%s", to_prefix(), path);
-    if (getenv("TDB_REDIRECT_DEBUG"))
+    if (getenv("DN_REDIRECT_DEBUG"))
       fprintf(stderr, "[path-redirect] %s -> %s\n", path, buf);
     return buf;
   }

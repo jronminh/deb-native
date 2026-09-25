@@ -21,7 +21,7 @@
 #   Termux's glibc ld.so, not Bionic's.
 
 set -eu
-GLIBC=${TDB_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
+GLIBC=${DN_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 OUT=${1:-$HERE/native/path-redirect.so}
 

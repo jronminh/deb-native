@@ -23,7 +23,7 @@
 set -eu
 
 DEB=${1:?usage: prototype-install.sh package.deb}
-PREFIX=${TDB_PREFIX:-$HOME/.termux-deb-bridge}
+PREFIX=${DN_PREFIX:-$HOME/.deb-native}
 INSTDIR="$PREFIX/root"
 ADMINDIR="$PREFIX/var/lib/dpkg"
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

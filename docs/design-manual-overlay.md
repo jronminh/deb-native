@@ -60,7 +60,7 @@ remaining row.
 `native/path-redirect.c` is an `LD_PRELOAD` shared library: it overrides
 `open`, `openat`, `fopen`, `stat`, `fstatat`, and the older `__fxstatat`,
 rewriting any path starting with a configured prefix
-(`TDB_REDIRECT_FROM`) to a different prefix (`TDB_REDIRECT_TO`) before
+(`DN_REDIRECT_FROM`) to a different prefix (`DN_REDIRECT_TO`) before
 calling the real libc function via `dlsym(RTLD_NEXT, ...)`. This is
 userspace symbol interposition — the dynamic linker resolves the
 program's calls to *this* library's functions instead of glibc's, because
@@ -73,7 +73,7 @@ doc used the term: since the overlay itself is unbuildable, redirect the
 specific calls that would have needed it, one prefix mapping at a time,
 per-process (via env vars set alongside `LD_PRELOAD` when running the
 wrapped binary — ties directly into `design-static-wrappers.md`'s wrapper
-scripts: the wrapper sets `TDB_REDIRECT_FROM`/`TDB_REDIRECT_TO`/
+scripts: the wrapper sets `DN_REDIRECT_FROM`/`DN_REDIRECT_TO`/
 `LD_PRELOAD` before `exec`ing the real binary).
 
 ## Verified against a real package, not a toy example
@@ -96,7 +96,7 @@ it (checked: no `FIGLET_FONTDIR` or similar in this binary's behavior).
 With the shim:
 
 ```
-$ TDB_REDIRECT_FROM=/usr/share/figlet TDB_REDIRECT_TO=<font root> \
+$ DN_REDIRECT_FROM=/usr/share/figlet DN_REDIRECT_TO=<font root> \
   LD_PRELOAD=native/path-redirect.so \
   ld-linux-aarch64.so.1 figlet-figlet "termux deb bridge"
  _                                       _      _
@@ -104,7 +104,7 @@ $ TDB_REDIRECT_FROM=/usr/share/figlet TDB_REDIRECT_TO=<font root> \
 ...
 ```
 
-Full ASCII-banner output, correct. `TDB_REDIRECT_DEBUG=1` prints each
+Full ASCII-banner output, correct. `DN_REDIRECT_DEBUG=1` prints each
 rewrite for verification (`/usr/share/figlet/standard.flf -> .../standard.flf`).
 
 ## Toolchain gotchas hit building this (recorded so they aren't re-discovered)
@@ -136,7 +136,7 @@ needed:
 
 ## Open work
 
-- [ ] Generalize past one hardcoded `TDB_REDIRECT_FROM`/`_TO` pair to a
+- [ ] Generalize past one hardcoded `DN_REDIRECT_FROM`/`_TO` pair to a
       real mapping table (multiple prefixes per process) — needed once
       this is wired into the wrapper-generation pipeline
       (`design-hooks.md`) for packages with more than one hardcoded path.
@@ -146,7 +146,7 @@ needed:
       `figlet-figlet` alternative-link case), `realpath`.
 - [ ] Decide how the wrapper script generated per binary
       (`design-static-wrappers.md`) computes each binary's
-      `TDB_REDIRECT_FROM`/`_TO` pairs — likely from `prefix-wrap`-style
+      `DN_REDIRECT_FROM`/`_TO` pairs — likely from `prefix-wrap`-style
       detection (which absolute paths under `/usr`, `/etc`, `/opt` does
       this package's own file list touch) rather than hand-set env vars.
 - [ ] Statically-linked binaries (no dynamic libc calls to intercept) are

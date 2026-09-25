@@ -65,7 +65,7 @@ step gets triggered automatically after an install (apt's
       layer neither direction handles yet".
 - [x] ~~Decide whether the `LD_PRELOAD` shim is worth building~~ — built,
       see `design-manual-overlay.md`.
-- [ ] Wire the shim's env vars (`TDB_REDIRECT_FROM`/`_TO`) into the
+- [ ] Wire the shim's env vars (`DN_REDIRECT_FROM`/`_TO`) into the
       wrapper-script generation this doc describes, instead of setting
       them by hand as done for the `figlet` test.
 - [ ] Decide whether the remainder (statically-linked binaries, unreachable

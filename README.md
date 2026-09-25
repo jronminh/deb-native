@@ -1,4 +1,4 @@
-# termux-deb-bridge
+# deb-native
 
 **Install your favorite `linux-arm64` package through Termux's own `pkg`
 workflow** — real Debian `.deb` (glibc) packages on Termux/Android, without
@@ -38,10 +38,12 @@ breakdown of what carries over to Termux and what doesn't.
 
 **The short version: about 40% of sudo-less's approach is reusable as-is.**
 The other 60% — the mount-namespace + overlayfs "view", and the
-`systemd --user` service layer — assumes machinery Android typically
-denies to an app-sandboxed process (`unshare(CLONE_NEWUSER)` is blocked by
-SELinux on most stock ROMs even when the kernel supports it) or doesn't
-have at all (no systemd on Termux).
+`systemd --user` service layer — needs machinery this device doesn't have:
+`unshare(CLONE_NEWUSER)` fails `EINVAL` (confirmed by strace — the kernel
+itself has no unprivileged user namespace support here, not merely a
+policy denial), and there's no systemd on Termux at all. The view's job is
+now done instead by a userspace `LD_PRELOAD` shim (no kernel privilege
+needed) — see [`docs/design-manual-overlay.md`](docs/design-manual-overlay.md).
 
 ## Approach
 
@@ -110,3 +112,8 @@ This repo is pursuing two directions in place of the blocked 60%:
   original source sudo-less itself forked from; ends up being the piece
   this repo needs least modified, since it's already built for this exact
   environment.
+
+## License
+
+GPL-3.0-or-later (see [`LICENSE`](LICENSE)) — same license as `sudo-less`,
+whose approach and docs this project builds on and adapts.
