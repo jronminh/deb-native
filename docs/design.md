@@ -845,3 +845,29 @@ Two real differences from this project's approach, worth naming plainly:
 
 Being closed-source, `proroot` can't be inspected or reused directly —
 noted here as prior art / validation of direction, not a dependency.
+
+
+## Delivering the shim — "mimicking preload"
+
+The preload environment variable is only one way to get the shim loaded ahead
+of libc; the effect we actually need is **symbol interposition**. For a
+dynamically-linked glibc target there are four ways, in order of how
+baked-in they are:
+
+1. **Environment preload** — `LD_PRELOAD=$SHIM`, what the launchers set today.
+2. **Explicit loader call** — `$GLIBC/lib/ld-linux-aarch64.so.1 --preload $SHIM /prog`.
+   The same effect with nothing in the environment to scrub; Termux already
+   launches glibc programs through an explicit interpreter.
+3. **Baked into the ELF** at install time — e.g.
+   `patchelf --add-rpath $SHIMDIR --add-needed libpath-redirect.so /prog`,
+   so the loader loads the shim on every run regardless of the environment.
+4. **`DT_AUDIT` / `DT_DEPAUDIT`** — a loader audit module whose `la_symbind`
+   returns an alternative symbol address. It is the loader's supported
+   interposition hook and can likewise be patched into the ELF.
+
+Boundary, and the reason a syscall layer is still needed: a **static binary
+has no dynamic symbols and no loader** — its libc is compiled in — so none of
+the above reaches it. The same is true of raw `syscall()` and libc-internal
+calls such as `dlopen`. Those need a syscall-level tracer
+(`ptrace` / `SECCOMP_RET_USER_NOTIF`) inside the app uid, which the platform
+probe shows is available (`docs/findings.md`, "Platform sandbox limits").

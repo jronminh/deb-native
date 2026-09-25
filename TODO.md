@@ -78,6 +78,27 @@ for what just landed.
       install Debian `sed`/`findutils` or wrap them.
 - [ ] refresh `README.md` status numbers once the survey (#Now) reports.
 
+## Shim hardening (from code review + platform probes, 2026-09-26)
+
+Tracked in [#1](https://github.com/jronminh/deb-native/issues/1).
+
+- [ ] **Fix `unlink()`** in `native/path-redirect.c` — declared with
+      `unlinkat_t`, so `real(AT_FDCWD, path, 0)` passes `(char *)-100` as the
+      path (`EFAULT`). Use an `unlink_t` and call `real(path)`.
+- [ ] **Grow the intercepted symbol set**: fortified `__open_2` /
+      `__openat_2` / `__open64_2`; the missing `*64` (`fopen64`,
+      `freopen64`, `openat64`, `fstatat64`, `truncate64`); `lstat`,
+      `statfs`/`statvfs`; `dlopen`/`dlmopen`; socket `bind`/`connect` with a
+      short-base workaround for `sun_path`'s 108-byte limit.
+- [ ] **Bake the shim into installed ELFs** (see `docs/design.md`,
+      "Delivering the shim"): `patchelf --add-needed`/`--add-rpath`, or a
+      `DT_AUDIT` module, so the shim survives an empty environment; the
+      explicit loader (`ld.so --preload`) is the simpler variant.
+- [ ] **Syscall-level tracer** for what libc interposition can't see (static
+      binaries, raw `syscall()`, `dlopen`): `ptrace` or
+      `SECCOMP_RET_USER_NOTIF`, inside the app uid. Feasible — `ptrace` works
+      here (`proot` runs); namespaces/overlayfs/FUSE do not.
+
 ## Open, still-unsafe
 
 - [ ] `--force-architecture` workaround for the archive-name mismatch
@@ -86,8 +107,10 @@ for what just landed.
 
 ## Blocked / impossible on this device
 
-Keep these out of scope, they cannot be built without namespaces (this
-kernel: `unshare(CLONE_NEWUSER)` = `EINVAL`, FUSE closed):
+Keep these out of scope. Probed 2026-09-26 (`docs/findings.md`, "Platform
+sandbox limits"): user namespaces are off **kernel-wide** (`CLONE_NEWUSER` =
+`EINVAL` even from the seccomp-free shell), mount namespaces need
+`CAP_SYS_ADMIN`, and `/dev/fuse` is root-only:
 
 - install-view / service-view isolation (hidden `$HOME`, empty `/run`);
 - `prefix-sandbox`'s seccomp + namespace isolation;
