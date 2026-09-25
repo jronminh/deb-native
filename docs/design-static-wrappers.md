@@ -58,6 +58,10 @@ claiming a coverage number** — do not assume sudo-less's 73%/27% split
 transfers; it was measured on Debian's package set with Debian's own
 `/usr` layout assumptions, not against Termux's prefix.
 
+See [`design-hooks.md`](design-hooks.md) for how this detection/generation
+step gets triggered automatically after an install (apt's
+`DPkg::Post-Invoke` plus a `dpkg` wrapper script, not a patch).
+
 ## Open work
 
 - [ ] Run `prefix-wrap`'s detection heuristic (or a reimplementation of it)

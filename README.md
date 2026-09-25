@@ -49,6 +49,12 @@ Debian host, so this project reuses them as-is, relocated to a separate
 prefix via dpkg's own `--instdir`/`--force-script-chrootless` flags and a
 custom `apt.conf` — not a source fork.
 
+Same reuse-not-patch decision for triggering Direction 2's wrapper
+generation — see [`docs/design-hooks.md`](docs/design-hooks.md): apt's
+`DPkg::Post-Invoke` config hook plus a thin `dpkg` wrapper script on
+`PATH` (for direct `dpkg -i` calls apt never sees), the same dual mechanism
+sudo-less itself uses for `prefix-wrap`.
+
 This repo is pursuing two directions in place of the blocked 60%:
 
 1. **[Direction 2 — static per-binary wrappers](docs/design-static-wrappers.md).**
