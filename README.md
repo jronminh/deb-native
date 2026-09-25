@@ -23,6 +23,11 @@ apt install bsdmainutils   # Debian-only -> deb.debian.org -> the prefix
 figlet hi                  # installed program, run by name
 ```
 
+Installing `lua5.4` — a package Termux does not carry — and running it. No
+root, no proot, no chroot:
+
+![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
+
 Status: **working prototype** (2026-09-26). A fresh prefix bootstraps the
 full Debian base set (28 packages, all `Status: install ok installed`) and
 installs leaf packages on top of it. See [Status](#status) for what works
