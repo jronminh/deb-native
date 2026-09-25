@@ -39,21 +39,8 @@ set -eu
 ADMINDIR=${1:?usage: patch-maintainer-scripts.sh ADMINDIR INSTDIR}
 INSTDIR=${2:?usage: patch-maintainer-scripts.sh ADMINDIR INSTDIR}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-SHIM="$HERE/../native/path-redirect.so"
-DASH="$INSTDIR/usr/bin/dash"
-WRAPPER="$INSTDIR/usr/bin/dn-dash"
-
-if [ -x "$DASH" ] && [ -f "$SHIM" ] && [ ! -e "$WRAPPER" ]; then
-  cat > "$WRAPPER" <<EOF
-#!/system/bin/sh
-export LD_PRELOAD="$SHIM"
-export DN_INSTDIR="$INSTDIR"
-export PATH="$INSTDIR/usr/sbin:$INSTDIR/usr/bin:$INSTDIR/sbin:$INSTDIR/bin:\$PATH"
-export DEBIAN_FRONTEND=noninteractive
-exec "$DASH" "\$@"
-EOF
-  chmod 755 "$WRAPPER"
-fi
+"$HERE/setup-runtime.sh" "$INSTDIR"
+WRAPPER="$INSTDIR/usr/bin/dn-shell"
 
 [ -d "$ADMINDIR/info" ] || exit 0
 for f in "$ADMINDIR"/info/*.postinst "$ADMINDIR"/info/*.preinst \
@@ -75,8 +62,7 @@ for f in "$ADMINDIR"/info/*.postinst "$ADMINDIR"/info/*.preinst \
   # real case this was missing).
   # \s/\S are PCRE, not POSIX ERE -- silently never matched with them.
   shebang=$(head -1 "$f")
-  if [ -x "$WRAPPER" ] &&
-     printf '%s' "$shebang" | grep -qE '^#![[:space:]]*/bin/(sh|bash|dash)([[:space:]]+[^[:space:]]+)?[[:space:]]*$'; then
+  if printf '%s' "$shebang" | grep -qE '^#![[:space:]]*/bin/(sh|bash|dash)([[:space:]]+[^[:space:]]+)?[[:space:]]*$'; then
     # NOT using # as the sed delimiter here: the pattern itself starts
     # with a literal "#" (matching the shebang's own "#!"), which broke
     # delimiter parsing outright ("sed: unknown option to `s'") and, under
@@ -87,14 +73,9 @@ for f in "$ADMINDIR"/info/*.postinst "$ADMINDIR"/info/*.preinst \
     # didn't work rather than a shell script bug.
     flag=$(printf '%s' "$shebang" | sed -E 's,^#![[:space:]]*/bin/(sh|bash|dash)[[:space:]]*([^[:space:]]*)[[:space:]]*$,\2,')
     sed -i "1s#.*#\#!${WRAPPER}${flag:+ }${flag}#" "$f"
-    # Drop LD_PRELOAD from dash's own environment as its very first
-    # action, so a command the script forks (cp, ln, ...) -- often a
-    # Bionic binary found via PATH -- doesn't inherit a glibc .so in its
-    # LD_PRELOAD (Bionic's linker refuses to even start in that case:
-    # "CANNOT LINK EXECUTABLE ... libc.so.6 not found", confirmed the
-    # hard way). dash's OWN interposition, already resolved at process
-    # load time, keeps working regardless -- this only affects what
-    # children fork with afterward.
-    sed -i "2i unset LD_PRELOAD 2>/dev/null || true" "$f"
+    # No `unset LD_PRELOAD` line any more -- see patch-deb.sh's comment: the
+    # shim's execve() dispatch keeps LD_PRELOAD for glibc targets and strips
+    # it for Bionic ones, so neither a forked glibc coreutils command nor a
+    # forked Bionic command needs the shell to clear it first.
   fi
 done

@@ -5,8 +5,14 @@ workflow** — real Debian `.deb` (glibc) packages on Termux/Android, without
 patching every binary by hand, and without the parts of the `sudo-less`
 approach that Android's kernel/SELinux won't allow.
 
-Status: **working prototype, 2026-09-25.** A real Debian arm64 `.deb`
-(`hello`) installs and runs end to end via `scripts/prototype-install.sh`;
+Status: **working prototype, 2026-09-25.** The full Debian base set
+(`base-files`, `base-passwd`, `dash`, `debianutils`, `debconf`,
+`cdebconf`, `openssl`, `ca-certificates`, `mawk`, and their libraries —
+28 packages) now bootstraps to `Status: install ok installed` on a
+**fresh** prefix, and a new package installs on top of it (`hello` runs)
+— see [`docs/findings-runtime-and-base-2026-09-25.md`](docs/findings-runtime-and-base-2026-09-25.md).
+A real Debian arm64 `.deb` (`hello`) installs and runs end to end via
+`scripts/prototype-install.sh`;
 a real dependency (`ciso`'s `zlib1g`) resolves natively against Termux's
 own glibc packages with zero files duplicated
 ([`docs/design-native-deps.md`](docs/design-native-deps.md)); and a real
@@ -144,6 +150,22 @@ separate Bionic process the wrapper deliberately clears `LD_PRELOAD`
 before forking, to avoid crashing it — meaning that fork's own file access
 isn't intercepted at all). Stopped here for this session (quota-conscious,
 repeated direct instruction), with concrete next steps recorded.
+
+**Closed, later the same day
+([`docs/findings-runtime-and-base-2026-09-25.md`](docs/findings-runtime-and-base-2026-09-25.md)):**
+both of those open problems — and the fresh-prefix chicken-and-egg they
+sat behind — are fixed. The maintainer-script interpreter is now a real
+**Bionic ELF** (`native/dn-launch.c`) rather than a shell script (the
+kernel follows only one `#!` level, which is why a fresh prefix fell back
+to Bionic `/bin/sh`); the runtime reuses Termux's **pre-existing** glibc
+userland (`$PREFIX/glibc/bin`) so forked commands are glibc and the shim
+reaches them, removing the "need a Debian dash first" cycle; the shim
+gained `chdir`, `execvp`/`execl*`, `statx`, `mkdirat`, `unlinkat`,
+`symlinkat`, `renameat`, `utimensat`, `readlink`, and more; the shim's own
+directory no longer trips `base-files`' usrmerge check; and
+`dpkg-realpath`'s missing `dpkg-error.sh` is pre-placed. A fresh
+`setup-apt-prefix.sh` now brings all 28 base packages to `ii`, and
+`apt-install.sh ~/prefix hello` installs and runs on top.
 
 ## Why this exists
 

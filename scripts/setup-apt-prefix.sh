@@ -20,6 +20,10 @@ NEWPREFIX=${1:?usage: setup-apt-prefix.sh NEWPREFIX [suite]}
 SUITE=${2:-stable}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
+# Build the path-redirect shim from source if it is missing (it is a build
+# artifact; see scripts/build-path-redirect.sh for the toolchain notes).
+[ -f "$HERE/../native/path-redirect.so" ] || "$HERE/build-path-redirect.sh"
+
 mkdir -p "$NEWPREFIX/etc/apt/apt.conf.d" "$NEWPREFIX/etc/apt/sources.list.d" \
          "$NEWPREFIX/etc/apt/trusted.gpg.d" \
          "$NEWPREFIX/var/lib/apt/lists/partial" \

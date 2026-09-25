@@ -19,21 +19,13 @@ set -eu
 DEB=${1:?usage: patch-deb.sh DEB_FILE INSTDIR}
 INSTDIR=${2:?usage: patch-deb.sh DEB_FILE INSTDIR}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-SHIM="$HERE/../native/path-redirect.so"
-WRAPPER="$INSTDIR/usr/bin/dn-dash"
 
-DASH="$INSTDIR/usr/bin/dash"
-if [ -x "$DASH" ] && [ -f "$SHIM" ] && [ ! -e "$WRAPPER" ]; then
-  cat > "$WRAPPER" <<EOF
-#!/system/bin/sh
-export LD_PRELOAD="$SHIM"
-export DN_INSTDIR="$INSTDIR"
-export PATH="$INSTDIR/usr/sbin:$INSTDIR/usr/bin:$INSTDIR/sbin:$INSTDIR/bin:\$PATH"
-export DEBIAN_FRONTEND=noninteractive
-exec "$DASH" "\$@"
-EOF
-  chmod 755 "$WRAPPER"
-fi
+# The maintainer-script runtime (glibc bash + shim + no-op chown/chgrp) comes
+# from Termux's pre-existing glibc userland, so it exists before any Debian
+# package is unpacked -- no dash chicken-and-egg. Created here because this
+# runs before every --unpack, so even preinst scripts get a working shebang.
+"$HERE/setup-runtime.sh" "$INSTDIR"
+WRAPPER="$INSTDIR/usr/bin/dn-shell"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -84,8 +76,7 @@ for f in "$WORK/pkg/DEBIAN/preinst" "$WORK/pkg/DEBIAN/postinst" \
   # across a whole earlier round of testing). [[:space:]]/[^[:space:]]
   # are the POSIX ERE equivalents.
   shebang=$(head -1 "$f")
-  if [ -x "$WRAPPER" ] &&
-     printf '%s' "$shebang" | grep -qE '^#![[:space:]]*/bin/(sh|bash|dash)([[:space:]]+[^[:space:]]+)?[[:space:]]*$'; then
+  if printf '%s' "$shebang" | grep -qE '^#![[:space:]]*/bin/(sh|bash|dash)([[:space:]]+[^[:space:]]+)?[[:space:]]*$'; then
     # NOT using # as the sed delimiter: the pattern starts with a literal
     # "#" (matching the shebang's own "#!"), which broke delimiter
     # parsing outright and, under this script's `set -eu`, silently
@@ -94,7 +85,10 @@ for f in "$WORK/pkg/DEBIAN/preinst" "$WORK/pkg/DEBIAN/postinst" \
     # every run, looking like the mechanism just didn't work at all.
     flag=$(printf '%s' "$shebang" | sed -E 's,^#![[:space:]]*/bin/(sh|bash|dash)[[:space:]]*([^[:space:]]*)[[:space:]]*$,\2,')
     sed -i "1s#.*#\#!${WRAPPER}${flag:+ }${flag}#" "$f"
-    sed -i "2i unset LD_PRELOAD 2>/dev/null || true" "$f"
+    # No `unset LD_PRELOAD` line any more: the shim's own execve() dispatch
+    # strips LD_PRELOAD for a non-glibc target and keeps it for a glibc one,
+    # so a forked glibc coreutils command stays redirected while a forked
+    # Bionic command does not crash -- neither needs the shell to clear it.
   fi
 done
 

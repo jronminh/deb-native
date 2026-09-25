@@ -58,6 +58,15 @@ for pkg in $order; do
        $DPKG_FLAGS --unpack "$deb" || true
   find "$NEWPREFIX/root" -type f -perm -u+x 2>/dev/null |
     while IFS= read -r f; do
+      # Never grun-patch this project's own runtime: dn-shell/dn-perl are
+      # Bionic launchers and the shim is a glibc .so; rewriting their ELF
+      # interpreter to the glibc target breaks them ("libdl.so: cannot open
+      # shared object file").
+      case "$f" in
+        "$NEWPREFIX/root/lib/deb-native/"*|\
+        "$NEWPREFIX/root/usr/bin/dn-shell"|\
+        "$NEWPREFIX/root/usr/bin/dn-perl") continue ;;
+      esac
       case "$(head -c4 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')" in
         7f454c46) grun --configure "$f" >/dev/null 2>&1 || true ;;
       esac
