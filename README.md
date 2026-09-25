@@ -28,10 +28,20 @@ unpacks the one `.deb` it's given. Fixed and re-verified same day
 `scripts/apt-install.sh` point real `apt` at a real Debian repo, scoped to
 a separate prefix — same 30-package sample, same seed, now **10/30 (33%)**.
 Two new failure classes found: maintainer scripts hitting hardcoded
-absolute paths the `LD_PRELOAD` shim can't reach (it only works for glibc
-binaries, not scripts run via Termux's own Bionic `/bin/sh` — a real scope
-limit, not previously stated), and `dpkg` failing to recreate some
-packages' intra-archive hard links on this filesystem.**
+absolute paths, and `dpkg` failing to recreate some packages'
+intra-archive hard links on this filesystem. The first is now fixed —
+see below.**
+
+**Maintainer-script paths, solved (`docs/design-manual-overlay.md`):** a
+`LD_PRELOAD`-based Bionic shim was built and tested, but turned out to be
+chasing the wrong binary (`/bin/sh` on Android resolves to the OS's own
+root-owned `/system/bin/sh`, not Termux's `dash` — and Termux's own shell
+resists `LD_PRELOAD` interception too, being linked `BIND_NOW`). Abandoned
+that dead end for something simpler and more robust: `scripts/patch-maintainer-scripts.sh`
+rewrites a package's maintainer scripts as plain text (`sed`) between
+`dpkg --unpack` and `--configure` — no interception, no linker, no
+dependency on which shell is really running. Verified working end to
+end.
 
 ## Why this exists
 

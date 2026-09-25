@@ -43,6 +43,9 @@ dpkg --instdir="$INSTDIR" --admindir="$ADMINDIR" \
      --force-not-root --force-script-chrootless --force-architecture \
      --unpack "$DEB"
 
+echo "==> patching maintainer scripts' hardcoded absolute paths"
+"$HERE/patch-maintainer-scripts.sh" "$ADMINDIR" "$INSTDIR"
+
 echo "==> configuring $pkg_name"
 # No --force-depends: a real, still-missing dependency should still fail
 # here rather than silently "install" broken. If this fails, either the

@@ -137,69 +137,74 @@ needed:
 ## Scope limit found later: doesn't reach maintainer scripts
 
 `docs/findings-survey-apt-2026-09-25.md` found this the hard way: this
-shim only helps **glibc dynamically-linked binaries**. dpkg's maintainer
-scripts run under `--force-script-chrootless` execute via **Termux's own
-Bionic `/bin/sh`**, not a glibc process — `LD_PRELOAD=path-redirect.so`
-(a glibc `.so`) does not load into a Bionic shell at all. A real package's
+shim only helps **glibc dynamically-linked binaries**. A real package's
 `postinst` doing `. /usr/share/debconf/confmodule` or
 `ln -s ... /usr/lib/ssl` hits the exact same "hardcoded absolute path,
-nothing there" problem this doc solves for binaries, and this mechanism
-cannot reach it. Left as a real, open gap — not silently assumed covered.
+nothing there" problem this doc solves for binaries — sudo-less's own
+`design.md` says outright **"no shims needed so far (the view made
+`py3compile`'s unnecessary)"**: this class of problem is exactly what
+*the view*, not a "shim" in sudo-less's sense (a narrower thing — a fake
+stand-in for a root-only helper program), solved for them. Since the view
+is dead here, this project needed its own answer.
 
-## Next: a Bionic shim for maintainer scripts, not the "shim" sudo-less means
+### Dead end, fully explored: a Bionic `LD_PRELOAD` shim
 
-sudo-less's own `design.md` says outright: **"no shims needed so far (the
-view made `py3compile`'s unnecessary)"** — their "shim" is a narrower,
-different thing (a fake stand-in for a *root-only helper program*, e.g.
-`py3compile`, `systemctl`; a no-op command on `DPkg::Path`). The class of
-problem found in `findings-survey-apt-2026-09-25.md` (`debconf`'s
-`. /usr/share/debconf/confmodule`, `openssl`'s
-`ln -s ... /usr/lib/ssl`) is exactly what **the view**, not a shim, solved
-for sudo-less. Since the view is dead here, this project needs its own
-equivalent for the Bionic side — not a "shim" in sudo-less's sense.
+First attempt: a Bionic build of `path-redirect.c`'s idea
+(`native/path-redirect-bionic.c`, plain `clang`, no cross-compile needed —
+Bionic is native here), generalized to a wholesale `/usr`, `/etc`, `/var`,
+`/opt` → `$INSTDIR` mapping (the same four directories the view
+overlaid), `LD_PRELOAD`ed into dpkg's environment before it forks
+maintainer scripts.
 
-Concretely: a Bionic build of `path-redirect.c`'s idea (this repo's
-existing shim is glibc-only, built for glibc binaries — see "Toolchain
-gotchas" above), generalized from one hardcoded `FROM`/`TO` pair to a real
-wholesale mapping (`/usr` → `$INSTDIR/usr`, `/etc` → `$INSTDIR/etc`,
-`/var` → `$INSTDIR/var`, `/opt` → `$INSTDIR/opt` — the same four
-directories the view overlaid), `LD_PRELOAD`ed into dpkg's own environment
-before it forks maintainer scripts.
+- **Confirmed dpkg preserves `LD_PRELOAD` into scripts**: a throwaway test
+  `.deb`'s `postinst` dumped its own environment and showed
+  `LD_PRELOAD=<the .so>` verbatim — dpkg does not clear it.
+- **The shim itself works correctly**: verified against a freshly-compiled
+  test binary calling `open()` — redirected, with debug output to prove
+  it.
+- **But the real target turned out to be a different binary than
+  assumed.** The maintainer script's `#!/bin/sh` shebang is resolved by
+  the *kernel*, against the real filesystem root — which on Android is
+  `/system/bin/sh` (a root-owned Android **toybox** binary), confirmed
+  directly (`readlink -f /proc/$$/exe` from inside a running maintainer
+  script printed `/system/bin/sh`), **not** Termux's own `/bin/sh`
+  (`dash`) as first assumed. Termux's `dash` was tested too and also
+  resisted interception (linked `BIND_NOW`/`FLAGS_1 NOW` — Bionic's linker
+  doesn't honor `LD_PRELOAD`'s override on `BIND_NOW` binaries the way
+  glibc does), but it turned out to be the wrong binary to even chase:
+  `/system/bin/sh` is root-owned, on a read-only system partition — not
+  patchable, not rebuildable, not ours to touch at all.
 
-**Confirmed, not just planned:** built a throwaway test `.deb` with a
-`postinst` that dumps its own environment, installed it with
-`LD_PRELOAD=<any real .so>` set beforehand (same
-`--instdir`/`--admindir`/`--force-not-root`/`--force-script-chrootless`
-flags this project already uses) — the script's own `env` output shows
-`LD_PRELOAD=<the .so>` verbatim. **dpkg does not clear the environment
-before exec'ing a maintainer script.** The mechanism is viable; nothing
-else blocks starting it. (Also visible in that same env dump: dpkg
-already sets `DPKG_ROOT` for scripts, per `apt-dpkg-port.md`'s note — the
-scripts hitting this gap just don't check it themselves.)
+Abandoned as a dead end: even if `BIND_NOW` weren't a problem, this
+approach needs write access to (or the ability to rebuild) whatever
+`/bin/sh` really is, and on Android that binary belongs to the OS, not to
+this project's own writable prefix.
 
-**Built and tested — mechanism works, but doesn't reach the real target.**
-`native/path-redirect-bionic.c` (plain `clang -fPIC -shared`, no
-cross-compile flags — Bionic is native here) correctly redirects `open`/
-`fopen`/`stat`/`symlink` for a **freshly-compiled test binary**: verified
-with a tiny C program calling `open("/etc/foo.conf", ...)`, redirected
-correctly with debug output to prove it.
+### What actually worked: rewrite the script text, not the runtime
 
-**But it does not intercept Termux's own `dash` (`/bin/sh`) or
-`coreutils` (`cat`, etc.)** — tested directly, no redirect happens, no
-debug output. Root cause found: both are linked with `BIND_NOW`/`FLAGS_1
-NOW` (`readelf -d`), and Bionic's dynamic linker does not honor
-`LD_PRELOAD`'s override for symbols in a `BIND_NOW`-linked binary the way
-glibc's does. Since maintainer scripts run via exactly `dash`, and often
-call out to exactly this class of Termux-built binary (`ln`, etc.), **this
-approach as built does not yet reach the actual failing case**
-(`debconf`'s `.`, `openssl`'s `ln -s`) — it's proven correct in isolation,
-not proven useful for the real target yet.
+`scripts/patch-maintainer-scripts.sh`, run between dpkg's `--unpack` and
+`--configure` (already two separate steps in this project's pipeline —
+see `design-install-path.md`): plain `sed`, rewriting any `/etc/`,
+`/usr/`, `/var/`, `/opt/` path component in a package's `postinst`/
+`preinst`/`postrm`/`prerm` to the same path under `$INSTDIR`, before dpkg
+ever executes the script. No interception, no linker, no `LD_PRELOAD`, no
+dependency on which binary `/bin/sh` happens to be.
 
-Open direction, not yet explored: whether a non-`BIND_NOW` variant of
-`dash`/`coreutils` could be built (own build, `-z lazy`), or whether the
-interception needs to move earlier (wrapping the maintainer script's
-`#!/bin/sh` shebang itself with a different, non-hardened shell before
-`LD_PRELOAD` even gets a chance to matter) — not decided, not started.
+This works because maintainer scripts are **shell scripts**: their paths
+are almost always literal strings dpkg unpacks to disk as plain text
+*before* running them, unlike a compiled binary's paths (which can be
+runtime-computed, string-concatenated, or simply invisible to a text
+tool). Verified end to end: a test `postinst` doing `. /etc/foo.conf`
+failed before this ran and printed the sourced file's real content
+correctly after.
+
+Known limits (not yet hit in practice, worth stating): a script that
+builds a path at runtime (`dir=/usr; . "$dir/share/foo"`) won't be
+caught by a literal-string `sed`; a value carried through a variable
+already set before the rewrite runs is invisible to it. Falls back to
+the same "genuinely can't reach this without a much bigger mechanism"
+bucket as a statically-linked binary's hardcoded paths, for the
+`LD_PRELOAD` shim above.
 
 ## Open work
 
