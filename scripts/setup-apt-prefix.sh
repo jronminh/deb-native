@@ -65,4 +65,8 @@ echo "    transaction -- see scripts/bootstrap-base.sh for why one, not"
 echo "    piecemeal, matters here"
 "$HERE/bootstrap-base.sh" "$NEWPREFIX"
 
+echo "==> generating launchers and activating PATH"
+"$HERE/make-launchers.sh" "$NEWPREFIX/root"
+"$HERE/dn-activate.sh" "$NEWPREFIX/root"
+
 echo "==> ready: APT_CONFIG=$NEWPREFIX/etc/apt.conf apt-get install -y <package>"

@@ -23,7 +23,7 @@ set -eu
 INSTDIR=${1:?usage: setup-runtime.sh INSTDIR}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SRC="$HERE/../native"
-PREFIX_DIR=${PREFIX:-/data/data/com.termux/files/usr}
+PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
 BINDIR="$INSTDIR/usr/bin"
 LIBDIR="$INSTDIR/usr/lib/deb-native"

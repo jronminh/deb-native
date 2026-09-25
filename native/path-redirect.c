@@ -66,18 +66,36 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
 
 /* ---- execve dispatch ------------------------------------------------- */
 
-static char **strip_preload(char **envp) {
+/* Environment for a NON-glibc (Bionic/script) child.
+ *
+ * A glibc LD_PRELOAD must never reach a Bionic process: Bionic's linker
+ * aborts ("library libc.so.6 not found"). But simply dropping LD_PRELOAD
+ * would also drop Termux's own termux-exec preload, which Termux-native
+ * commands rely on for shebang handling -- and disabling termux-exec
+ * system-wide can break Termux packages, so we must not.
+ *
+ * The launcher/wrapper captures whatever LD_PRELOAD it inherited (i.e.
+ * termux-exec) into DN_BIONIC_PRELOAD before installing the path-redirect
+ * shim. Here we put that back for a Bionic child; if there was none (e.g.
+ * running under dpkg, which has no preload), LD_PRELOAD is removed.
+ */
+static char **bionic_env(char **envp) {
   if (!envp) return envp;
-  int has = 0;
-  for (char **e = envp; *e; e++)
-    if (!strncmp(*e, "LD_PRELOAD=", 11)) { has = 1; break; }
-  if (!has) return envp;
+  const char *b = getenv("DN_BIONIC_PRELOAD");
+  int want = (b && *b);
+  static char entry[8192];
+  if (want) snprintf(entry, sizeof entry, "LD_PRELOAD=%s", b);
   static char *out[2048];
-  int n = 0;
-  for (char **e = envp; *e && n < 2046; e++) {
-    if (!strncmp(*e, "LD_PRELOAD=", 11)) continue;
+  int n = 0, saw = 0;
+  for (char **e = envp; *e && n < 2045; e++) {
+    if (!strncmp(*e, "LD_PRELOAD=", 11)) {
+      saw = 1;
+      if (want) out[n++] = entry;
+      continue;
+    }
     out[n++] = *e;
   }
+  if (want && !saw && n < 2045) out[n++] = entry;
   out[n] = NULL;
   return out;
 }
@@ -489,12 +507,12 @@ static int do_exec(execve_t real, const char *rp, char *const argv[],
        * (#!/system/bin/sh) which sets LD_PRELOAD for the real glibc
        * interpreter it execs -- passing ours through here would hand a
        * glibc .so to Bionic's /system/bin/sh and abort it. */
-      return real(iw, na, strip_preload(envp));
+      return real(iw, na, bionic_env(envp));
     }
-    return real(rp, argv, strip_preload(envp));
+    return real(rp, argv, bionic_env(envp));
   }
   if (target_is_glibc(rp)) return real(rp, argv, envp);
-  return real(rp, argv, strip_preload(envp));
+  return real(rp, argv, bionic_env(envp));
 }
 
 int execve(const char *pathname, char *const argv[], char *const envp[]) {
@@ -597,5 +615,5 @@ int execveat(int dirfd, const char *pathname, char *const argv[],
   char buf[4096];
   const char *rp = rewrite(pathname, buf, sizeof buf);
   if (target_is_glibc(rp)) return real(dirfd, rp, argv, envp, flags);
-  return real(dirfd, rp, argv, strip_preload(envp), flags);
+  return real(dirfd, rp, argv, bionic_env(envp), flags);
 }

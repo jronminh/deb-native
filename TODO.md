@@ -7,6 +7,16 @@ random sample**, not feature count. See
 and [`docs/findings-runtime-and-base-2026-09-25.md`](docs/findings-runtime-and-base-2026-09-25.md)
 for what just landed.
 
+## Done recently
+
+- [x] **Fresh base bootstrap to `ii`** (all 28 base packages) — see
+      [`docs/findings-runtime-and-base-2026-09-25.md`](docs/findings-runtime-and-base-2026-09-25.md).
+- [x] **Seamless launch**: `scripts/make-launchers.sh` + `scripts/dn-activate.sh`
+      — installed programs run by name; `termux-exec` preserved (a Bionic
+      child gets it back via `DN_BIONIC_PRELOAD`, a glibc child gets the shim).
+- [x] **First full install script**: `install.sh PREFIX [pkg...]` — bootstrap
+      if new, reuse if existing, install, generate launchers, activate PATH.
+
 ## Now / do first
 
 - [ ] **Re-run the coverage survey on a fresh prefix** (sudo-less's
@@ -57,6 +67,15 @@ for what just landed.
 
 - [ ] no-op shim for `dpkg-statoverride` (Termux's `dpkg` doesn't ship it;
       `ca-certificates` logs `command not found` but still reaches `ii`).
+- [ ] **`update-alternatives` writes links into Termux's own prefix**
+      (`$PREFIX/usr/bin/awk -> $TERMUX_PREFIX/etc/alternatives/awk`), so
+      alternative names are dangling. `make-launchers.sh` covers the
+      `<name>-<pkg>` case (`figlet -> figlet-figlet`) but not `awk -> mawk`.
+      Either fix the link target or resolve providers from the alternatives db.
+- [ ] **forked Bionic `sed`/`find`** in some postinsts can't see prefix paths
+      (`ca-certificates` logs `sed: can't read /etc/ca-certificates.conf` but
+      still reaches `ii`). The shim only covers the glibc shell's own calls;
+      install Debian `sed`/`findutils` or wrap them.
 - [ ] refresh `README.md` status numbers once the survey (#Now) reports.
 
 ## Open, still-unsafe

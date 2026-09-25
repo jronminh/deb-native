@@ -50,7 +50,8 @@ int main(int argc, char **argv) {
   snprintf(inst, sizeof inst, "%s", self);
   up_dirs(inst, 3); /* .../usr/bin/dn-shell -> INSTDIR */
 
-  const char *pfx = getenv("PREFIX");
+  const char *pfx = getenv("DN_TERMUX_PREFIX");
+  if (!pfx || !*pfx) pfx = getenv("PREFIX");
   if (!pfx || !*pfx) pfx = "/data/data/com.termux/files/usr";
 
   char shim[4096];
@@ -59,6 +60,14 @@ int main(int argc, char **argv) {
   snprintf(path, sizeof path,
            "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/glibc/bin:%s/bin",
            inst, inst, inst, inst, pfx, pfx);
+
+  /* Preserve whatever preload we inherited (on Termux, termux-exec) so the
+   * shim can hand it back to a Bionic child it execs -- see bionic_env()
+   * in path-redirect.c. Never capture our own shim. Capture before we
+   * overwrite LD_PRELOAD. */
+  const char *inh = getenv("LD_PRELOAD");
+  if (inh && *inh && !strstr(inh, "path-redirect.so"))
+    setenv("DN_BIONIC_PRELOAD", inh, 1);
 
   setenv("LD_PRELOAD", shim, 1);
   setenv("DN_INSTDIR", inst, 1);

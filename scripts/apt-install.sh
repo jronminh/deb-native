@@ -89,3 +89,7 @@ dpkg --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
 # an already grun-patched binary with the archive's pristine (unpatched
 # ELF interpreter) copy -- found the hard way with dash.
 rm -f "$ARCHIVES"/*.deb
+
+# Generate/refresh launcher wrappers for every program now in the prefix,
+# so it runs by name (scripts/make-launchers.sh).
+"$HERE/make-launchers.sh" "$NEWPREFIX/root"
