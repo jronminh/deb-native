@@ -24,7 +24,10 @@ mkdir -p "$NEWPREFIX/etc/apt/apt.conf.d" "$NEWPREFIX/etc/apt/sources.list.d" \
          "$NEWPREFIX/etc/apt/trusted.gpg.d" \
          "$NEWPREFIX/var/lib/apt/lists/partial" \
          "$NEWPREFIX/var/cache/apt/archives/partial" \
-         "$NEWPREFIX/var/lib/dpkg" "$NEWPREFIX/root"
+         "$NEWPREFIX/var/lib/dpkg" \
+         "$NEWPREFIX/root/etc" "$NEWPREFIX/root/usr" \
+         "$NEWPREFIX/root/var/lib" "$NEWPREFIX/root/var/log" \
+         "$NEWPREFIX/root/var/cache" "$NEWPREFIX/root/opt"
 [ -f "$NEWPREFIX/var/lib/dpkg/status" ] || : > "$NEWPREFIX/var/lib/dpkg/status"
 touch "$NEWPREFIX/etc/apt/trusted.gpg"
 
@@ -52,4 +55,10 @@ EOF
 
 "$HERE/native-seed.sh" "$NEWPREFIX/var/lib/dpkg"
 APT_CONFIG="$NEWPREFIX/etc/apt.conf" apt-get update
+
+echo "==> installing dash: maintainer scripts' shebang points here instead of"
+echo "    the real (root-owned, unpatchable) /system/bin/sh -- see"
+echo "    docs/design-manual-overlay.md and patch-maintainer-scripts.sh"
+"$HERE/apt-install.sh" "$NEWPREFIX" dash
+
 echo "==> ready: APT_CONFIG=$NEWPREFIX/etc/apt.conf apt-get install -y <package>"

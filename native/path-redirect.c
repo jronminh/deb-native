@@ -9,24 +9,32 @@
  * docs/design-manual-overlay.md.
  *
  * This is an LD_PRELOAD shared library: it intercepts the libc calls a
- * dynamically-linked glibc binary uses to open/stat a file and rewrites
- * any path matching a configured prefix to a different prefix, before
- * handing it to the real libc function. No kernel privilege is needed —
- * this works entirely at userspace symbol interposition.
+ * dynamically-linked glibc binary uses to open/stat/exec a file and
+ * rewrites any path under one of four directories (/usr, /etc, /var,
+ * /opt — the same ones sudo-less's "view" overlaid) to the same path
+ * under DN_INSTDIR, before handing it to the real libc function. No
+ * kernel privilege is needed — this works entirely at userspace symbol
+ * interposition.
  *
- * Verified against a real gap: figlet-figlet (from figlet_2.2.5-3+b2,
- * Debian's own binary, no source patch) calls fstatat() on the hardcoded,
- * compiled-in absolute path /usr/share/figlet/standard.flf, with no
- * environment variable or CLI flag able to redirect it — exactly the case
- * sudo-less's own docs (view.md) cite as needing their view. With this
- * shim preloaded and DN_REDIRECT_FROM=/usr/share/figlet
- * DN_REDIRECT_TO=<prefix root> set, it prints the ASCII banner
- * correctly, reading the font from wherever it was actually unpacked.
- *
- * Current limitation: ONE prefix mapping per process (DN_REDIRECT_FROM /
- * DN_REDIRECT_TO), not a general list — enough to prove the mechanism,
- * not yet a real multi-package tool. See "Open work" in
- * docs/design-manual-overlay.md.
+ * Verified against two real gaps:
+ * - figlet-figlet (figlet_2.2.5-3+b2, Debian's own binary): fstatat() on
+ *   the hardcoded /usr/share/figlet/standard.flf, no env var or CLI flag
+ *   able to redirect it — exactly the case sudo-less's docs (view.md)
+ *   cite as needing their view. Prints the ASCII banner correctly with
+ *   this shim + DN_INSTDIR set.
+ * - a real Debian glibc `dash` (installed via this project's own apt
+ *   pipeline, ELF-patched with `grun --configure` like any other glibc
+ *   binary), running `. /etc/foo.conf`: dash imports open64/stat64/
+ *   lstat64 (LFS variants — a modern glibc target compiles plain open()/
+ *   stat() source into these by default), not the plain names first
+ *   tried; missed on the first attempt, found via `readelf --dyn-syms`,
+ *   fixed by intercepting both. This is the mechanism maintainer scripts
+ *   actually use once their shebang points at this dash instead of the
+ *   real /bin/sh (docs/design-manual-overlay.md) — no dpkg patch needed,
+ *   no Bionic shim needed: dpkg just execve()s the script file directly
+ *   and lets the kernel resolve its shebang, so rewriting the shebang
+ *   line itself (already done by patch-maintainer-scripts.sh, which
+ *   already edits this same file's text) is enough.
  */
 #define _GNU_SOURCE
 #include <stdio.h>
@@ -36,26 +44,40 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <stdarg.h>
+#include <unistd.h>
 
-static const char *from_prefix(void) {
-  const char *p = getenv("DN_REDIRECT_FROM");
-  return p ? p : "";
-}
-static const char *to_prefix(void) {
-  const char *p = getenv("DN_REDIRECT_TO");
-  return p ? p : "";
-}
+static const char *PREFIXES[] = {"/usr", "/etc", "/var", "/opt", NULL};
 
 static const char *rewrite(const char *path, char *buf, size_t bufsz) {
-  const char *from = from_prefix();
-  size_t flen = strlen(from);
-  if (flen && path && strncmp(path, from, flen) == 0) {
-    snprintf(buf, bufsz, "%s%s", to_prefix(), path);
-    if (getenv("DN_REDIRECT_DEBUG"))
-      fprintf(stderr, "[path-redirect] %s -> %s\n", path, buf);
-    return buf;
+  const char *root = getenv("DN_INSTDIR");
+  if (!root || !path) return path;
+  for (int i = 0; PREFIXES[i]; i++) {
+    size_t plen = strlen(PREFIXES[i]);
+    if (strncmp(path, PREFIXES[i], plen) == 0 &&
+        (path[plen] == '/' || path[plen] == '\0')) {
+      snprintf(buf, bufsz, "%s%s", root, path);
+      if (getenv("DN_REDIRECT_DEBUG"))
+        fprintf(stderr, "[path-redirect] %s -> %s\n", path, buf);
+      return buf;
+    }
   }
   return path;
+}
+
+/* open64/stat64/... too: a modern glibc target compiles plain open()/
+ * stat() source calls into these LFS ("large file support") variants by
+ * default (_FILE_OFFSET_BITS=64) -- confirmed the hard way against a
+ * real Debian dash binary, whose dynamic symbol table imports open64/
+ * stat64/lstat64/fstat64, not the plain names this file used to only
+ * intercept. */
+typedef int (*open64_t)(const char *, int, ...);
+int open64(const char *pathname, int flags, ...) {
+  static open64_t real = NULL;
+  if (!real) real = (open64_t)dlsym(RTLD_NEXT, "open64");
+  char buf[4096];
+  mode_t mode = 0;
+  if (flags & O_CREAT) { va_list ap; va_start(ap, flags); mode = va_arg(ap, mode_t); va_end(ap); }
+  return real(rewrite(pathname, buf, sizeof buf), flags, mode);
 }
 
 typedef int (*openat_t)(int, const char *, int, ...);
@@ -106,10 +128,53 @@ int stat(const char *pathname, struct stat *st) {
   return real(rewrite(pathname, buf, sizeof buf), st);
 }
 
+typedef int (*statv_t)(const char *, struct stat64 *);
+int stat64(const char *pathname, struct stat64 *st) {
+  static statv_t real = NULL;
+  if (!real) real = (statv_t)dlsym(RTLD_NEXT, "stat64");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), st);
+}
+
+int lstat64(const char *pathname, struct stat64 *st) {
+  static statv_t real = NULL;
+  if (!real) real = (statv_t)dlsym(RTLD_NEXT, "lstat64");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), st);
+}
+
 typedef FILE *(*fopen_t)(const char *, const char *);
 FILE *fopen(const char *pathname, const char *mode) {
   static fopen_t real = NULL;
   if (!real) real = (fopen_t)dlsym(RTLD_NEXT, "fopen");
   char buf[4096];
   return real(rewrite(pathname, buf, sizeof buf), mode);
+}
+
+/* A maintainer script (or something it sources, like debconf's
+ * confmodule calling out to /usr/lib/cdebconf/debconf) can also just
+ * *run* an absolute path, not only open/read one -- access() and the
+ * exec family need the same rewrite. */
+typedef int (*access_t)(const char *, int);
+int access(const char *pathname, int mode) {
+  static access_t real = NULL;
+  if (!real) real = (access_t)dlsym(RTLD_NEXT, "access");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), mode);
+}
+
+typedef int (*execv_t)(const char *, char *const[]);
+int execv(const char *pathname, char *const argv[]) {
+  static execv_t real = NULL;
+  if (!real) real = (execv_t)dlsym(RTLD_NEXT, "execv");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), argv);
+}
+
+typedef int (*execve_t)(const char *, char *const[], char *const[]);
+int execve(const char *pathname, char *const argv[], char *const envp[]) {
+  static execve_t real = NULL;
+  if (!real) real = (execve_t)dlsym(RTLD_NEXT, "execve");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), argv, envp);
 }

@@ -59,6 +59,26 @@ current reach. Left as a named, understood gap (matches sudo-less's own
 install-side work now covers single-package leaf tools and their real
 dependency chains that don't route through `debconf`/`cdebconf`.
 
+**Update, same day (`docs/findings-dash-wrapper-2026-09-25.md`):** closed
+most of that gap. Insight: dpkg just `execve()`s a maintainer script and
+lets the *kernel* resolve its `#!/bin/sh` shebang — dpkg never chooses the
+shell, so instead of patching dpkg or the real (root-owned, unpatchable)
+`/system/bin/sh`, rewrite the shebang to point at a **real Debian `dash`,
+installed through this project's own `apt-install.sh` and ELF-patched
+with `grun`** — reusing infrastructure this repo already had. The
+original glibc `path-redirect.c` shim (generalized to a wholesale
+`/usr`/`etc`/`var`/`opt` mapping, plus `open64`/`stat64`/`access`/`execve`
+support once `readelf --dyn-syms` showed `dash` needs the LFS variants)
+now correctly redirects a real `dash` process. Found and fixed two sharp
+edges along the way: `LD_PRELOAD` crashes `dpkg` itself outright if
+exported before calling it (`dpkg` is Bionic; Bionic's linker won't start
+with a glibc `.so` preloaded), and it leaks into a script's own forked
+children (`cp`, etc.) unless unset right after the shell starts. `openssl`
+and a plain `. /etc/foo.conf` case now work end to end through the real
+pipeline; `debconf`'s deeper `exec /usr/lib/cdebconf/debconf` case got
+further but isn't fully solved yet — stopped there for this session
+(quota-conscious), with a concrete, narrow next step recorded.
+
 ## Why this exists
 
 Termux ships its own package repo, rebuilt against Bionic (musl-like NDK
