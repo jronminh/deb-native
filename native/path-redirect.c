@@ -163,6 +163,16 @@ int access(const char *pathname, int mode) {
   return real(rewrite(pathname, buf, sizeof buf), mode);
 }
 
+/* dash's own `exec` builtin checks the target with this, not plain
+ * access() -- found via readelf --dyn-syms on a real Debian dash. */
+typedef int (*faccessat_t)(int, const char *, int, int);
+int faccessat(int dirfd, const char *pathname, int mode, int flags) {
+  static faccessat_t real = NULL;
+  if (!real) real = (faccessat_t)dlsym(RTLD_NEXT, "faccessat");
+  char buf[4096];
+  return real(dirfd, rewrite(pathname, buf, sizeof buf), mode, flags);
+}
+
 typedef int (*execv_t)(const char *, char *const[]);
 int execv(const char *pathname, char *const argv[]) {
   static execv_t real = NULL;

@@ -66,3 +66,8 @@ echo "==> configuring"
 dpkg --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
      --force-not-root --force-script-chrootless --force-architecture \
      --configure -a || true
+
+echo "==> configuring, second pass (resolves ordering, not real failures)"
+dpkg --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
+     --force-not-root --force-script-chrootless --force-architecture \
+     --configure -a || true

@@ -75,9 +75,21 @@ exported before calling it (`dpkg` is Bionic; Bionic's linker won't start
 with a glibc `.so` preloaded), and it leaks into a script's own forked
 children (`cp`, etc.) unless unset right after the shell starts. `openssl`
 and a plain `. /etc/foo.conf` case now work end to end through the real
-pipeline; `debconf`'s deeper `exec /usr/lib/cdebconf/debconf` case got
-further but isn't fully solved yet — stopped there for this session
-(quota-conscious), with a concrete, narrow next step recorded.
+pipeline.
+
+Pushed further into `debconf`'s case (same doc): fixed two more real bugs
+(`dash`'s `exec` builtin checks via `faccessat`, not `access`; `cdebconf`
+is a separate package `debconf` doesn't strictly depend on — Debian
+assumes it's already present, this project's from-scratch prefix has to
+install it explicitly). That surfaced a **deeper, architectural wall**:
+`cdebconf`'s own `preinst` (`mkdir -p /var/lib/cdebconf`) fails because a
+package's `preinst` runs *during* `dpkg --unpack`, before
+`patch-maintainer-scripts.sh` ever gets a chance to run — `preinst`
+scripts are never patched at all, for any package. Fixing this for real
+needs patching a `.deb`'s control scripts *inside the archive itself*,
+before handing it to `dpkg` — a meaningfully bigger piece of work than
+anything else done today. Stopped here for this session
+(quota-conscious), with the next concrete step recorded.
 
 ## Why this exists
 

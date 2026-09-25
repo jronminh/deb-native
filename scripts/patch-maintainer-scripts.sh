@@ -49,6 +49,7 @@ if [ -x "$DASH" ] && [ -f "$SHIM" ] && [ ! -e "$WRAPPER" ]; then
 export LD_PRELOAD="$SHIM"
 export DN_INSTDIR="$INSTDIR"
 export PATH="$INSTDIR/usr/sbin:$INSTDIR/usr/bin:$INSTDIR/sbin:$INSTDIR/bin:\$PATH"
+export DEBIAN_FRONTEND=noninteractive
 exec "$DASH" "\$@"
 EOF
   chmod 755 "$WRAPPER"

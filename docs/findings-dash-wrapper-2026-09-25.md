@@ -76,9 +76,52 @@ pattern as `open`→`open64`) the actual symbol dash's `exec` implementation
 calls might not be the plain `access` this shim already intercepts —
 needs the same `readelf --dyn-syms` treatment `open`/`stat` already got.
 
-**Stopping here for this session** (quota-conscious, per direct
-instruction) rather than continuing to iterate. Next step is concrete and
-narrow: check `dash`'s actual dynamic symbol imports for the access/exec
-family the same way `open64`/`stat64` were found, add whichever variant
-is missing, retest the `ruby-adsf`/`ca-certificates`/`debconf` chain from
-`findings-hard-package-2026-09-25.md`.
+## Follow-up, same session: two more real fixes, then a bigger wall
+
+- **`faccessat`, not `access`.** `readelf --dyn-syms` on `dash` confirmed
+  it: `dash`'s own `exec` builtin checks the target via `faccessat`
+  (`UND faccessat@GLIBC_2.17`), not the plain `access` this shim already
+  intercepted. Added.
+- **`cdebconf` is a separate package `debconf` doesn't strictly `Depends:`
+  on.** `apt-cache show debconf` has no hard dependency on it at all —
+  real Debian assumes it's already present (it's `Priority: important`,
+  part of the base install apt normally never has to think about). Our
+  from-scratch prefix has nothing "already there," so it must be
+  installed explicitly. `apt-cache show cdebconf` confirms it `Provides:
+  debconf-2.0`, satisfying `ca-certificates`'s alternative dependency
+  directly.
+- Also added `DEBIAN_FRONTEND=noninteractive` to the wrapper (standard
+  Debian practice for unattended installs, prevents a `debconf` prompt
+  from hanging) and a second `--configure -a` pass in `apt-install.sh`
+  (resolves ordering-only failures like `libruby3.3 depends on
+  ruby-ruby2-keywords` after the package that provides it configures).
+
+**New, deeper wall found installing `cdebconf` itself:**
+
+```
+mkdir: cannot create directory '/var': Read-only file system
+dpkg: ... new cdebconf:arm64 package pre-installation script subprocess returned error exit status 1
+```
+
+`cdebconf`'s `preinst` (`cdebconfdir="/var/lib/cdebconf"; mkdir -p
+$cdebconfdir`) hits the same hardcoded-path class of problem — but this
+one is architecturally different from every case fixed so far. Checked
+directly: the sed pattern *would* rewrite this fine (`="` followed by
+`/var/` matches; the earlier worry that a variable-held path would be
+invisible to sed was wrong for this actual case). The real problem is
+**timing**: a package's `preinst` runs as part of `dpkg`'s `--unpack` step
+itself, *before* `patch-maintainer-scripts.sh` ever gets to run (it runs
+*after* `--unpack` in this pipeline) — so `preinst` scripts are never
+patched at all, for any package, regardless of what they contain.
+
+Fixing this needs a real architecture change, not a tweak: patch a
+package's control scripts (and rewrite the shebang) **inside the `.deb`
+file itself** — extract, patch, repackage — before ever handing it to
+`dpkg`, instead of patching `$ADMINDIR/info/*` after the fact. That's a
+meaningfully bigger piece of work (handling `md5sums` consistency, a
+`dpkg-deb --build` round-trip per package) than anything else in this
+doc. **Stopping here for this session** (quota-conscious): the debconf/
+`cdebconf` chain is understood in real depth now, but not yet fully
+closed. Next concrete step, in order: (1) build the pre-unpack `.deb`
+patching pipeline, (2) retest `cdebconf` → `ca-certificates` →
+`ruby-adsf` end to end.
