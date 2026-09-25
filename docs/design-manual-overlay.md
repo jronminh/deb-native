@@ -164,10 +164,20 @@ gotchas" above), generalized from one hardcoded `FROM`/`TO` pair to a real
 wholesale mapping (`/usr` → `$INSTDIR/usr`, `/etc` → `$INSTDIR/etc`,
 `/var` → `$INSTDIR/var`, `/opt` → `$INSTDIR/opt` — the same four
 directories the view overlaid), `LD_PRELOAD`ed into dpkg's own environment
-before it forks maintainer scripts (needs checking: does dpkg's
-`--force-script-chrootless` path preserve an inherited `LD_PRELOAD` into
-the script's `exec`, or clear the environment first? — untested). Not
-started; picking this up is the natural next step after the apt work.
+before it forks maintainer scripts.
+
+**Confirmed, not just planned:** built a throwaway test `.deb` with a
+`postinst` that dumps its own environment, installed it with
+`LD_PRELOAD=<any real .so>` set beforehand (same
+`--instdir`/`--admindir`/`--force-not-root`/`--force-script-chrootless`
+flags this project already uses) — the script's own `env` output shows
+`LD_PRELOAD=<the .so>` verbatim. **dpkg does not clear the environment
+before exec'ing a maintainer script.** The mechanism is viable; nothing
+else blocks starting it. (Also visible in that same env dump: dpkg
+already sets `DPKG_ROOT` for scripts, per `apt-dpkg-port.md`'s note — the
+scripts hitting this gap just don't check it themselves.)
+
+Not started; picking this up is the natural next step after the apt work.
 
 ## Open work
 
