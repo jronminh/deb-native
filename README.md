@@ -10,10 +10,11 @@ a small userspace **native overlay** that fakes the one thing Debian assumes
 and Android lacks: a writable `/usr`, `/etc`, `/var`, `/opt`.
 
 ```sh
-git clone --depth 1 https://github.com/jronminh/deb-native ~/.deb-native && sh ~/.deb-native/install.sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/install.sh | sh
 ```
 
-Then open a new shell (`exec bash`). Termux's `apt` now routes per package:
+That fetches the project into `~/.deb-native` and sets up the prefix. Then
+open a new shell (`exec bash`). Termux's `apt` now routes per package:
 anything Termux also provides installs normally, a Debian-only name goes to
 the prefix, and installed programs run by name:
 
@@ -101,16 +102,21 @@ Full side-by-side: [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md).
 
 ## Quick start
 
-Requirements: Termux with `clang` and the glibc side-install
+Requirements: Termux with `git`, `clang`, and the glibc side-install
 (`termux-pacman/glibc-packages`: `glibc-runner`/`grun`, `coreutils-glibc`,
 `bash-glibc`, `perl`, and the loader/libraries). Everything else the project
 needs (`apt`, `dpkg`, `dpkg-deb`) is already in Termux.
 
 ```sh
-git clone --depth 1 https://github.com/jronminh/deb-native ~/.deb-native
-sh ~/.deb-native/install.sh ~/.dn figlet tree   # prefix + packages (optional)
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/install.sh | sh
 exec bash                                       # or: . ~/.bashrc
 figlet hi                                       # installed program, by name
+```
+
+From a checkout you can pick the prefix and pre-install packages in one go:
+
+```sh
+sh install.sh ~/.dn figlet tree
 ```
 
 After activation, **Termux's own `apt` and `dpkg` route per package** — no
