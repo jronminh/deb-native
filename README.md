@@ -60,7 +60,8 @@ Debian layout — and reuses everything else Termux already has:
    process, Debian's layout simply exists; the files keep the real app uid
    and nothing runs as root. (This stands in for the kernel "view" sudo-less
    uses, which is unavailable here: `unshare(CLONE_NEWUSER)` fails `EINVAL`
-   and FUSE is closed.)
+   and FUSE is closed — both confirmed kernel-wide, even from the unrestricted
+   Android shell domain; see [`docs/findings.md`](docs/findings.md#platform-sandbox-limits-by-direct-probe-2026-09-26).)
 2. **Real Debian files, in a prefix.** The packages are unpacked with
    Termux's own `dpkg` (which already ships the non-root patches) into a
    separate prefix, `$INSTDIR/root`, using dpkg's stock
