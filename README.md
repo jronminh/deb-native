@@ -1,8 +1,9 @@
 # termux-deb-bridge
 
-Install real Debian `.deb` (glibc, `linux-arm64`) packages on Termux/Android
-— without patching every binary by hand, and without the parts of the
-`sudo-less` approach that Android's kernel/SELinux won't allow.
+**Install your favorite `linux-arm64` package through Termux's own `pkg`
+workflow** — real Debian `.deb` (glibc) packages on Termux/Android, without
+patching every binary by hand, and without the parts of the `sudo-less`
+approach that Android's kernel/SELinux won't allow.
 
 Status: **R&D, not functional yet.** No install path works end to end. This
 repo currently holds design notes and a comparison against prior art, not
