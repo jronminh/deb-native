@@ -19,6 +19,15 @@ See [`docs/findings-prototype-2026-09-25.md`](docs/findings-prototype-2026-09-25
 for the first round's log and the still-open, still-unsafe workarounds
 (architecture-name mismatch via `--force-architecture`).
 
+**A random-sample survey (`docs/findings-survey-2026-09-25.md`), following
+sudo-less's own methodology, found only 2 of 30 packages install (≈7%,
+vs. sudo-less's 63%) — not because of anything fixed so far, but because
+this project has never actually installed a package's ordinary
+dependencies: `scripts/prototype-install.sh` only unpacks the one `.deb`
+it's given. Wiring real `apt` dependency resolution (always the plan in
+`docs/design-install-path.md`, never actually built) is now the clear #1
+priority, ahead of everything else open in this repo.**
+
 ## Why this exists
 
 Termux ships its own package repo, rebuilt against Bionic (musl-like NDK
