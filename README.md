@@ -88,8 +88,31 @@ package's `preinst` runs *during* `dpkg --unpack`, before
 scripts are never patched at all, for any package. Fixing this for real
 needs patching a `.deb`'s control scripts *inside the archive itself*,
 before handing it to `dpkg` — a meaningfully bigger piece of work than
-anything else done today. Stopped here for this session
-(quota-conscious), with the next concrete step recorded.
+anything else done today.
+
+**Built that, plus a proper base bootstrap
+(`docs/findings-bootstrap-base-2026-09-25.md`):** `scripts/patch-deb.sh`
+rewrites a `.deb`'s control scripts before `dpkg` ever unpacks it; a new
+`scripts/bootstrap-base.sh` installs the packages real Debian assumes are
+"always already there" (`base-files`, `base-passwd`, `dash`,
+`debianutils`, `debconf`, `cdebconf`, `openssl`, `ca-certificates`) as one
+transaction instead of piecemeal. Found and fixed three more real bugs:
+batching `--unpack`-then-`--configure` breaks `Pre-Depends` ordering
+(`base-files` needs `awk` *configured*, not just unpacked, before it can
+even unpack) — now installs one package at a time, in apt's own resolved
+order; a stale downloaded `.deb` from an earlier run gets silently
+re-unpacked by a later one, undoing a `grun` patch — archives are now
+cleared after every install; and patching the same script twice
+(pre-unpack and the post-unpack safety net both touching it) doubles an
+already-rewritten path — fixed with an idempotency marker. Most of the
+base set now reaches fully configured; found, but explicitly **not yet
+fixed**, why the rest doesn't: `update-alternatives` is already
+`DPKG_ROOT`-aware (per sudo-less's own docs) and this project's blanket
+path rewrite double-prefixes its arguments; `base-passwd`'s postinst calls
+real `chown`, which no path redirect can fix (an actual, first real use
+case for sudo-less's "shim" concept — a no-op `chown` on `PATH`, not path
+rewriting at all). Stopped here for this session (quota-conscious,
+repeated direct instruction), with concrete next steps recorded.
 
 ## Why this exists
 

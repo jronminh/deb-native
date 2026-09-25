@@ -56,9 +56,9 @@ EOF
 "$HERE/native-seed.sh" "$NEWPREFIX/var/lib/dpkg"
 APT_CONFIG="$NEWPREFIX/etc/apt.conf" apt-get update
 
-echo "==> installing dash: maintainer scripts' shebang points here instead of"
-echo "    the real (root-owned, unpatchable) /system/bin/sh -- see"
-echo "    docs/design-manual-overlay.md and patch-maintainer-scripts.sh"
-"$HERE/apt-install.sh" "$NEWPREFIX" dash
+echo "==> bootstrapping base packages (dash, debconf, cdebconf, ...) in one"
+echo "    transaction -- see scripts/bootstrap-base.sh for why one, not"
+echo "    piecemeal, matters here"
+"$HERE/bootstrap-base.sh" "$NEWPREFIX"
 
 echo "==> ready: APT_CONFIG=$NEWPREFIX/etc/apt.conf apt-get install -y <package>"

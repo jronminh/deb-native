@@ -59,10 +59,22 @@ fi
 for f in "$ADMINDIR"/info/*.postinst "$ADMINDIR"/info/*.preinst \
          "$ADMINDIR"/info/*.postrm "$ADMINDIR"/info/*.prerm; do
   [ -f "$f" ] || continue
-  # Only rewrite a path when it's a whole path component (preceded by
-  # space, =, quote, or "("), not inside some other word, so
-  # "musr/foo" or a variable named "$usr_dir" are left alone.
-  sed -i -E "s#([ =\"'(])/(etc|usr|var|opt)/#\1${INSTDIR}/\2/#g" "$f"
+  # Idempotency guard on the PATH rewrite only: this script may already
+  # have been patched by patch-deb.sh before dpkg ever unpacked it --
+  # rewriting it a second time double-prefixes any path it already
+  # rewrote (found the hard way: $INSTDIR/usr/bin/mawk became
+  # $INSTDIR/$INSTDIR/usr/bin/mawk). The shebang rewrite below is left
+  # OUTSIDE this guard on purpose: it's naturally idempotent (it only
+  # matches a literal /bin/sh-style shebang, never the wrapper path it
+  # rewrites to), and this safety-net pass exists specifically to catch
+  # a script patched before the wrapper existed, once it now does.
+  if ! grep -q '# deb-native: patched' "$f"; then
+    # Only rewrite a path when it's a whole path component (preceded by
+    # space, =, quote, or "("), not inside some other word, so
+    # "musr/foo" or a variable named "$usr_dir" are left alone.
+    sed -i -E "s#([ =\"'(])/(etc|usr|var|opt)/#\1${INSTDIR}/\2/#g" "$f"
+    sed -i "1a # deb-native: patched" "$f"
+  fi
 
   if [ -x "$WRAPPER" ] && head -1 "$f" | grep -qE '^#!\s*/bin/(sh|bash|dash)\s*$'; then
     sed -i "1s#.*#\#!${WRAPPER}#" "$f"
