@@ -38,6 +38,15 @@ if [ ! -f "$LIBDIR/path-redirect.so" ] || [ "$SRC/path-redirect.c" -nt "$LIBDIR/
   "$HERE/build-path-redirect.sh" "$LIBDIR/path-redirect.so"
 fi
 
+# Launch dispatcher: classifies a target's ELF PT_INTERP at launch and picks
+# the shim (glibc), plain exec (Bionic), or `proot -b` syscall rewrite
+# (static, which the shim cannot reach). Built with Termux's own clang -- it
+# is a Bionic binary and must run before any glibc env is set up.
+if [ ! -x "$LIBDIR/dn-run" ] || [ "$SRC/dn-run.c" -nt "$LIBDIR/dn-run" ]; then
+  clang -O2 -o "$LIBDIR/dn-run" "$SRC/dn-run.c"
+  chmod 755 "$LIBDIR/dn-run"
+fi
+
 # Build the launcher. One binary, dispatched by its own argv[0] basename.
 if [ ! -x "$BINDIR/dn-shell" ] || [ "$SRC/dn-launch.c" -nt "$BINDIR/dn-shell" ]; then
   clang -O2 -o "$BINDIR/dn-shell" "$SRC/dn-launch.c"

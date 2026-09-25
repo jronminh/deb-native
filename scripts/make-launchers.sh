@@ -2,11 +2,13 @@
 # Generate launcher wrappers for a prefix's installed programs, so a user
 # can just type `prog` instead of running it through dn-shell by hand.
 #
-# Why wrappers at all: an installed Debian binary is grun-repointed at
-# $PREFIX/glibc/lib/ld-linux, and only with the path-redirect shim in its
-# environment does it run (and then its hardcoded /usr, /etc, /var, /opt
-# paths resolve into the prefix). A wrapper sets that environment and execs
-# the real program.
+# Why wrappers at all: an installed Debian ELF is grun-repointed at
+# $PREFIX/glibc/lib/ld-linux, and needs the right launch mechanism for its
+# hardcoded /usr, /etc, /var, /opt paths to resolve into the prefix. The
+# wrapper hands the real binary to dn-run, which classifies it at launch:
+# glibc -> LD_PRELOAD the path-redirect shim, static -> `proot -b` syscall
+# rewrite, Bionic -> plain exec. Scripts still get the glibc shell/perl
+# wrappers below.
 #
 # Where they go: NOT $INSTDIR/bin -- base-files' usrmerge makes that a
 # symlink to usr/bin, so writing there would clobber real binaries (found
@@ -23,6 +25,7 @@ SHIM="$INSTDIR/usr/lib/deb-native/path-redirect.so"
 LAUNCHDIR="$INSTDIR/usr/lib/deb-native/bin"
 
 [ -f "$SHIM" ] || { echo "make-launchers: missing $SHIM" >&2; exit 1; }
+[ -x "$INSTDIR/usr/lib/deb-native/dn-run" ] || { echo "make-launchers: run setup-runtime.sh first (no dn-run)" >&2; exit 1; }
 [ -x "$INSTDIR/usr/bin/dn-shell" ] || { echo "make-launchers: run setup-runtime.sh first" >&2; exit 1; }
 
 mkdir -p "$LAUNCHDIR"
@@ -32,29 +35,23 @@ is_elf() {
   [ "$(head -c4 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "7f454c46" ]
 }
 
-# Wrap $name -> $real. Wrapper type depends on the target: an ELF gets the
-# shim environment directly; a #! script is run through the glibc shell
-# wrappers (so its own hardcoded paths are covered and its interpreter
-# resolves), because handing a Bionic /bin/sh a glibc LD_PRELOAD crashes.
+# Wrap $name -> $real. Wrapper type depends on the target: an ELF is handed
+# to dn-run for launch-time classification; a #! script is run through the
+# glibc shell wrappers (so its own hardcoded paths are covered and its
+# interpreter resolves), because handing a Bionic /bin/sh a glibc LD_PRELOAD
+# crashes.
 wrap() {
   name=$1; real=$2
   case "$name" in
     dn-shell|dn-perl|chown|chgrp|path-redirect.so|'') return 0 ;;
   esac
   if is_elf "$real"; then
+    # One uniform wrapper for every ELF: dn-run classifies the target at
+    # launch and sets up the shim (glibc), a plain exec (Bionic), or a
+    # proot syscall rewrite (static). See native/dn-run.c.
     cat > "$tmp" <<EOF
 #!/system/bin/sh
-export DN_INSTDIR="$INSTDIR"
-export PATH="$INSTDIR/usr/sbin:$INSTDIR/usr/bin:$INSTDIR/sbin:$INSTDIR/bin:$INSTDIR/usr/games:$LAUNCHDIR:$GLIBC/bin:$PREFIX_DIR/bin"
-# Hand Termux's own preload (termux-exec) back to any Bionic child via the
-# shim's DN_BIONIC_PRELOAD, instead of dropping it -- Termux-native
-# commands need it, and it must not be disabled system-wide.
-case "\$LD_PRELOAD" in
-  *path-redirect.so*) ;;
-  *) [ -n "\$LD_PRELOAD" ] && export DN_BIONIC_PRELOAD="\$LD_PRELOAD" ;;
-esac
-export LD_PRELOAD="$SHIM"
-exec "$real" "\$@"
+exec "$LAUNCHDIR/../dn-run" "$real" "\$@"
 EOF
   else
     first=$(head -c 64 "$real" 2>/dev/null | head -1)
