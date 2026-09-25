@@ -96,14 +96,79 @@ plus `debconf`'s own still-unresolved `exec /usr/share/debconf/frontend`
 case — the file exists in the prefix, so this needs its own trace, not
 yet done).
 
+## Update, same session: the static rewrite was the wrong tool entirely
+
+The `update-alternatives` double-prefix above kept recurring even after
+exempting it by name, traced to the same root cause hitting `base-files`
+too: its postinst is **already `$DPKG_ROOT`-aware** (`"$DPKG_ROOT$1"`
+throughout — a real, standard Debian convention for exactly this
+chrootless-install scenario, more scripts follow it than just the
+dpkg-suite tools). Naming individual tools to exempt doesn't scale.
+
+**Fix: removed the static text path-rewrite entirely.** Kept only the
+shebang rewrite to the `dn-dash` wrapper. This works because the runtime
+`LD_PRELOAD` shim already covers exactly the complementary case — a
+script with *no* `$DPKG_ROOT` awareness, using a bare literal path
+(openssl's `ln -s /etc/ssl /usr/lib/ssl`) — by intercepting the actual
+`symlink()`/`open()`/`exec()` call with the literal, unmodified path, not
+by pre-editing the script's text. A `$DPKG_ROOT`-aware script's own
+already-correctly-prefixed path never matches the shim's rewrite (it no
+longer starts with a bare `/usr`, `/etc`, `/var`, `/opt`), so nothing
+double-applies from that side either. Removing sed entirely also
+eliminated the whole idempotency-marker mechanism (`# deb-native:
+patched`) — no longer needed, since there's no more double-application
+risk, and the shebang rewrite alone is naturally idempotent.
+
+## The actual highest-value bug of the day: a sed delimiter mistake
+
+Full writeup: `docs/findings-sed-delimiter-bug-2026-09-25.md`. Short
+version: a `sed -E 's#^#!...#\2#'` call (extracting a shebang's trailing
+flag, e.g. `-e`) used `#` as its delimiter while the pattern itself starts
+with a literal `#` (matching `#!`) — `sed` doesn't parse this
+semantically, so the first `#` after `^` closed the pattern section
+immediately, producing `sed: unknown option to 's'`. Under this script's
+`set -eu`, that single failure **silently aborted the entire per-file
+loop**, every time, for every file alphabetically after whichever one
+first hit it — which is exactly why `openssl.postinst` (sorts after
+`base-files`, `base-passwd`, `dash`, `debconf`, `debianutils`) looked
+permanently unfixable across many rounds of testing, when the actual
+mechanism was fine. Fixed by switching to `,` as the delimiter. Found only
+by invoking the script directly by hand and reading its own exit code —
+not by reading the code harder, and not visible at all through the full
+pipeline's logs, since a `|| true` one level up swallowed the crash.
+
+## Where the bootstrap stands now
+
+Fixed by the sed-delimiter fix alone: `openssl`, `dash`, `debianutils`,
+`mawk` all reach fully configured (`ii`).
+
+Two new, distinct, real findings — neither a bug in this project's
+mechanism, both genuinely needing new work:
+
+- **`chown` permission errors** (`base-passwd` on `/etc/subuid`,
+  `base-files` on `/mnt`): a maintainer script's own explicit `chown`
+  call, which this unprivileged process cannot satisfy regardless of what
+  path it targets. No path redirect fixes a permissions problem. This is
+  the first genuine case for sudo-less's actual "shim" concept (a fake,
+  no-op stand-in command placed on `PATH`) — not path rewriting at all.
+- **External commands the script forks don't get the shim**
+  (`readline-common`'s postinst: `cp: cannot stat
+  '/usr/share/readline/inputrc'`). The `dn-dash` wrapper deliberately
+  `unset`s `LD_PRELOAD` right after starting, specifically so a forked
+  Bionic binary (`cp`, found via `PATH`, likely Termux's own) doesn't
+  crash trying to load a glibc `.so`. But that means `cp`'s own file
+  access is **not** covered by the shim at all — a structural gap between
+  "dash's own calls" (covered) and "anything dash forks as a separate
+  process" (not, unless that process is itself a glibc binary this
+  project also patches and separately arranges to run under the shim).
+
 **Stopping here for this session** (quota-conscious, repeated direct
 instruction). Concrete next steps, in order:
-1. Exempt `DPKG_ROOT`-aware tools (`update-alternatives`, `dpkg-divert`,
-   `dpkg-statoverride`, `dpkg-trigger`) from the path-rewrite pass.
-2. A shimmed no-op `chown` (and audit for other root-only commands a
-   maintainer script might call) on the wrapper's `PATH` — sudo-less's own
-   "shim" concept, genuinely needed here for the first time.
-3. Trace why `debconf.postinst`'s `exec /usr/share/debconf/frontend`
-   still isn't redirected even once the wrapper mechanism is confirmed
-   active for this script (unlike the earlier `cdebconf` case, the target
-   file demonstrably exists in the prefix this time).
+1. A shimmed no-op `chown` on the wrapper's `PATH` (audit for other
+   root-only commands too: `chgrp`, real `mount`, etc.).
+2. Decide how external commands a script forks should get shim coverage
+   — install a real glibc `coreutils` via this project's own pipeline and
+   arrange for the wrapper's `PATH` to prefer it (with the shim, since
+   it'd be a glibc binary launched fresh, not a fork inheriting a cleared
+   `LD_PRELOAD`)? Or accept this class of failure and treat it the way
+   `chown` is being treated — case by case?

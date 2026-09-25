@@ -108,10 +108,41 @@ already-rewritten path — fixed with an idempotency marker. Most of the
 base set now reaches fully configured; found, but explicitly **not yet
 fixed**, why the rest doesn't: `update-alternatives` is already
 `DPKG_ROOT`-aware (per sudo-less's own docs) and this project's blanket
-path rewrite double-prefixes its arguments; `base-passwd`'s postinst calls
-real `chown`, which no path redirect can fix (an actual, first real use
-case for sudo-less's "shim" concept — a no-op `chown` on `PATH`, not path
-rewriting at all). Stopped here for this session (quota-conscious,
+path rewrite double-prefixes its arguments.
+
+**Resolved, same day:** the `DPKG_ROOT` conflict turned out not to be an
+`update-alternatives`-specific quirk — `base-files` itself is
+`$DPKG_ROOT`-aware throughout, a real standard Debian convention more
+scripts follow than just the dpkg-suite tools. Fix: **removed the static
+path-rewrite entirely**, keeping only the shebang rewrite to the `dash`
+wrapper — the runtime `LD_PRELOAD` shim already covers a script with no
+`$DPKG_ROOT` awareness at all, by intercepting the actual syscall-adjacent
+call with the literal path, and a `$DPKG_ROOT`-aware script's own
+already-correct path never matches the shim's rewrite either, so nothing
+double-applies from either direction.
+
+That fix also exposed **the highest-value bug of the whole session**
+(`docs/findings-sed-delimiter-bug-2026-09-25.md`): a `sed` command used
+`#` as its delimiter while its own pattern started with a literal `#`
+(matching a shebang's `#!`) — `sed: unknown option to 's'`, and under
+`set -eu` this silently killed the entire patch script partway through
+its file loop, every run, for every file alphabetically after whichever
+one hit it first. This is exactly why `openssl` looked permanently broken
+across many rounds of testing when the mechanism itself was fine. Found
+only by invoking the script directly by hand and reading its real exit
+code — a `|| true` one level up hid the crash completely inside the full
+pipeline's logs. Fixed (switched delimiter to `,`): `openssl`, `dash`,
+`debianutils`, and `mawk` all now reach fully configured.
+
+Two new, genuinely distinct problems found and left open, neither a bug
+in this project's own mechanism: **`chown` permission errors**
+(`base-passwd`/`base-files` calling real `chown`, which no path redirect
+can fix — the first real case for sudo-less's actual "shim" concept, a
+no-op stand-in command, not path rewriting) and **external commands a
+script forks aren't covered by the shim** (`readline-common`'s `cp`, a
+separate Bionic process the wrapper deliberately clears `LD_PRELOAD`
+before forking, to avoid crashing it — meaning that fork's own file access
+isn't intercepted at all). Stopped here for this session (quota-conscious,
 repeated direct instruction), with concrete next steps recorded.
 
 ## Why this exists

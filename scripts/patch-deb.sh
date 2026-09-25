@@ -43,18 +43,59 @@ dpkg-deb -R "$DEB" "$WORK/pkg"
 for f in "$WORK/pkg/DEBIAN/preinst" "$WORK/pkg/DEBIAN/postinst" \
          "$WORK/pkg/DEBIAN/prerm" "$WORK/pkg/DEBIAN/postrm"; do
   [ -f "$f" ] || continue
-  # Idempotency guard: this same script (already unpacked once before, in
-  # an earlier transaction, or already patched once via this same file
-  # here) must not get the path rewrite applied a second time -- found
-  # the hard way: a second pass double-prefixed an already-rewritten
-  # $INSTDIR/usr/bin/mawk into $INSTDIR/$INSTDIR/usr/bin/mawk.
-  grep -q '# deb-native: patched' "$f" && continue
-  sed -i -E "s#([ =\"'(])/(etc|usr|var|opt)/#\1${INSTDIR}/\2/#g" "$f"
-  if [ -x "$WRAPPER" ] && head -1 "$f" | grep -qE '^#!\s*/bin/(sh|bash|dash)\s*$'; then
-    sed -i "1s#.*#\#!${WRAPPER}#" "$f"
+  # No idempotency marker needed: the only thing this loop still does is
+  # rewrite the shebang, which is naturally idempotent (the regex below
+  # only ever matches a plain /bin/sh-style shebang, never the wrapper
+  # path it rewrites to) -- running this twice is harmless by
+  # construction, and a script must be allowed a second attempt once
+  # the wrapper exists but didn't yet on the first pass (a real
+  # chicken-and-egg case: dash's own dependencies are patched before
+  # dash itself is unpacked).
+  #
+  # NOT rewriting literal /etc, /usr, /var, /opt paths in the script text
+  # anymore (an earlier version of this script did). Found the hard way,
+  # twice: many maintainer scripts (base-files, and dpkg's own
+  # update-alternatives/dpkg-divert/dpkg-statoverride/dpkg-trigger) are
+  # already DPKG_ROOT-aware -- dpkg exports $DPKG_ROOT to every script,
+  # set to this project's prefix, and their own logic already resolves
+  # paths against it correctly. Rewriting a literal path on top of that
+  # double-prefixes it once the script's own $DPKG_ROOT concatenation
+  # ALSO applies (confirmed: $INSTDIR/usr/bin/mawk ->
+  # $INSTDIR/$INSTDIR/usr/bin/mawk, and the same shape of bug in
+  # base-files's own DPKG_ROOT-based helper functions). The runtime
+  # LD_PRELOAD shim (via the dash wrapper below) already covers the
+  # OTHER case -- a script with NO $DPKG_ROOT awareness at all, using a
+  # bare literal absolute path (openssl's `ln -s /etc/ssl /usr/lib/ssl`)
+  # -- by intercepting the actual open/exec syscall-adjacent call with
+  # the literal path, not by editing the script's text first. A
+  # DPKG_ROOT-aware script's own already-correct, already-prefixed path
+  # never matches this shim's rewrite (it no longer starts with a bare
+  # /usr, /etc, /var or /opt), so nothing double-applies there either.
+  # Allow (and preserve) a trailing flag on the shebang, e.g. "#!/bin/sh
+  # -e" -- found the hard way: openssl's postinst has exactly this, and
+  # the earlier version of this regex (requiring nothing after the
+  # interpreter name) silently never matched it at all, so it never got
+  # the wrapper treatment and just fell through to the real, unpatched
+  # /system/bin/sh. A shebang carries at most one argument, so this is
+  # passed to the wrapper itself (its own shebang has none), which
+  # forwards it on to the real dash via "$@".
+  # \s/\S are PCRE, not POSIX ERE -- grep -E/sed -E here silently never
+  # matched at all with them (found the hard way: this stayed broken
+  # across a whole earlier round of testing). [[:space:]]/[^[:space:]]
+  # are the POSIX ERE equivalents.
+  shebang=$(head -1 "$f")
+  if [ -x "$WRAPPER" ] &&
+     printf '%s' "$shebang" | grep -qE '^#![[:space:]]*/bin/(sh|bash|dash)([[:space:]]+[^[:space:]]+)?[[:space:]]*$'; then
+    # NOT using # as the sed delimiter: the pattern starts with a literal
+    # "#" (matching the shebang's own "#!"), which broke delimiter
+    # parsing outright and, under this script's `set -eu`, silently
+    # killed the entire loop partway through -- every file alphabetically
+    # after the one being processed when this hit never got touched, in
+    # every run, looking like the mechanism just didn't work at all.
+    flag=$(printf '%s' "$shebang" | sed -E 's,^#![[:space:]]*/bin/(sh|bash|dash)[[:space:]]*([^[:space:]]*)[[:space:]]*$,\2,')
+    sed -i "1s#.*#\#!${WRAPPER}${flag:+ }${flag}#" "$f"
     sed -i "2i unset LD_PRELOAD 2>/dev/null || true" "$f"
   fi
-  sed -i "1a # deb-native: patched" "$f"
 done
 
 dpkg-deb -b "$WORK/pkg" "$WORK/out.deb" >/dev/null

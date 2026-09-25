@@ -59,25 +59,34 @@ fi
 for f in "$ADMINDIR"/info/*.postinst "$ADMINDIR"/info/*.preinst \
          "$ADMINDIR"/info/*.postrm "$ADMINDIR"/info/*.prerm; do
   [ -f "$f" ] || continue
-  # Idempotency guard on the PATH rewrite only: this script may already
-  # have been patched by patch-deb.sh before dpkg ever unpacked it --
-  # rewriting it a second time double-prefixes any path it already
-  # rewrote (found the hard way: $INSTDIR/usr/bin/mawk became
-  # $INSTDIR/$INSTDIR/usr/bin/mawk). The shebang rewrite below is left
-  # OUTSIDE this guard on purpose: it's naturally idempotent (it only
-  # matches a literal /bin/sh-style shebang, never the wrapper path it
-  # rewrites to), and this safety-net pass exists specifically to catch
-  # a script patched before the wrapper existed, once it now does.
-  if ! grep -q '# deb-native: patched' "$f"; then
-    # Only rewrite a path when it's a whole path component (preceded by
-    # space, =, quote, or "("), not inside some other word, so
-    # "musr/foo" or a variable named "$usr_dir" are left alone.
-    sed -i -E "s#([ =\"'(])/(etc|usr|var|opt)/#\1${INSTDIR}/\2/#g" "$f"
-    sed -i "1a # deb-native: patched" "$f"
-  fi
-
-  if [ -x "$WRAPPER" ] && head -1 "$f" | grep -qE '^#!\s*/bin/(sh|bash|dash)\s*$'; then
-    sed -i "1s#.*#\#!${WRAPPER}#" "$f"
+  # No idempotency marker needed -- see patch-deb.sh's identical comment:
+  # the shebang rewrite below is naturally idempotent, and this pass
+  # exists specifically to give a script a second chance once the
+  # wrapper exists, if it didn't yet when patch-deb.sh first touched it.
+  #
+  # NOT rewriting literal path text anymore -- see patch-deb.sh's
+  # identical comment for the full reason (many maintainer scripts,
+  # base-files included, are already $DPKG_ROOT-aware; rewriting a
+  # literal path on top of that double-prefixes it once the script's own
+  # concatenation also applies). The runtime LD_PRELOAD shim covers a
+  # script with no $DPKG_ROOT awareness at all.
+  # Allow (and preserve) a trailing flag on the shebang -- see
+  # patch-deb.sh's identical comment (openssl's "#!/bin/sh -e" is the
+  # real case this was missing).
+  # \s/\S are PCRE, not POSIX ERE -- silently never matched with them.
+  shebang=$(head -1 "$f")
+  if [ -x "$WRAPPER" ] &&
+     printf '%s' "$shebang" | grep -qE '^#![[:space:]]*/bin/(sh|bash|dash)([[:space:]]+[^[:space:]]+)?[[:space:]]*$'; then
+    # NOT using # as the sed delimiter here: the pattern itself starts
+    # with a literal "#" (matching the shebang's own "#!"), which broke
+    # delimiter parsing outright ("sed: unknown option to `s'") and, under
+    # this script's `set -eu`, silently killed the ENTIRE run partway
+    # through its file loop -- any script alphabetically after the one
+    # being processed when this hit (here: openssl.postinst) never got
+    # touched at all, in every run, looking like the mechanism just
+    # didn't work rather than a shell script bug.
+    flag=$(printf '%s' "$shebang" | sed -E 's,^#![[:space:]]*/bin/(sh|bash|dash)[[:space:]]*([^[:space:]]*)[[:space:]]*$,\2,')
+    sed -i "1s#.*#\#!${WRAPPER}${flag:+ }${flag}#" "$f"
     # Drop LD_PRELOAD from dash's own environment as its very first
     # action, so a command the script forks (cp, ln, ...) -- often a
     # Bionic binary found via PATH -- doesn't inherit a glibc .so in its
