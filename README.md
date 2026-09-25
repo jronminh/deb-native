@@ -255,7 +255,10 @@ This repo is pursuing two directions in place of the blocked 60%:
 - [`sudo-less`](https://github.com/jronminh/sudo-less) — the apt/dpkg
   prefix-install approach and its docs are the starting point for this
   repo's design. See [`docs/prior-art.md`](docs/prior-art.md) for the
-  detailed carry-over analysis.
+  detailed carry-over analysis, and
+  [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) for the side-by-side diff
+  (sudo-less = Debian-on-Debian with a kernel view; this repo = Termux
+  fused with a userspace native overlay to run Debian arm64 glibc).
 - Termux's own `apt`/`dpkg` patches (`termux/termux-packages`) — the
   original source sudo-less itself forked from; ends up being the piece
   this repo needs least modified, since it's already built for this exact
