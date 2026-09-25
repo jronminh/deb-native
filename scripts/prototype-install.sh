@@ -1,13 +1,13 @@
 #!/bin/sh
 # Prototype: install one real Debian arm64 .deb into a prefix separate from
 # Termux's own $PREFIX, using stock dpkg relocation flags (no fork/patch —
-# see docs/design-install-path.md), then auto-patch any new ELF binaries to
+# see docs/design.md), then auto-patch any new ELF binaries to
 # run against Termux's own glibc side-install via `grun --configure`
-# (docs/design-static-wrappers.md's Direction 2, ELF-patch case).
+# (docs/design.md's Direction 2, ELF-patch case).
 #
 # Dependencies Termux already provides natively (glibc itself, zlib,
 # openssl, ...) are NOT reinstalled into the prefix: native-seed.sh marks
-# them satisfied in $ADMINDIR/status first (docs/design-native-deps.md),
+# them satisfied in $ADMINDIR/status first (docs/design.md),
 # pointing dpkg's resolver at what Termux already has instead of
 # duplicating it. Only what's genuinely missing lands under $INSTDIR —
 # the sudo-less-style single collection point for the delta, not everything.
@@ -16,7 +16,7 @@
 # ciso_1.0.2-2+b1_arm64.deb (libc6 + zlib1g, resolved natively, zero files
 # duplicated — confirmed with the glibc ld.so's own --list that the
 # resulting binary loads Termux's libz.so.1 directly). See
-# docs/findings-prototype-2026-09-25.md and docs/design-native-deps.md.
+# docs/findings.md and docs/design.md.
 #
 # Usage: prototype-install.sh /path/to/package.deb
 
@@ -52,7 +52,7 @@ echo "==> configuring $pkg_name"
 # package needs a dependency native-seed.sh doesn't know about yet (add a
 # mapping) or it's genuinely missing and needs installing for real —
 # a real dependency resolver (apt, not bare dpkg) is the eventual answer,
-# not more manual seeding; see docs/design-native-deps.md "Open problem".
+# not more manual seeding; see docs/design.md "Open problem".
 dpkg --instdir="$INSTDIR" --admindir="$ADMINDIR" \
      --force-not-root --force-script-chrootless --force-architecture \
      --configure "$pkg_name"

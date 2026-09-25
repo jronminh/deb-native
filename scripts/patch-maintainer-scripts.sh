@@ -5,7 +5,7 @@
 # finds the file where it actually landed ($INSTDIR), instead of at a
 # real absolute path Android doesn't have.
 #
-# Replaces the LD_PRELOAD approach in design-manual-overlay.md's Bionic
+# Replaces the LD_PRELOAD approach in design.md's Bionic
 # shim attempt, abandoned after testing found it doesn't reach the real
 # target: maintainer scripts run via the real /bin/sh, which on Android
 # is /system/bin/sh (root-owned toybox, not Termux's dash at all -- a

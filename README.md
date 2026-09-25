@@ -163,7 +163,7 @@ a different prefix. Under the hood:
   install does not hide `$HOME` or provide an empty `/run` the way
   sudo-less's view does. Run only packages you trust.
 - **No system services yet.** No `systemd --user` on Termux; `runit`
-  (`termux-services`) is the candidate ([research](docs/services-research.md)).
+  (`termux-services`) is the candidate ([research](docs/design.md)).
 - **Not for packages that need root** — system users/groups, `setuid`,
   firewall/TUN, kernel modules.
 - Two known nits: `update-alternatives` writes its links into Termux's own
@@ -183,22 +183,13 @@ Next steps are tracked in [`TODO.md`](TODO.md).
 
 ## Documentation
 
+- [`docs/design.md`](docs/design.md) — how it works end to end: the userspace
+  overlay, native dependency reuse, the install path, run-time wrappers, the
+  apt/dpkg hooks, services, and prior art.
+- [`docs/findings.md`](docs/findings.md) — the engineering log (every dead
+  end, and the syscall evidence behind the decisions).
 - [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) — the method, side by side
   with `sudo-less`.
-- [`docs/design-manual-overlay.md`](docs/design-manual-overlay.md) — the
-  userspace overlay, and why the kernel view is unavailable here.
-- [`docs/design-native-deps.md`](docs/design-native-deps.md) — reusing
-  Termux's glibc packages instead of duplicating them.
-- [`docs/design-install-path.md`](docs/design-install-path.md) — why
-  Termux's apt/dpkg are reused rather than patched.
-- [`docs/design-static-wrappers.md`](docs/design-static-wrappers.md),
-  [`docs/design-hooks.md`](docs/design-hooks.md) — run-time wrappers.
-- [`docs/findings-runtime-and-base-2026-09-25.md`](docs/findings-runtime-and-base-2026-09-25.md)
-  — how the base bootstrap was made to work end to end.
-- [`docs/findings-shim-perf-2026-09-25.md`](docs/findings-shim-perf-2026-09-25.md)
-  — the shim's performance and the one-time cost of `grun`.
-- [`docs/prior-art.md`](docs/prior-art.md) — what carries over from
-  `sudo-less`, and related work (`proot`, `proroot`).
 
 ## Prior art / credit
 

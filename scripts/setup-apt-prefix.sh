@@ -1,8 +1,8 @@
 #!/bin/sh
 # Point Termux's own apt at a real Debian arm64 repository, scoped to a
-# separate prefix — the piece design-install-path.md always intended but
+# separate prefix — the piece design.md always intended but
 # this repo never actually built until the survey
-# (docs/findings-survey-2026-09-25.md) showed it was the #1 gap: without
+# (docs/findings.md) showed it was the #1 gap: without
 # it, only the one requested .deb ever gets installed, never its
 # dependencies.
 #
@@ -14,7 +14,7 @@
 # KNOWN INSECURE SHORTCUT: sources.list uses [trusted=yes], skipping
 # signature verification entirely, because Termux ships no Debian archive
 # keyring to verify against. Fine for this prototype; do not ship this
-# as-is — see "Open work" in docs/design-install-path.md.
+# as-is — see "Open work" in docs/design.md.
 set -eu
 NEWPREFIX=${1:?usage: setup-apt-prefix.sh NEWPREFIX [suite]}
 SUITE=${2:-stable}

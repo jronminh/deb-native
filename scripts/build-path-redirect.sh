@@ -2,7 +2,7 @@
 # Cross-compile native/path-redirect.c into a glibc shared library, using
 # Termux's own clang (Bionic-hosted) targeting Termux's glibc side-install
 # — the same technique Termux's own termux-pacman/glibc-packages build
-# uses, discovered by trial and error (see docs/design-manual-overlay.md
+# uses, discovered by trial and error (see docs/design.md
 # "Toolchain gotchas" for why each of these flags exists):
 #
 # - --target=aarch64-linux-gnu: glibc target, not Android/Bionic.

@@ -3,7 +3,7 @@
 # dependencies already satisfied natively by one of Termux's own
 # termux-pacman/glibc-packages (*-glibc), so dpkg's dependency resolver
 # accepts a real .deb without duplicating that dependency's files into
-# our own prefix — see docs/design-native-deps.md.
+# our own prefix — see docs/design.md.
 #
 # Usage: native-seed.sh $ADMINDIR
 #
@@ -23,7 +23,7 @@ mkdir -p "$ADMINDIR"
 # these since they're marked as having none, see dpkg-wrapper.sh's own
 # handling of exactly this "no files list" case).
 #
-# Known gap (see docs/design-native-deps.md "Open problem"): this is a
+# Known gap (see docs/design.md "Open problem"): this is a
 # hand-maintained name mapping, not derived from anything. Debian and
 # Termux name shared-library packages differently on purpose (Debian
 # splits per soname+ABI, Termux doesn't) — a real implementation needs to

@@ -3,7 +3,7 @@
 # there" (Priority: required/important, part of every base install) as
 # ONE bootstrap transaction, instead of pulling them in piecemeal as
 # other packages' dependencies -- found the hard way
-# (docs/findings-dash-wrapper-2026-09-25.md) that installing them one at
+# (docs/findings.md) that installing them one at
 # a time across separate apt-install.sh calls causes real bugs: a
 # package's control scripts only get the shebang-rewrite-to-wrapper
 # treatment if dash+wrapper already exist AT PATCH TIME (a real

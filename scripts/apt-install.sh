@@ -6,7 +6,7 @@
 #      hardcoded paths and shebang, INSIDE the archive, before dpkg ever
 #      sees it -- necessary because a package's preinst runs during
 #      dpkg's own --unpack, before any post-unpack patch step could
-#      touch it: docs/findings-dash-wrapper-2026-09-25.md)
+#      touch it: docs/findings.md)
 #   3. install one package at a time, in apt's own resolved order
 #      (--unpack then --configure per package, not batched) -- found the
 #      hard way that batching breaks Pre-Depends ordering (base-files

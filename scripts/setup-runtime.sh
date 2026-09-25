@@ -1,7 +1,7 @@
 #!/bin/sh
 # Create the maintainer-script runtime inside INSTDIR. Idempotent.
 #
-# Why this exists (docs/findings-bootstrap-base-2026-09-25.md, and the
+# Why this exists (docs/findings.md, and the
 # on-device re-test 2026-09-25 PM that produced docs/findings-runtime-and-
 # base-2026-09-25.md): maintainer scripts are executed by the *kernel*
 # resolving their shebang, and the kernel follows only one `#!` level. An
@@ -47,7 +47,7 @@ fi
 
 # No-op shims for root-only commands a maintainer script may call by bare
 # name: an unprivileged process cannot chown/chgrp no matter what path the
-# shim points it at (findings-bootstrap-base-2026-09-25.md, next step 1).
+# shim points it at (findings.md, next step 1).
 # These are fine as scripts -- they are reached through PATH (a normal
 # exec, not a shebang chain), so the one-level rule does not apply.
 printf '#!/system/bin/sh\nexit 0\n' > "$BINDIR/chown"

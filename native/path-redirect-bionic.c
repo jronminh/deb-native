@@ -1,4 +1,4 @@
-/* Bionic build of the manual-overlay idea (docs/design-manual-overlay.md),
+/* Bionic build of the manual-overlay idea (docs/design.md),
  * for maintainer scripts — path-redirect.c only helps glibc binaries;
  * dpkg's maintainer scripts run via Termux's own Bionic /bin/sh under
  * --force-script-chrootless, which needs its own build of this shim.

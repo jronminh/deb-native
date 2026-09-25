@@ -49,7 +49,7 @@
 /* Cached once, at load. rewrite() is on the hot path of every intercepted
  * open/stat/exec call, so it must not call getenv()/strlen() per call or
  * snprintf() to build the result -- a plain branch + memcpy is enough and
- * measurably faster (see docs/findings-shim-perf-2026-09-25.md). The env is
+ * measurably faster (see docs/findings.md). The env is
  * fixed before exec by the launchers, so caching at construction is safe. */
 static const char *g_root;
 static size_t g_rootlen;

@@ -3,7 +3,7 @@
 # instead of patching $ADMINDIR/info/* after --unpack (patch-maintainer-
 # scripts.sh) -- found necessary because a package's preinst runs DURING
 # dpkg's own --unpack step, before any post-unpack patch step gets a
-# chance to touch it (docs/findings-dash-wrapper-2026-09-25.md: cdebconf's
+# chance to touch it (docs/findings.md: cdebconf's
 # preinst, "mkdir -p /var/lib/cdebconf", failed with "Read-only file
 # system" because it ran unpatched). Confirmed by reading sudo-less's own
 # tools/prefix-integrate.sh: it's purely a post-hoc step (launchers,

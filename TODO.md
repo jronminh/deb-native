@@ -4,13 +4,13 @@ Ordered the way `sudo-less` orders its own work (`docs/design.md`, "Order
 of work"), and judged by its criterion: **per-section coverage from a
 random sample**, not feature count. See
 [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) for the side-by-side diff
-and [`docs/findings-runtime-and-base-2026-09-25.md`](docs/findings-runtime-and-base-2026-09-25.md)
+and [`docs/findings.md`](docs/findings.md)
 for what just landed.
 
 ## Done recently
 
 - [x] **Fresh base bootstrap to `ii`** (all 28 base packages) — see
-      [`docs/findings-runtime-and-base-2026-09-25.md`](docs/findings-runtime-and-base-2026-09-25.md).
+      [`docs/findings.md`](docs/findings.md).
 - [x] **Seamless launch**: `scripts/make-launchers.sh` + `scripts/dn-activate.sh`
       — installed programs run by name; `termux-exec` preserved (a Bionic
       child gets it back via `DN_BIONIC_PRELOAD`, a glibc child gets the shim).
@@ -36,8 +36,8 @@ for what just landed.
       whether it needs path help (interpreter not present, interpreter's
       compiled-in module path, `ldd`-missing lib, hardcoded `/usr /etc
       /opt` path) and generate a wrapper. Build on
-      [`docs/design-static-wrappers.md`](docs/design-static-wrappers.md);
-      trigger via [`docs/design-hooks.md`](docs/design-hooks.md) (apt
+      [`docs/design.md`](docs/design.md);
+      trigger via [`docs/design.md`](docs/design.md) (apt
       `DPkg::Post-Invoke` + a `dpkg` wrapper), not a source patch.
 - [ ] **Stage 2 classifier / refusal** (`prefix-check` equivalent) — read
       each `.deb` before dpkg runs; classify scope (in / admin's / never)
@@ -50,13 +50,13 @@ for what just landed.
 - [ ] **Patch B: two-layer database, soname-based** — replace
       `scripts/native-seed.sh`'s hand-written ~10-entry name table with
       matching a `.deb`'s `Depends:` against installed `*-glibc` packages'
-      `.so` SONAMEs (`docs/design-native-deps.md`, "Open work"). Small,
+      `.so` SONAMEs (`docs/design.md`, "Open work"). Small,
       directly improves install success.
 - [ ] **Stage 4 integration** — launchers/icons/desktop DB (mostly N/A on
       Android; do only what Termux needs).
 - [ ] **Direction 3: services on `termux-services` (runit)** — translate a
       package's systemd unit into a runit `run` script
-      (`docs/services-research.md`). The service *view* (config/state at
+      (`docs/design.md`). The service *view* (config/state at
       `/etc/foo`, `/var/lib/foo`) is the hard part and shares Direction 2's
       unsolved gap.
 - [ ] **State + `explain` + `doctor`** — record per package its scope,
@@ -82,7 +82,7 @@ for what just landed.
 
 - [ ] `--force-architecture` workaround for the archive-name mismatch
       (`arm64` vs `aarch64`) — flagged unsafe in
-      `docs/findings-prototype-2026-09-25.md`; decide on a real fix.
+      `docs/findings.md`; decide on a real fix.
 
 ## Blocked / impossible on this device
 
