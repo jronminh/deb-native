@@ -11,7 +11,7 @@ unprivileged user and make the installed programs work. The difference is
 - **deb-native** is Termux fused with a userspace **native overlay**: an
   unrooted Android app's Bionic Termux as the host, Termux's own apt/dpkg
   and glibc side-install (`termux-pacman/glibc-packages`) as the base, and
-  an `LD_PRELOAD` path-redirect shim plus a Bionic ELF launcher as the
+  our own path-redirect shim plus a Bionic ELF launcher as the
   "overlay" — no namespaces at all, because this device's kernel does not
   allow them.
 
@@ -25,7 +25,7 @@ the host and the kernel are different.
 | host | standard Debian, non-root user, `~/.local` | unrooted Android app (uid `u0_a…`), Termux prefix `/data/data/com.termux/files/usr` | different base, same no-root constraint |
 | apt/dpkg | fork of Termux's patches, retargeted *back* to Debian | Termux's own apt/dpkg, built for Bionic, reused **as-is** | the reuse runs in the opposite direction |
 | files land in | `~/.local` | a dedicated `$INSTDIR` (e.g. `~/.dn/root`), separate from Termux's own prefix | same idea, different target |
-| path virtualization | kernel **view**: `unshare(CLONE_NEWUSER)` + unprivileged overlayfs over `/usr /etc /var /opt` | userspace **native overlay**: `LD_PRELOAD` `path-redirect.so` rewrites `/usr /etc /var /opt` → `$INSTDIR`, with `execve` dispatch and shebang handling | view is **dead here** (`unshare` = `EINVAL`, FUSE closed); the shim replaces *path resolution only* |
+| path virtualization | kernel **view**: `unshare(CLONE_NEWUSER)` + unprivileged overlayfs over `/usr /etc /var /opt` | userspace: our own `path-redirect.so` shim rewrites `/usr /etc /var /opt` → `$INSTDIR`, with `execve` dispatch and shebang handling | view is **dead here** (`unshare` = `EINVAL`, FUSE closed); the shim replaces *path resolution only* |
 | glibc / libc | host already has glibc; prefix seeded from the host's dpkg db | Termux has **no** glibc; reuse Termux's `$PREFIX/glibc` side-install for libs, coreutils, perl; `native-seed.sh` stubs Debian names | the second userland is the fusion's whole point |
 | maintainer-script runtime | scripts run inside the view; the kernel's `/bin/sh` sees the prefix | `native/dn-launch.c`, a Bionic ELF, execs Termux's glibc `bash` (`dn-shell`) / `perl` (`dn-perl`) with the shim; control-script shebangs are rewritten to it | a real ELF is required — the kernel follows only one `#!`, and Android's `/system/bin/sh` is root-owned toybox |
 | interpreter / ELF | host `/lib/ld-linux-…` already correct | `grun --configure` repoints Debian ELFs at `$PREFIX/glibc/lib/ld-linux-aarch64.so.1` | glibc-runner is fused in |

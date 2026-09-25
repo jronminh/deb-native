@@ -1,11 +1,11 @@
 # Design
 
-How deb-native works: the userspace overlay, native dependency reuse, the
-install path, run-time wrappers, the apt/dpkg hooks, services, and prior
-art. (Merged from the former `design-*.md`, `design.md` and
-`design.md`.)
+How deb-native works: we fake the Debian layout, not root — with our own
+libc-interposition shim — plus native dependency reuse, the install path,
+run-time wrappers, the apt/dpkg hooks, services, and prior art. (Merged from
+the former `design-*.md`, `services-research.md` and `prior-art.md`.)
 
-## Manual overlay: sudo-less's "view" purpose, without a kernel view
+## Faking the Debian layout with our own shim (no kernel view)
 
 
 Status: **prototyped and verified working**, against a real gap (not a
@@ -56,7 +56,7 @@ not a "probably."
 | dynamic linker / library search path | binary's `DT_NEEDED` libraries | `$PREFIX/glibc/lib`, already the glibc `ld.so`'s own default search path | none needed | **already solved**, no overlay ever required (`design.md`) |
 | interpreter's own module search path (Python/Perl/...) | `#!/usr/bin/python3`-style scripts | env vars (`PYTHONPATH`, ...) | none needed | **already solved** via env vars (`design.md`) |
 | ELF interpreter (`.interp`) pointing at `/lib/ld-linux-...`| dynamic linker itself | `$PREFIX/glibc/lib/ld-linux-aarch64.so.1` | ELF patch | **already solved**, `grun --configure` |
-| a binary's own hardcoded absolute data/config path (`/usr/share/figlet`, `/etc/foo.conf`) read directly in C code, no env var, no CLI flag | genuinely needs *something* to sit at that absolute path | nothing — this is the one real gap | **this doc's approach**: libc call interposition (`LD_PRELOAD`), not a mount | **yes, verified working** |
+| a binary's own hardcoded absolute data/config path (`/usr/share/figlet`, `/etc/foo.conf`) read directly in C code, no env var, no CLI flag | genuinely needs *something* to sit at that absolute path | nothing — this is the one real gap | **this doc's approach**: libc call interposition (our own shim), not a mount | **yes, verified working** |
 
 Only the last row was ever actually unsolved. Everything else in the
 table already has a working, non-overlay answer elsewhere in this repo's
@@ -65,14 +65,15 @@ remaining row.
 
 ### The mechanism: libc call interposition, not a filesystem view
 
-`native/path-redirect.c` is an `LD_PRELOAD` shared library: it overrides
+`native/path-redirect.c` is our own shim — a glibc shared object we build
+and preload into the process. It overrides
 `open`, `openat`, `fopen`, `stat`, `fstatat`, and the older `__fxstatat`,
 rewriting any path starting with a configured prefix
 (`DN_REDIRECT_FROM`) to a different prefix (`DN_REDIRECT_TO`) before
 calling the real libc function via `dlsym(RTLD_NEXT, ...)`. This is
 userspace symbol interposition — the dynamic linker resolves the
 program's calls to *this* library's functions instead of glibc's, because
-`LD_PRELOAD` puts it first in the search order. No kernel feature beyond
+preloading our shim puts it first in the search order. No kernel feature beyond
 ordinary dynamic linking is involved.
 
 This is effectively "the view's job, done per-syscall instead of per
@@ -155,7 +156,7 @@ nothing there" problem this doc solves for binaries — sudo-less's own
 stand-in for a root-only helper program), solved for them. Since the view
 is dead here, this project needed its own answer.
 
-#### Dead end, fully explored: a Bionic `LD_PRELOAD` shim
+#### Dead end, fully explored: a Bionic preload shim
 
 First attempt: a Bionic build of `path-redirect.c`'s idea
 (`native/path-redirect-bionic.c`, plain `clang`, no cross-compile needed —
@@ -212,7 +213,7 @@ caught by a literal-string `sed`; a value carried through a variable
 already set before the rewrite runs is invisible to it. Falls back to
 the same "genuinely can't reach this without a much bigger mechanism"
 bucket as a statically-linked binary's hardcoded paths, for the
-`LD_PRELOAD` shim above.
+shim above.
 
 ### Open work
 
@@ -527,7 +528,7 @@ Concretely, by failure mode (same table as sudo-less's `view.md`):
 | interpreter only searches compiled-in module paths (Python/Perl/Node/...) | wrapper sets the interpreter's own search-path env var (`PYTHONPATH`, `PERL5LIB`, `NODE_PATH`, ...) to the prefix's copy before `exec`ing — this is exactly the case sudo-less's own docs call out as **not** solvable by env vars *for the view's other cases*, but it's the right tool specifically for module search paths |
 | `ldd` can't find a library the package ships | wrapper sets `LD_LIBRARY_PATH` to the prefix's lib dir before `exec` — same caveat as above: fine for this one case, not a general substitute for the view |
 | ELF binary is a glibc build, needs glibc-runner | wrapper (or the binary's patched ELF interpreter directly, per the existing manual glibc-runner method) invokes it against the glibc side-install |
-| binary/script has a hardcoded absolute path to its own data (`/usr/share/figlet`, `/etc/redis/redis.conf`) it reads directly, not through a library call the above env vars cover | **solved** — see [`design.md`](design.md): an `LD_PRELOAD` shim (`native/path-redirect.c`) intercepts `open`/`openat`/`fopen`/`stat`/`fstatat` and rewrites the path, verified against `figlet`'s real `/usr/share/figlet` lookup |
+| binary/script has a hardcoded absolute path to its own data (`/usr/share/figlet`, `/etc/redis/redis.conf`) it reads directly, not through a library call the above env vars cover | **solved** — see [`design.md`](design.md): our own shim (`native/path-redirect.c`) intercepts `open`/`openat`/`fopen`/`stat`/`fstatat` and rewrites the path, verified against `figlet`'s real `/usr/share/figlet` lookup |
 
 ### What this used to not solve (now closed)
 
@@ -538,7 +539,7 @@ shebangs). A binary that does `open("/etc/foo.conf")` directly in its own
 C code, with no env var and no CLI flag to redirect it, used to have no
 static fix short of binary-patching the literal path string (only works if
 the replacement is the same length or shorter) — **until
-`design.md`'s `LD_PRELOAD` shim, now built and verified**.
+`design.md`'s shim, now built and verified**.
 Binary-patching the string remains the fallback for a statically-linked
 binary (no dynamic libc calls to intercept), which the shim genuinely
 cannot reach.
@@ -562,7 +563,7 @@ step gets triggered automatically after an install (apt's
       against a real sample of glibc arm64 `.deb`s to get an actual
       coverage number for "wrapper suffices" vs. "needs a path-virtualization
       layer neither direction handles yet".
-- [x] ~~Decide whether the `LD_PRELOAD` shim is worth building~~ — built,
+- [x] ~~Decide whether the shim is worth building~~ — built,
       see `design.md`.
 - [ ] Wire the shim's env vars (`DN_REDIRECT_FROM`/`_TO`) into the
       wrapper-script generation this doc describes, instead of setting
@@ -789,7 +790,7 @@ touching at all.
    user namespaces at all here, not merely an SELinux policy denial. Plain
    `unshare(CLONE_NEWNS)` alone fails with `EPERM` as expected (needs
    `CAP_SYS_ADMIN`). FUSE is also closed (`/dev/fuse`: permission denied,
-   no `fusermount`). Replaced by a userspace `LD_PRELOAD` path-redirect
+   no `fusermount`). Replaced by our userspace path-redirect shim
    shim instead — see `design.md`, verified working against
    a real package (`figlet`).
 
@@ -806,7 +807,7 @@ touching at all.
 ~~Whether `unshare(CLONE_NEWNS)` alone... is available to Termux without
 root.~~ Answered: no — `EPERM`, confirmed by direct test and strace. See
 `design.md` for the full data and the replacement mechanism
-(userspace `LD_PRELOAD` path redirection, no mount involved at all).
+(userspace path redirection, no mount involved at all).
 
 ### Related work found later: `proroot` (closed-source)
 

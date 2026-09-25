@@ -821,7 +821,7 @@ Up from 2/30 (7%) with bare `dpkg`. Real progress, and close to (though
 short of) the "even 40% would be great" bar set going in — with two new,
 previously-unseen failure categories now dominant instead of `depmissing`.
 
-### New finding: the `LD_PRELOAD` shim doesn't reach maintainer scripts
+### New finding: our shim doesn't reach maintainer scripts
 
 Two of the 6 `script` failures are the *same class* of problem
 `design.md` already solved for compiled binaries —
