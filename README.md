@@ -56,6 +56,15 @@ Debian host, so this project reuses them as-is, relocated to a separate
 prefix via dpkg's own `--instdir`/`--force-script-chrootless` flags and a
 custom `apt.conf` — not a source fork.
 
+Native dependency reuse (sudo-less's "native"/two-layer-db idea, adapted —
+see [`docs/design-native-deps.md`](docs/design-native-deps.md), verified
+working): a Debian dependency Termux's own glibc side-install
+(`termux-pacman/glibc-packages`) already provides is left exactly where
+Termux put it — no copy, found by the glibc dynamic linker's own default
+search path — instead of sudo-less's approach of putting everything under
+one `.local`. Only what's genuinely missing lands in this project's own
+collection point, which plays `.local`'s role but only for the delta.
+
 Same reuse-not-patch decision for triggering Direction 2's wrapper
 generation — see [`docs/design-hooks.md`](docs/design-hooks.md): apt's
 `DPkg::Post-Invoke` config hook plus a thin `dpkg` wrapper script on
