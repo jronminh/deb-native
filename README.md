@@ -21,12 +21,17 @@ for the first round's log and the still-open, still-unsafe workarounds
 
 **A random-sample survey (`docs/findings-survey-2026-09-25.md`), following
 sudo-less's own methodology, found only 2 of 30 packages install (≈7%,
-vs. sudo-less's 63%) — not because of anything fixed so far, but because
-this project has never actually installed a package's ordinary
-dependencies: `scripts/prototype-install.sh` only unpacks the one `.deb`
-it's given. Wiring real `apt` dependency resolution (always the plan in
-`docs/design-install-path.md`, never actually built) is now the clear #1
-priority, ahead of everything else open in this repo.**
+vs. sudo-less's 63%) — because this project had never actually installed
+a package's ordinary dependencies: `scripts/prototype-install.sh` only
+unpacks the one `.deb` it's given. Fixed and re-verified same day
+(`docs/findings-survey-apt-2026-09-25.md`): `scripts/setup-apt-prefix.sh` +
+`scripts/apt-install.sh` point real `apt` at a real Debian repo, scoped to
+a separate prefix — same 30-package sample, same seed, now **10/30 (33%)**.
+Two new failure classes found: maintainer scripts hitting hardcoded
+absolute paths the `LD_PRELOAD` shim can't reach (it only works for glibc
+binaries, not scripts run via Termux's own Bionic `/bin/sh` — a real scope
+limit, not previously stated), and `dpkg` failing to recreate some
+packages' intra-archive hard links on this filesystem.**
 
 ## Why this exists
 

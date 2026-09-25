@@ -134,6 +134,18 @@ needed:
   fails on missing `Scrt1.o`/`crti.o`/`crtn.o`, unresolved, not needed
   for this shim since `LD_PRELOAD` targets are always shared libraries).
 
+## Scope limit found later: doesn't reach maintainer scripts
+
+`docs/findings-survey-apt-2026-09-25.md` found this the hard way: this
+shim only helps **glibc dynamically-linked binaries**. dpkg's maintainer
+scripts run under `--force-script-chrootless` execute via **Termux's own
+Bionic `/bin/sh`**, not a glibc process — `LD_PRELOAD=path-redirect.so`
+(a glibc `.so`) does not load into a Bionic shell at all. A real package's
+`postinst` doing `. /usr/share/debconf/confmodule` or
+`ln -s ... /usr/lib/ssl` hits the exact same "hardcoded absolute path,
+nothing there" problem this doc solves for binaries, and this mechanism
+cannot reach it. Left as a real, open gap — not silently assumed covered.
+
 ## Open work
 
 - [ ] Generalize past one hardcoded `DN_REDIRECT_FROM`/`_TO` pair to a
