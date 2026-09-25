@@ -146,6 +146,29 @@ Bionic `/bin/sh`**, not a glibc process — `LD_PRELOAD=path-redirect.so`
 nothing there" problem this doc solves for binaries, and this mechanism
 cannot reach it. Left as a real, open gap — not silently assumed covered.
 
+## Next: a Bionic shim for maintainer scripts, not the "shim" sudo-less means
+
+sudo-less's own `design.md` says outright: **"no shims needed so far (the
+view made `py3compile`'s unnecessary)"** — their "shim" is a narrower,
+different thing (a fake stand-in for a *root-only helper program*, e.g.
+`py3compile`, `systemctl`; a no-op command on `DPkg::Path`). The class of
+problem found in `findings-survey-apt-2026-09-25.md` (`debconf`'s
+`. /usr/share/debconf/confmodule`, `openssl`'s
+`ln -s ... /usr/lib/ssl`) is exactly what **the view**, not a shim, solved
+for sudo-less. Since the view is dead here, this project needs its own
+equivalent for the Bionic side — not a "shim" in sudo-less's sense.
+
+Concretely: a Bionic build of `path-redirect.c`'s idea (this repo's
+existing shim is glibc-only, built for glibc binaries — see "Toolchain
+gotchas" above), generalized from one hardcoded `FROM`/`TO` pair to a real
+wholesale mapping (`/usr` → `$INSTDIR/usr`, `/etc` → `$INSTDIR/etc`,
+`/var` → `$INSTDIR/var`, `/opt` → `$INSTDIR/opt` — the same four
+directories the view overlaid), `LD_PRELOAD`ed into dpkg's own environment
+before it forks maintainer scripts (needs checking: does dpkg's
+`--force-script-chrootless` path preserve an inherited `LD_PRELOAD` into
+the script's `exec`, or clear the environment first? — untested). Not
+started; picking this up is the natural next step after the apt work.
+
 ## Open work
 
 - [ ] Generalize past one hardcoded `DN_REDIRECT_FROM`/`_TO` pair to a
