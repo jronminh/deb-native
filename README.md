@@ -42,6 +42,13 @@ have at all (no systemd on Termux).
 | the "view": private mount ns + unprivileged overlayfs, live-patching path resolution at run time | **blocked on Android** (SELinux denies `unshare(CLONE_NEWUSER)` to Termux's app domain on most devices) — being replaced, see [Direction 2](docs/design-static-wrappers.md) |
 | services via `systemd --user`, translated unit by unit | **doesn't exist on Termux** — being researched against `termux-services` (runit), see [Direction 3](docs/services-research.md) |
 
+Install path decision (no fork/patch of apt/dpkg needed — see
+[`docs/design-install-path.md`](docs/design-install-path.md)): Termux's own
+apt/dpkg already carry the non-root patches sudo-less had to add for a real
+Debian host, so this project reuses them as-is, relocated to a separate
+prefix via dpkg's own `--instdir`/`--force-script-chrootless` flags and a
+custom `apt.conf` — not a source fork.
+
 This repo is pursuing two directions in place of the blocked 60%:
 
 1. **[Direction 2 — static per-binary wrappers](docs/design-static-wrappers.md).**
