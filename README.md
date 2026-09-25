@@ -96,6 +96,25 @@ Debian layout — and reuses everything else Termux already has:
 Everything above is a shell script, our own C shim, and one tiny C launcher
 — no patched apt/dpkg, no helpers to install, no kernel features.
 
+## Scope: install and run, not emulate
+
+The goal is deliberately narrow — the same shape as `sudo-less`, not general
+virtualization: a Debian package should **install** (reach `dpkg` status `ii`)
+and its program should **run by name**, unprivileged. Not a faithful Debian,
+not isolation.
+
+Almost everything underneath is *real* — real aarch64, real glibc (Termux's
+side-install), Termux's real `apt`/`dpkg`, real ELF loading. Only the **layout**
+is faked (`/usr /etc /var /opt`). So detail is spent only at the seams that
+decide "installed" and "runs": the prefix, the maintainer-script exec path, and
+dpkg's own state.
+
+Because it is an adapter and not an emulator, coverage is a *named boundary*,
+not a promise: anything that goes around libc — static binaries, raw
+`syscall()`, libc-internal `dlopen`, sockets — is out of scope for now, tracked
+in [`TODO.md`](TODO.md) and [#1](https://github.com/jronminh/deb-native/issues/1).
+Being incomplete there is fine, as long as the common case is solid.
+
 ## How it relates to `sudo-less`
 
 [`sudo-less`](https://github.com/jronminh/sudo-less) does the same job on a

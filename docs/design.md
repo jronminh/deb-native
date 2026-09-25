@@ -5,6 +5,29 @@ libc-interposition shim — plus native dependency reuse, the install path,
 run-time wrappers, the apt/dpkg hooks, services, and prior art. (Merged from
 the former `design-*.md`, `services-research.md` and `prior-art.md`.)
 
+## Scope and design philosophy
+
+The goal is deliberately narrow (the same shape as `sudo-less`): a Debian
+package should **install** — reach `dpkg` status `ii` — and its program should
+**run by name**, unprivileged. Not faithful Debian emulation, not isolation.
+
+The design follows from that. Everything heavy underneath is *real*: real
+aarch64, real glibc from Termux's side-install, Termux's real `apt`/`dpkg`,
+real ELF loading. The only thing faked is the **layout** — that `/usr /etc /var
+/opt` exist. Detail is therefore spent only at the **seams** that decide
+"installed" and "runs":
+
+- the prefix (where files actually land) and the path interposition;
+- the maintainer-script exec path (`native/dn-launch.c`), because `preinst`/
+  `postinst` run outside the process we control;
+- dpkg's own state, which is real bookkeeping, not a bluff.
+
+Everything in between can be ignored. And because this is an **adapter, not an
+emulator**, coverage is a named boundary rather than a promise: paths that go
+around libc — static binaries, raw `syscall()`, libc-internal `dlopen`, socket
+`sun_path` — are out of scope until the syscall-level tracer sketched below and
+in `TODO.md` / issue #1.
+
 ## Faking the Debian layout with our own shim (no kernel view)
 
 
