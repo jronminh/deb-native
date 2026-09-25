@@ -10,9 +10,12 @@ side-install — with a small **shim we build ourselves** that fakes the one
 thing Debian assumes and Android lacks: a writable `/usr`, `/etc`, `/var`,
 `/opt`.
 
-> **Caution:** this is an early prototype, built fast with AI assistance. It
-> still has bugs, and it installs software outside Termux's own package
-> management. Read the scripts before running, and use it at your own risk.
+> [!CAUTION]
+> **AI-assisted and unaudited.** The scripts, shim and docs were written with
+> AI assistants. It still has bugs, and it installs software outside Termux's
+> own package management. Read the code before you run it — especially
+> `install.sh` and the scripts under `scripts/`. This is not a
+> security-reviewed artifact; use it at your own risk.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/install.sh | sh
