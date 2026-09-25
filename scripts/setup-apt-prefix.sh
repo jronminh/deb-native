@@ -61,8 +61,9 @@ Dpkg::options:: "--force-script-chrootless";
 Dpkg::options:: "--force-architecture";
 // Hook the deb-native pipeline into apt's own lifecycle (the sudo-less
 // approach): patch each .deb before dpkg unpacks it, and regenerate
-// launchers after. So a plain `apt-get install` (through the `dn` front-end,
-// which points APT_CONFIG here) installs Debian arm64 packages seamlessly.
+// launchers after. So a plain `apt-get install` (through the arch-aware apt
+// wrapper, which points APT_CONFIG here for Debian-only names) installs
+// Debian arm64 packages seamlessly.
 DPkg::Pre-Install-Pkgs { "$REPO/scripts/apt-hook-pre.sh $NEWPREFIX"; };
 DPkg::Post-Invoke { "$REPO/scripts/apt-hook-post.sh $NEWPREFIX || true"; };
 EOF
@@ -77,6 +78,7 @@ echo "    piecemeal, matters here"
 
 echo "==> generating launchers, the dn front-end, and activating PATH"
 "$HERE/make-launchers.sh" "$NEWPREFIX/root"
+"$HERE/make-apt-wrappers.sh" "$NEWPREFIX/root"
 "$HERE/dn-activate.sh" "$NEWPREFIX/root"
 
 echo "==> ready: APT_CONFIG=$NEWPREFIX/etc/apt.conf apt-get install -y <package>"

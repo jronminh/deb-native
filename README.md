@@ -10,14 +10,19 @@ a small userspace **native overlay** that fakes the one thing Debian assumes
 and Android lacks: a writable `/usr`, `/etc`, `/var`, `/opt`.
 
 ```sh
-git clone https://github.com/jronminh/deb-native
-cd deb-native
-./install.sh ~/.dn figlet tree
-exec bash
-figlet hi
+git clone --depth 1 https://github.com/jronminh/deb-native ~/.deb-native && sh ~/.deb-native/install.sh
 ```
 
-Status: **working prototype** (2026-09-25). A fresh prefix bootstraps the
+Then open a new shell (`exec bash`). Termux's `apt` now routes per package:
+anything Termux also provides installs normally, a Debian-only name goes to
+the prefix, and installed programs run by name:
+
+```sh
+apt install bsdmainutils   # Debian-only -> deb.debian.org -> the prefix
+figlet hi                  # installed program, run by name
+```
+
+Status: **working prototype** (2026-09-26). A fresh prefix bootstraps the
 full Debian base set (28 packages, all `Status: install ok installed`) and
 installs leaf packages on top of it. See [Status](#status) for what works
 and [Roadmap](TODO.md) for what is next.
@@ -102,22 +107,22 @@ Requirements: Termux with `clang` and the glibc side-install
 needs (`apt`, `dpkg`, `dpkg-deb`) is already in Termux.
 
 ```sh
-git clone https://github.com/jronminh/deb-native
-cd deb-native
-
-./install.sh ~/.dn figlet tree     # bootstrap the base, then install pkgs
-exec bash                          # or: . ~/.bashrc
-figlet hi                          # installed program, run by name
+git clone --depth 1 https://github.com/jronminh/deb-native ~/.deb-native
+sh ~/.deb-native/install.sh ~/.dn figlet tree   # prefix + packages (optional)
+exec bash                                       # or: . ~/.bashrc
+figlet hi                                       # installed program, by name
 ```
 
-After activation, **Termux's own `apt` and `dpkg` are wired to the real
-Debian `arm64` repository and to the prefix** (no wrapper command, no new
-name) — the pipeline hangs on apt's own hooks, the way `sudo-less` does:
+After activation, **Termux's own `apt` and `dpkg` route per package** — no
+wrapper command, no new name. The rule is **Termux wins**: a package Termux
+also provides installs normally (aarch64, Bionic, untouched); only a name
+that exists in the Debian `arm64` repo and *not* in Termux goes through the
+prefix and the pipeline (the `sudo-less` hook approach):
 
 ```sh
-apt install cowsay        # Termux's apt -> deb.debian.org -> the prefix
-apt remove cowsay
-dpkg -i ./some.deb        # direct dpkg targets the prefix too
+apt install bsdmainutils  # Debian-only -> deb.debian.org -> the prefix
+apt install cowsay        # Termux has it -> normal Termux install
+dpkg -i ./pkg_arm64.deb   # arm64 .deb -> the prefix; aarch64 -> Termux
 ```
 
 `install.sh` is idempotent: run it again with more packages, or point it at
@@ -127,7 +132,10 @@ a different prefix. Under the hood:
   scope it to the prefix, bootstrap the base set, generate launchers.
 - `scripts/apt-install.sh` — resolve + download with `apt`, patch each
   `.deb`, drive `dpkg --unpack` / `--configure` one package at a time.
-- `scripts/make-launchers.sh` + `scripts/dn-activate.sh` — wrappers + `PATH`.
+- `scripts/make-apt-wrappers.sh` — arch-aware `apt`/`apt-get`/`apt-cache`/
+  `dpkg` wrappers (the dispatcher; Termux wins).
+- `scripts/make-launchers.sh` + `scripts/dn-activate.sh` — program wrappers
+  + `PATH`.
 
 ## What works today
 

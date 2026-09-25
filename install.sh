@@ -24,6 +24,7 @@ if [ ! -s "$DNPREFIX/var/lib/dpkg/status" ]; then
 else
   echo "==> reusing existing prefix $DNPREFIX"
   "$HERE/scripts/make-launchers.sh" "$DNPREFIX/root"
+  "$HERE/scripts/make-apt-wrappers.sh" "$DNPREFIX/root"
   "$HERE/scripts/dn-activate.sh" "$DNPREFIX/root"
 fi
 
