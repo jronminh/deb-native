@@ -177,7 +177,29 @@ else blocks starting it. (Also visible in that same env dump: dpkg
 already sets `DPKG_ROOT` for scripts, per `apt-dpkg-port.md`'s note — the
 scripts hitting this gap just don't check it themselves.)
 
-Not started; picking this up is the natural next step after the apt work.
+**Built and tested — mechanism works, but doesn't reach the real target.**
+`native/path-redirect-bionic.c` (plain `clang -fPIC -shared`, no
+cross-compile flags — Bionic is native here) correctly redirects `open`/
+`fopen`/`stat`/`symlink` for a **freshly-compiled test binary**: verified
+with a tiny C program calling `open("/etc/foo.conf", ...)`, redirected
+correctly with debug output to prove it.
+
+**But it does not intercept Termux's own `dash` (`/bin/sh`) or
+`coreutils` (`cat`, etc.)** — tested directly, no redirect happens, no
+debug output. Root cause found: both are linked with `BIND_NOW`/`FLAGS_1
+NOW` (`readelf -d`), and Bionic's dynamic linker does not honor
+`LD_PRELOAD`'s override for symbols in a `BIND_NOW`-linked binary the way
+glibc's does. Since maintainer scripts run via exactly `dash`, and often
+call out to exactly this class of Termux-built binary (`ln`, etc.), **this
+approach as built does not yet reach the actual failing case**
+(`debconf`'s `.`, `openssl`'s `ln -s`) — it's proven correct in isolation,
+not proven useful for the real target yet.
+
+Open direction, not yet explored: whether a non-`BIND_NOW` variant of
+`dash`/`coreutils` could be built (own build, `-z lazy`), or whether the
+interception needs to move earlier (wrapping the maintainer script's
+`#!/bin/sh` shebang itself with a different, non-hardened shell before
+`LD_PRELOAD` even gets a chance to matter) — not decided, not started.
 
 ## Open work
 
