@@ -1,270 +1,182 @@
 # deb-native
 
-**Install your favorite `linux-arm64` package through Termux's own `pkg`
-workflow** — real Debian `.deb` (glibc) packages on Termux/Android, without
-patching every binary by hand, and without the parts of the `sudo-less`
-approach that Android's kernel/SELinux won't allow.
+**Termux, made into a Debian you can install into.** Real `arm64` Debian
+`.deb` packages — installed with `apt`/`dpkg`, run by name — inside Termux,
+with **no root, no kernel namespaces, and no proot/container**.
 
-Status: **working prototype, 2026-09-25.** The full Debian base set
-(`base-files`, `base-passwd`, `dash`, `debianutils`, `debconf`,
-`cdebconf`, `openssl`, `ca-certificates`, `mawk`, and their libraries —
-28 packages) now bootstraps to `Status: install ok installed` on a
-**fresh** prefix, and a new package installs on top of it (`hello` runs)
-— see [`docs/findings-runtime-and-base-2026-09-25.md`](docs/findings-runtime-and-base-2026-09-25.md).
-A real Debian arm64 `.deb` (`hello`) installs and runs end to end via
-`scripts/prototype-install.sh`;
-a real dependency (`ciso`'s `zlib1g`) resolves natively against Termux's
-own glibc packages with zero files duplicated
-([`docs/design-native-deps.md`](docs/design-native-deps.md)); and a real
-hardcoded-path gap (`figlet`'s `/usr/share/figlet`, the exact case
-sudo-less's kernel-level "view" exists for) is solved with a userspace
-`LD_PRELOAD` shim instead, since neither the mount-namespace view nor FUSE
-works on this device — confirmed with the actual syscall errors, not a
-guess ([`docs/design-manual-overlay.md`](docs/design-manual-overlay.md)).
-See [`docs/findings-prototype-2026-09-25.md`](docs/findings-prototype-2026-09-25.md)
-for the first round's log and the still-open, still-unsafe workarounds
-(architecture-name mismatch via `--force-architecture`).
+The trick is not emulation and not a chroot. `deb-native` fuses two things
+Termux already has — its own `apt`/`dpkg` and its glibc side-install — with
+a small userspace **native overlay** that fakes the one thing Debian assumes
+and Android lacks: a writable `/usr`, `/etc`, `/var`, `/opt`.
 
-**A random-sample survey (`docs/findings-survey-2026-09-25.md`), following
-sudo-less's own methodology, found only 2 of 30 packages install (≈7%,
-vs. sudo-less's 63%) — because this project had never actually installed
-a package's ordinary dependencies: `scripts/prototype-install.sh` only
-unpacks the one `.deb` it's given. Fixed and re-verified same day
-(`docs/findings-survey-apt-2026-09-25.md`): `scripts/setup-apt-prefix.sh` +
-`scripts/apt-install.sh` point real `apt` at a real Debian repo, scoped to
-a separate prefix — same 30-package sample, same seed, now **10/30 (33%)**.
-Two new failure classes found: maintainer scripts hitting hardcoded
-absolute paths, and `dpkg` failing to recreate some packages'
-intra-archive hard links on this filesystem. The first is now fixed —
-see below.**
+```sh
+git clone https://github.com/jronminh/deb-native
+cd deb-native
+./install.sh ~/.dn figlet tree
+exec bash
+figlet hi
+```
 
-**Maintainer-script paths, solved (`docs/design-manual-overlay.md`):** a
-`LD_PRELOAD`-based Bionic shim was built and tested, but turned out to be
-chasing the wrong binary (`/bin/sh` on Android resolves to the OS's own
-root-owned `/system/bin/sh`, not Termux's `dash` — and Termux's own shell
-resists `LD_PRELOAD` interception too, being linked `BIND_NOW`). Abandoned
-that dead end for something simpler and more robust: `scripts/patch-maintainer-scripts.sh`
-rewrites a package's maintainer scripts as plain text (`sed`) between
-`dpkg --unpack` and `--configure` — no interception, no linker, no
-dependency on which shell is really running.
+Status: **working prototype** (2026-09-25). A fresh prefix bootstraps the
+full Debian base set (28 packages, all `Status: install ok installed`) and
+installs leaf packages on top of it. See [Status](#status) for what works
+and [Roadmap](TODO.md) for what is next.
 
-**Tested against a genuinely hard package** (`docs/findings-hard-package-2026-09-25.md`):
-`ruby-adsf`, pulling in `ruby3.3`/`libruby3.3`/`debconf`/`ca-certificates`/
-`openssl`. Found and fixed a real bug along the way — apt runs its own
-`dpkg` in one combined invocation (unpack+configure internally, no
-apt-level hook boundary between them), so the `DPkg::Pre-Invoke` hook
-never fired at the right time; `apt-install.sh` now uses apt only to
-resolve+download, then drives `dpkg --unpack` / patch / `--configure -a`
-explicitly itself. `openssl` now configures correctly as a result. Hit a
-real, deep, not-quick-to-fix wall one level further in:
-`debconf`'s own `confmodule` (correctly found via the sed rewrite) calls
-`/usr/lib/cdebconf/debconf` internally — a hardcoded path inside an
-ordinary shipped file, not a maintainer script, so out of this mechanism's
-current reach. Left as a named, understood gap (matches sudo-less's own
-"study one by one" bucket for this exact class), not chased further —
-install-side work now covers single-package leaf tools and their real
-dependency chains that don't route through `debconf`/`cdebconf`.
+---
 
-**Update, same day (`docs/findings-dash-wrapper-2026-09-25.md`):** closed
-most of that gap. Insight: dpkg just `execve()`s a maintainer script and
-lets the *kernel* resolve its `#!/bin/sh` shebang — dpkg never chooses the
-shell, so instead of patching dpkg or the real (root-owned, unpatchable)
-`/system/bin/sh`, rewrite the shebang to point at a **real Debian `dash`,
-installed through this project's own `apt-install.sh` and ELF-patched
-with `grun`** — reusing infrastructure this repo already had. The
-original glibc `path-redirect.c` shim (generalized to a wholesale
-`/usr`/`etc`/`var`/`opt` mapping, plus `open64`/`stat64`/`access`/`execve`
-support once `readelf --dyn-syms` showed `dash` needs the LFS variants)
-now correctly redirects a real `dash` process. Found and fixed two sharp
-edges along the way: `LD_PRELOAD` crashes `dpkg` itself outright if
-exported before calling it (`dpkg` is Bionic; Bionic's linker won't start
-with a glibc `.so` preloaded), and it leaks into a script's own forked
-children (`cp`, etc.) unless unset right after the shell starts. `openssl`
-and a plain `. /etc/foo.conf` case now work end to end through the real
-pipeline.
+## The method: how Termux becomes "Debian"
 
-Pushed further into `debconf`'s case (same doc): fixed two more real bugs
-(`dash`'s `exec` builtin checks via `faccessat`, not `access`; `cdebconf`
-is a separate package `debconf` doesn't strictly depend on — Debian
-assumes it's already present, this project's from-scratch prefix has to
-install it explicitly). That surfaced a **deeper, architectural wall**:
-`cdebconf`'s own `preinst` (`mkdir -p /var/lib/cdebconf`) fails because a
-package's `preinst` runs *during* `dpkg --unpack`, before
-`patch-maintainer-scripts.sh` ever gets a chance to run — `preinst`
-scripts are never patched at all, for any package. Fixing this for real
-needs patching a `.deb`'s control scripts *inside the archive itself*,
-before handing it to `dpkg` — a meaningfully bigger piece of work than
-anything else done today.
+A Debian package assumes `/` is a real Debian system. On stock Android that
+is false in three ways at once: there is no writable `/usr /etc /var /opt`,
+`dpkg` will not run as an unprivileged app, and the package's binaries are
+glibc ELF, not Bionic. `deb-native` addresses each:
 
-**Built that, plus a proper base bootstrap
-(`docs/findings-bootstrap-base-2026-09-25.md`):** `scripts/patch-deb.sh`
-rewrites a `.deb`'s control scripts before `dpkg` ever unpacks it; a new
-`scripts/bootstrap-base.sh` installs the packages real Debian assumes are
-"always already there" (`base-files`, `base-passwd`, `dash`,
-`debianutils`, `debconf`, `cdebconf`, `openssl`, `ca-certificates`) as one
-transaction instead of piecemeal. Found and fixed three more real bugs:
-batching `--unpack`-then-`--configure` breaks `Pre-Depends` ordering
-(`base-files` needs `awk` *configured*, not just unpacked, before it can
-even unpack) — now installs one package at a time, in apt's own resolved
-order; a stale downloaded `.deb` from an earlier run gets silently
-re-unpacked by a later one, undoing a `grun` patch — archives are now
-cleared after every install; and patching the same script twice
-(pre-unpack and the post-unpack safety net both touching it) doubles an
-already-rewritten path — fixed with an idempotency marker. Most of the
-base set now reaches fully configured; found, but explicitly **not yet
-fixed**, why the rest doesn't: `update-alternatives` is already
-`DPKG_ROOT`-aware (per sudo-less's own docs) and this project's blanket
-path rewrite double-prefixes its arguments.
+1. **Real Debian files, in a prefix.** The packages are unpacked with
+   Termux's own `dpkg` (which already ships the non-root patches) into a
+   separate prefix, `$INSTDIR/root`, using dpkg's stock
+   `--instdir` / `--admindir` / `--force-script-chrootless` flags and a
+   prefix-scoped `apt.conf`. No fork of apt/dpkg is needed.
+2. **Real glibc.** Termux ships a full glibc userland
+   (`termux-pacman/glibc-packages`) — `bash`, `coreutils`, `perl`, the
+   loader, the libraries. Debian binaries are repointed at it with
+   `grun --configure` (a one-time ELF `PT_INTERP` + `RUNPATH` edit), so a
+   Debian glibc `.deb` runs unmodified.
+3. **Fake the absolute-path view — this is the native overlay.** A small
+   `LD_PRELOAD` library (`native/path-redirect.c`) intercepts the libc
+   calls that touch paths — `open`/`openat`/`stat`/`statx`/`exec*`/`mkdir`/
+   `unlink`/`symlink`/`rename`/… — and rewrites any literal
+   `/usr`, `/etc`, `/var`, `/opt` path to the same path under `$INSTDIR`.
+   No mount, no namespace, no kernel privilege: just userspace symbol
+   interposition. (Not available on this device: `unshare(CLONE_NEWUSER)`
+   fails `EINVAL`, FUSE is closed — so the kernel "view" sudo-less uses is
+   replaced by this.)
+4. **A real interpreter for maintainer scripts.** A package's `postinst`
+   is executed by the *kernel* resolving its shebang, and the kernel
+   follows only one `#!` level. `native/dn-launch.c` is a tiny **Bionic
+   ELF** that sets the shim environment and execs Termux's glibc `bash`
+   (or `perl`), so maintainer scripts run **inside** the fake Debian with
+   the overlay active — including `preinst`, before `dpkg` has even
+   unpacked the package.
+5. **launch programs by name.** After each install, a wrapper is generated
+   per program under `$INSTDIR/usr/lib/deb-native/bin` (ELF targets get the
+   overlay; scripts go through the glibc shell), and that directory is put
+   first on `PATH`. `figlet hi` just works.
+6. **Termux stays intact.** Termux's own `LD_PRELOAD` (`termux-exec`) is
+   never disabled; when a program running under the overlay forks a
+   *Bionic* child, the shim hands `termux-exec` back to it. The two
+   userlands coexist.
 
-**Resolved, same day:** the `DPKG_ROOT` conflict turned out not to be an
-`update-alternatives`-specific quirk — `base-files` itself is
-`$DPKG_ROOT`-aware throughout, a real standard Debian convention more
-scripts follow than just the dpkg-suite tools. Fix: **removed the static
-path-rewrite entirely**, keeping only the shebang rewrite to the `dash`
-wrapper — the runtime `LD_PRELOAD` shim already covers a script with no
-`$DPKG_ROOT` awareness at all, by intercepting the actual syscall-adjacent
-call with the literal path, and a `$DPKG_ROOT`-aware script's own
-already-correct path never matches the shim's rewrite either, so nothing
-double-applies from either direction.
+Everything above is a shell script, one C shim, and one tiny C launcher —
+no patched apt/dpkg, no helpers to install, no kernel features.
 
-That fix also exposed **the highest-value bug of the whole session**
-(`docs/findings-sed-delimiter-bug-2026-09-25.md`): a `sed` command used
-`#` as its delimiter while its own pattern started with a literal `#`
-(matching a shebang's `#!`) — `sed: unknown option to 's'`, and under
-`set -eu` this silently killed the entire patch script partway through
-its file loop, every run, for every file alphabetically after whichever
-one hit it first. This is exactly why `openssl` looked permanently broken
-across many rounds of testing when the mechanism itself was fine. Found
-only by invoking the script directly by hand and reading its real exit
-code — a `|| true` one level up hid the crash completely inside the full
-pipeline's logs. Fixed (switched delimiter to `,`): `openssl`, `dash`,
-`debianutils`, and `mawk` all now reach fully configured.
+## How it relates to `sudo-less`
 
-Two new, genuinely distinct problems found and left open, neither a bug
-in this project's own mechanism: **`chown` permission errors**
-(`base-passwd`/`base-files` calling real `chown`, which no path redirect
-can fix — the first real case for sudo-less's actual "shim" concept, a
-no-op stand-in command, not path rewriting) and **external commands a
-script forks aren't covered by the shim** (`readline-common`'s `cp`, a
-separate Bionic process the wrapper deliberately clears `LD_PRELOAD`
-before forking, to avoid crashing it — meaning that fork's own file access
-isn't intercepted at all). Stopped here for this session (quota-conscious,
-repeated direct instruction), with concrete next steps recorded.
+[`sudo-less`](https://github.com/jronminh/sudo-less) does the same job on a
+**real Debian host** (non-root user, `~/.local`) using a private mount
+namespace + unprivileged overlayfs ("the view") and `systemd --user`.
+`deb-native` is that idea ported to Android, where the view and systemd are
+unavailable, so the mechanism is inverted:
 
-**Closed, later the same day
-([`docs/findings-runtime-and-base-2026-09-25.md`](docs/findings-runtime-and-base-2026-09-25.md)):**
-both of those open problems — and the fresh-prefix chicken-and-egg they
-sat behind — are fixed. The maintainer-script interpreter is now a real
-**Bionic ELF** (`native/dn-launch.c`) rather than a shell script (the
-kernel follows only one `#!` level, which is why a fresh prefix fell back
-to Bionic `/bin/sh`); the runtime reuses Termux's **pre-existing** glibc
-userland (`$PREFIX/glibc/bin`) so forked commands are glibc and the shim
-reaches them, removing the "need a Debian dash first" cycle; the shim
-gained `chdir`, `execvp`/`execl*`, `statx`, `mkdirat`, `unlinkat`,
-`symlinkat`, `renameat`, `utimensat`, `readlink`, and more; the shim's own
-directory no longer trips `base-files`' usrmerge check; and
-`dpkg-realpath`'s missing `dpkg-error.sh` is pre-placed. A fresh
-`setup-apt-prefix.sh` now brings all 28 base packages to `ii`, and
-`apt-install.sh ~/prefix hello` installs and runs on top.
+| | sudo-less (Debian host) | deb-native (Termux/Android) |
+|---|---|---|
+| base | Debian-on-Debian | Termux (Bionic) **fused** with a userspace native overlay |
+| virtualization | kernel view: user+mount namespace + overlayfs | `LD_PRELOAD` path-redirect shim (`native/path-redirect.c`) |
+| shell / runtime | the host's own | Termux's pre-existing glibc `bash`/`perl`/coreutils |
+| apt / dpkg | a fork retargeted *back* to Debian | Termux's own, reused **as-is** |
+| dependency reuse | seed from the host's dpkg db | seed from Termux's installed `*-glibc` packages |
 
-## Why this exists
+Full side-by-side: [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md).
 
-Termux ships its own package repo, rebuilt against Bionic (musl-like NDK
-libc). A huge amount of the Debian archive never gets rebuilt for Termux.
-Meanwhile a real Debian `.deb` for `arm64` is a normal glibc ELF binary —
-Termux can already load glibc binaries one at a time via `glibc-runner`
-(patch the ELF interpreter, run against a glibc side-install), but doing
-that per-binary, by hand, does not scale to "apt-get install anything".
+## Quick start
 
-[`sudo-less`](https://github.com/jronminh/sudo-less) solves a related but
-different problem: real `apt`+`dpkg` installing Debian packages into
-`~/.local` **on a real Debian host**, no root, using a private mount
-namespace that overlays the prefix onto `/usr /etc /var /opt` ("the view")
-so a package's hardcoded absolute paths still resolve. Its docs are the
-valuable part — see [`docs/prior-art.md`](docs/prior-art.md) for the full
-breakdown of what carries over to Termux and what doesn't.
+Requirements: Termux with `clang` and the glibc side-install
+(`termux-pacman/glibc-packages`: `glibc-runner`/`grun`, `coreutils-glibc`,
+`bash-glibc`, `perl`, and the loader/libraries). Everything else the project
+needs (`apt`, `dpkg`, `dpkg-deb`) is already in Termux.
 
-**The short version: about 40% of sudo-less's approach is reusable as-is.**
-The other 60% — the mount-namespace + overlayfs "view", and the
-`systemd --user` service layer — needs machinery this device doesn't have:
-`unshare(CLONE_NEWUSER)` fails `EINVAL` (confirmed by strace — the kernel
-itself has no unprivileged user namespace support here, not merely a
-policy denial), and there's no systemd on Termux at all. The view's job is
-now done instead by a userspace `LD_PRELOAD` shim (no kernel privilege
-needed) — see [`docs/design-manual-overlay.md`](docs/design-manual-overlay.md).
+```sh
+git clone https://github.com/jronminh/deb-native
+cd deb-native
 
-## Approach
+./install.sh ~/.dn figlet tree     # bootstrap the base, then install pkgs
+exec bash                          # or: . ~/.bashrc
+figlet hi                          # installed program, run by name
+```
 
-| sudo-less piece | on Termux |
-|---|---|
-| apt/dpkg forked to run root-less in a prefix, patches for no-superuser-check/chown/ldconfig-check | **not needed as a fork** — this *is* what Termux's own apt/dpkg patches already do, they're just built for Bionic. Reusable directly. |
-| two-layer package db (host's `dpkg` status as read-only lower layer) | reusable idea: treat Termux's existing package set as the "already installed" layer, only fetch/install glibc leaf packages |
-| `prefix-wrap` heuristics (does a binary need path-resolution help: absolute symlink out of prefix, missing interpreter, `ldd`-missing lib, hardcoded `/usr|/etc|/opt` path) | reusable as detection logic, independent of how the fix is applied |
-| the "view": private mount ns + unprivileged overlayfs, live-patching path resolution at run time | **confirmed blocked** — `unshare(CLONE_NEWUSER)` fails `EINVAL` (kernel has no unprivileged userns support at all here, not just a policy denial), FUSE is also closed. Replaced by a userspace `LD_PRELOAD` path-redirect shim, verified working — see [`docs/design-manual-overlay.md`](docs/design-manual-overlay.md) |
-| services via `systemd --user`, translated unit by unit | **doesn't exist on Termux** — being researched against `termux-services` (runit), see [Direction 3](docs/services-research.md) |
+`install.sh` is idempotent: run it again with more packages, or point it at
+a different prefix. Under the hood:
 
-Install path decision (no fork/patch of apt/dpkg needed — see
-[`docs/design-install-path.md`](docs/design-install-path.md)): Termux's own
-apt/dpkg already carry the non-root patches sudo-less had to add for a real
-Debian host, so this project reuses them as-is, relocated to a separate
-prefix via dpkg's own `--instdir`/`--force-script-chrootless` flags and a
-custom `apt.conf` — not a source fork.
+- `scripts/setup-apt-prefix.sh` — point `apt` at a Debian `arm64` repo,
+  scope it to the prefix, bootstrap the base set, generate launchers.
+- `scripts/apt-install.sh` — resolve + download with `apt`, patch each
+  `.deb`, drive `dpkg --unpack` / `--configure` one package at a time.
+- `scripts/make-launchers.sh` + `scripts/dn-activate.sh` — wrappers + `PATH`.
 
-Native dependency reuse (sudo-less's "native"/two-layer-db idea, adapted —
-see [`docs/design-native-deps.md`](docs/design-native-deps.md), verified
-working): a Debian dependency Termux's own glibc side-install
-(`termux-pacman/glibc-packages`) already provides is left exactly where
-Termux put it — no copy, found by the glibc dynamic linker's own default
-search path — instead of sudo-less's approach of putting everything under
-one `.local`. Only what's genuinely missing lands in this project's own
-collection point, which plays `.local`'s role but only for the delta.
+## What works today
 
-Same reuse-not-patch decision for triggering Direction 2's wrapper
-generation — see [`docs/design-hooks.md`](docs/design-hooks.md): apt's
-`DPkg::Post-Invoke` config hook plus a thin `dpkg` wrapper script on
-`PATH` (for direct `dpkg -i` calls apt never sees), the same dual mechanism
-sudo-less itself uses for `prefix-wrap`.
+- Fresh bootstrap of the Debian base: `base-files`, `base-passwd`, `dash`,
+  `debianutils`, `debconf`, `cdebconf`, `openssl`, `ca-certificates`,
+  `mawk` and their libraries — 28 packages to `ii`.
+- Installing real leaf packages and their dependency chains from
+  `deb.debian.org`, with Debian dependencies that Termux's glibc install
+  already provides reused in place (no duplicate files).
+- Programs that read hardcoded absolute paths (`/usr/share/figlet`, …) run
+  correctly once launched through the overlay.
+- Programs run by name from a new shell.
 
-This repo is pursuing two directions in place of the blocked 60%:
+## What it does not do
 
-1. **[Direction 2 — static per-binary wrappers](docs/design-static-wrappers.md).**
-   Instead of a live mount-namespace overlay, generate a fixed wrapper script
-   per binary at install time (same detection heuristics as `prefix-wrap`),
-   pointing it at prefix paths directly (`--config`, env vars, or a
-   glibc-runner-patched ELF interpreter) instead of making `/etc/foo.conf`
-   resolve live. Less general, no namespace required, works everywhere
-   Termux does.
-2. **[Direction 3 — services on `termux-services` (research)](docs/services-research.md).**
-   No `systemd --user` on Termux; `termux-services` (runit-based) is the
-   native equivalent. Researching whether a package's systemd unit can be
-   translated to a runit service script the way sudo-less translates it to
-   a user unit.
+- **No fake root.** No uid-0 illusion (`fakeroot`/`proot -0`); files keep
+  the real unprivileged uid, and `dpkg` runs `--force-not-root`.
+- **No isolation.** The kernel here cannot build a user namespace, so an
+  install does not hide `$HOME` or provide an empty `/run` the way
+  sudo-less's view does. Run only packages you trust.
+- **No system services yet.** No `systemd --user` on Termux; `runit`
+  (`termux-services`) is the candidate ([research](docs/services-research.md)).
+- **Not for packages that need root** — system users/groups, `setuid`,
+  firewall/TUN, kernel modules.
+- Two known nits: `update-alternatives` writes its links into Termux's own
+  prefix, and a few maintainer scripts that fork Bionic `sed`/`find` can't
+  see prefix paths. Neither blocks a package reaching `ii`.
 
-## Non-goals
+## Status
 
-- Not a container, not a second distribution (that's `proot-distro`).
-- Not trying to reproduce sudo-less's sandbox (`prefix-sandbox`,
-  seccomp filters tied to the namespace) — that whole layer depends on the
-  view, which isn't available here.
-- Not for packages that need root at install or run time (system daemons
-  with real system users, `setuid` binaries) — same caveat sudo-less states
-  for its own prefix installs.
+The base environment and install path are solid; the run/integrate/service
+half is still being built. Coverage is measured the way `sudo-less` measures
+its own — a random per-section sample (see `docs/survey*.md`); the last
+number predates the base-env fix and is being re-measured. The full,
+chronological engineering log — including every dead end and the syscall
+evidence — is in [`docs/`](docs/).
+
+Next steps are tracked in [`TODO.md`](TODO.md).
+
+## Documentation
+
+- [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) — the method, side by side
+  with `sudo-less`.
+- [`docs/design-manual-overlay.md`](docs/design-manual-overlay.md) — the
+  userspace overlay, and why the kernel view is unavailable here.
+- [`docs/design-native-deps.md`](docs/design-native-deps.md) — reusing
+  Termux's glibc packages instead of duplicating them.
+- [`docs/design-install-path.md`](docs/design-install-path.md) — why
+  Termux's apt/dpkg are reused rather than patched.
+- [`docs/design-static-wrappers.md`](docs/design-static-wrappers.md),
+  [`docs/design-hooks.md`](docs/design-hooks.md) — run-time wrappers.
+- [`docs/findings-runtime-and-base-2026-09-25.md`](docs/findings-runtime-and-base-2026-09-25.md)
+  — how the base bootstrap was made to work end to end.
+- [`docs/findings-shim-perf-2026-09-25.md`](docs/findings-shim-perf-2026-09-25.md)
+  — the shim's performance and the one-time cost of `grun`.
+- [`docs/prior-art.md`](docs/prior-art.md) — what carries over from
+  `sudo-less`, and related work (`proot`, `proroot`).
 
 ## Prior art / credit
 
-- [`sudo-less`](https://github.com/jronminh/sudo-less) — the apt/dpkg
-  prefix-install approach and its docs are the starting point for this
-  repo's design. See [`docs/prior-art.md`](docs/prior-art.md) for the
-  detailed carry-over analysis, and
-  [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) for the side-by-side diff
-  (sudo-less = Debian-on-Debian with a kernel view; this repo = Termux
-  fused with a userspace native overlay to run Debian arm64 glibc).
-- Termux's own `apt`/`dpkg` patches (`termux/termux-packages`) — the
-  original source sudo-less itself forked from; ends up being the piece
-  this repo needs least modified, since it's already built for this exact
-  environment.
+- [`sudo-less`](https://github.com/jronminh/sudo-less) — the prefix-install
+  approach and its documentation are the starting point; the `apt`/`dpkg`
+  patches both projects build on originate in Termux.
+- Termux and `termux-pacman/glibc-packages` — the Bionic host and the glibc
+  userland the fusion relies on.
 
 ## License
 
-GPL-3.0-or-later (see [`LICENSE`](LICENSE)) — same license as `sudo-less`,
-whose approach and docs this project builds on and adapts.
+GPL-3.0-or-later. See [`LICENSE`](LICENSE).
