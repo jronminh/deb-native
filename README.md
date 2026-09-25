@@ -40,8 +40,24 @@ resists `LD_PRELOAD` interception too, being linked `BIND_NOW`). Abandoned
 that dead end for something simpler and more robust: `scripts/patch-maintainer-scripts.sh`
 rewrites a package's maintainer scripts as plain text (`sed`) between
 `dpkg --unpack` and `--configure` — no interception, no linker, no
-dependency on which shell is really running. Verified working end to
-end.
+dependency on which shell is really running.
+
+**Tested against a genuinely hard package** (`docs/findings-hard-package-2026-09-25.md`):
+`ruby-adsf`, pulling in `ruby3.3`/`libruby3.3`/`debconf`/`ca-certificates`/
+`openssl`. Found and fixed a real bug along the way — apt runs its own
+`dpkg` in one combined invocation (unpack+configure internally, no
+apt-level hook boundary between them), so the `DPkg::Pre-Invoke` hook
+never fired at the right time; `apt-install.sh` now uses apt only to
+resolve+download, then drives `dpkg --unpack` / patch / `--configure -a`
+explicitly itself. `openssl` now configures correctly as a result. Hit a
+real, deep, not-quick-to-fix wall one level further in:
+`debconf`'s own `confmodule` (correctly found via the sed rewrite) calls
+`/usr/lib/cdebconf/debconf` internally — a hardcoded path inside an
+ordinary shipped file, not a maintainer script, so out of this mechanism's
+current reach. Left as a named, understood gap (matches sudo-less's own
+"study one by one" bucket for this exact class), not chased further —
+install-side work now covers single-package leaf tools and their real
+dependency chains that don't route through `debconf`/`cdebconf`.
 
 ## Why this exists
 
