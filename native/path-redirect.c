@@ -38,6 +38,11 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/vfs.h>
+#include <sys/statvfs.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <stddef.h>
 #include <stdarg.h>
 #include <unistd.h>
 #include <elf.h>
@@ -245,6 +250,33 @@ int open(const char *pathname, int flags, ...) {
   return real(rewrite(pathname, buf, sizeof buf), flags, mode);
 }
 
+/* Fortified variants: with _FORTIFY_SOURCE the compiler can bind a call
+ * directly to __open_2/__openat_2/__open64_2, bypassing the interposable
+ * open/openat/open64 symbols. */
+typedef int (*__open_2_t)(const char *, int);
+int __open_2(const char *pathname, int flags) {
+  static __open_2_t real;
+  if (!real) real = (__open_2_t)dlsym(RTLD_NEXT, "__open_2");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), flags);
+}
+
+typedef int (*__openat_2_t)(int, const char *, int);
+int __openat_2(int dirfd, const char *pathname, int flags) {
+  static __openat_2_t real;
+  if (!real) real = (__openat_2_t)dlsym(RTLD_NEXT, "__openat_2");
+  char buf[4096];
+  return real(dirfd, rewrite(pathname, buf, sizeof buf), flags);
+}
+
+typedef int (*__open64_2_t)(const char *, int);
+int __open64_2(const char *pathname, int flags) {
+  static __open64_2_t real;
+  if (!real) real = (__open64_2_t)dlsym(RTLD_NEXT, "__open64_2");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), flags);
+}
+
 typedef int (*fstatat_t)(int, const char *, struct stat *, int);
 int fstatat(int dirfd, const char *pathname, struct stat *st, int flags) {
   static fstatat_t real;
@@ -285,6 +317,14 @@ int lstat64(const char *pathname, struct stat64 *st) {
   return real(rewrite(pathname, buf, sizeof buf), st);
 }
 
+typedef int (*lstat_t)(const char *, struct stat *);
+int lstat(const char *pathname, struct stat *st) {
+  static lstat_t real;
+  if (!real) real = (lstat_t)dlsym(RTLD_NEXT, "lstat");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), st);
+}
+
 typedef int (*statx_t)(int, const char *, int, unsigned int, struct statx *);
 int statx(int dirfd, const char *pathname, int flags, unsigned int mask,
           struct statx *stx) {
@@ -293,6 +333,22 @@ int statx(int dirfd, const char *pathname, int flags, unsigned int mask,
   if (!real) return -1;
   char buf[4096];
   return real(dirfd, rewrite(pathname, buf, sizeof buf), flags, mask, stx);
+}
+
+typedef int (*statfs_t)(const char *, struct statfs *);
+int statfs(const char *pathname, struct statfs *buf) {
+  static statfs_t real;
+  if (!real) real = (statfs_t)dlsym(RTLD_NEXT, "statfs");
+  char path[4096];
+  return real(rewrite(pathname, path, sizeof path), buf);
+}
+
+typedef int (*statvfs_t)(const char *, struct statvfs *);
+int statvfs(const char *pathname, struct statvfs *buf) {
+  static statvfs_t real;
+  if (!real) real = (statvfs_t)dlsym(RTLD_NEXT, "statvfs");
+  char path[4096];
+  return real(rewrite(pathname, path, sizeof path), buf);
 }
 
 typedef FILE *(*fopen_t)(const char *, const char *);
@@ -368,14 +424,15 @@ int mkdirat(int dirfd, const char *pathname, mode_t mode) {
   return real(dirfd, rewrite(pathname, buf, sizeof buf), mode);
 }
 
-typedef int (*unlinkat_t)(int, const char *, int);
+typedef int (*unlink_t)(const char *);
 int unlink(const char *pathname) {
-  static unlinkat_t real;
-  if (!real) real = (unlinkat_t)dlsym(RTLD_NEXT, "unlink");
+  static unlink_t real;
+  if (!real) real = (unlink_t)dlsym(RTLD_NEXT, "unlink");
   char buf[4096];
-  return real(AT_FDCWD, rewrite(pathname, buf, sizeof buf), 0);
+  return real(rewrite(pathname, buf, sizeof buf));
 }
 
+typedef int (*unlinkat_t)(int, const char *, int);
 int unlinkat(int dirfd, const char *pathname, int flags) {
   static unlinkat_t real;
   if (!real) real = (unlinkat_t)dlsym(RTLD_NEXT, "unlinkat");
@@ -476,6 +533,51 @@ typedef int (*truncate_t)(const char *, off_t);
 int truncate(const char *pathname, off_t length) {
   static truncate_t real;
   if (!real) real = (truncate_t)dlsym(RTLD_NEXT, "truncate");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), length);
+}
+
+/* The *64 names are distinct symbols a caller can reference even where
+ * off_t is already 64-bit; without these the base-symbol override above is
+ * bypassed. */
+typedef FILE *(*fopen64_t)(const char *, const char *);
+FILE *fopen64(const char *pathname, const char *mode) {
+  static fopen64_t real;
+  if (!real) real = (fopen64_t)dlsym(RTLD_NEXT, "fopen64");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), mode);
+}
+
+typedef FILE *(*freopen64_t)(const char *, const char *, FILE *);
+FILE *freopen64(const char *pathname, const char *mode, FILE *stream) {
+  static freopen64_t real;
+  if (!real) real = (freopen64_t)dlsym(RTLD_NEXT, "freopen64");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), mode, stream);
+}
+
+typedef int (*openat64_t)(int, const char *, int, ...);
+int openat64(int dirfd, const char *pathname, int flags, ...) {
+  static openat64_t real;
+  if (!real) real = (openat64_t)dlsym(RTLD_NEXT, "openat64");
+  char buf[4096];
+  mode_t mode = 0;
+  if (flags & O_CREAT) { va_list ap; va_start(ap, flags); mode = va_arg(ap, mode_t); va_end(ap); }
+  return real(dirfd, rewrite(pathname, buf, sizeof buf), flags, mode);
+}
+
+typedef int (*fstatat64_t)(int, const char *, struct stat64 *, int);
+int fstatat64(int dirfd, const char *pathname, struct stat64 *st, int flags) {
+  static fstatat64_t real;
+  if (!real) real = (fstatat64_t)dlsym(RTLD_NEXT, "fstatat64");
+  char buf[4096];
+  return real(dirfd, rewrite(pathname, buf, sizeof buf), st, flags);
+}
+
+typedef int (*truncate64_t)(const char *, off64_t);
+int truncate64(const char *pathname, off64_t length) {
+  static truncate64_t real;
+  if (!real) real = (truncate64_t)dlsym(RTLD_NEXT, "truncate64");
   char buf[4096];
   return real(rewrite(pathname, buf, sizeof buf), length);
 }
@@ -645,4 +747,75 @@ int execveat(int dirfd, const char *pathname, char *const argv[],
   const char *rp = rewrite(pathname, buf, sizeof buf);
   if (target_is_glibc(rp)) return real(dirfd, rp, argv, envp, flags);
   return real(dirfd, rp, argv, bionic_env(envp), flags);
+}
+
+/* ---- dlopen / dlmopen ------------------------------------------------- */
+
+/* glibc's loader opens an object internally rather than through the
+ * interposable PLT, but it does so from these entry points, so rewriting
+ * the name here covers the common `dlopen("/usr/lib/...")` case. A NULL
+ * name (re-open the main program) is passed through untouched. */
+typedef void *(*dlopen_t)(const char *, int);
+void *dlopen(const char *filename, int flags) {
+  static dlopen_t real;
+  if (!real) real = (dlopen_t)dlsym(RTLD_NEXT, "dlopen");
+  if (!filename) return real(NULL, flags);
+  char buf[4096];
+  return real(rewrite(filename, buf, sizeof buf), flags);
+}
+
+typedef void *(*dlmopen_t)(Lmid_t, const char *, int);
+void *dlmopen(Lmid_t nsid, const char *filename, int flags) {
+  static dlmopen_t real;
+  if (!real) real = (dlmopen_t)dlsym(RTLD_NEXT, "dlmopen");
+  if (!filename) return real(nsid, NULL, flags);
+  char buf[4096];
+  return real(nsid, rewrite(filename, buf, sizeof buf), flags);
+}
+
+/* ---- AF_UNIX socket paths -------------------------------------------- */
+
+/* A filesystem sun_path is just another absolute path, but sun_path is only
+ * 108 bytes: a rewritten path that would not fit is left untouched rather
+ * than truncated (a wrong socket is worse than an honest ENOENT). Abstract
+ * sockets (first byte '\0') are ignored -- rewrite() only acts on a leading
+ * '/'. The caller's addr may be shorter than struct sockaddr_un, so copy at
+ * most addrlen bytes. */
+static int rewrite_sockaddr(const struct sockaddr *addr, socklen_t addrlen,
+                            struct sockaddr_un *out, socklen_t *outlen) {
+  if (!addr || addr->sa_family != AF_UNIX) return 0;
+  if (addrlen <= (socklen_t)offsetof(struct sockaddr_un, sun_path)) return 0;
+  memset(out, 0, sizeof *out);
+  memcpy(out, addr, addrlen < (socklen_t)sizeof *out ? addrlen : (socklen_t)sizeof *out);
+  if (out->sun_path[0] != '/') return 0;
+  char buf[4096];
+  const char *rp = rewrite(out->sun_path, buf, sizeof buf);
+  if (rp == out->sun_path) return 0;
+  size_t rl = strlen(rp);
+  if (rl >= sizeof out->sun_path) return 0;
+  memcpy(out->sun_path, rp, rl + 1);
+  *outlen = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + rl + 1);
+  return 1;
+}
+
+typedef int (*bind_t)(int, const struct sockaddr *, socklen_t);
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+  static bind_t real;
+  if (!real) real = (bind_t)dlsym(RTLD_NEXT, "bind");
+  struct sockaddr_un un;
+  socklen_t unlen;
+  if (rewrite_sockaddr(addr, addrlen, &un, &unlen))
+    return real(sockfd, (const struct sockaddr *)&un, unlen);
+  return real(sockfd, addr, addrlen);
+}
+
+typedef int (*connect_t)(int, const struct sockaddr *, socklen_t);
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+  static connect_t real;
+  if (!real) real = (connect_t)dlsym(RTLD_NEXT, "connect");
+  struct sockaddr_un un;
+  socklen_t unlen;
+  if (rewrite_sockaddr(addr, addrlen, &un, &unlen))
+    return real(sockfd, (const struct sockaddr *)&un, unlen);
+  return real(sockfd, addr, addrlen);
 }
