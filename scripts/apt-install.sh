@@ -56,21 +56,8 @@ for pkg in $order; do
   [ -n "$deb" ] || continue
   dpkg --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
        $DPKG_FLAGS --unpack "$deb" || true
-  find "$NEWPREFIX/root" -type f -perm -u+x 2>/dev/null |
-    while IFS= read -r f; do
-      # Never grun-patch this project's own runtime: dn-shell/dn-perl are
-      # Bionic launchers and the shim is a glibc .so; rewriting their ELF
-      # interpreter to the glibc target breaks them ("libdl.so: cannot open
-      # shared object file").
-      case "$f" in
-        "$NEWPREFIX/root/lib/deb-native/"*|\
-        "$NEWPREFIX/root/usr/bin/dn-shell"|\
-        "$NEWPREFIX/root/usr/bin/dn-perl") continue ;;
-      esac
-      case "$(head -c4 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')" in
-        7f454c46) grun --configure "$f" >/dev/null 2>&1 || true ;;
-      esac
-    done
+  # Repoint new ELFs at Termux's glibc loader (and skip our own runtime).
+  "$HERE/patch-elfs.sh" "$NEWPREFIX/root"
   # Re-patch: dash (or its wrapper) may not have existed yet when this
   # exact package's own control scripts were patched above, if this
   # package was earlier in apt's order than dash itself.

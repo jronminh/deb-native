@@ -57,11 +57,18 @@ glibc ELF, not Bionic. `deb-native` addresses each:
    (or `perl`), so maintainer scripts run **inside** the fake Debian with
    the overlay active — including `preinst`, before `dpkg` has even
    unpacked the package.
-5. **launch programs by name.** After each install, a wrapper is generated
+5. **Hang the pipeline on apt/dpkg, the way `sudo-less` does.** A
+   prefix-scoped apt config points Termux's own `apt` at the Debian `arm64`
+   repository and the prefix, with `DPkg::Pre-Install-Pkgs` patching each
+   `.deb` before dpkg unpacks it (so even `preinst` sees the overlay) and
+   `DPkg::Post-Invoke` repointing new ELFs at Termux's glibc and regenerating
+   launchers. A `dpkg` wrapper does the same for direct `dpkg -i`. A user
+   types `apt install PKG`; nothing else.
+6. **launch programs by name.** After each install, a wrapper is generated
    per program under `$INSTDIR/usr/lib/deb-native/bin` (ELF targets get the
    overlay; scripts go through the glibc shell), and that directory is put
    first on `PATH`. `figlet hi` just works.
-6. **Termux stays intact.** Termux's own `LD_PRELOAD` (`termux-exec`) is
+7. **Termux stays intact.** Termux's own `LD_PRELOAD` (`termux-exec`) is
    never disabled; when a program running under the overlay forks a
    *Bionic* child, the shim hands `termux-exec` back to it. The two
    userlands coexist.
@@ -101,6 +108,16 @@ cd deb-native
 ./install.sh ~/.dn figlet tree     # bootstrap the base, then install pkgs
 exec bash                          # or: . ~/.bashrc
 figlet hi                          # installed program, run by name
+```
+
+After activation, **Termux's own `apt` and `dpkg` are wired to the real
+Debian `arm64` repository and to the prefix** (no wrapper command, no new
+name) — the pipeline hangs on apt's own hooks, the way `sudo-less` does:
+
+```sh
+apt install cowsay        # Termux's apt -> deb.debian.org -> the prefix
+apt remove cowsay
+dpkg -i ./some.deb        # direct dpkg targets the prefix too
 ```
 
 `install.sh` is idempotent: run it again with more packages, or point it at

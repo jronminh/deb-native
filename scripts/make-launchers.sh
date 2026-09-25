@@ -45,7 +45,7 @@ wrap() {
     cat > "$tmp" <<EOF
 #!/system/bin/sh
 export DN_INSTDIR="$INSTDIR"
-export PATH="$INSTDIR/usr/sbin:$INSTDIR/usr/bin:$INSTDIR/sbin:$INSTDIR/bin:$LAUNCHDIR:$GLIBC/bin:$PREFIX_DIR/bin"
+export PATH="$INSTDIR/usr/sbin:$INSTDIR/usr/bin:$INSTDIR/sbin:$INSTDIR/bin:$INSTDIR/usr/games:$LAUNCHDIR:$GLIBC/bin:$PREFIX_DIR/bin"
 # Hand Termux's own preload (termux-exec) back to any Bionic child via the
 # shim's DN_BIONIC_PRELOAD, instead of dropping it -- Termux-native
 # commands need it, and it must not be disabled system-wide.
@@ -73,7 +73,7 @@ EOF
 }
 
 # Real bin dirs (skip the usrmerge symlinks: bin -> usr/bin, sbin -> usr/sbin).
-for d in "$INSTDIR/usr/bin" "$INSTDIR/usr/sbin" "$INSTDIR/sbin" "$INSTDIR/bin"; do
+for d in "$INSTDIR/usr/bin" "$INSTDIR/usr/sbin" "$INSTDIR/sbin" "$INSTDIR/bin" "$INSTDIR/usr/games"; do
   [ -d "$d" ] || continue
   [ -L "$d" ] && continue
   for f in "$d"/*; do

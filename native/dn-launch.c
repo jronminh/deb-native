@@ -58,8 +58,8 @@ int main(int argc, char **argv) {
   snprintf(shim, sizeof shim, "%s/usr/lib/deb-native/path-redirect.so", inst);
   char path[8192];
   snprintf(path, sizeof path,
-           "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/glibc/bin:%s/bin",
-           inst, inst, inst, inst, pfx, pfx);
+           "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/usr/games:%s/glibc/bin:%s/bin",
+           inst, inst, inst, inst, inst, pfx, pfx);
 
   /* Preserve whatever preload we inherited (on Termux, termux-exec) so the
    * shim can hand it back to a Bionic child it execs -- see bionic_env()

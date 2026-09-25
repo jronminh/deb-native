@@ -19,12 +19,14 @@ set -eu
 NEWPREFIX=${1:?usage: setup-apt-prefix.sh NEWPREFIX [suite]}
 SUITE=${2:-stable}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
 
 # Build the path-redirect shim from source if it is missing (it is a build
 # artifact; see scripts/build-path-redirect.sh for the toolchain notes).
 [ -f "$HERE/../native/path-redirect.so" ] || "$HERE/build-path-redirect.sh"
 
 mkdir -p "$NEWPREFIX/etc/apt/apt.conf.d" "$NEWPREFIX/etc/apt/sources.list.d" \
+         "$NEWPREFIX/etc/apt/preferences.d" \
          "$NEWPREFIX/etc/apt/trusted.gpg.d" \
          "$NEWPREFIX/var/lib/apt/lists/partial" \
          "$NEWPREFIX/var/cache/apt/archives/partial" \
@@ -36,7 +38,9 @@ mkdir -p "$NEWPREFIX/etc/apt/apt.conf.d" "$NEWPREFIX/etc/apt/sources.list.d" \
 touch "$NEWPREFIX/etc/apt/trusted.gpg"
 
 cat > "$NEWPREFIX/etc/apt/sources.list" <<EOF
-deb [trusted=yes] https://deb.debian.org/debian $SUITE main
+deb [trusted=yes] https://deb.debian.org/debian $SUITE main contrib non-free-firmware
+deb [trusted=yes] https://deb.debian.org/debian ${SUITE}-updates main contrib non-free-firmware
+deb [trusted=yes] https://security.debian.org/debian-security ${SUITE}-security main contrib non-free-firmware
 EOF
 
 cat > "$NEWPREFIX/etc/apt.conf" <<EOF
@@ -55,6 +59,12 @@ Dpkg::options:: "--admindir=$NEWPREFIX/var/lib/dpkg";
 Dpkg::options:: "--force-not-root";
 Dpkg::options:: "--force-script-chrootless";
 Dpkg::options:: "--force-architecture";
+// Hook the deb-native pipeline into apt's own lifecycle (the sudo-less
+// approach): patch each .deb before dpkg unpacks it, and regenerate
+// launchers after. So a plain `apt-get install` (through the `dn` front-end,
+// which points APT_CONFIG here) installs Debian arm64 packages seamlessly.
+DPkg::Pre-Install-Pkgs { "$REPO/scripts/apt-hook-pre.sh $NEWPREFIX"; };
+DPkg::Post-Invoke { "$REPO/scripts/apt-hook-post.sh $NEWPREFIX || true"; };
 EOF
 
 "$HERE/native-seed.sh" "$NEWPREFIX/var/lib/dpkg"
@@ -65,7 +75,7 @@ echo "    transaction -- see scripts/bootstrap-base.sh for why one, not"
 echo "    piecemeal, matters here"
 "$HERE/bootstrap-base.sh" "$NEWPREFIX"
 
-echo "==> generating launchers and activating PATH"
+echo "==> generating launchers, the dn front-end, and activating PATH"
 "$HERE/make-launchers.sh" "$NEWPREFIX/root"
 "$HERE/dn-activate.sh" "$NEWPREFIX/root"
 
