@@ -1098,13 +1098,25 @@ one-level-down redirect was an assumption, not a fact.
 `shim` except the NSS lookups (untested), `glob`/`glob64` (indirect),
 `mount`/`umount2`/`chroot` (admin), and the raw-`syscall()` boundary.
 
-The NSS question was then tested and answered: **not redirected.** With a
-fake `$INSTDIR/etc/passwd` holding `dnshim:54321`, `getpwnam("dnshim")` and
-`getpwuid(54321)` returned `NOTFOUND`, and `getgrgid(54321)` returned the
-real Android group `all_a4321`. `libnss_files.so.2` imports no
-`open`/`fopen` at all — the `files` service is linked into `libc.so.6` and
-opens its files with the private `__open_nocancel`/`__open64_nocancel`
-(`GLIBC_PRIVATE`), which an `LD_PRELOAD` interposer cannot reach. So the shim
-is complete at its layer: the only remaining gaps — NSS reads, raw
-`syscall()`, static binaries — all belong to the syscall tracer.
+The NSS question was then tested and answered: **not redirected, and not
+fixable at the libc layer.** With a fake `$INSTDIR/etc/passwd` holding
+`dnshim:54321`, `getpwnam("dnshim")` and `getpwuid(54321)` returned
+`NOTFOUND`, and `getgrgid(54321)` returned the real Android group
+`all_a4321`, and `DN_REDIRECT_DEBUG=1` produced no rewrite line for
+`nsswitch.conf`/`passwd`/`group`/`hosts`/`resolv.conf` at all — every open
+is internal. `libc.so.6` defines `_nss_files_*`/`_nss_dns_*` itself; the
+bundled `libnss_files.so.2`/`libnss_dns.so.2` are empty ABI stubs that
+glibc never `dlopen`s. Stock Debian glibc is identical (its `libc.so.6`
+defines `_nss_files_getpwnam`; its `libnss_files.so.2` is a stub), so this
+is upstream glibc design, not Termux. The opens use the private
+`__open_nocancel`/`__open64_nocancel` (`GLIBC_PRIVATE`), and even the
+`nsswitch.conf` dispatch is internal, so a custom NSS module cannot be
+selected either.
+
+It is not unfixable, just not here: the syscall tracer catches the `openat`
+before any of this and covers NSS, raw `syscall()` and static binaries
+uniformly. The only libc-layer alternative — interposing the public
+`getpwnam`/`getpwuid_r`/… and reimplementing the `files` lookup — is a
+partial reimplementation and not worth it against the tracer. So the shim is
+complete at its layer; the remaining gaps all belong to the tracer.
 

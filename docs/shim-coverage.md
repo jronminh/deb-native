@@ -130,11 +130,31 @@ call, so the question was whether glibc's backend opens those files through
 the interposable `fopen` anyway. The test says **no**: with a fake
 `$INSTDIR/etc/passwd` holding `dnshim:54321`, `getpwnam("dnshim")` and
 `getpwuid(54321)` returned `NOTFOUND`, and `getgrgid(54321)` returned the
-**real** Android group `all_a4321`. `libnss_files.so.2` imports no
-`open`/`fopen` at all — the `files` service is linked inside `libc.so.6` and
-opens its files with the private `__open_nocancel`/`__open64_nocancel`
-(`GLIBC_PRIVATE`), which no `LD_PRELOAD` interposer can reach. This is the
-syscall tracer's job, not a shim gap.
+**real** Android group `all_a4321`. Running the same test with
+`DN_REDIRECT_DEBUG=1` produces **no** rewrite line for `nsswitch.conf`,
+`passwd`, `group`, `hosts` or `resolv.conf` — every one of those opens is
+internal.
+
+Why — and why it is not a Termux packaging bug: `libc.so.6` itself defines
+`_nss_files_*` and `_nss_dns_*`, and the bundled `libnss_files.so.2` /
+`libnss_dns.so.2` are empty ABI stubs (zero `_nss_*` symbols, zero imports),
+so glibc never `dlopen`s them. Stock Debian glibc is the same — its
+`libc.so.6` also defines `_nss_files_getpwnam` and its `libnss_files.so.2`
+is a stub — so this is **upstream glibc design**. The opens go through the
+private `__open_nocancel`/`__open64_nocancel` (`GLIBC_PRIVATE`), bound at
+link time, which no `LD_PRELOAD` interposer can reach. That also rules out
+the "ship a custom NSS module" route: the dispatch config (`nsswitch.conf`)
+is read internally too, so it cannot be pointed at a module of ours.
+
+**Not unfixable — just not at this layer.** The syscall tracer sees the
+`openat` syscall before any of this and covers NSS, raw `syscall()` and
+static binaries uniformly. A narrower libc-layer hack exists — interpose the
+public `getpwnam`/`getpwuid`/`getpwuid_r`/… and reimplement only the `files`
+lookup against `$INSTDIR/etc/passwd` — but it is a partial reimplementation
+(no `hosts`/`dns`, no `nsswitch` semantics, `_r` variants) and the tracer is
+the cleaner general fix. In practice most lookups just resolve the current
+uid/gid or hostnames, where the real `/etc` (and Android's DNS) is often
+what you want anyway.
 
 **Out of scope, deliberately:** `mount` (0/1), `umount2` (0/1), `chroot`
 (1/1) are admin operations; redirecting them is neither possible nor wanted.
