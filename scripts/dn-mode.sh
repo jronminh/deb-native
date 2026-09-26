@@ -67,6 +67,10 @@ Dir::State::Lists "$LISTS/";
 Dir::Cache "$CACHE/";
 Acquire::PDiffs "false";
 Acquire::Languages "none";
+// main's apt-install.sh installs with --no-install-recommends: Recommends
+// pull XS perl modules (debconf-i18n -> liblocale-gettext-perl) that need
+// Debian's own perl, whose /usr/bin/perl is Termux's perl in this prefix.
+APT::Install-Recommends "false";
 APT::Update::Post-Invoke-Success { "$HERE/dn-debian-index.sh $LISTS"; };
 // Install pipeline: packages are fused into Termux's prefix (paths inside
 // a translated .deb are prefix-relative), maintainer scripts run without
