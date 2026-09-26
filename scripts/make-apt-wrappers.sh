@@ -101,4 +101,11 @@ esac
 EOF
 chmod 755 "$LAUNCHDIR/dpkg"
 
-echo "==> arch-aware wrappers in $LAUNCHDIR (apt apt-get apt-cache dpkg)"
+cat > "$LAUNCHDIR/termux-dn-doctor" <<EOF
+#!/system/bin/sh
+# deb-native doctor (generated; do not edit).
+exec sh "$REPO/scripts/dn-doctor.sh" "$DNPREFIX" "\$@"
+EOF
+chmod 755 "$LAUNCHDIR/termux-dn-doctor"
+
+echo "==> arch-aware wrappers in $LAUNCHDIR (apt apt-get apt-cache dpkg termux-dn-doctor)"

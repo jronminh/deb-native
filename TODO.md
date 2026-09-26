@@ -9,6 +9,12 @@ for what just landed.
 
 ## Done recently
 
+- [x] **`termux-dn-doctor`** — a generated command (in the launcher dir, so it
+      runs by name) that checks the Termux↔prefix seams: a leaked
+      `APT_CONFIG` in the shell rc (which made `apt update` show only Debian),
+      a Termux `sources.list` clobbered by installing into `$PREFIX`, and
+      stale/missing wrappers or activation; `--fix` repairs them.
+      [`scripts/dn-doctor.sh`](scripts/dn-doctor.sh).
 - [x] **Fresh base bootstrap to `ii`** (all 28 base packages) — see
       [`docs/findings.md`](docs/findings.md).
 - [x] **Seamless launch**: `scripts/make-launchers.sh` + `scripts/dn-activate.sh`
