@@ -106,24 +106,21 @@ intercepted. The counts are `app / base` imports across the corpus:
 | `mkstemp` | 5 / 0 | yes |
 | `posix_spawn*` | 1 / 0 | yes |
 
-### Gaps found
+### Gaps found — and closed
 
-**Genuine, and cheap to close** (the symbol exists in Termux's glibc, the shim
-just does not define it — all take a plain path or template):
+Eight genuine gaps were all closed in `native/path-redirect.c`:
+`__xstat`/`__lxstat` (legacy pre-2.33 stat entry points; `__fxstat` is
+fd-based and needs no redirect), `sendmsg` (the AF_UNIX path in
+`msghdr.msg_name`, mirroring `sendto`), `lutimes`, `mkstemps`/`mkostemps`,
+`eaccess`/`euidaccess`, and `setmntent`. `scandir`/`scandir64` were promoted
+from "indirect" to explicit redirects as well: glibc's own scan walks the
+directory with an internal `opendir` that does not reach the interposed
+symbol. `tests/shim-libc/run.sh` exercises every one of them on-device.
 
-| symbol | app/base | note |
-|---|---|---|
-| `__xstat` / `__lxstat` / `__fxstat` | 1 / 0 each | legacy pre-2.33 stat entry points; Termux's glibc still exports them, so an old binary reaches the real `/etc` |
-| `sendmsg` | 2 / 1 | AF_UNIX datagram path in `msghdr.msg_name`; mirror of the existing `sendto` |
-| `lutimes` | 2 / 0 | `utimes` for the symlink itself |
-| `mkstemps` / `mkostemps` | 0 / 1 | template form of the already-covered `mkstemp` |
-| `eaccess` | 1 / 0 | glibc alias of `euidaccess` |
-| `setmntent` | 1 / 0 | opens an mtab/mounts file by path |
-
-**Covered indirectly — verify, do not assume a gap:** `scandir64` (1/1) and
-`glob`/`glob64` (1/0) take a directory path but walk it through the already
-interposed `opendir`/`stat`, so the redirect should already happen one level
-down.
+**Still indirect (not a gap):** `glob`/`glob64` (1/0) match a pattern and
+walk it through the interposed `opendir`/`stat`, so the redirect happens one
+level down; a rewritten *pattern* would, however, return `$INSTDIR`-prefixed
+matches, so it is left alone.
 
 **NSS lookups — needs a test, not yet a confirmed gap:** `getpwuid` (31/3),
 `getgrgid` (17/1), `getpwnam` (3/3), `getaddrinfo` (8/0), `gethostbyname`
@@ -149,8 +146,9 @@ libc layer can be.**
 
 ## Next steps
 
-- [ ] Add the cheap gaps above (`__xstat`/`__lxstat`/`__fxstat` + `*64`,
-      `sendmsg`, `lutimes`, `mkstemps`/`mkostemps`, `eaccess`, `setmntent`).
+- [x] Add the cheap gaps above (`__xstat`/`__lxstat` + `*64`, `sendmsg`,
+      `lutimes`, `mkstemps`/`mkostemps`, `eaccess`, `setmntent`, and
+      `scandir`/`scandir64`); all now intercepted and in `tests/shim-libc`.
 - [ ] Test the NSS question against a fake prefix (`/etc/passwd` under
       `$INSTDIR`) and record the answer here.
 - [ ] Extend `scan-libc-symbols.sh` to print the *file* behind `syscall()` and

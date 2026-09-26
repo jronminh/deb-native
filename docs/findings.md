@@ -1078,3 +1078,28 @@ Result: 33 rewrites asserted, all new symbols covered, `mkstemp`/`mkdtemp`
 templates handed back un-prefixed, and the redirected `posix_spawn` child
 exits 0. Real `/etc` is untouched. The build is warning-free.
 
+## Findings: closing the measured shim gaps (2026-09-26)
+
+With a scope decided ([`standard.md`](standard.md)) and the imported-symbol
+corpus measured ([`shim-coverage.md`](shim-coverage.md)), the eight symbols
+that were genuinely imported but not intercepted are now covered in
+`native/path-redirect.c`: the legacy `__xstat`/`__lxstat` entry points (and
+their `*64` forms — `__fxstat` is fd-based and needs no redirect);
+`sendmsg`, rewriting the AF_UNIX address in a copied `msghdr` the same way
+`sendto` does; `lutimes`; `mkstemps`/`mkostemps`, with the same
+template copy-back as `mkstemp`; and `eaccess`/`euidaccess`, `setmntent`.
+`scandir`/`scandir64` were also promoted from "covered indirectly" to
+explicit redirects: glibc walks the directory with an internal `opendir`
+that does not pass through the interposed symbol, so relying on the
+one-level-down redirect was an assumption, not a fact.
+
+`tests/shim-libc/run.sh` grew to 46 asserted rewrites and passes on-device;
+`docs/coverage/path-symbols.tsv` now marks every imported path-taking symbol
+`shim` except the NSS lookups (untested), `glob`/`glob64` (indirect),
+`mount`/`umount2`/`chroot` (admin), and the raw-`syscall()` boundary.
+
+Remaining, by category: the six NSS lookups need a fake-prefix test to
+confirm whether the `nss_files` backend's `fopen` already redirects them;
+and raw `syscall()` (12 in-scope ELFs) is the syscall tracer's job, not the
+shim's.
+

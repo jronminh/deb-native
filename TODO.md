@@ -16,6 +16,12 @@ for what just landed.
       child gets it back via `DN_BIONIC_PRELOAD`, a glibc child gets the shim).
 - [x] **First full install script**: `install.sh PREFIX [pkg...]` — bootstrap
       if new, reuse if existing, install, generate launchers, activate PATH.
+- [x] **Package scope decided + libc-shim coverage measured and completed**:
+      [`docs/standard.md`](docs/standard.md) (section-based scope) and
+      [`docs/shim-coverage.md`](docs/shim-coverage.md) (258-package in-scope
+      corpus). Every imported path-taking symbol is now intercepted except the
+      NSS lookups (untested), `glob`/`glob64` (indirect), admin ops, and the
+      raw-`syscall()` boundary.
 
 ## Now / do first
 

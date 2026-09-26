@@ -54,6 +54,7 @@
 #include <utime.h>
 #include <spawn.h>
 #include <sys/inotify.h>
+#include <mntent.h>
 
 /* Cached once, at load. rewrite() is on the hot path of every intercepted
  * open/stat/exec call, so it must not call getenv()/strlen() per call or
@@ -298,6 +299,44 @@ int __fxstatat(int ver, int dirfd, const char *pathname, struct stat *st, int fl
   return real(ver, dirfd, rewrite(pathname, buf, sizeof buf), st, flags);
 }
 
+/* Legacy stat entry points: a binary built against glibc < 2.33 reaches
+ * stat through the versioned __xstat/__lxstat names, and Termux's glibc
+ * still exports them for compatibility. The first argument is the (unused)
+ * _STAT_VER. __fxstat takes an fd, not a path, so it needs no redirect. */
+typedef int (*xstat_t)(int, const char *, struct stat *);
+int __xstat(int ver, const char *pathname, struct stat *st) {
+  static xstat_t real;
+  if (!real) real = (xstat_t)dlsym(RTLD_NEXT, "__xstat");
+  if (!real) return -1;
+  char buf[4096];
+  return real(ver, rewrite(pathname, buf, sizeof buf), st);
+}
+
+int __lxstat(int ver, const char *pathname, struct stat *st) {
+  static xstat_t real;
+  if (!real) real = (xstat_t)dlsym(RTLD_NEXT, "__lxstat");
+  if (!real) return -1;
+  char buf[4096];
+  return real(ver, rewrite(pathname, buf, sizeof buf), st);
+}
+
+typedef int (*xstat64_t)(int, const char *, struct stat64 *);
+int __xstat64(int ver, const char *pathname, struct stat64 *st) {
+  static xstat64_t real;
+  if (!real) real = (xstat64_t)dlsym(RTLD_NEXT, "__xstat64");
+  if (!real) return -1;
+  char buf[4096];
+  return real(ver, rewrite(pathname, buf, sizeof buf), st);
+}
+
+int __lxstat64(int ver, const char *pathname, struct stat64 *st) {
+  static xstat64_t real;
+  if (!real) real = (xstat64_t)dlsym(RTLD_NEXT, "__lxstat64");
+  if (!real) return -1;
+  char buf[4096];
+  return real(ver, rewrite(pathname, buf, sizeof buf), st);
+}
+
 typedef int (*stat_t)(const char *, struct stat *);
 int stat(const char *pathname, struct stat *st) {
   static stat_t real;
@@ -371,6 +410,43 @@ DIR *opendir(const char *pathname) {
   return real(rewrite(pathname, buf, sizeof buf));
 }
 
+/* scandir()/scandir64() take the directory path and walk it themselves;
+ * glibc uses an internal opendir that does not reach the interposed
+ * symbol, so rewrite the path here too. */
+typedef int (*scandir_t)(const char *, struct dirent ***,
+                         int (*)(const struct dirent *),
+                         int (*)(const struct dirent **, const struct dirent **));
+int scandir(const char *dirp, struct dirent ***namelist,
+            int (*filter)(const struct dirent *),
+            int (*compar)(const struct dirent **, const struct dirent **)) {
+  static scandir_t real;
+  if (!real) real = (scandir_t)dlsym(RTLD_NEXT, "scandir");
+  char buf[4096];
+  return real(rewrite(dirp, buf, sizeof buf), namelist, filter, compar);
+}
+
+typedef int (*scandir64_t)(const char *, struct dirent64 ***,
+                           int (*)(const struct dirent64 *),
+                           int (*)(const struct dirent64 **, const struct dirent64 **));
+int scandir64(const char *dirp, struct dirent64 ***namelist,
+              int (*filter)(const struct dirent64 *),
+              int (*compar)(const struct dirent64 **, const struct dirent64 **)) {
+  static scandir64_t real;
+  if (!real) real = (scandir64_t)dlsym(RTLD_NEXT, "scandir64");
+  char buf[4096];
+  return real(rewrite(dirp, buf, sizeof buf), namelist, filter, compar);
+}
+
+/* getmntent()/getmntent_r() take a FILE*, so only setmntent()'s path is
+ * rewritten. */
+typedef FILE *(*setmntent_t)(const char *, const char *);
+FILE *setmntent(const char *filename, const char *type) {
+  static setmntent_t real;
+  if (!real) real = (setmntent_t)dlsym(RTLD_NEXT, "setmntent");
+  char buf[4096];
+  return real(rewrite(filename, buf, sizeof buf), type);
+}
+
 /* ---- access ---------------------------------------------------------- */
 
 typedef int (*access_t)(const char *, int);
@@ -395,6 +471,20 @@ int faccessat2(int dirfd, const char *pathname, int mode, int flags) {
   if (!real) return faccessat(dirfd, pathname, mode, flags);
   char buf[4096];
   return real(dirfd, rewrite(pathname, buf, sizeof buf), mode, flags);
+}
+
+typedef int (*eaccess_t)(const char *, int);
+int eaccess(const char *pathname, int mode) {
+  static eaccess_t real;
+  if (!real) real = (eaccess_t)dlsym(RTLD_NEXT, "eaccess");
+  if (!real) real = (eaccess_t)dlsym(RTLD_NEXT, "euidaccess");
+  if (!real) return -1;
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), mode);
+}
+
+int euidaccess(const char *pathname, int mode) {
+  return eaccess(pathname, mode);
 }
 
 /* coreutils mkdir -p verifies an existing component with chdir(), not
@@ -600,6 +690,14 @@ typedef int (*utimes_t)(const char *, const struct timeval *);
 int utimes(const char *pathname, const struct timeval times[2]) {
   static utimes_t real;
   if (!real) real = (utimes_t)dlsym(RTLD_NEXT, "utimes");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), times);
+}
+
+typedef int (*lutimes_t)(const char *, const struct timeval *);
+int lutimes(const char *pathname, const struct timeval times[2]) {
+  static lutimes_t real;
+  if (!real) real = (lutimes_t)dlsym(RTLD_NEXT, "lutimes");
   char buf[4096];
   return real(rewrite(pathname, buf, sizeof buf), times);
 }
@@ -1063,6 +1161,26 @@ ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
   return real(sockfd, buf, len, flags, dest_addr, addrlen);
 }
 
+/* sendmsg() carries the same AF_UNIX address in msg_name; copy the msghdr
+ * because the caller's is const. */
+typedef ssize_t (*sendmsg_t)(int, const struct msghdr *, int);
+ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
+  static sendmsg_t real;
+  if (!real) real = (sendmsg_t)dlsym(RTLD_NEXT, "sendmsg");
+  if (msg && msg->msg_name) {
+    struct sockaddr_un un;
+    socklen_t unlen;
+    if (rewrite_sockaddr((const struct sockaddr *)msg->msg_name,
+                         msg->msg_namelen, &un, &unlen)) {
+      struct msghdr m = *msg;
+      m.msg_name = &un;
+      m.msg_namelen = unlen;
+      return real(sockfd, &m, flags);
+    }
+  }
+  return real(sockfd, msg, flags);
+}
+
 /* ---- temp files ------------------------------------------------------ */
 
 /* mkstemp/mkostemp/mkdtemp modify tmpl in place and the caller's
@@ -1095,6 +1213,34 @@ int mkostemp(char *tmpl, int flags) {
   const char *rp = rewrite(tmpl, buf, sizeof buf);
   if (rp == tmpl) return real(tmpl, flags);
   int r = real(buf, flags);
+  if (r >= 0 && g_root && g_rootlen &&
+      strlen(buf + g_rootlen) + 1 <= strlen(tmpl) + 1)
+    strcpy(tmpl, buf + g_rootlen);
+  return r;
+}
+
+typedef int (*mkstemps_t)(char *, int);
+int mkstemps(char *tmpl, int suffixlen) {
+  static mkstemps_t real;
+  if (!real) real = (mkstemps_t)dlsym(RTLD_NEXT, "mkstemps");
+  char buf[4096];
+  const char *rp = rewrite(tmpl, buf, sizeof buf);
+  if (rp == tmpl) return real(tmpl, suffixlen);
+  int r = real(buf, suffixlen);
+  if (r >= 0 && g_root && g_rootlen &&
+      strlen(buf + g_rootlen) + 1 <= strlen(tmpl) + 1)
+    strcpy(tmpl, buf + g_rootlen);
+  return r;
+}
+
+typedef int (*mkostemps_t)(char *, int, int);
+int mkostemps(char *tmpl, int suffixlen, int flags) {
+  static mkostemps_t real;
+  if (!real) real = (mkostemps_t)dlsym(RTLD_NEXT, "mkostemps");
+  char buf[4096];
+  const char *rp = rewrite(tmpl, buf, sizeof buf);
+  if (rp == tmpl) return real(tmpl, suffixlen, flags);
+  int r = real(buf, suffixlen, flags);
   if (r >= 0 && g_root && g_rootlen &&
       strlen(buf + g_rootlen) + 1 <= strlen(tmpl) + 1)
     strcpy(tmpl, buf + g_rootlen);

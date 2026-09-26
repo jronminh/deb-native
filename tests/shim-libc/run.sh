@@ -53,16 +53,22 @@ for p in \
   /etc/zz_statfs64 /etc/zz_statvfs64 \
   /etc/zz_realpath /etc/zz_canon /etc/zz_inotify /etc/zz_sendto \
   /etc/zz_mkstempXXXXXX /etc/zz_mkostempXXXXXX /etc/zz_mkdtempXXXXXX \
+  /etc/zz_xstat /etc/zz_lxstat /etc/zz_xstat64 /etc/zz_lxstat64 \
+  /etc/zz_scandir /etc/zz_scandir64 /etc/zz_mtab \
+  /etc/zz_eaccess /etc/zz_euidaccess /etc/zz_lutimes /etc/zz_sendmsg \
+  /etc/zz_mkstempsXXXXXX.txt /etc/zz_mkostempsXXXXXX.txt \
   /usr/bin/zz_nope /usr/bin/zz_true
 do
   check "[path-redirect] $p -> "
 done
 
-# mkstemp/mkostemp/mkdtemp templates must be handed back in the caller's
-# (un-prefixed) form, not as $ROOT/etc/...
-grep -q '^MKSTEMP_TMPL=/etc/zz_mkstemp'  "$OUT" || { echo "mkstemp template not stripped";  fail=1; }
-grep -q '^MKOSTEMP_TMPL=/etc/zz_mkostemp' "$OUT" || { echo "mkostemp template not stripped"; fail=1; }
-grep -q '^MKDTEMP_TMPL=/etc/zz_mkdtemp'  "$OUT" || { echo "mkdtemp template not stripped";  fail=1; }
+# mkstemp/mkostemp/mkstemps/mkostemps/mkdtemp templates must be handed back
+# in the caller's (un-prefixed) form, not as $ROOT/etc/...
+grep -q '^MKSTEMP_TMPL=/etc/zz_mkstemp'    "$OUT" || { echo "mkstemp template not stripped";   fail=1; }
+grep -q '^MKOSTEMP_TMPL=/etc/zz_mkostemp'  "$OUT" || { echo "mkostemp template not stripped";  fail=1; }
+grep -q '^MKSTEMPS_TMPL=/etc/zz_mkstemps'  "$OUT" || { echo "mkstemps template not stripped";  fail=1; }
+grep -q '^MKOSTEMPS_TMPL=/etc/zz_mkostemps' "$OUT" || { echo "mkostemps template not stripped"; fail=1; }
+grep -q '^MKDTEMP_TMPL=/etc/zz_mkdtemp'    "$OUT" || { echo "mkdtemp template not stripped";   fail=1; }
 grep -q '^POSIX_SPAWN_REAL_EXIT=0' "$OUT" || { echo "posix_spawn of a redirected binary did not run"; fail=1; }
 grep -q '^POSIX_SPAWNP_RC=-1' "$OUT" || { echo "posix_spawnp PATH walk did not return ENOENT"; fail=1; }
 grep -q '^DONE' "$OUT" || { echo "test did not finish"; fail=1; }

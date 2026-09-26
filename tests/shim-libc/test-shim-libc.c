@@ -15,10 +15,21 @@
 #include <spawn.h>
 #include <sys/inotify.h>
 #include <sys/wait.h>
+#include <sys/time.h>
+#include <dirent.h>
+#include <mntent.h>
 #include <errno.h>
 #include <limits.h>
 
 extern char **environ;
+
+/* Legacy stat entry points, not always declared by the headers. */
+extern int __xstat(int, const char *, struct stat *);
+extern int __lxstat(int, const char *, struct stat *);
+extern int __xstat64(int, const char *, struct stat64 *);
+extern int __lxstat64(int, const char *, struct stat64 *);
+extern int eaccess(const char *, int);
+extern int euidaccess(const char *, int);
 
 static void note(const char *n) { fprintf(stderr, "TEST %s\n", n); }
 
@@ -56,7 +67,21 @@ int main(void) {
 
   note("mkstemp");    { char t[] = "/etc/zz_mkstempXXXXXX"; fd = mkstemp(t); if (fd >= 0) { fprintf(stderr, "MKSTEMP_TMPL=%s\n", t); close(fd); } else fprintf(stderr, "MKSTEMP_ERR\n"); }
   note("mkostemp");   { char t[] = "/etc/zz_mkostempXXXXXX"; fd = mkostemp(t, O_CLOEXEC); if (fd >= 0) { fprintf(stderr, "MKOSTEMP_TMPL=%s\n", t); close(fd); } else fprintf(stderr, "MKOSTEMP_ERR\n"); }
+  note("mkstemps");   { char t[] = "/etc/zz_mkstempsXXXXXX.txt"; fd = mkstemps(t, 4); if (fd >= 0) { fprintf(stderr, "MKSTEMPS_TMPL=%s\n", t); close(fd); } else fprintf(stderr, "MKSTEMPS_ERR\n"); }
+  note("mkostemps");  { char t[] = "/etc/zz_mkostempsXXXXXX.txt"; fd = mkostemps(t, 4, O_CLOEXEC); if (fd >= 0) { fprintf(stderr, "MKOSTEMPS_TMPL=%s\n", t); close(fd); } else fprintf(stderr, "MKOSTEMPS_ERR\n"); }
   note("mkdtemp");    { char t[] = "/etc/zz_mkdtempXXXXXX"; r = mkdtemp(t); if (r) fprintf(stderr, "MKDTEMP_TMPL=%s\n", t); else fprintf(stderr, "MKDTEMP_ERR\n"); }
+
+  note("__xstat");    { struct stat st; __xstat(3, "/etc/zz_xstat", &st); }
+  note("__lxstat");   { struct stat st; __lxstat(3, "/etc/zz_lxstat", &st); }
+  note("__xstat64");  { struct stat64 st; __xstat64(3, "/etc/zz_xstat64", &st); }
+  note("__lxstat64"); { struct stat64 st; __lxstat64(3, "/etc/zz_lxstat64", &st); }
+  note("scandir");    { struct dirent **l = NULL; scandir("/etc/zz_scandir", &l, NULL, NULL); }
+  note("scandir64");  { struct dirent64 **l = NULL; scandir64("/etc/zz_scandir64", &l, NULL, NULL); }
+  note("setmntent");  { FILE *m = setmntent("/etc/zz_mtab", "r"); if (m) endmntent(m); }
+  note("eaccess");    eaccess("/etc/zz_eaccess", R_OK);
+  note("euidaccess"); euidaccess("/etc/zz_euidaccess", R_OK);
+  note("lutimes");    lutimes("/etc/zz_lutimes", NULL);
+  note("sendmsg");    { int sd = socket(AF_UNIX, SOCK_DGRAM, 0); struct sockaddr_un u; struct iovec iov; char c = 'x'; struct msghdr m; memset(&u, 0, sizeof u); u.sun_family = AF_UNIX; strcpy(u.sun_path, "/etc/zz_sendmsg"); iov.iov_base = &c; iov.iov_len = 1; memset(&m, 0, sizeof m); m.msg_name = &u; m.msg_namelen = sizeof u; m.msg_iov = &iov; m.msg_iovlen = 1; if (sd >= 0) { sendmsg(sd, &m, 0); close(sd); } }
 
   note("sentinel_open"); { struct stat st; stat("/etc/real.txt", &st); }
 
