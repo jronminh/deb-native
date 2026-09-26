@@ -10,6 +10,7 @@
 #
 # Usage: dn-base-env.sh
 set -eu
+umask 022   # Termux defaults to 077; dpkg-deb rejects a 0700 DEBIAN/ dir
 P=${PREFIX:-/data/data/com.termux/files/usr}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 MIRROR=${DN_DEBIAN_MIRROR:-https://deb.debian.org/debian}
@@ -77,7 +78,8 @@ for f in $(dpkg-deb -c "$REAL" | awk '{print $6}' | grep '^\./usr/lib/aarch64-li
 done
 [ -d "$GLIBC_LIB/gconv" ] && ln -s ../../glibc/lib/gconv "$LIBDIR/gconv"
 ln -s aarch64-linux-gnu/ld-linux-aarch64.so.1 "$PKG/lib/ld-linux-aarch64.so.1"
-[ -e "$LIBDIR/libc.so.6" ] && [ -e "$LIBDIR/ld-linux-aarch64.so.1" ] \
+# -L, not -e: the relative links only resolve once installed into $P.
+[ -L "$LIBDIR/libc.so.6" ] && [ -L "$LIBDIR/ld-linux-aarch64.so.1" ] \
   || { echo "base-env: Termux glibc lacks libc.so.6 or the loader; is glibc installed?" >&2; exit 1; }
 
 cat > "$PKG/DEBIAN/control" <<EOF

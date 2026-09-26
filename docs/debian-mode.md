@@ -158,6 +158,25 @@ lib/ld-linux-aarch64.so.1                    -> aarch64-linux-gnu/ld-linux-aarch
   blocked by the apt pin (above), not by an inflated version. After a
   Termux glibc upgrade, re-running `dn-base-env.sh` tracks the new version.
 
+### Verified on the test device (2026-09-26)
+
+- `libc6:arm64 2.44-0dn1` installed; all 25 paths present, no dangling
+  link, every soname in Debian's `libc6` found in Termux's glibc.
+- `apt-cache policy libc6:arm64`: Debian's `2.41-12+deb13u4` at `-1`, no
+  candidate. (The pin needs arch-qualified names, `libc6:arm64`: a bare
+  `libc6` in a preferences file only matches the native architecture.)
+- `apt-get check` clean: the fusion packages installed earlier without
+  `libc6` (`figlet`, `mawk`, `sysvbanner`) are consistent again.
+- Debian's own `hello` runs through the identity paths:
+  `$PREFIX/lib/ld-linux-aarch64.so.1 --library-path $PREFIX/lib/aarch64-linux-gnu hello`
+  prints `Hello, world!`.
+- `apt-get -s`: `sl` (4 packages) and `hello` (1) plan cleanly, never
+  pulling Debian's `libc6`. Packages whose name or dependencies match an
+  installed Termux package still plan a removal (`jq:arm64` -> `Remv jq`;
+  `moreutils` / `git:arm64` -> `Remv perl`, via Debian's `perl:arm64`):
+  the plan guard below is required, and "bare platform" means those Termux
+  packages go before their Debian counterparts come in.
+
 ## Install pipeline (next step, not wired yet)
 
 | apt hook | Step | Source |

@@ -29,11 +29,11 @@ case "${1:-status}" in
     # Debian's own glibc family must never install: it dies under Android's
     # seccomp filter. libc6:arm64 is Termux's glibc (dn-base-env.sh).
     cat > "$ETC/preferences.d/dn-glibc" <<EOF
-Package: libc6 libc-bin libc6-dev libc-dev-bin libc-l10n locales
+Package: libc6:arm64 libc-bin:arm64 libc6-dev:arm64 libc-dev-bin:arm64 libc-l10n:arm64 locales:arm64
 Pin: origin deb.debian.org
 Pin-Priority: -1
 
-Package: libc6 libc-bin libc6-dev libc-dev-bin libc-l10n locales
+Package: libc6:arm64 libc-bin:arm64 libc6-dev:arm64 libc-dev-bin:arm64 libc-l10n:arm64 locales:arm64
 Pin: origin security.debian.org
 Pin-Priority: -1
 EOF
