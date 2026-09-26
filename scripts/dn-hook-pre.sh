@@ -28,7 +28,7 @@ umask 022
 P=${PREFIX:-/data/data/com.termux/files/usr}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 STATE="$P/var/lib/deb-native"
-LOG="$P/var/log/deb-native-debian-mode.log"
+LOG="$P/var/log/deb-native-fusion.log"
 mkdir -p "$STATE" "$(dirname "$LOG")"
 PLAN=$(mktemp)
 trap 'rm -f "$PLAN"' EXIT

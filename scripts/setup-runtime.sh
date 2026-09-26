@@ -89,10 +89,23 @@ chmod 755 "$BINDIR/chown" "$BINDIR/chgrp" "$BINDIR/dpkg-statoverride"
 # the prefix's own directories with a wrapper, same idea as the no-op shims
 # above. --log too: its default log path is joined with DPKG_ROOT the same
 # way (found as $PREFIX/data/data/com.termux/files/usr/var/log/alternatives.log).
+if [ "$DN_FUSION" = 0 ]; then
 cat > "$BINDIR/update-alternatives" <<EOF
 #!/system/bin/sh
 exec "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log "$INSTDIR/var/log/alternatives.log" "\$@"
 EOF
+else
+# True fusion: the links it writes are absolute and would leave the command
+# (awk, in the real case) broken until something rewrote them -- fix them
+# at once, not in a later hook (scripts/dn-fix-alternatives.sh).
+cat > "$BINDIR/update-alternatives" <<EOF
+#!/system/bin/sh
+"$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log "$INSTDIR/var/log/alternatives.log" "\$@"
+rc=\$?
+"$HERE/dn-fix-alternatives.sh" "$INSTDIR"
+exit \$rc
+EOF
+fi
 chmod 755 "$BINDIR/update-alternatives"
 # dpkg-divert has the same shape of bug: under DPKG_ROOT (which dpkg exports
 # to maintainer scripts from --instdir) it joins DPKG_ROOT with its own

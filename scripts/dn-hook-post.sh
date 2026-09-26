@@ -12,7 +12,7 @@ set -u
 P=${PREFIX:-/data/data/com.termux/files/usr}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 STATE="$P/var/lib/deb-native"
-LOG="$P/var/log/deb-native-debian-mode.log"
+LOG="$P/var/log/deb-native-fusion.log"
 [ -s "$STATE/pending" ] || [ -n "$(ls "$P"/lib/deb-native/bin 2>/dev/null)" ] || exit 0
 touch "$STATE/pending"
 
@@ -23,17 +23,9 @@ sort -u "$STATE/pending" | while read -r pkg; do
     [ -L "$P$f" ] && echo "$P$f"
   done
 done > "$LINKS"
-# update-alternatives admin files: line 2 is the master link, then
-# name/link pairs for the slaves, up to a blank line.
-for a in "$P"/var/lib/dpkg/alternatives/*; do
-  [ -f "$a" ] || continue
-  awk 'NR == 2 { print } NR > 2 && /^$/ { exit } NR > 2 && NR % 2 == 0 { print }' "$a" |
-    while read -r l; do
-      l=${l#/usr}
-      [ -L "$P$l" ] && echo "$P$l"
-    done
-  echo "$P/etc/alternatives/${a##*/}"
-done >> "$LINKS"
+# Alternatives links first, with Termux's gawk by full path: when the group
+# is awk, `awk` itself is broken until they are fixed.
+"$HERE/dn-fix-alternatives.sh" "$P"
 
 # Programs the new packages put on a bin path get launchers (main's
 # make-launchers.sh, scoped to exactly these files): run by name, a glibc
