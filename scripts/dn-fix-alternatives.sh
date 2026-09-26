@@ -12,6 +12,10 @@
 # Usage: dn-fix-alternatives.sh [PREFIX]
 set -u
 P=${1:-${PREFIX:-/data/data/com.termux/files/usr}}
+# Run from a maintainer script, PATH puts Termux's glibc coreutils first
+# while this Bionic shell carries termux-exec's preload, which a glibc
+# program cannot load: use Termux's own tools.
+PATH="$P/bin:$PATH"
 AWK="$P/bin/gawk"
 ADMIN="$P/var/lib/dpkg/alternatives"
 [ -d "$ADMIN" ] || exit 0

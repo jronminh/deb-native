@@ -87,12 +87,14 @@ chmod 755 "$BINDIR/chown" "$BINDIR/chgrp" "$BINDIR/dpkg-statoverride"
 # alternatives directory instead of the prefix's own (found via a genuinely
 # dangling `figlet -> $PREFIX_DIR/etc/alternatives/figlet` symlink). Force
 # the prefix's own directories with a wrapper, same idea as the no-op shims
-# above. --log too: its default log path is joined with DPKG_ROOT the same
-# way (found as $PREFIX/data/data/com.termux/files/usr/var/log/alternatives.log).
+# above. --log too, but root-relative: update-alternatives joins DPKG_ROOT
+# onto its log path even when given explicitly (an absolute --log landed in
+# $PREFIX/data/data/com.termux/files/usr/var/log/), so DPKG_ROOT is set and
+# the log given as /var/log/alternatives.log.
 if [ "$DN_FUSION" = 0 ]; then
 cat > "$BINDIR/update-alternatives" <<EOF
 #!/system/bin/sh
-exec "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log "$INSTDIR/var/log/alternatives.log" "\$@"
+DPKG_ROOT="$INSTDIR" exec "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log /var/log/alternatives.log "\$@"
 EOF
 else
 # True fusion: the links it writes are absolute and would leave the command
@@ -100,7 +102,7 @@ else
 # at once, not in a later hook (scripts/dn-fix-alternatives.sh).
 cat > "$BINDIR/update-alternatives" <<EOF
 #!/system/bin/sh
-"$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log "$INSTDIR/var/log/alternatives.log" "\$@"
+DPKG_ROOT="$INSTDIR" "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log /var/log/alternatives.log "\$@"
 rc=\$?
 "$HERE/dn-fix-alternatives.sh" "$INSTDIR"
 exit \$rc
