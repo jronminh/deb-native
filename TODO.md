@@ -114,7 +114,10 @@ Tracked in [#1](https://github.com/jronminh/deb-native/issues/1).
 - [ ] **Syscall-level tracer** for what libc interposition can't see (static
       binaries, raw `syscall()`, libc-internal `dlopen`/NSS): `ptrace` or
       `SECCOMP_RET_USER_NOTIF`, inside the app uid. Feasible — `ptrace` works
-      here (`proot` runs); namespaces/overlayfs/FUSE do not.
+      here (`proot` runs); namespaces/overlayfs/FUSE do not. See
+      [`docs/syscall-boundary.md`](docs/syscall-boundary.md) for the measured
+      cases, the `proot` route already in place, and the `PT_INTERP` routing
+      gap (a dynamic PIE can still emit `svc #0`).
 
 ## Open, still-unsafe
 

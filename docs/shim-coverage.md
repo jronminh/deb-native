@@ -170,7 +170,9 @@ interposable symbol. All three need a syscall-level mechanism
 (`ptrace`/`SECCOMP_RET_USER_NOTIF`, feasible here — `proot` runs). That work
 is tracked in [#1](https://github.com/jronminh/deb-native/issues/1) and
 `TODO.md`, and is distinct from the shim: **the shim is now as complete as the
-libc layer can be.**
+libc layer can be.** The wider boundary — inline `svc #0`, static executables,
+explicit `syscall()`, and the `PT_INTERP` routing gap in `dn-run.c` — is mapped
+and measured in [`syscall-boundary.md`](syscall-boundary.md).
 
 ## Next steps
 
