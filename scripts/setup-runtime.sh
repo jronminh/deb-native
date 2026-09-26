@@ -76,3 +76,19 @@ printf '#!/system/bin/sh\nexit 0\n' > "$BINDIR/chown"
 printf '#!/system/bin/sh\nexit 0\n' > "$BINDIR/chgrp"
 printf '#!/system/bin/sh\nexit 0\n' > "$BINDIR/dpkg-statoverride"
 chmod 755 "$BINDIR/chown" "$BINDIR/chgrp" "$BINDIR/dpkg-statoverride"
+
+# update-alternatives defaults its --altdir/--admindir to Termux's own real,
+# compiled-in absolute path ($PREFIX_DIR/etc/alternatives, .../var/lib/dpkg/
+# alternatives) -- an absolute path that does NOT start with a bare /usr,
+# /etc, /var or /opt, so the shim correctly leaves it alone (it isn't a path
+# this project should ever redirect). A postinst calling bare
+# update-alternatives therefore writes a symlink into TERMUX's real
+# alternatives directory instead of the prefix's own (found via a genuinely
+# dangling `figlet -> $PREFIX_DIR/etc/alternatives/figlet` symlink). Force
+# the prefix's own directories with a wrapper, same idea as the no-op shims
+# above.
+cat > "$BINDIR/update-alternatives" <<EOF
+#!/system/bin/sh
+exec "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" "\$@"
+EOF
+chmod 755 "$BINDIR/update-alternatives"

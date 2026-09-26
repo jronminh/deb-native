@@ -98,15 +98,16 @@ for d in $BIN_DIRS; do
   [ -L "$d" ] && continue
   for f in "$d"/*; do
     [ -e "$f" ] || continue
-    [ -L "$f" ] && continue
     [ -x "$f" ] || continue
     [ -f "$f" ] || continue
     wrap "$(basename "$f")" "$f"
   done
   # Also expose a program's alternative name if a <name>-<pkg> provider
-  # exists next to a dangling alternatives symlink. update-alternatives on
-  # this device writes those links into Termux's own prefix (a real bug,
-  # noted in TODO.md), so the links themselves cannot be followed.
+  # exists next to a STILL-dangling alternatives symlink (setup-runtime.sh's
+  # update-alternatives wrapper fixes the common case; this remains a
+  # fallback for whatever isn't covered yet, e.g. awk -> mawk, TODO.md).
+  # A working symlink is already picked up by the loop above (-f/-x follow
+  # it), so this only ever fires for one that still doesn't resolve.
   for f in "$d"/*; do
     [ -L "$f" ] || continue
     name=$(basename "$f")
