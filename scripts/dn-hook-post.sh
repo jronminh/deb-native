@@ -36,6 +36,25 @@ trap 'rm -f "$LINKS" "$PROGS"' EXIT
 sort -u "$STATE/pending" | while read -r pkg; do
   dpkg-query -L "$pkg:arm64" 2>/dev/null | grep -E '^/(bin|sbin|games)/[^/]+$' | sed "s|^|$P|"
 done > "$PROGS"
+# Alternatives links on a bin path whose program is a Debian package's
+# (bin/figlet -> etc/alternatives/figlet -> bin/figlet-figlet): found by
+# name, they need a launcher too. Termux's own (bin/awk -> gawk) do not.
+for a in "$P"/var/lib/dpkg/alternatives/*; do
+  [ -f "$a" ] || continue
+  n=0
+  while IFS= read -r line; do
+    n=$((n + 1))
+    [ "$n" -eq 1 ] && continue
+    [ -z "$line" ] && break
+    [ "$n" -eq 2 ] || [ $((n % 2)) -eq 0 ] || continue
+    l=${line#/usr}
+    case "$l" in /bin/*|/sbin/*|/games/*) ;; *) continue ;; esac
+    [ -L "$P$l" ] || continue
+    real=$(readlink -f "$P$l") || continue
+    owner=$(dpkg -S "${real#$P}" 2>/dev/null | head -1 | sed 's/: .*//')
+    case "$owner" in *:arm64) echo "$P$l" ;; esac
+  done < "$a"
+done >> "$PROGS"
 
 {
   echo "== $(date '+%F %T') post: $(sort -u "$STATE/pending" | tr '\n' ' ')"
