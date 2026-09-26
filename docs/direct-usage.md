@@ -142,9 +142,39 @@ tracer that makes the no-`proot` ideal true (option 3).
 
 ## Decision
 
-*Pending.* Working lean: **option 1** (extend the `proot` route) is the
-cheapest and reuses the tool already trusted; **option 3** is the endgame once
-option 1's overhead is known. Option 2 is a cheap probe worth doing for Q2.
+**Fork-lite.** Keep `proot` as the fallback while fork-lite is built, then
+replace it. The mechanism for rewriting a syscall's path arguments is
+inherently `ptrace` — seccomp user-notification can inspect and inject fds but
+**cannot modify arguments** — so proot's `ptrace` core is the hard part and is
+worth reusing. What we cut is the weight: multi-arch loaders and the extension
+suite. A clean-room tracer is rejected: it would re-solve years of proot's
+`exec`/`clone`/string-read/TOCTOU fixes for no gain.
+
+## Fork-lite (the plan)
+
+A reduced, vendored subset of `termux/proot` — **arm64-only, path syscalls
+only, no extensions**. Not a full fork.
+
+**Keep** (from `src/`): `ptrace/`, `tracee/`,
+`syscall/{enter,exit,seccomp,chain,sysnum}.c` + `sysnums-arm64.h`, `path/`,
+`execve/`, `arch.h`/`compat.h`.
+**Drop**: `extension/` (all ~266 KB), `loader/` and the non-arm64 loaders,
+`sysnums-{arm,i386,x86_64}.h`, other-arch register sets, QEMU hooks, `cli/`.
+**Prune**: `enter.c`/`exit.c` to the path syscalls plus `execve`/`clone`/`fork`
+(so children stay traced).
+**Write ourselves**: the binding policy — bind `$INSTDIR` over
+`/usr /etc /var /opt`, handle missing guest paths (proot errors on them),
+`DN_INSTDIR`/PATH env — as a small `main` producing a `dn-trace` binary.
+
+Layout: `third_party/proot-lite/` (GPLv2+ headers kept). Phases:
+
+1. clone `termux/proot`, prune non-arm64 + extensions, **build arm64-only on
+   `fe2`** (first de-risk: does the stock tree even build with Termux clang?).
+2. replace the CLI with our binder → `dn-trace`.
+3. wire `dn-run.c`'s direct-usage route to `dn-trace`, keeping `proot` as the
+   fallback.
+4. tests: a static binary, `abbtr` (PIE + inline `svc`), and the NSS case —
+   the three things the shim cannot reach.
 
 ## Next step
 

@@ -111,13 +111,13 @@ Tracked in [#1](https://github.com/jronminh/deb-native/issues/1).
       "Delivering the shim"): `patchelf --add-needed`/`--add-rpath`, or a
       `DT_AUDIT` module, so the shim survives an empty environment; the
       explicit loader (`ld.so --preload`) is the simpler variant.
-- [ ] **Syscall-level tracer** for what libc interposition can't see (static
-      binaries, raw `syscall()`, libc-internal `dlopen`/NSS): `ptrace` or
-      `SECCOMP_RET_USER_NOTIF`, inside the app uid. Feasible — `ptrace` works
-      here (`proot` runs); namespaces/overlayfs/FUSE do not. See
-      [`docs/syscall-boundary.md`](docs/syscall-boundary.md) for the measured
-      cases, the `proot` route already in place, and the `PT_INTERP` routing
-      gap (a dynamic PIE can still emit `svc #0`).
+- [ ] **Fork-lite tracer** (`dn-trace`) for what libc interposition can't see
+      (static binaries, inline `svc`, libc-internal NSS): a reduced,
+      arm64-only subset of `termux/proot` (`ptrace` — seccomp user-notification
+      cannot rewrite syscall arguments), keeping `proot` as the fallback. Plan
+      and phases in [`docs/direct-usage.md`](docs/direct-usage.md); the measured
+      boundary is in [`docs/syscall-boundary.md`](docs/syscall-boundary.md).
+      Phase 1: prune non-arm64 + extensions, build arm64-only on `fe2`.
 
 ## Open, still-unsafe
 
