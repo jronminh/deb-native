@@ -7,15 +7,17 @@ no `chroot`, no kernel namespaces.** `apt install PKG` works, and the program
 runs by name.
 
 > [!WARNING]
-> **Pre-alpha.** Experimental and unaudited; the interface and on-disk layout
-> may change without notice, and it can break your Termux setup. Installs
-> software outside Termux's own package management. Use a throwaway
-> Termux/device until it stabilizes.
-
-> [!CAUTION]
-> **AI-assisted and unaudited.** Written with AI assistants; read the code
-> before running it (especially `install.sh` and `scripts/`). Not a
-> security-reviewed artifact — use at your own risk.
+> **Pre-alpha, AI-assisted, not security-reviewed.** The install pipeline
+> itself is tested — fresh bootstrap, both routing paths, and the full
+> install/remove/purge/reinstall lifecycle are verified working, and it
+> never touches Termux's own `sources.list`/`dpkg` status/binaries
+> (`setup-apt-prefix.sh` refuses to target Termux's own prefix; checked, not
+> just assumed). What's still true regardless: written with AI assistants
+> and not independently audited, so read `install.sh`/`scripts/` before
+> running them; the interface and on-disk layout can still change between
+> releases; and package coverage is still small (a handful of packages
+> verified by hand, not the full Debian archive) — use a throwaway
+> Termux/device until it's had wider testing.
 
 ```sh
 # pinned pre-alpha release:
