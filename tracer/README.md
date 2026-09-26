@@ -12,9 +12,11 @@ arguments — so proot's `ptrace` core is the hard part worth reusing. See
 
 ## Status
 
-**Imported base, not yet pruned.** It builds on Termux (`make CC=clang`, needs
-`libtalloc`) and a static binary reads through a bind — validated on the
-phone. The pruning below has not been applied yet.
+**Partially pruned.** The extension suite is gone (the `extension.c`
+framework stays so core call sites still link; with nothing initialized its
+hooks are no-ops). It builds on Termux (`make CC=clang`, needs `libtalloc`)
+and a static binary reads through a bind. Remaining: the multi-arch
+loaders/sysnums, then the `cli/` → binder rewrite.
 
 ## Origin
 

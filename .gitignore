@@ -7,5 +7,6 @@ tracer/build.h
 tracer/licenses
 tracer/loader/loader
 tracer/loader/loader-m32
+tracer/loader/loader-info.c
 tracer/.check_*
 !tracer/.check_*.c

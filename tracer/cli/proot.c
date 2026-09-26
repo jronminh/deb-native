@@ -28,7 +28,6 @@
 #include "cli/cli.h"
 #include "cli/note.h"
 #include "extension/extension.h"
-#include "extension/sysvipc/sysvipc.h"
 #include "path/binding.h"
 #include "attribute.h"
 
@@ -153,37 +152,15 @@ static int handle_option_w(Tracee *tracee, const Cli *cli UNUSED, const char *va
 	return 0;
 }
 
-static int handle_option_k(Tracee *tracee, const Cli *cli UNUSED, const char *value)
+static int handle_option_k(Tracee *tracee UNUSED, const Cli *cli UNUSED, const char *value UNUSED)
 {
-	void *extension;
-	int status;
-
-	extension = get_extension(tracee, kompat_callback);
-	if (extension != NULL) {
-		note(tracee, WARNING, USER, "option -k was already specified");
-		note(tracee, INFO, USER, "only the last -k option is enabled");
-		TALLOC_FREE(extension);
-	}
-
-	status = initialize_extension(tracee, kompat_callback, value);
-	if (status < 0)
-		note(tracee, WARNING, INTERNAL, "option \"-k %s\" discarded", value);
-
+	/* fork-lite: the kompat extension was pruned. */
 	return 0;
 }
 
-static int handle_option_i(Tracee *tracee, const Cli *cli UNUSED, const char *value)
+static int handle_option_i(Tracee *tracee UNUSED, const Cli *cli UNUSED, const char *value UNUSED)
 {
-	void *extension;
-
-	extension = get_extension(tracee, fake_id0_callback);
-	if (extension != NULL) {
-		note(tracee, WARNING, USER, "option -i/-0/-S was already specified");
-		note(tracee, INFO, USER, "only the last -i/-0/-S option is enabled");
-		TALLOC_FREE(extension);
-	}
-
-	(void) initialize_extension(tracee, fake_id0_callback, value);
+	/* fork-lite: the fake_id0 extension was pruned. */
 	return 0;
 }
 
@@ -281,60 +258,42 @@ static int handle_option_S(Tracee *tracee, const Cli *cli, const char *value)
 	return 0;
 }
 
-static int handle_option_link2symlink(Tracee *tracee, const Cli *cli UNUSED, const char *value UNUSED)
+static int handle_option_link2symlink(Tracee *tracee UNUSED, const Cli *cli UNUSED, const char *value UNUSED)
 {
-	int status;
-
-	/* Initialize the link2symlink extension.  */
-	status = initialize_extension(tracee, link2symlink_callback, NULL);
-	if (status < 0)
-		note(tracee, WARNING, INTERNAL, "link2symlink not initialized");
-
+	/* fork-lite: the link2symlink extension was pruned. */
 	return 0;
 }
 
 #if defined(__ANDROID__) || defined(__BIONIC__)
-static int handle_option_ashmem_memfd(Tracee *tracee, const Cli *cli UNUSED, const char *value UNUSED)
+static int handle_option_ashmem_memfd(Tracee *tracee UNUSED, const Cli *cli UNUSED, const char *value UNUSED)
 {
-	int status;
-
-	/* Initialize the ashmem-memfd extension.  */
-	status = initialize_extension(tracee, ashmem_memfd_callback, NULL);
-	if (status < 0)
-		note(tracee, WARNING, INTERNAL, "ashmem-memfd not initialized");
-
+	/* fork-lite: the ashmem_memfd extension was pruned. */
 	return 0;
 }
 #endif /* defined(__ANDROID__) || defined(__BIONIC__) */
 
-static int handle_option_sysvipc(Tracee *tracee, const Cli *cli UNUSED, const char *value UNUSED)
+static int handle_option_sysvipc(Tracee *tracee UNUSED, const Cli *cli UNUSED, const char *value UNUSED)
 {
-	int status;
-
-	/* Initialize the sysvipc extension.  */
-	status = initialize_extension(tracee, sysvipc_callback, NULL);
-	if (status < 0)
-		note(tracee, WARNING, INTERNAL, "sysvipc not initialized");
-
+	/* fork-lite: the sysvipc extension was pruned. */
 	return 0;
 }
 
-static int handle_option_L(Tracee *tracee, const Cli *cli UNUSED, const char *value UNUSED)
+static int handle_option_L(Tracee *tracee UNUSED, const Cli *cli UNUSED, const char *value UNUSED)
 {
-        (void) initialize_extension(tracee, fix_symlink_size_callback, NULL);
-        return 0;
+	/* fork-lite: the fix_symlink_size extension was pruned. */
+	return 0;
 }
 
-static int handle_option_H(Tracee *tracee, const Cli *cli UNUSED, const char *value UNUSED)
+static int handle_option_H(Tracee *tracee UNUSED, const Cli *cli UNUSED, const char *value UNUSED)
 {
-        (void) initialize_extension(tracee, hidden_files_callback, NULL);
-        return 0;
+	/* fork-lite: the hidden_files extension was pruned. */
+	return 0;
 }
 
-static int handle_option_p(Tracee *tracee, const Cli *cli UNUSED, const char *value UNUSED)
+static int handle_option_p(Tracee *tracee UNUSED, const Cli *cli UNUSED, const char *value UNUSED)
 {
-        (void) initialize_extension(tracee, port_switch_callback, NULL);
-        return 0;
+	/* fork-lite: the port_switch extension was pruned. */
+	return 0;
 }
 
 /**
