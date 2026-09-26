@@ -19,9 +19,9 @@ for what just landed.
 - [x] **Package scope decided + libc-shim coverage measured and completed**:
       [`docs/standard.md`](docs/standard.md) (section-based scope) and
       [`docs/shim-coverage.md`](docs/shim-coverage.md) (258-package in-scope
-      corpus). Every imported path-taking symbol is now intercepted except the
-      NSS lookups (untested), `glob`/`glob64` (indirect), admin ops, and the
-      raw-`syscall()` boundary.
+      corpus). Every imported path-taking symbol is now intercepted except
+      NSS lookups (tested: opened inside libc, out of the shim's reach),
+      `glob`/`glob64` (indirect), admin ops, and the raw-`syscall()` boundary.
 
 ## Now / do first
 

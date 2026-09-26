@@ -18,6 +18,8 @@
 #include <sys/time.h>
 #include <dirent.h>
 #include <mntent.h>
+#include <pwd.h>
+#include <grp.h>
 #include <errno.h>
 #include <limits.h>
 
@@ -84,6 +86,22 @@ int main(void) {
   note("sendmsg");    { int sd = socket(AF_UNIX, SOCK_DGRAM, 0); struct sockaddr_un u; struct iovec iov; char c = 'x'; struct msghdr m; memset(&u, 0, sizeof u); u.sun_family = AF_UNIX; strcpy(u.sun_path, "/etc/zz_sendmsg"); iov.iov_base = &c; iov.iov_len = 1; memset(&m, 0, sizeof m); m.msg_name = &u; m.msg_namelen = sizeof u; m.msg_iov = &iov; m.msg_iovlen = 1; if (sd >= 0) { sendmsg(sd, &m, 0); close(sd); } }
 
   note("sentinel_open"); { struct stat st; stat("/etc/real.txt", &st); }
+
+  /* NSS: these take no path, so the shim cannot rewrite them. The question is
+   * whether glibc's nss_files backend opens /etc/passwd through the
+   * interposable fopen (then the fake root's passwd is found) or internally.
+   * The fake root's passwd has uid/gid 54321 = "dnshim". */
+  note("nss");
+  { struct passwd *pw; struct group *gr;
+    pw = getpwnam("dnshim");
+    fprintf(stderr, "NSS_PWNAM=%s\n", pw ? pw->pw_name : "NOTFOUND");
+    pw = getpwuid(54321);
+    fprintf(stderr, "NSS_PWUID=%s\n", pw ? pw->pw_name : "NOTFOUND");
+    gr = getgrgid(54321);
+    fprintf(stderr, "NSS_GRGID=%s\n", gr ? gr->gr_name : "NOTFOUND");
+    gr = getgrnam("dnshimgrp");
+    fprintf(stderr, "NSS_GRNAM=%s\n", gr ? gr->gr_name : "NOTFOUND");
+  }
 
   note("posix_spawn");  { pid_t p; char *av[] = {"/etc/zz_posix_spawn", NULL}; char *ev[] = {NULL}; int rc = posix_spawn(&p, "/etc/zz_posix_spawn", NULL, NULL, av, ev); fprintf(stderr, "POSIX_SPAWN_RC=%d\n", rc); }
   note("posix_spawnp"); { pid_t p; char *av[] = {"zz_nope", NULL}; char *ev[] = {NULL}; int rc = posix_spawnp(&p, "zz_nope", NULL, NULL, av, ev); fprintf(stderr, "POSIX_SPAWNP_RC=%d\n", rc); }

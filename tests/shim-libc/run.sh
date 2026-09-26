@@ -22,6 +22,10 @@ TEST=$HERE/test
 rm -rf "$ROOT"
 mkdir -p "$ROOT/etc" "$ROOT/usr/bin" "$ROOT/var" "$ROOT/opt"
 printf 'hi\n' > "$ROOT/etc/real.txt"
+# A fake account so the NSS question is answerable: if glibc's nss_files
+# backend opens /etc/passwd through the interposed fopen, it sees this.
+printf 'dnshim:x:54321:54321:DN Shim Test:/nonexistent:/bin/sh\n' > "$ROOT/etc/passwd"
+printf 'dnshimgrp:x:54321:\n' > "$ROOT/etc/group"
 cp "$G/bin/true" "$ROOT/usr/bin/zz_true"
 
 # A standalone glibc executable needs Scrt1.o/crti.o/crtn.o explicitly (the
@@ -82,6 +86,11 @@ set -- "$ROOT"/etc/zz_mkdtemp*
 set -- "$ROOT"/etc/zz_mkstemp*
 [ -f "$1" ] || { echo "not created under root: mkstemp file"; fail=1; }
 if [ -e /etc/zz_creat ]; then echo "leaked into real /etc"; fail=1; fi
+
+# NSS probe result (see docs/shim-coverage.md): did glibc's nss_files backend
+# reach the fake root's passwd/group through the interposed fopen? Reported,
+# not asserted, until the mechanism is confirmed.
+echo "NSS probe: $(grep -h '^NSS_' "$OUT" | tr '\n' ' ')"
 
 if [ "$fail" -eq 0 ]; then
   echo "PASS: shim-libc ($(grep -c 'path-redirect\]' "$OUT") rewrites, fake root $ROOT)"

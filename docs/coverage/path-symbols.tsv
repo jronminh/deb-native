@@ -6,7 +6,7 @@ open64	46	2	shim
 unlink	38	8	shim
 open	34	14	shim
 __open64_2	34	1	shim
-getpwuid	31	3	verify-nss
+getpwuid	31	3	boundary-nss
 access	30	9	shim
 stat	28	12	shim
 opendir	28	8	shim
@@ -14,7 +14,7 @@ rename	25	8	shim
 stat64	24	3	shim
 chdir	21	3	shim
 link	21	2	shim
-getgrgid	17	1	verify-nss
+getgrgid	17	1	boundary-nss
 lstat64	16	3	shim
 freopen	16	0	shim
 execvp	15	2	shim
@@ -28,7 +28,7 @@ bind	10	2	shim
 connect	9	3	shim
 dlopen	8	5	shim
 fstatat64	8	0	shim
-getaddrinfo	8	0	verify-nss
+getaddrinfo	8	0	boundary-nss
 symlink	7	2	shim
 utimensat	7	0	shim
 realpath	6	1	shim
@@ -38,10 +38,10 @@ lstat	4	5	shim
 execl	4	2	shim
 execlp	4	2	shim
 utime	4	0	shim
-getpwnam	3	2	verify-nss
+getpwnam	3	2	boundary-nss
 lchown	3	2	shim
 creat	3	0	shim
-gethostbyname	3	0	verify-nss
+gethostbyname	3	0	boundary-nss
 statx	3	0	shim
 execve	2	3	shim
 mkfifo	2	1	shim
@@ -62,7 +62,7 @@ creat64	1	0	shim
 eaccess	1	0	shim
 execvpe	1	0	shim
 fstatat	1	0	shim
-getservbyname	1	0	verify-nss
+getservbyname	1	0	boundary-nss
 glob	1	0	verify-indirect
 glob64	1	0	verify-indirect
 inotify_add_watch	1	0	shim

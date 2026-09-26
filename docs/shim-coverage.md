@@ -122,13 +122,19 @@ walk it through the interposed `opendir`/`stat`, so the redirect happens one
 level down; a rewritten *pattern* would, however, return `$INSTDIR`-prefixed
 matches, so it is left alone.
 
-**NSS lookups — needs a test, not yet a confirmed gap:** `getpwuid` (31/3),
+**NSS lookups — confirmed out of the shim's reach.** `getpwuid` (31/3),
 `getgrgid` (17/1), `getpwnam` (3/3), `getaddrinfo` (8/0), `gethostbyname`
-(3/0), `getservbyname` (1/0). These take no path; they read `/etc/passwd`,
-`/etc/group`, `/etc/hosts`, `/etc/resolv.conf`. glibc's `nss_files` backend is
-a separate object that opens those files through the interposable `fopen`, so
-they may already be redirected — but that must be shown with a fake prefix and
-a modified `/etc/passwd`, not inferred.
+(3/0), `getservbyname` (1/0) take no path; they read `/etc/passwd`,
+`/etc/group`, `/etc/hosts`, `/etc/resolv.conf`. The shim cannot rewrite the
+call, so the question was whether glibc's backend opens those files through
+the interposable `fopen` anyway. The test says **no**: with a fake
+`$INSTDIR/etc/passwd` holding `dnshim:54321`, `getpwnam("dnshim")` and
+`getpwuid(54321)` returned `NOTFOUND`, and `getgrgid(54321)` returned the
+**real** Android group `all_a4321`. `libnss_files.so.2` imports no
+`open`/`fopen` at all — the `files` service is linked inside `libc.so.6` and
+opens its files with the private `__open_nocancel`/`__open64_nocancel`
+(`GLIBC_PRIVATE`), which no `LD_PRELOAD` interposer can reach. This is the
+syscall tracer's job, not a shim gap.
 
 **Out of scope, deliberately:** `mount` (0/1), `umount2` (0/1), `chroot`
 (1/1) are admin operations; redirecting them is neither possible nor wanted.
@@ -138,7 +144,9 @@ a modified `/etc/passwd`, not inferred.
 **Raw `syscall()`: 12 in-scope ELFs import it, 0 in the base set.** These
 programs name syscalls directly and bypass the shim entirely. **Static
 binaries: 0** in the sample, so historically rarer than the review feared —
-but the category is real. Both need a syscall-level mechanism
+but the category is real. The same ceiling applies to libc-internal file
+access: the NSS reads above happen inside `libc.so.6` and never cross the
+interposable symbol. All three need a syscall-level mechanism
 (`ptrace`/`SECCOMP_RET_USER_NOTIF`, feasible here — `proot` runs). That work
 is tracked in [#1](https://github.com/jronminh/deb-native/issues/1) and
 `TODO.md`, and is distinct from the shim: **the shim is now as complete as the
@@ -149,8 +157,10 @@ libc layer can be.**
 - [x] Add the cheap gaps above (`__xstat`/`__lxstat` + `*64`, `sendmsg`,
       `lutimes`, `mkstemps`/`mkostemps`, `eaccess`, `setmntent`, and
       `scandir`/`scandir64`); all now intercepted and in `tests/shim-libc`.
-- [ ] Test the NSS question against a fake prefix (`/etc/passwd` under
-      `$INSTDIR`) and record the answer here.
+- [x] Test the NSS question against a fake prefix — **not redirected**: the
+      `files` service is inside `libc.so.6` and opens via private
+      `__open*_nocancel` (see above); the syscall tracer is the only
+      mechanism.
 - [ ] Extend `scan-libc-symbols.sh` to print the *file* behind `syscall()` and
       `STATIC_ELF`, so the tracer's first targets are named.
 - [ ] Re-run on a wider/`sid` sample and on the in-scope set of `sudo-less`'s
