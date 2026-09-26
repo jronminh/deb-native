@@ -37,6 +37,8 @@ replace the view's path-resolution job.
 - `docs/direct-usage.md` — the living investigation + **fork-lite plan**.
 - `docs/bind-only.md` — what to strip to make fork-lite a bind-only tracer
   (`canonicalize` → prefix rewrite): safe/keep/replace + whitelist + risks.
+- `docs/install-flow.md` — the bootstrap/install order (runtime → auto-patch
+  `.deb` → native seed → base transaction → launchers) and the E2E recipe.
 - `docs/design.md`, `docs/findings.md`, `docs/vs-sudo-less.md`.
 - `tracer/README.md` — fork-lite provenance, build, prune status.
 - `TODO.md` — roadmap.
