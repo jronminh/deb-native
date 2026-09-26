@@ -118,6 +118,16 @@ Tracked in [#1](https://github.com/jronminh/deb-native/issues/1).
       and phases in [`docs/direct-usage.md`](docs/direct-usage.md); the measured
       boundary is in [`docs/syscall-boundary.md`](docs/syscall-boundary.md).
       Phase 1: prune non-arm64 + extensions, build arm64-only on `fe2`.
+      - [x] prune + build AArch64-only on `fe2`; **bind-only fast path**
+            (~1.6x stat-dense; `scripts/bench-tracer.sh`, `docs/bind-only.md`).
+      - [x] NSS (case 2): route to the tracer + bind `$INSTDIR/etc` over Termux
+            glibc's sysconfdir — `tests/tracer-nss/run.sh` PASS.
+      - [ ] **direct-syscall attribute** (cases 3/4): detect `svc`/`syscall`
+            importers at install time (`make-launchers.sh`) and route them to
+            the tracer; today they are misrouted to the shim and run
+            unredirected (`docs/syscall-boundary.md`, "Remaining").
+      - [ ] replace `cli/` with the `dn-trace` binder, then drop the Termux
+            `proot` fallback in `dn-run.c`.
 
 ## Open, still-unsafe
 

@@ -72,6 +72,41 @@ binaries take the tracer route too. Verified by `tests/tracer-nss/run.sh`
 (PASS). glibc still synthesizes `root`/`nobody`/Android uids; the bind only
 makes the prefix's `passwd`, `group`, `hosts`, `resolv.conf` authoritative.
 
+## Status by case (2026-09-26)
+
+| # | case | mechanism | status |
+|---|---|---|---|
+| 1 | libc path call | shim | done |
+| 2 | libc-internal / NSS | tracer + glibc-sysconfdir bind | **solved** (`tests/tracer-nss`) |
+| 3 | explicit `syscall()` import | tracer (or a shim interposer) | **routing gap** |
+| 4 | inline `svc #0` | tracer | **routing gap** |
+| 5 | fully static exe | tracer (no `PT_INTERP` → `C_STATIC`) | done |
+
+Cases 3 and 4 fail **silently**. A PIE such as `abbtr` has `PT_INTERP`, so
+`dn-run` classifies it `C_GLIBC` and sends it to the shim — but its syscalls
+are issued in its own code, which the shim never sees. It then runs with no
+redirection at all (reads the host `/etc`, `/usr`, …). The mechanism (the
+tracer) already covers 3 and 4; only the classifier's decision is wrong.
+
+## Remaining: the direct-syscall attribute (cases 3/4)
+
+Give a binary the same kind of per-binary attribute as NSS: "this ELF issues
+its own syscalls" → route to the tracer, not the shim.
+
+- **Detection must be disassembly, not a byte search.** A whole-file grep for
+  `svc #0` flags **111** binaries; `objdump` confirms **6** (`syscall-boundary.md`
+  above). `scripts/scan-direct-syscalls.py` already does exactly this, plus a
+  `syscall`-symbol check for case 3.
+- **Compute it once at install time**, in `make-launchers.sh`, not per launch:
+  disassembling on every exec is far too slow. Store the tag beside the
+  launcher (or pass it to `dn-run`) so launch stays a cheap file read.
+- **Cost is tracer overhead on those binaries only** — the shim stays fast for
+  everything else.
+
+Scale: 6 `svc` emitters and 12 `syscall` importers in the 258-package corpus,
+out of 246 PIE + 7 `ET_EXEC` programs — a small tail, but structural: leaving
+them misrouted means a package can reach `ii` and then read the wrong `/etc`.
+
 ## Method
 
 `scripts/scan-direct-syscalls.py` reports the cases above: it parses the ELF,
