@@ -66,12 +66,22 @@ static size_t g_rootlen;
 static int g_debug;
 static const char *g_bionic_preload;
 static int g_init;
+/* Fusion mode (branch experiment, not the default prefix design): DN_INSTDIR
+ * is Termux's own real prefix, which has no nested usr/ of its own --
+ * $PREFIX/bin IS what /usr/bin means on a real Debian root. So /usr must
+ * drop its own segment when rewritten (/usr/bin/x -> $DN_INSTDIR/bin/x),
+ * while /etc, /var, /opt keep today's behavior (Termux already has real
+ * etc/ and var/ matching Debian's own convention there). The .deb's own
+ * data archive is repackaged to match (scripts/fuse-repack.sh) --
+ * this only has to agree with that, not invent the mapping twice. */
+static int g_fuse_usr;
 
 static void dn_init(void) {
   g_root = getenv("DN_INSTDIR");
   g_rootlen = g_root ? strlen(g_root) : 0;
   g_debug = getenv("DN_REDIRECT_DEBUG") != NULL;
   g_bionic_preload = getenv("DN_BIONIC_PRELOAD");
+  g_fuse_usr = getenv("DN_FUSE_USR") != NULL;
   g_init = 1;
 }
 __attribute__((constructor)) static void dn_ctor(void) { dn_init(); }
@@ -83,8 +93,9 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
   /* Only /usr, /etc, /var, /opt qualify; dispatch on the second byte so a
    * non-matching path costs one compare instead of four strncmp()s. */
   const char *pre;
+  int strip_prefix = 0;
   switch (path[1]) {
-    case 'u': pre = "/usr"; break;
+    case 'u': pre = "/usr"; strip_prefix = g_fuse_usr; break;
     case 'e': pre = "/etc"; break;
     case 'v': pre = "/var"; break;
     case 'o': pre = "/opt"; break;
@@ -93,10 +104,15 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
   if (strncmp(path, pre, 4) != 0) return path;
   if (path[4] != '/' && path[4] != '\0') return path;
 
-  size_t plen = strlen(path);
+  /* Fusion mode's /usr case: drop the "/usr" segment itself, keeping only
+   * what comes after it (path[4] is '/' or '\0' here; strip_prefix implies
+   * pre == "/usr" is 4 bytes, so path+4 is exactly the remainder). */
+  const char *tail = strip_prefix ? path + 4 : path;
+  size_t plen = strlen(tail);
+  if (strip_prefix && plen == 0) { tail = "/"; plen = 1; } /* bare "/usr" */
   if (g_rootlen + plen + 1 > bufsz) return path;
   memcpy(buf, g_root, g_rootlen);
-  memcpy(buf + g_rootlen, path, plen + 1);
+  memcpy(buf + g_rootlen, tail, plen + 1);
   if (g_debug) fprintf(stderr, "[path-redirect] %s -> %s\n", path, buf);
   return buf;
 }
