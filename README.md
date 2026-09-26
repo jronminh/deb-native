@@ -126,8 +126,16 @@ needs (`apt`, `dpkg`, `dpkg-deb`) ships with Termux.
 
 ## Credit & license
 
-Built with AI assistance (**Claude Opus 5.5**, **DeepSeek v4.1 Pro**). The
-glibc userland and the `apt`/`dpkg` patches originate in Termux; the
-prefix-install approach follows
-[`sudo-less`](https://github.com/jronminh/sudo-less). GPL-3.0-or-later — see
-[`LICENSE`](LICENSE).
+Built on other people's work — see [`CREDITS.md`](CREDITS.md):
+
+- **[PRoot](https://github.com/termux/proot)** (`proot-me/PRoot`,
+  GPL-2.0-or-later) — the `ptrace` syscall-interception core; `tracer/` is a
+  reduced fork with its headers kept.
+- **[Termux](https://github.com/termux/termux-packages)** and
+  [`glibc-packages`](https://github.com/termux-pacman/glibc-packages) — the
+  host, the non-root `apt`/`dpkg` patches, and the glibc userland.
+- **[sudo-less](https://github.com/jronminh/sudo-less)** — the prefix-install
+  approach and the `apt`/`dpkg` lifecycle-hook idea.
+
+Written with AI assistance (**Claude Opus 5.5**, **DeepSeek v4.1 Pro**).
+GPL-3.0-or-later — see [`LICENSE`](LICENSE).
