@@ -29,6 +29,7 @@
 #include <sys/stat.h>  /* S_ISDIR, */
 #include <dirent.h>    /* opendir(3), readdir(3), */
 #include <stdio.h>     /* snprintf(3), */
+#include <stdlib.h>    /* getenv(3), */
 #include <errno.h>     /* E*, */
 #include <stddef.h>    /* ptrdiff_t, */
 #include <inttypes.h>  /* PRI*, */
@@ -308,6 +309,88 @@ int readlink_proc_pid_fd(pid_t pid, int fd, char path[PATH_MAX])
 }
 
 /**
+ * Normalize an absolute @path in place: collapse duplicate slashes and
+ * "." components, and keep at most one trailing slash.  Unlike
+ * canonicalize(), symlinks are left for the kernel to resolve and the
+ * path is not rebased.  This returns 0 on success, or -1 when @path
+ * contains a ".." component -- resolving it may cross a bind boundary,
+ * so the caller must fall back to canonicalize().
+ */
+static int normalize_guest_path(char path[PATH_MAX])
+{
+	char out[PATH_MAX];
+	size_t length = strlen(path);
+	size_t n = 0;
+	const char *cursor = path;
+	bool trailing_slash = (length > 1 && path[length - 1] == '/');
+
+	assert(path[0] == '/');
+
+	out[n++] = '/';
+
+	while (*cursor != '\0') {
+		const char *start;
+		size_t component_length;
+
+		while (*cursor == '/')
+			cursor++;
+		if (*cursor == '\0')
+			break;
+
+		start = cursor;
+		while (*cursor != '\0' && *cursor != '/')
+			cursor++;
+		component_length = (size_t)(cursor - start);
+
+		if (component_length == 1 && start[0] == '.')
+			continue;
+		if (component_length == 2 && start[0] == '.' && start[1] == '.')
+			return -1;
+
+		if (n > 1) {
+			if (n + 1 >= PATH_MAX)
+				return -1;
+			out[n++] = '/';
+		}
+		if (n + component_length >= PATH_MAX)
+			return -1;
+		memcpy(out + n, start, component_length);
+		n += component_length;
+	}
+
+	if (trailing_slash && n > 1) {
+		if (n + 1 >= PATH_MAX)
+			return -1;
+		out[n++] = '/';
+	}
+
+	out[n] = '\0';
+	memcpy(path, out, n + 1);
+
+	return 0;
+}
+
+/**
+ * Whether the bind-only fast path is active.  PRoot's per-component
+ * canonicalization is skipped so the kernel resolves the path; this is
+ * safe only because the guest tree is symlink-normalized
+ * (scripts/normalize-symlinks.sh) and ".." still falls back.  Set
+ * PROOT_NO_BIND_ONLY=1 to disable and force canonicalize().
+ */
+static bool bind_only_enabled(void)
+{
+	static int cached = -1;
+
+	if (cached < 0) {
+		const char *value = getenv("PROOT_NO_BIND_ONLY");
+		cached = (value != NULL && value[0] != '\0' && strcmp(value, "0") != 0)
+			? 0 : 1;
+	}
+
+	return cached == 1;
+}
+
+/**
  * Copy in @result the equivalent of "@tracee->root + canon(@dir_fd +
  * @user_path)".  If @user_path is not absolute then it is relative to
  * the directory referred by the descriptor @dir_fd (AT_FDCWD is for
@@ -368,6 +451,21 @@ int translate_path(Tracee *tracee, char result[PATH_MAX], int dir_fd,
 	if (status < 0)
 		return status;
 	strcpy(result, "/");
+
+	/* Bind-only fast path: rewrite the leading bound component and let
+	 * the kernel resolve the rest, instead of walking every component
+	 * with lstat(2).  Falls back to canonicalize() for ".." (which can
+	 * cross a bind boundary). */
+	if (bind_only_enabled()) {
+		strcpy(result, guest_path);
+		if (normalize_guest_path(result) == 0) {
+			status = substitute_binding(tracee, GUEST, result);
+			if (status < 0)
+				return status;
+			goto skip;
+		}
+		strcpy(result, "/");
+	}
 
 	/* Canonicalize regarding the new root. */
 	status = canonicalize(tracee, guest_path, deref_final, result, 0);

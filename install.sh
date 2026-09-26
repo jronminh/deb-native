@@ -38,4 +38,7 @@ if [ $# -gt 0 ]; then
     "$HERE/scripts/apt-install.sh" "$DNPREFIX" "$@"
 fi
 
+echo "==> normalizing prefix symlinks (bind-only tracer)"
+"$HERE/scripts/normalize-symlinks.sh" "$DNPREFIX/root"
+
 echo "==> done. Installed programs run by name in a new shell (or: . ~/.bashrc)"

@@ -121,6 +121,29 @@ The actual bind-only surface — **KEEP**: `open/openat/openat2`,
 - **dir_fd-relative paths** — the base branch (`path.c:330`) already yields a
   host dir, so the relative part needs **no** rewrite. A fast win, not a risk.
 
+## Status (2026-09-26, implemented)
+
+The core bind-only path plus the safe mechanics for the three traps landed:
+
+- **Fast path** — `translate_path` (`path/path.c`) normalizes the guest path
+  (collapse `.`/`//`, keep one trailing `/`) and prefix-substitutes, skipping
+  per-component `lstat`.  `normalize_guest_path()` returns -1 on `..`, which
+  falls back to `canonicalize()` (trap 2).  Disable with `PROOT_NO_BIND_ONLY=1`
+  to force the old path (A/B).
+- **Trap 1 (absolute symlinks)** — `scripts/normalize-symlinks.sh` rewrites
+  absolute targets under bound dirs to relative, idempotently (5-pass cap).
+  Wired into `install.sh` after install.  Demonstrated: an absolute `/etc/x`
+  symlink fails under bind-only, passes after normalizing.
+- **Trap 3 (detranslation)** — unchanged: `detranslate_path` still strips the
+  host prefix for getcwd/readlink/`/proc/self/cwd`.  Verified.
+- **Verified on `fe2`**: bind read; `..` clamp (`/etc/../../etc/x`) matches
+  canonicalize; absolute-symlink before/after; `/proc/self/cwd` -> `/etc`.
+  `ls -lR /usr` 0.43s bind-only vs 0.51s canonicalize (~17%; larger on
+  stat-dense ld.so startup).
+- **Not done**: getcwd kernel-passthrough, whitelist pruning, and deleting
+  `glue.*`/`f2fs-bug.*`/`readlink_proc` — kept because canonicalize is still
+  the fallback.
+
 ## Suggested order
 
 1. Write `translate_path_inner` (prefix rewrite + `..`/symlink fallback)
