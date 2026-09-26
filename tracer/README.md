@@ -12,11 +12,12 @@ arguments — so proot's `ptrace` core is the hard part worth reusing. See
 
 ## Status
 
-**Partially pruned.** The extension suite is gone (the `extension.c`
-framework stays so core call sites still link; with nothing initialized its
-hooks are no-ops). It builds on Termux (`make CC=clang`, needs `libtalloc`)
-and a static binary reads through a bind. Remaining: the multi-arch
-loaders/sysnums, then the `cli/` → binder rewrite.
+**AArch64-only.** The extension suite is gone (framework `extension.c` kept)
+and the multi-arch machinery is removed: `arch.h` is AArch64-only with a hard
+`#error` otherwise, the 32-bit ARM ABI and `-m32` loader are gone, and the
+`sysnums-{arm,i386,x86_64,x32,sh4}.h` / `assembly-{arm,x86,x86_64}.h` files
+are deleted. It builds on Termux (`make CC=clang`, needs `libtalloc`) and a
+static binary reads through a bind. Remaining: the `cli/` → binder rewrite.
 
 ## Origin
 
@@ -42,15 +43,15 @@ Keep:
 - `extension/{extension.c,extension.h}` — the framework only (core call sites
   keep linking; with no extension initialized, its hooks are no-ops).
 
-Drop:
+Drop (done):
 
 - `extension/*/` — every concrete extension (`fake_id0`, `link2symlink`,
   `sysvipc`, `ashmem_memfd`, `kompat`, `hidden_files`, `mountinfo`,
   `port_switch`, `fix_symlink_size`). Their init calls live in `cli/proot.c`
-  and `cli/cli.c`; the CLI is being replaced, which removes them.
-- `loader/` m32 and the non-arm64 loaders (`HAS_LOADER_32BIT` in `arch.h`,
-  `assembly-arm.h`, the `loader-m32` rules).
-- `sysnums-{arm,i386,x86_64,x32}.h`, other-arch register sets, QEMU hooks.
+  and `cli/cli.c` and are now no-ops.
+- `loader/` m32 and the non-arm64 loaders (`HAS_LOADER_32BIT` removed from
+  `arch.h`, `assembly-{arm,x86,x86_64}.h` deleted), and the other-arch
+  `sysnums-*.h`.
 
 Write ourselves:
 

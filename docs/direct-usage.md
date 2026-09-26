@@ -130,6 +130,7 @@ tracer that makes the no-`proot` ideal true (option 3).
 | 2026-09-26 | Q4b: proot syscall coverage (source check) | `openat2`/`statx`/`faccessat2`/xattr/sockets handled; `io_uring` absent | `io_uring` is proot's blind spot; verify Android's seccomp blocks it |
 | 2026-09-26 | fork-lite phase 1: build stock `termux/proot` on `fe2` | builds with Termux clang + `libtalloc`; `proot -b $R/etc:/etc busybox cat /etc/dn-test` prints the fake file | foundation validated — a static binary redirected at the syscall layer; pruning can start |
 | 2026-09-26 | fork-lite: prune the extension suite | 50 files / ~9k lines removed; framework `extension.c` kept; still builds (221 KB) and the static bind still works | 1.3 M → 888 K; next is multi-arch |
+| 2026-09-26 | fork-lite: arm64-only prune | `arch.h` hard-errors on non-aarch64; 32-bit ARM ABI, `-m32` loader + makefile rules, and other-arch `sysnums-*.h`/`assembly-*.h` removed | builds (213 KB), static bind works; next is the `cli/` → binder rewrite |
 
 ## Working notes
 

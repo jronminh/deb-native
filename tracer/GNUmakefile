@@ -65,20 +65,13 @@ define define_from_arch.h
 $2$1 := $(shell $(CC) $1 -E -dM -DNO_LIBC_HEADER $(SRC)/arch.h | grep -w $2 | cut -f 3 -d ' ')
 endef
 
-$(eval $(call define_from_arch.h,,HAS_LOADER_32BIT))
 $(eval $(call define_from_arch.h,,HAS_POKEDATA_WORKAROUND))
 
 ifdef PROOT_UNBUNDLE_LOADER
   CFLAGS += "-DPROOT_UNBUNDLE_LOADER=\"$(PROOT_UNBUNDLE_LOADER)\""
 proot: | loader/loader
-ifdef HAS_LOADER_32BIT
-proot: | loader/loader-m32
-endif
 else
   OBJECTS += loader/loader-wrapped.o
-ifdef HAS_LOADER_32BIT
-  OBJECTS += loader/loader-m32-wrapped.o
-endif
 endif
 
 ifdef HAS_POKEDATA_WORKAROUND
@@ -209,10 +202,6 @@ endef
 
 $(eval $(build_loader))
 
-ifdef HAS_LOADER_32BIT
-$(eval $(call build_loader,-m32))
-endif
-
 loader/loader-info.c: loader/loader
 	readelf -s $< | awk -f loader/loader-info.awk > $@
 
@@ -220,9 +209,9 @@ loader/loader-info.c: loader/loader
 # Dependencies
 
 .DELETE_ON_ERROR:
-$(OBJECTS) $(LOADER_OBJECTS) $(LOADER-m32_OBJECTS): $(firstword $(MAKEFILE_LIST))
+$(OBJECTS) $(LOADER_OBJECTS): $(firstword $(MAKEFILE_LIST))
 
-DEPS = $(OBJECTS:.o=.d) $(LOADER_OBJECTS:.o=.d) $(LOADER-m32_OBJECTS:.o=.d) $(CHECK_OBJECTS:.o=.d)
+DEPS = $(OBJECTS:.o=.d) $(LOADER_OBJECTS:.o=.d) $(CHECK_OBJECTS:.o=.d)
 -include $(DEPS)
 
 ######################################################################
@@ -233,22 +222,16 @@ BINDIR ?= $(PREFIX)/bin
 
 .PHONY: clean distclean install uninstall
 clean distclean:
-	-$(RM) -f $(CHECK_OBJECTS) $(CHECK_PROGRAMS) $(CHECK_RESULTS) $(OBJECTS) $(LOADER_OBJECTS) $(LOADER-m32_OBJECTS) proot loader/loader loader/loader-m32 $(DEPS) build.h licenses
+	-$(RM) -f $(CHECK_OBJECTS) $(CHECK_PROGRAMS) $(CHECK_RESULTS) $(OBJECTS) $(LOADER_OBJECTS) proot loader/loader $(DEPS) build.h licenses
 
 install: proot
 	$($(quiet)INSTALL) -D $< $(DESTDIR)$(BINDIR)/$<
 ifdef PROOT_UNBUNDLE_LOADER
 	$(INSTALL) -D loader/loader $(PROOT_UNBUNDLE_LOADER)/loader
-ifdef HAS_LOADER_32BIT
-	$(INSTALL) -D loader/loader-m32 $(PROOT_UNBUNDLE_LOADER)/loader32
-endif
 endif
 
 uninstall:
 	-$(RM) -f $(DESTDIR)$(BINDIR)/proot
 ifdef PROOT_UNBUNDLE_LOADER
 	$(INSTALL) -D loader/loader $(PROOT_UNBUNDLE_LOADER)/loader
-ifdef HAS_LOADER_32BIT
-	$(INSTALL) -D loader/loader-m32 $(PROOT_UNBUNDLE_LOADER)/loader32
-endif
 endif
