@@ -27,9 +27,22 @@ case "${1:-status}" in
       || { echo "dn-mode: no backup in ~/dn-fusion-backup/ -- make one first" >&2; exit 1; }
     dpkg --print-foreign-architectures | grep -qx arm64 || dpkg --add-architecture arm64
     mkdir -p "$ETC/sources.list.d" "$ETC/preferences.d" "$LISTS/partial" "$CACHE/archives/partial"
-    # Debian's own glibc family must never install: it dies under Android's
-    # seccomp filter. libc6:arm64 is Termux's glibc (dn-base-env.sh).
-    cat > "$ETC/preferences.d/dn-glibc" <<EOF
+    # Tier 1 (docs/debian-mode.md): Debian names filled by Termux-backed
+    # packages from dn-base-env.sh must never install from Debian -- the
+    # glibc family would die under Android's seccomp filter, the others
+    # would crossgrade Termux's own packages away.
+    rm -f "$ETC/preferences.d/dn-glibc"
+    cat > "$ETC/preferences.d/dn-tier1" <<EOF
+Package: dash:arm64 debianutils:arm64 openssl:arm64 ca-certificates:arm64
+Pin: origin deb.debian.org
+Pin-Priority: -1
+
+Package: dash:arm64 debianutils:arm64 openssl:arm64 ca-certificates:arm64
+Pin: origin security.debian.org
+Pin-Priority: -1
+
+EOF
+    cat >> "$ETC/preferences.d/dn-tier1" <<EOF
 Package: libc6:arm64 libc-bin:arm64 libc6-dev:arm64 libc-dev-bin:arm64 libc-l10n:arm64 locales:arm64
 Pin: origin deb.debian.org
 Pin-Priority: -1
