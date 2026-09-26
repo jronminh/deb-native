@@ -78,7 +78,15 @@ sh install.sh ~/dn-e2e figlet          # fresh bootstrap + install
 Plus the boundary suites (`tests/shim-libc`, `tests/tracer-nss`) against that
 prefix.
 
-Readiness: the mechanism-and-routing boundary is closed (cases 1–5 route to a
-working mechanism), and `install.sh` reuse-mode was exercised on `fe2`. What a
-fresh E2E would newly cover is the full `setup-apt-prefix.sh` path with the
-tracer install and `normalize-symlinks.sh` in it.
+Verified on `fe2` (2026-09-26): a fresh prefix `~/dn-e2e` plus `figlet` —
+`install.sh` exits `0`, `dn-trace` (fork-lite) is installed, `figlet` runs by
+name through its launcher, and `tests/tracer-nss` passes against the fresh
+prefix. The mechanism-and-routing boundary is closed, so a fresh E2E is the
+full check from empty prefix to a working program.
+
+That run also caught a bug worth keeping in mind: the `apt.conf` heredoc is
+**unquoted** (it must expand `$NEWPREFIX`), so the comment's backticks around
+`apt-get install` were command-substituted and apt's own output was spliced
+into `apt.conf`, making `apt-get` fail with *"Extra junk after value"*. Fixed
+by dropping the backticks — any checkout before that fix breaks on a fresh
+bootstrap (an existing prefix does not, which is why it hid).

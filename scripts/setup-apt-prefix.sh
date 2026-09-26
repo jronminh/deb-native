@@ -61,7 +61,7 @@ Dpkg::options:: "--force-script-chrootless";
 Dpkg::options:: "--force-architecture";
 // Hook the deb-native pipeline into apt's own lifecycle (the sudo-less
 // approach): patch each .deb before dpkg unpacks it, and regenerate
-// launchers after. So a plain `apt-get install` (through the arch-aware apt
+// launchers after. So a plain apt-get install (through the arch-aware apt
 // wrapper, which points APT_CONFIG here for Debian-only names) installs
 // Debian arm64 packages seamlessly.
 DPkg::Pre-Install-Pkgs { "$REPO/scripts/apt-hook-pre.sh $NEWPREFIX"; };
