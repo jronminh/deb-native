@@ -141,6 +141,8 @@ needs (`apt`, `dpkg`, `dpkg-deb`) ships with Termux.
 - [`docs/shim-coverage.md`](docs/shim-coverage.md) — measured shim coverage.
 - [`docs/syscall-boundary.md`](docs/syscall-boundary.md) — beyond libc.
 - [`docs/direct-usage.md`](docs/direct-usage.md) — tracer investigation + fork-lite plan.
+- [`docs/runtime-failures.md`](docs/runtime-failures.md) — what breaks when *running* a program.
+- [`docs/tailscale.md`](docs/tailscale.md) — the static-daemon goal (userspace networking).
 - [`docs/findings.md`](docs/findings.md) — engineering log.
 - [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) — method, side by side with `sudo-less`.
 - [`tracer/README.md`](tracer/README.md) — the reduced proot (`fork-lite`).

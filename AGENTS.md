@@ -35,6 +35,8 @@ replace the view's path-resolution job.
   against a 258-package corpus; what is left.
 - `docs/syscall-boundary.md` — the cases libc interposition cannot reach.
 - `docs/direct-usage.md` — the living investigation + **fork-lite plan**.
+- `docs/runtime-failures.md` — what breaks when *running* a program (wide).
+- `docs/tailscale.md` — the static-daemon goal (userspace networking).
 - `docs/bind-only.md` — what to strip to make fork-lite a bind-only tracer
   (`canonicalize` → prefix rewrite): safe/keep/replace + whitelist + risks.
 - `docs/install-flow.md` — the bootstrap/install order (runtime → auto-patch
