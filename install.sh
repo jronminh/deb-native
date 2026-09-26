@@ -10,10 +10,28 @@ REPO=https://github.com/jronminh/deb-native
 DIR=${DEB_NATIVE_DIR:-$HOME/.deb-native}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || echo .)
 
+# --- display ---------------------------------------------------------------
+if [ -t 1 ]; then
+    B=$(printf '\033[1m'); D=$(printf '\033[2m'); C=$(printf '\033[36m')
+    G=$(printf '\033[32m'); Y=$(printf '\033[33m'); R=$(printf '\033[0m')
+else
+    B= D= C= G= Y= R=
+fi
+banner() {
+    printf '%s\n' "${B}deb-native${R} ${D}·${R} Debian arm64 .debs in Termux, unrooted"
+}
+step() {
+    STEP=$((STEP + 1))
+    printf '\n%s[%s/%s]%s %s%s%s\n' "$C" "$STEP" "$TOTAL" "$R" "$B" "$*" "$R"
+}
+kv() { printf '   %s%-10s%s %s\n' "$D" "$1" "$R" "$2"; }
+fail() { printf '%s error:%s %s\n' "$Y" "$R" "$*" >&2; exit 1; }
+
 # Piped (curl | sh) or run outside a checkout: fetch the repo, then re-exec.
 if [ ! -f "$HERE/scripts/setup-apt-prefix.sh" ]; then
-    command -v git >/dev/null 2>&1 || { echo "error: git is required (pkg install git)"; exit 1; }
-    echo "==> fetching deb-native into $DIR"
+    banner
+    command -v git >/dev/null 2>&1 || fail "git is required (pkg install git)"
+    printf '\n%s[1/1]%s fetching deb-native into %s\n' "$C" "$R" "$DIR"
     [ -d "$DIR/.git" ] || git clone --depth 1 "$REPO" "$DIR"
     exec sh "$DIR/install.sh" "$@"
 fi
@@ -28,17 +46,28 @@ case "$DNPREFIX" in /*) ;; *) DNPREFIX="$PWD/$DNPREFIX" ;; esac
 TERMUX_PREFIX=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 case "$DNPREFIX" in
   "$TERMUX_PREFIX"|"$TERMUX_PREFIX"/*)
-    echo "install.sh: refusing prefix $DNPREFIX" >&2
-    echo "  it is inside Termux's prefix ($TERMUX_PREFIX); that would clobber Termux's apt." >&2
-    echo "  Use a separate prefix, e.g. \$HOME/.dn (the default)." >&2
+    printf '%s error: refusing prefix %s%s\n' "$Y" "$DNPREFIX" "$R" >&2
+    printf '   it is inside Termux'"'"'s prefix (%s); that would clobber Termux'"'"'s apt.\n' "$TERMUX_PREFIX" >&2
+    printf '   use a separate prefix, e.g. \$HOME/.dn (the default).\n' >&2
     exit 1 ;;
 esac
 
+# --- run -------------------------------------------------------------------
+STEP=0
+TOTAL=2
+[ $# -gt 0 ] && TOTAL=3
+T0=$(date +%s)
+
+banner
+kv "prefix" "$DNPREFIX"
+[ $# -gt 0 ] && kv "packages" "$*"
+
 if [ ! -s "$DNPREFIX/var/lib/dpkg/status" ]; then
-    echo "==> bootstrapping a Debian glibc base into $DNPREFIX"
+    step "bootstrapping the Debian glibc base"
     "$HERE/scripts/setup-apt-prefix.sh" "$DNPREFIX"
 else
-    echo "==> reusing existing prefix $DNPREFIX"
+    step "refreshing the existing prefix"
+    kv "state" "reused (already bootstrapped)"
     "$HERE/scripts/setup-runtime.sh" "$DNPREFIX/root"
     "$HERE/scripts/make-launchers.sh" "$DNPREFIX/root"
     "$HERE/scripts/make-apt-wrappers.sh" "$DNPREFIX/root"
@@ -46,11 +75,21 @@ else
 fi
 
 if [ $# -gt 0 ]; then
-    echo "==> installing: $*"
+    step "installing: $*"
     "$HERE/scripts/apt-install.sh" "$DNPREFIX" "$@"
 fi
 
-echo "==> normalizing prefix symlinks (bind-only tracer)"
+step "normalizing prefix symlinks"
 "$HERE/scripts/normalize-symlinks.sh" "$DNPREFIX/root"
 
-echo "==> done. Installed programs run by name in a new shell (or: . ~/.bashrc)"
+# --- summary ---------------------------------------------------------------
+T1=$(date +%s)
+secs=$((T1 - T0))
+[ "$secs" -lt 60 ] && took="${secs}s" || took="$((secs / 60))m$((secs % 60))s"
+installed=$(grep -c "install ok installed" "$DNPREFIX/var/lib/dpkg/status" 2>/dev/null || true)
+
+printf '\n%s done%s in %s\n' "$G" "$R" "$took"
+kv "prefix" "$DNPREFIX"
+kv "installed" "${installed:-0} packages"
+kv "run" "a program by name in a new shell (or: . ~/.bashrc)"
+kv "check" "termux-dn-doctor"
