@@ -138,8 +138,10 @@ The core bind-only path plus the safe mechanics for the three traps landed:
   host prefix for getcwd/readlink/`/proc/self/cwd`.  Verified.
 - **Verified on `fe2`**: bind read; `..` clamp (`/etc/../../etc/x`) matches
   canonicalize; absolute-symlink before/after; `/proc/self/cwd` -> `/etc`.
-  `ls -lR /usr` 0.43s bind-only vs 0.51s canonicalize (~17%; larger on
-  stat-dense ld.so startup).
+- **Benchmark** (`scripts/bench-tracer.sh`, binds `$PREFIX:/usr`; medians):
+  20 000 path lookups in one process — og (stock Termux proot) 2.26s,
+  fork-lite canonicalize 2.26s, **fork-lite bind-only 1.40s (~1.6x)**.
+  `find -type f` over 67k files (I/O-bound): 2.66s / 2.80s / 2.45s (~8%).
 - **Not done**: getcwd kernel-passthrough, whitelist pruning, and deleting
   `glue.*`/`f2fs-bug.*`/`readlink_proc` — kept because canonicalize is still
   the fallback.
