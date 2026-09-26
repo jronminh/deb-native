@@ -5,16 +5,13 @@
 # prefix to discard if this gets it wrong, so this runs as a pre-flight
 # check, not a rollback: nothing is unpacked until this exits 0.
 #
-# Deliberately has NO "same package, safe to reinstall" exception: dpkg
-# has no reliable way to tell Termux's own build of a name apart from
-# Debian's for an `Architecture: all` package (found the hard way testing
-# with cowsay -- both Termux's and Debian's report Architecture: all, so
-# name+arch matching alone can't distinguish them; dpkg's model has no
-# concept of "which repo/origin" a package came from). Refusing on ANY
-# existing path, regardless of who dpkg thinks owns it, is the only
-# answer that's safe by construction. This means no reinstall/upgrade
-# support yet for a package already fused in -- acceptable for a
-# proof-of-concept, not for real use.
+# Same-package exception, arm64 only: a path already owned by PKG:arm64 is
+# this package's own (upgrade/reinstall). This is safe only because Debian
+# mode rewrites "Architecture: all" to arm64 (docs/debian-mode.md), so every
+# fused Debian package is recorded as :arm64 and never as Termux's native
+# side. (Before that rule, cowsay showed why there could be no exception:
+# Termux's and Debian's both reported "all" and were indistinguishable.)
+# A path owned by anything else, or by nobody, is always refused.
 #
 # Usage: fuse-classify.sh DEB_FILE
 # Exit 0: clear to install. Exit 1: refused (see stderr for which path).
@@ -41,7 +38,10 @@ dpkg-deb -c "$DEB" | while IFS= read -r line; do
   target="$TP$path"
   [ -e "$target" ] || [ -L "$target" ] || continue
 
-  owner=$(dpkg -S "$target" 2>/dev/null | awk -F: '{print $1; exit}')
+  # dpkg records fused paths relative to --instdir ("/bin/x"), not "$TP/bin/x".
+  owner=$(dpkg -S "$path" 2>/dev/null | head -1 | sed 's/: .*//')
+  # The same package being upgraded or reinstalled owns its own files.
+  [ "$owner" = "$PKG:arm64" ] && continue
   if [ -n "$owner" ]; then
     echo "fuse-classify: REFUSE $DEB -- $target already owned by $owner" >&2
   else

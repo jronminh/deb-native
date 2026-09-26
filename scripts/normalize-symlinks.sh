@@ -31,6 +31,12 @@
 #                          (classic design's ROOT is its own small sandbox,
 #                          where that scan is cheap and the intended
 #                          behavior).
+#
+#   NORMALIZE_LINKS_FILE=FILE
+#                          Exactly these links (absolute host paths, one
+#                          per line) instead of scanning -- Debian mode's
+#                          post-install hook passes the links the
+#                          just-installed packages brought in.
 set -eu
 
 ROOT=${1:?usage: normalize-symlinks.sh PREFIX_ROOT}
@@ -75,7 +81,9 @@ while [ "$changed" -eq 1 ] && [ "$pass" -lt 5 ]; do
     pass=$((pass + 1))
     changed=0
 
-    if [ -n "${NORMALIZE_SCAN_DIRS:-}" ]; then
+    if [ -n "${NORMALIZE_LINKS_FILE:-}" ]; then
+        cp "$NORMALIZE_LINKS_FILE" "$tmp"
+    elif [ -n "${NORMALIZE_SCAN_DIRS:-}" ]; then
         : > "$tmp"
         for d in $NORMALIZE_SCAN_DIRS; do
             [ -d "$ROOT/$d" ] || continue

@@ -54,9 +54,17 @@ Dir::Cache "$CACHE/";
 Acquire::PDiffs "false";
 Acquire::Languages "none";
 APT::Update::Post-Invoke-Success { "$HERE/dn-debian-index.sh $LISTS"; };
-// Guard until the install pipeline is wired in: never let raw Debian
-// .debs reach dpkg in Termux's prefix.
-DPkg::Pre-Invoke { "echo 'dn-mode: debian mode install pipeline not wired yet; refusing to run dpkg' >&2; exit 1"; };
+// Install pipeline: packages are fused into Termux's prefix (paths inside
+// a translated .deb are prefix-relative), maintainer scripts run without
+// chroot (Android's seccomp forbids it). The pre hook gets apt's full plan
+// (protocol version 3) to refuse any change to Termux's own packages, then
+// translates each .deb; the post hook fixes the symlinks they brought in.
+DPkg::Options:: "--instdir=$P";
+DPkg::Options:: "--force-script-chrootless";
+DPkg::Pre-Install-Pkgs { "$HERE/dn-hook-pre.sh"; };
+DPkg::Tools::Options::$HERE/dn-hook-pre.sh "";
+DPkg::Tools::Options::$HERE/dn-hook-pre.sh::Version "3";
+DPkg::Post-Invoke { "$HERE/dn-hook-post.sh"; };
 EOF
     mv "$SWITCH.tmp" "$SWITCH"
     echo "switched to debian mode; run: apt update"
