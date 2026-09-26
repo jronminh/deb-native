@@ -71,7 +71,7 @@ is a tiny Bionic ELF that sets up the shim and execs Termux's glibc
 `dpkg` has unpacked anything.
 
 **Real prefix, real `dpkg`.** Packages unpack with Termux's own `dpkg`
-(`--instdir`/`--admindir`/`--force-script-chrootless`) into `$INSTDIR/root`,
+(`--instdir`/`--admindir`/`--force-script-chrootless`) into `$INSTDIR`,
 driven by a prefix-scoped `apt.conf` pointed at the Debian `arm64` repository.
 
 **Real glibc, reused.** Termux's `$PREFIX/glibc` side-install is repointed at

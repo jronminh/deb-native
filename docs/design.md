@@ -295,7 +295,7 @@ is left exactly where Termux's own package manager put it
 (`$PREFIX/glibc/lib/libz.so.1`, found by the glibc dynamic linker's own
 default search path, not by any `LD_LIBRARY_PATH` trick). Only what
 Termux's glibc side-install does *not* already have lands in the project's
-own collection point (`$INSTDIR`, `~/.deb-native/root` by default) —
+own collection point (`$INSTDIR`, `~/.dn` by default) —
 that's the one place matching sudo-less's `.local` role, but scoped to the
 actual delta instead of everything.
 

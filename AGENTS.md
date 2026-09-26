@@ -78,7 +78,7 @@ replace the view's path-resolution job.
   user with the toolchain). It pushes to GitHub `main`.
 - A local copy may be **stale**. Edit locally, `scp`/`tar` to `fe2`, build and
   test on `fe2`, then commit and push **there**. `gh` is authed as `jronminh`.
-- Test prefix `~/dn6` (`~/dn6/root`). No `sudo`/root anywhere; the box is
+- Test prefix `~/dn6`. No `sudo`/root anywhere; the box is
   small (low RAM).
 - Persisted files (code, docs, commits) are in **English**.
 

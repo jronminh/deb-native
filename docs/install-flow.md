@@ -91,7 +91,7 @@ A full E2E is: bootstrap a **fresh** prefix, install a package through
 
 ```
 sh install.sh ~/dn-e2e figlet          # fresh bootstrap + install
-~/dn-e2e/root/usr/lib/deb-native/bin/figlet hi
+~/dn-e2e/usr/lib/deb-native/bin/figlet hi
 ```
 
 Plus the boundary suites (`tests/shim-libc`, `tests/tracer-nss`) against that
