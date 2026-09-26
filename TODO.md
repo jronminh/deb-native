@@ -82,20 +82,31 @@ for what just landed.
 
 Tracked in [#1](https://github.com/jronminh/deb-native/issues/1).
 
-- [ ] **Fix `unlink()`** in `native/path-redirect.c` — declared with
-      `unlinkat_t`, so `real(AT_FDCWD, path, 0)` passes `(char *)-100` as the
-      path (`EFAULT`). Use an `unlink_t` and call `real(path)`.
-- [ ] **Grow the intercepted symbol set**: fortified `__open_2` /
-      `__openat_2` / `__open64_2`; the missing `*64` (`fopen64`,
-      `freopen64`, `openat64`, `fstatat64`, `truncate64`); `lstat`,
-      `statfs`/`statvfs`; `dlopen`/`dlmopen`; socket `bind`/`connect` with a
-      short-base workaround for `sun_path`'s 108-byte limit.
+- [x] **Fix `unlink()`** — fixed in `521cc73` (was declared with
+      `unlinkat_t` and called `real(AT_FDCWD, path, 0)`, passing `(char
+      *)-100`).
+- [x] **Grow the intercepted libc surface** — the issue-#1 gaps landed in
+      `521cc73` (`lstat`; `fopen64`/`freopen64`/`openat64`/`fstatat64`/
+      `truncate64`; fortified `__open_2`/`__openat_2`/`__open64_2`;
+      `statfs`/`statvfs`; `dlopen`/`dlmopen`; AF_UNIX `bind`/`connect`).
+      This change finishes the libc layer with the rest of the path-taking
+      surface: `creat`/`creat64`/`freopen`; `chown`/`lchown`/`fchownat`;
+      `utime`; the xattr family (`setxattr`/`lsetxattr`/`getxattr`/
+      `lgetxattr`/`listxattr`/`llistxattr`/`removexattr`/`lremovexattr`);
+      `mkfifo`/`mkfifoat`/`mknod`/`mknodat`; `statfs64`/`statvfs64`;
+      `realpath`/`canonicalize_file_name`; `inotify_add_watch`; AF_UNIX
+      `sendto`; `mkstemp`/`mkostemp`/`mkdtemp`; `posix_spawn`/
+      `posix_spawnp`. Verified on-device by `tests/shim-libc/run.sh`
+      (asserts each symbol rewrites; `posix_spawn` of a redirected glibc
+      binary runs). What this layer **cannot** reach is the tracer's job:
+      raw `syscall()`, static binaries, and libc-internal opens that bypass
+      the PLT.
 - [ ] **Bake the shim into installed ELFs** (see `docs/design.md`,
       "Delivering the shim"): `patchelf --add-needed`/`--add-rpath`, or a
       `DT_AUDIT` module, so the shim survives an empty environment; the
       explicit loader (`ld.so --preload`) is the simpler variant.
 - [ ] **Syscall-level tracer** for what libc interposition can't see (static
-      binaries, raw `syscall()`, `dlopen`): `ptrace` or
+      binaries, raw `syscall()`, libc-internal `dlopen`/NSS): `ptrace` or
       `SECCOMP_RET_USER_NOTIF`, inside the app uid. Feasible — `ptrace` works
       here (`proot` runs); namespaces/overlayfs/FUSE do not.
 

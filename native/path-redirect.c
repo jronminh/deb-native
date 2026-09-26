@@ -50,6 +50,10 @@
 #include <dirent.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <sys/xattr.h>
+#include <utime.h>
+#include <spawn.h>
+#include <sys/inotify.h>
 
 /* Cached once, at load. rewrite() is on the hot path of every intercepted
  * open/stat/exec call, so it must not call getenv()/strlen() per call or
@@ -111,8 +115,8 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
  * shim. Here we put that back for a Bionic child; if there was none (e.g.
  * running under dpkg, which has no preload), LD_PRELOAD is removed.
  */
-static char **bionic_env(char **envp) {
-  if (!envp) return envp;
+static char **bionic_env(char *const *envp) {
+  if (!envp) return (char **)envp;
   if (!g_init) dn_init();
   const char *b = g_bionic_preload;
   int want = (b && *b);
@@ -120,7 +124,7 @@ static char **bionic_env(char **envp) {
   if (want) snprintf(entry, sizeof entry, "LD_PRELOAD=%s", b);
   static char *out[2048];
   int n = 0, saw = 0;
-  for (char **e = envp; *e && n < 2045; e++) {
+  for (char *const *e = envp; *e && n < 2045; e++) {
     if (!strncmp(*e, "LD_PRELOAD=", 11)) {
       saw = 1;
       if (want) out[n++] = entry;
@@ -471,9 +475,10 @@ int symlinkat(const char *target, int newdirfd, const char *linkpath) {
   return real(target, newdirfd, rewrite(linkpath, buf, sizeof buf));
 }
 
+typedef int (*link_t)(const char *, const char *);
 int link(const char *oldpath, const char *newpath) {
-  static symlink_t real;
-  if (!real) real = (symlink_t)dlsym(RTLD_NEXT, "link");
+  static link_t real;
+  if (!real) real = (link_t)dlsym(RTLD_NEXT, "link");
   char b1[4096], b2[4096];
   return real(rewrite(oldpath, b1, sizeof b1), rewrite(newpath, b2, sizeof b2));
 }
@@ -487,9 +492,10 @@ int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath,
               rewrite(newpath, b2, sizeof b2), flags);
 }
 
+typedef int (*rename_t)(const char *, const char *);
 int rename(const char *oldpath, const char *newpath) {
-  static symlink_t real;
-  if (!real) real = (symlink_t)dlsym(RTLD_NEXT, "rename");
+  static rename_t real;
+  if (!real) real = (rename_t)dlsym(RTLD_NEXT, "rename");
   char b1[4096], b2[4096];
   return real(rewrite(oldpath, b1, sizeof b1), rewrite(newpath, b2, sizeof b2));
 }
@@ -818,4 +824,352 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   if (rewrite_sockaddr(addr, addrlen, &un, &unlen))
     return real(sockfd, (const struct sockaddr *)&un, unlen);
   return real(sockfd, addr, addrlen);
+}
+
+/* ---- file creation / stdio ----------------------------------------- */
+
+typedef int (*creat_t)(const char *, mode_t);
+int creat(const char *pathname, mode_t mode) {
+  static creat_t real;
+  if (!real) real = (creat_t)dlsym(RTLD_NEXT, "creat");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), mode);
+}
+
+typedef int (*creat64_t)(const char *, mode_t);
+int creat64(const char *pathname, mode_t mode) {
+  static creat64_t real;
+  if (!real) real = (creat64_t)dlsym(RTLD_NEXT, "creat64");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), mode);
+}
+
+typedef FILE *(*freopen_t)(const char *, const char *, FILE *);
+FILE *freopen(const char *pathname, const char *mode, FILE *stream) {
+  static freopen_t real;
+  if (!real) real = (freopen_t)dlsym(RTLD_NEXT, "freopen");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), mode, stream);
+}
+
+/* ---- ownership / times --------------------------------------------- */
+
+typedef int (*chown_t)(const char *, uid_t, gid_t);
+int chown(const char *pathname, uid_t owner, gid_t group) {
+  static chown_t real;
+  if (!real) real = (chown_t)dlsym(RTLD_NEXT, "chown");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), owner, group);
+}
+
+typedef int (*lchown_t)(const char *, uid_t, gid_t);
+int lchown(const char *pathname, uid_t owner, gid_t group) {
+  static lchown_t real;
+  if (!real) real = (lchown_t)dlsym(RTLD_NEXT, "lchown");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), owner, group);
+}
+
+typedef int (*fchownat_t)(int, const char *, uid_t, gid_t, int);
+int fchownat(int dirfd, const char *pathname, uid_t owner, gid_t group,
+             int flags) {
+  static fchownat_t real;
+  if (!real) real = (fchownat_t)dlsym(RTLD_NEXT, "fchownat");
+  char buf[4096];
+  return real(dirfd, rewrite(pathname, buf, sizeof buf), owner, group,
+              flags);
+}
+
+typedef int (*utime_t)(const char *, const struct utimbuf *);
+int utime(const char *pathname, const struct utimbuf *times) {
+  static utime_t real;
+  if (!real) real = (utime_t)dlsym(RTLD_NEXT, "utime");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), times);
+}
+
+/* ---- extended attributes -------------------------------------------- */
+
+typedef int (*setxattr_t)(const char *, const char *, const void *, size_t,
+                           int);
+int setxattr(const char *path, const char *name, const void *value,
+             size_t size, int flags) {
+  static setxattr_t real;
+  if (!real) real = (setxattr_t)dlsym(RTLD_NEXT, "setxattr");
+  char buf[4096];
+  return real(rewrite(path, buf, sizeof buf), name, value, size, flags);
+}
+
+typedef int (*lsetxattr_t)(const char *, const char *, const void *, size_t,
+                            int);
+int lsetxattr(const char *path, const char *name, const void *value,
+              size_t size, int flags) {
+  static lsetxattr_t real;
+  if (!real) real = (lsetxattr_t)dlsym(RTLD_NEXT, "lsetxattr");
+  char buf[4096];
+  return real(rewrite(path, buf, sizeof buf), name, value, size, flags);
+}
+
+typedef ssize_t (*getxattr_t)(const char *, const char *, void *, size_t);
+ssize_t getxattr(const char *path, const char *name, void *value,
+                 size_t size) {
+  static getxattr_t real;
+  if (!real) real = (getxattr_t)dlsym(RTLD_NEXT, "getxattr");
+  char buf[4096];
+  return real(rewrite(path, buf, sizeof buf), name, value, size);
+}
+
+typedef ssize_t (*lgetxattr_t)(const char *, const char *, void *, size_t);
+ssize_t lgetxattr(const char *path, const char *name, void *value,
+                  size_t size) {
+  static lgetxattr_t real;
+  if (!real) real = (lgetxattr_t)dlsym(RTLD_NEXT, "lgetxattr");
+  char buf[4096];
+  return real(rewrite(path, buf, sizeof buf), name, value, size);
+}
+
+typedef ssize_t (*listxattr_t)(const char *, char *, size_t);
+ssize_t listxattr(const char *path, char *list, size_t size) {
+  static listxattr_t real;
+  if (!real) real = (listxattr_t)dlsym(RTLD_NEXT, "listxattr");
+  char buf[4096];
+  return real(rewrite(path, buf, sizeof buf), list, size);
+}
+
+typedef ssize_t (*llistxattr_t)(const char *, char *, size_t);
+ssize_t llistxattr(const char *path, char *list, size_t size) {
+  static llistxattr_t real;
+  if (!real) real = (llistxattr_t)dlsym(RTLD_NEXT, "llistxattr");
+  char buf[4096];
+  return real(rewrite(path, buf, sizeof buf), list, size);
+}
+
+typedef int (*removexattr_t)(const char *, const char *);
+int removexattr(const char *path, const char *name) {
+  static removexattr_t real;
+  if (!real) real = (removexattr_t)dlsym(RTLD_NEXT, "removexattr");
+  char buf[4096];
+  return real(rewrite(path, buf, sizeof buf), name);
+}
+
+typedef int (*lremovexattr_t)(const char *, const char *);
+int lremovexattr(const char *path, const char *name) {
+  static lremovexattr_t real;
+  if (!real) real = (lremovexattr_t)dlsym(RTLD_NEXT, "lremovexattr");
+  char buf[4096];
+  return real(rewrite(path, buf, sizeof buf), name);
+}
+
+/* ---- special files --------------------------------------------------- */
+
+typedef int (*mkfifo_t)(const char *, mode_t);
+int mkfifo(const char *pathname, mode_t mode) {
+  static mkfifo_t real;
+  if (!real) real = (mkfifo_t)dlsym(RTLD_NEXT, "mkfifo");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), mode);
+}
+
+typedef int (*mkfifoat_t)(int, const char *, mode_t);
+int mkfifoat(int dirfd, const char *pathname, mode_t mode) {
+  static mkfifoat_t real;
+  if (!real) real = (mkfifoat_t)dlsym(RTLD_NEXT, "mkfifoat");
+  char buf[4096];
+  return real(dirfd, rewrite(pathname, buf, sizeof buf), mode);
+}
+
+typedef int (*mknod_t)(const char *, mode_t, dev_t);
+int mknod(const char *pathname, mode_t mode, dev_t dev) {
+  static mknod_t real;
+  if (!real) real = (mknod_t)dlsym(RTLD_NEXT, "mknod");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), mode, dev);
+}
+
+typedef int (*mknodat_t)(int, const char *, mode_t, dev_t);
+int mknodat(int dirfd, const char *pathname, mode_t mode, dev_t dev) {
+  static mknodat_t real;
+  if (!real) real = (mknodat_t)dlsym(RTLD_NEXT, "mknodat");
+  char buf[4096];
+  return real(dirfd, rewrite(pathname, buf, sizeof buf), mode, dev);
+}
+
+/* ---- filesystem stats ------------------------------------------------ */
+
+typedef int (*statfs64_t)(const char *, struct statfs64 *);
+int statfs64(const char *pathname, struct statfs64 *st) {
+  static statfs64_t real;
+  if (!real) real = (statfs64_t)dlsym(RTLD_NEXT, "statfs64");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), st);
+}
+
+typedef int (*statvfs64_t)(const char *, struct statvfs64 *);
+int statvfs64(const char *pathname, struct statvfs64 *st) {
+  static statvfs64_t real;
+  if (!real) real = (statvfs64_t)dlsym(RTLD_NEXT, "statvfs64");
+  char buf[4096];
+  return real(rewrite(pathname, buf, sizeof buf), st);
+}
+
+/* ---- path resolution ------------------------------------------------- */
+
+char *realpath(const char *path, char *resolved) {
+  static char *(*real)(const char *, char *);
+  if (!real)
+    real = (char *(*)(const char *, char *))dlsym(RTLD_NEXT, "realpath");
+  char buf[4096];
+  const char *rp = rewrite(path, buf, sizeof buf);
+  if (rp == path) return real(path, resolved);
+  return real(rp, resolved);
+}
+
+char *canonicalize_file_name(const char *path) {
+  static char *(*real)(const char *);
+  if (!real)
+    real = (char *(*)(const char *))dlsym(RTLD_NEXT, "canonicalize_file_name");
+  char buf[4096];
+  const char *rp = rewrite(path, buf, sizeof buf);
+  if (rp == path) return real(path);
+  return real(rp);
+}
+
+/* ---- inotify --------------------------------------------------------- */
+
+typedef int (*inotify_add_watch_t)(int, const char *, uint32_t);
+int inotify_add_watch(int fd, const char *pathname, uint32_t mask) {
+  static inotify_add_watch_t real;
+  if (!real)
+    real = (inotify_add_watch_t)dlsym(RTLD_NEXT, "inotify_add_watch");
+  char buf[4096];
+  return real(fd, rewrite(pathname, buf, sizeof buf), mask);
+}
+
+/* ---- AF_UNIX datagram ------------------------------------------------ */
+
+/* sendto may carry an AF_UNIX sun_path in dest_addr; rewrite it the
+ * same way bind()/connect() do via rewrite_sockaddr(). */
+typedef ssize_t (*sendto_t)(int, const void *, size_t, int,
+                              const struct sockaddr *, socklen_t);
+ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+               const struct sockaddr *dest_addr, socklen_t addrlen) {
+  static sendto_t real;
+  if (!real) real = (sendto_t)dlsym(RTLD_NEXT, "sendto");
+  struct sockaddr_un un;
+  socklen_t unlen;
+  if (rewrite_sockaddr(dest_addr, addrlen, &un, &unlen))
+    return real(sockfd, buf, len, flags, (const struct sockaddr *)&un,
+                unlen);
+  return real(sockfd, buf, len, flags, dest_addr, addrlen);
+}
+
+/* ---- temp files ------------------------------------------------------ */
+
+/* mkstemp/mkostemp/mkdtemp modify tmpl in place and the caller's
+ * template buffer is only strlen(tmpl)+1 long.  After rewriting into
+ * a local buf and calling real(buf), we can copy the rewritten tail
+ * back into tmpl only if it fits: strlen(buf+g_rootlen)+1 must be
+ * <= strlen(tmpl)+1, i.e. the tail after g_rootlen must not exceed
+ * the original template's capacity.  Without this check we could
+ * overflow the caller's fixed-size template buffer. */
+
+typedef int (*mkstemp_t)(char *);
+int mkstemp(char *tmpl) {
+  static mkstemp_t real;
+  if (!real) real = (mkstemp_t)dlsym(RTLD_NEXT, "mkstemp");
+  char buf[4096];
+  const char *rp = rewrite(tmpl, buf, sizeof buf);
+  if (rp == tmpl) return real(tmpl);
+  int r = real(buf);
+  if (r >= 0 && g_root && g_rootlen &&
+      strlen(buf + g_rootlen) + 1 <= strlen(tmpl) + 1)
+    strcpy(tmpl, buf + g_rootlen);
+  return r;
+}
+
+typedef int (*mkostemp_t)(char *, int);
+int mkostemp(char *tmpl, int flags) {
+  static mkostemp_t real;
+  if (!real) real = (mkostemp_t)dlsym(RTLD_NEXT, "mkostemp");
+  char buf[4096];
+  const char *rp = rewrite(tmpl, buf, sizeof buf);
+  if (rp == tmpl) return real(tmpl, flags);
+  int r = real(buf, flags);
+  if (r >= 0 && g_root && g_rootlen &&
+      strlen(buf + g_rootlen) + 1 <= strlen(tmpl) + 1)
+    strcpy(tmpl, buf + g_rootlen);
+  return r;
+}
+
+typedef char *(*mkdtemp_t)(char *);
+char *mkdtemp(char *tmpl) {
+  static mkdtemp_t real;
+  if (!real) real = (mkdtemp_t)dlsym(RTLD_NEXT, "mkdtemp");
+  char buf[4096];
+  const char *rp = rewrite(tmpl, buf, sizeof buf);
+  if (rp == tmpl) return real(tmpl);
+  char *r = real(buf);
+  if (!r) return NULL;
+  if (g_root && g_rootlen &&
+      strlen(buf + g_rootlen) + 1 <= strlen(tmpl) + 1)
+    strcpy(tmpl, buf + g_rootlen);
+  return tmpl;
+}
+
+/* ---- process spawn --------------------------------------------------- */
+
+/* glibc's posix_spawn uses clone+exec internally, bypassing the
+ * interposed execve().  We must therefore rewrite the path and
+ * adjust the environment ourselves. */
+typedef int (*posix_spawn_t)(pid_t *, const char *,
+                              const posix_spawn_file_actions_t *,
+                              const posix_spawnattr_t *,
+                              char *const [], char *const []);
+int posix_spawn(pid_t *pid, const char *path,
+                const posix_spawn_file_actions_t *fa,
+                const posix_spawnattr_t *attr,
+                char *const argv[], char *const envp[]) {
+  static posix_spawn_t real;
+  if (!real)
+    real = (posix_spawn_t)dlsym(RTLD_NEXT, "posix_spawn");
+  char buf[4096];
+  const char *rp = rewrite(path, buf, sizeof buf);
+  if (target_is_glibc(rp))
+    return real(pid, rp, fa, attr, argv, envp);
+  return real(pid, rp, fa, attr, argv, bionic_env(envp));
+}
+
+/* posix_spawnp: glibc's internal PATH walk bypasses our execve
+ * interposition, so we walk $PATH ourselves and delegate to
+ * posix_spawn.  Do not call the real posix_spawnp. */
+int posix_spawnp(pid_t *pid, const char *file,
+                 const posix_spawn_file_actions_t *fa,
+                 const posix_spawnattr_t *attr,
+                 char *const argv[], char *const envp[]) {
+  if (strchr(file, '/'))
+    return posix_spawn(pid, file, fa, attr, argv, envp);
+  const char *path = getenv("PATH");
+  if (!path || !*path) path = "/bin:/usr/bin";
+  char buf[4096];
+  const char *p = path;
+  for (;;) {
+    const char *end = strchr(p, ':');
+    size_t len = end ? (size_t)(end - p) : strlen(p);
+    if (len && len < sizeof buf - 2) {
+      memcpy(buf, p, len);
+      buf[len] = '/';
+      size_t fl = strlen(file);
+      if (len + 1 + fl < sizeof buf) {
+        memcpy(buf + len + 1, file, fl + 1);
+        if (access(buf, X_OK) == 0)
+          return posix_spawn(pid, buf, fa, attr, argv, envp);
+      }
+    }
+    if (!end) break;
+    p = end + 1;
+  }
+  if (access(file, X_OK) == 0)
+    return posix_spawn(pid, file, fa, attr, argv, envp);
+  errno = ENOENT;
+  return -1;
 }

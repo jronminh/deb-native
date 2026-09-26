@@ -1,1 +1,2 @@
 native/*.so
+tests/shim-libc/test

@@ -1015,3 +1015,66 @@ this project ships — and (2) a syscall-level tracer via `ptrace` /
 `SECCOMP_RET_USER_NOTIF` **inside the app uid**. Namespaces, overlayfs and
 FUSE are off the table by kernel and SELinux policy, exactly as the design
 assumed.
+
+## Findings: finishing the libc-level shim (2026-09-26)
+
+The code review in
+[#1](https://github.com/jronminh/deb-native/issues/1) listed what the
+libc-level shim could not yet see. `521cc73` closed the review items
+(`unlink()` bug; `lstat`; the missing `*64` names; fortified `__open_2`/
+`__openat_2`/`__open64_2`; `statfs`/`statvfs`; `dlopen`/`dlmopen`; AF_UNIX
+`bind`/`connect`). This round finishes the layer, so the remaining gap is
+only the one libc interposition inherently cannot cover (raw syscalls,
+static binaries, libc-internal opens) — the syscall tracer's job.
+
+### What was added
+
+The rest of the path-taking libc surface: `creat`/`creat64`/`freopen`;
+`chown`/`lchown`/`fchownat`; `utime`; the xattr family (`setxattr`/
+`lsetxattr`/`getxattr`/`lgetxattr`/`listxattr`/`llistxattr`/`removexattr`/
+`lremovexattr`, which is how dpkg and capability-aware tools touch files);
+`mkfifo`/`mkfifoat`/`mknod`/`mknodat`; `statfs64`/`statvfs64`; `realpath`/
+`canonicalize_file_name`; `inotify_add_watch`; AF_UNIX `sendto` (reusing the
+existing `rewrite_sockaddr`); the temp-file templates `mkstemp`/`mkostemp`/
+`mkdtemp`; and `posix_spawn`/`posix_spawnp`.
+
+Two of these needed care beyond the usual rewrite-and-call:
+
+- **`mkstemp`/`mkostemp`/`mkdtemp` modify the caller's template in place**,
+  and that buffer is only `strlen(template)+1` long. Rewriting it to
+  `$INSTDIR/etc/...` cannot be copied back. The shim calls the real function
+  on the rewritten buffer, then copies back only the part after `$INSTDIR`
+  (the random suffix included), after a length check against the caller's
+  original template. Verified: the caller sees `/etc/zz_mkstemp9wnoFI` while
+  the file is created under `$INSTDIR/etc/`.
+- **`posix_spawn` bypasses the interposed `execve`** (glibc uses
+  clone+exec internally), so it gets its own wrapper: rewrite the path, keep
+  the environment for a glibc target and swap in `bionic_env()` otherwise.
+  `posix_spawnp` walks `$PATH` itself (glibc's internal walk is invisible
+  here) and delegates to `posix_spawn`. This matters because modern glibc
+  and coreutils spawn helpers through `posix_spawn`, not `fork`+`execve`.
+
+### How it was verified, on-device
+
+`tests/shim-libc/run.sh` builds a standalone glibc test binary, sets up a
+fake `$DN_INSTDIR` root, runs the test under the shim with
+`DN_REDIRECT_DEBUG=1`, and asserts that every intercepted symbol rewrote its
+path to the root and that nothing leaked into the real `/etc`.
+
+Two on-device facts made this possible and are worth recording:
+
+- **The glibc side-install does ship `Scrt1.o`/`crti.o`/`crtn.o`** (an
+  earlier note said a standalone glibc executable could not be linked, but
+  only because it was looking for `crtbeginS.o`/`crtendS.o`/`libgcc.a`).
+  Linking with `-nostartfiles -nodefaultlibs` and naming those three objects
+  explicitly produces a runnable glibc executable with the same clang that
+  builds the shim.
+- Tests that need a real child (`posix_spawn`) copy a glibc binary under
+  `$INSTDIR/usr/bin/` and spawn the `/usr/bin/...` path; the child runs and
+  exits 0, proving the redirect reached the real spawn, not just this
+  process's own libc calls.
+
+Result: 33 rewrites asserted, all new symbols covered, `mkstemp`/`mkdtemp`
+templates handed back un-prefixed, and the redirected `posix_spawn` child
+exits 0. Real `/etc` is untouched. The build is warning-free.
+

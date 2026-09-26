@@ -244,10 +244,16 @@ shim above.
       real mapping table (multiple prefixes per process) — needed once
       this is wired into the wrapper-generation pipeline
       (`design.md`) for packages with more than one hardcoded path.
-- [ ] Intercept more of the relevant libc surface as real packages expose
-      gaps: `access`, `readlink`, `opendir`, `execve` (a binary that
-      `exec`s another absolute path, sudo-less's own `figlet` →
-      `figlet-figlet` alternative-link case), `realpath`.
+- [x] Intercept the relevant libc surface: `access`, `readlink`, `opendir`,
+      `execve` (a binary that `exec`s another absolute path, sudo-less's own
+      `figlet` → `figlet-figlet` alternative-link case) and `realpath` are
+      covered, along with the rest of the path-taking entry points
+      (`creat`, `freopen`, `chown`/`lchown`/`fchownat`, the xattr family,
+      `mkfifo`/`mknod`, `statfs64`/`statvfs64`, `inotify_add_watch`, AF_UNIX
+      `sendto`, `mkstemp`/`mkdtemp`, `posix_spawn`/`posix_spawnp`).
+      `tests/shim-libc/run.sh` asserts each one on-device. What libc
+      interposition cannot reach — static binaries, raw `syscall()`,
+      libc-internal opens — is the syscall tracer's job.
 - [ ] Decide how the wrapper script generated per binary
       (`design.md`) computes each binary's
       `DN_REDIRECT_FROM`/`_TO` pairs — likely from `prefix-wrap`-style
