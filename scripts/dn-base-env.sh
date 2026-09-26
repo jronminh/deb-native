@@ -34,6 +34,13 @@ echo "base-env: $P/usr -> . ok"
 # the shim, dn-run, the tracer, the dn-shell/dn-perl maintainer-script
 # interpreter, no-op chown/chgrp/dpkg-statoverride, update-alternatives wrapper.
 "$HERE/setup-runtime.sh" "$P"
+# The shim maps a script's #!/bin/sh and #!/usr/bin/perl to
+# "$INSTDIR/usr/bin/dn-shell" / "dn-perl" (main's layout). Those names are
+# new in Termux's bin/, so plain links make main's path valid here too.
+for n in dn-shell dn-perl; do
+  [ -e "$P/bin/$n" ] && [ ! -L "$P/bin/$n" ] && { echo "base-env: $P/bin/$n exists and is not our link; refusing" >&2; exit 1; }
+  ln -sfn "../lib/deb-native/fusion-bin/$n" "$P/bin/$n"
+done
 echo "base-env: runtime ($P/lib/deb-native, fusion-bin) ok"
 
 # 4. libc6:arm64 identity package.

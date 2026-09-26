@@ -59,6 +59,12 @@ is_elf() {
   [ "$(head -c4 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "7f454c46" ]
 }
 
+# Debian mode: dn-run finds INSTDIR from its own path by stripping
+# usr/lib/deb-native, which the flat prefix does not have; it already takes
+# DN_INSTDIR instead, and its "$INSTDIR/usr/..." paths resolve via usr -> .
+ENVLINE=""
+[ "$DN_FUSION" = 0 ] || ENVLINE="export DN_INSTDIR=\"$INSTDIR\""
+
 # Wrap $name -> $real. Wrapper type depends on the target: an ELF is handed
 # to dn-run for launch-time classification; a #! script is run through the
 # glibc shell wrappers (so its own hardcoded paths are covered and its
@@ -76,11 +82,13 @@ wrap() {
     if grep -qxF "$real" "$DIRECT_LIST"; then
       cat > "$tmp" <<EOF
 #!/system/bin/sh
+$ENVLINE
 exec "$LAUNCHDIR/../dn-run" --trace "$real" "\$@"
 EOF
     else
       cat > "$tmp" <<EOF
 #!/system/bin/sh
+$ENVLINE
 exec "$LAUNCHDIR/../dn-run" "$real" "\$@"
 EOF
     fi
