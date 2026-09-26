@@ -93,3 +93,12 @@ cat > "$BINDIR/update-alternatives" <<EOF
 exec "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" "\$@"
 EOF
 chmod 755 "$BINDIR/update-alternatives"
+# dpkg-divert has the same shape of bug: under DPKG_ROOT (which dpkg exports
+# to maintainer scripts from --instdir) it joins DPKG_ROOT with its own
+# compiled-in absolute admindir -- traced: it opens
+# $PREFIX$PREFIX/var/lib/dpkg/diversions. base-files' preinst calls it.
+cat > "$BINDIR/dpkg-divert" <<EOF
+#!/system/bin/sh
+exec "$PREFIX_DIR/bin/dpkg-divert" --admindir "$INSTDIR/var/lib/dpkg" --instdir "$INSTDIR" "\$@"
+EOF
+chmod 755 "$BINDIR/dpkg-divert"

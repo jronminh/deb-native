@@ -63,6 +63,15 @@ if [ -f "$CONFFILES" ]; then
   sed -i 's#^/usr/#/#' "$CONFFILES"
 fi
 
+# Tier-2 customizations (docs/debian-mode.md): a package that needs a
+# Debian-mode-specific change gets it from debian-mode-custom/<package>.sh.
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PKGNAME=$(sed -n 's/^Package: //p' "$WORK/pkg/DEBIAN/control")
+if [ -x "$HERE/debian-mode-custom/$PKGNAME.sh" ]; then
+  "$HERE/debian-mode-custom/$PKGNAME.sh" "$WORK/pkg"
+  echo "fuse-repack: applied debian-mode-custom/$PKGNAME.sh"
+fi
+
 # Debian mode index rule, applied to the package itself (docs/debian-mode.md):
 # apt planned this package as arm64 from the rewritten index, so dpkg must
 # record it as arm64 too, never as "all" (= Termux's native side).
