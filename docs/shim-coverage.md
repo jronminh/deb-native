@@ -156,6 +156,11 @@ the cleaner general fix. In practice most lookups just resolve the current
 uid/gid or hostnames, where the real `/etc` (and Android's DNS) is often
 what you want anyway.
 
+**Resolved 2026-09-26:** the tracer route is wired in `native/dn-run.c` and
+the actual fix is a bind of the prefix's `/etc` over Termux glibc's
+**sysconfdir** `$PREFIX/glibc/etc` (where NSS reads, not the guest `/etc`).
+See `syscall-boundary.md`, "Solved: NSS", and `tests/tracer-nss/run.sh`.
+
 **Out of scope, deliberately:** `mount` (0/1), `umount2` (0/1), `chroot`
 (1/1) are admin operations; redirecting them is neither possible nor wanted.
 

@@ -4,12 +4,14 @@
  *   dn-run REAL [args...]
  * and this decides, at launch, which mechanism REAL needs:
  *
- *   glibc  -> LD_PRELOAD the path-redirect shim (+ DN_INSTDIR, PATH), exec
- *   bionic -> exec untouched (Termux's own libc; keep termux-exec preload)
- *   static -> exec `proot -b <host>:<guest> ... REAL` -- a syscall-level
- *             path rewrite, the only layer that sees a static binary or a
- *             raw syscall() (route #2; swap for our own tracer later)
- *   other  -> exec untouched
+ *   glibc      -> LD_PRELOAD the path-redirect shim (+ DN_INSTDIR, PATH), exec
+ *   glibc + NSS -> syscall tracer: statically-bound libc NSS reads are
+ *             invisible to the shim, and Termux glibc's sysconfdir is a host
+ *             path, so bind $INSTDIR/etc over it
+ *   bionic     -> exec untouched (Termux's own libc; keep termux-exec preload)
+ *   static     -> syscall tracer `-b <host>:<guest>` -- the only layer that
+ *             sees a static binary or a raw syscall() (route #2)
+ *   other      -> exec untouched
  *
  * Classification is done in-process by reading REAL's ELF PT_INTERP, so a
  * launch costs no extra fork beyond this dispatcher itself. INSTDIR comes
@@ -56,7 +58,44 @@ static int derive_instdir(char *out, size_t sz) {
 
 enum { C_NOTELF, C_GLIBC, C_BIONIC, C_DYNOTHER, C_STATIC };
 
-static int classify(const char *path) {
+/* Does the ELF import an NSS entry point (getpwnam, getaddrinfo, ...)?  Those
+ * lookups go through statically-bound libc symbols the LD_PRELOAD shim cannot
+ * reach, so such a binary must run under the syscall tracer.  The scan is a
+ * conservative raw string search: a false positive only costs tracer overhead,
+ * never correctness. */
+static int has_nss_import(int fd) {
+  static const char *names[] = {
+    "getpwnam", "getpwuid", "getgrnam", "getgrgid", "getspnam", "getspent",
+    "getaddrinfo", "gethostbyname", "gethostbyaddr", "getservbyname",
+    "getservbyport", "getnetbyname", "getprotobyname", "initgroups",
+    "getaliasbyname", "gethostent", NULL
+  };
+  struct stat st;
+  char *buf;
+  ssize_t off = 0, r;
+  int i, found = 0;
+
+  if (fstat(fd, &st) != 0 || st.st_size <= 0 || st.st_size > 64 * 1024 * 1024)
+    return 0;
+  buf = malloc((size_t)st.st_size);
+  if (!buf)
+    return 0;
+  while (off < st.st_size &&
+         (r = pread(fd, buf + off, (size_t)(st.st_size - off), off)) > 0)
+    off += r;
+  if (off == st.st_size) {
+    for (i = 0; names[i]; i++) {
+      if (memmem(buf, (size_t)st.st_size, names[i], strlen(names[i])) != NULL) {
+        found = 1;
+        break;
+      }
+    }
+  }
+  free(buf);
+  return found;
+}
+
+static int classify(const char *path, int *nss) {
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0) return C_NOTELF;
   Elf64_Ehdr eh;
@@ -76,9 +115,16 @@ static int classify(const char *path) {
     char in[512];
     if (pread(fd, in, ph.p_filesz, ph.p_offset) != (ssize_t)ph.p_filesz) continue;
     in[ph.p_filesz] = '\0';
+    if (strstr(in, "ld-linux")) {
+      *nss = has_nss_import(fd);
+      close(fd);
+      return C_GLIBC;
+    }
+    if (strstr(in, "linker")) {
+      close(fd);
+      return C_BIONIC;
+    }
     close(fd);
-    if (strstr(in, "ld-linux")) return C_GLIBC;
-    if (strstr(in, "linker")) return C_BIONIC;
     return C_DYNOTHER;
   }
   close(fd);
@@ -116,25 +162,46 @@ static void launch_glibc(char **args) {
   die("execv");
 }
 
-/* Route #2: syscall-level rewrite. proot -b maps the guest /usr,/etc,... onto
- * the prefix for the whole traced tree, which is why it reaches static
- * binaries and raw syscalls the libc shim cannot. Only dirs that exist are
- * bound -- proot errors on a missing host path. */
-static void launch_static(char **args) {
-  char proot[4096];
-  snprintf(proot, sizeof proot, "%s/bin/proot", termux_prefix());
+/* Route #2: syscall-level rewrite. A tracer (fork-lite `dn-trace`, else
+ * Termux `proot`) maps the guest /usr,/etc,... onto the prefix for the whole
+ * traced tree, which is why it reaches static binaries, raw syscalls, and the
+ * libc-internal NSS reads the libc shim cannot. Only dirs that exist are bound
+ * -- proot errors on a missing host path.
+ *
+ * nss=1 adds one more bind: Termux's glibc reads its sysconfdir at
+ * $PREFIX/glibc/etc (a host path outside the prefix), so NSS reads
+ * (/etc/passwd, /etc/hosts, ...) never hit the guest /etc. Bind the prefix's
+ * /etc over it so those lookups resolve in the prefix. */
+static void launch_trace(char **args, int nss) {
+  char tracer[4096];
+  const char *e = getenv("DN_TRACE");
   struct stat st;
-  if (stat(proot, &st) != 0) {
-    fprintf(stderr, "dn-run: proot not found at %s; running unredirected\n", proot);
-    execv(args[0], args);
-    die("execv");
+
+  if (e && *e)
+    snprintf(tracer, sizeof tracer, "%s", e);
+  else
+    snprintf(tracer, sizeof tracer, "%s/usr/lib/deb-native/dn-trace", instdir);
+  if (stat(tracer, &st) != 0) {
+    snprintf(tracer, sizeof tracer, "%s/bin/proot", termux_prefix());
+    if (stat(tracer, &st) != 0) {
+      fprintf(stderr, "dn-run: no tracer (dn-trace/proot); running unredirected\n");
+      execv(args[0], args);
+      die("execv");
+    }
   }
+
   set_path();
+  setenv("DN_INSTDIR", instdir, 1);
+  /* A glibc tracee must not inherit termux-exec/our shim: the tracer rewrites
+   * at the syscall layer; a Bionic preload would be the wrong libc. */
+  if (nss)
+    unsetenv("LD_PRELOAD");
+
   static char *pargv[4096];
-  static char binds[8][8192];
+  static char binds[10][8192];
   const char *dirs[] = { "usr", "etc", "var", "opt", "bin", "sbin", NULL };
   int n = 0;
-  pargv[n++] = proot;
+  pargv[n++] = tracer;
   for (int i = 0; dirs[i] && n < 4080; i++) {
     char host[4096];
     snprintf(host, sizeof host, "%s/%s", instdir, dirs[i]);
@@ -143,12 +210,23 @@ static void launch_static(char **args) {
     pargv[n++] = (char *)"-b";
     pargv[n++] = binds[i];
   }
+  if (nss && n < 4078) {
+    static char getc_bind[8192];
+    char host_etc[4096];
+    snprintf(host_etc, sizeof host_etc, "%s/etc", instdir);
+    if (stat(host_etc, &st) == 0) {
+      snprintf(getc_bind, sizeof getc_bind, "%s/etc:%s/glibc/etc",
+               instdir, termux_prefix());
+      pargv[n++] = (char *)"-b";
+      pargv[n++] = getc_bind;
+    }
+  }
   int ac = 0;
   while (args[ac]) ac++;
   for (int i = 0; i < ac && n < 4090; i++) pargv[n++] = args[i];
   pargv[n] = NULL;
-  execv(proot, pargv);
-  die("execv proot");
+  execv(tracer, pargv);
+  die("execv tracer");
 }
 
 int main(int argc, char **argv) {
@@ -164,9 +242,13 @@ int main(int argc, char **argv) {
   }
 
   char **args = &argv[1];
-  switch (classify(args[0])) {
-    case C_GLIBC:  launch_glibc(args);  break;
-    case C_STATIC: launch_static(args); break;
+  int nss = 0;
+  switch (classify(args[0], &nss)) {
+    case C_GLIBC:
+      if (nss) launch_trace(args, 1);
+      else     launch_glibc(args);
+      break;
+    case C_STATIC: launch_trace(args, 0); break;
     default:       execv(args[0], args); die("execv"); break;
   }
   return 127;

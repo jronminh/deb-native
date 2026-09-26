@@ -44,7 +44,10 @@ replace the view's path-resolution job.
 ## Current state (2026-09-26)
 
 - Libc shim finished at its layer; `tests/shim-libc/run.sh` passes (46
-  rewrites). NSS/raw-syscall/static are the documented boundary.
+  rewrites). **NSS (case 2) is now solved** by the tracer route plus a bind of
+  the prefix `/etc` over Termux glibc's sysconfdir (`dn-run.c` routes a
+  glibc+NSS ELF through `dn-trace`; `tests/tracer-nss/run.sh` passes).
+  Raw-`syscall()`/static stay the tracer's job.
 - **fork-lite** (`tracer/`): proot base imported and pruned — extensions
   removed (framework kept) and made AArch64-only. It **builds on `fe2`**
   (`make CC=clang`, needs `libtalloc`) and a static binary reads through a

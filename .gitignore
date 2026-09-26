@@ -1,5 +1,6 @@
 native/*.so
 tests/shim-libc/test
+tests/tracer-nss/nss-probe
 tracer/**/*.o
 tracer/**/*.d
 tracer/proot

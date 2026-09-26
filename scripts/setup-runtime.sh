@@ -47,6 +47,15 @@ if [ ! -x "$LIBDIR/dn-run" ] || [ "$SRC/dn-run.c" -nt "$LIBDIR/dn-run" ]; then
   chmod 755 "$LIBDIR/dn-run"
 fi
 
+# The syscall tracer (fork-lite) used for static binaries and glibc NSS. Built
+# from tracer/ (`make CC=clang`, needs libtalloc); install a prebuilt one if
+# present, otherwise dn-run falls back to Termux's proot.
+TRACER_SRC="$HERE/../tracer/proot"
+if [ -x "$TRACER_SRC" ] && { [ ! -x "$LIBDIR/dn-trace" ] || [ "$TRACER_SRC" -nt "$LIBDIR/dn-trace" ]; }; then
+  cp -f "$TRACER_SRC" "$LIBDIR/dn-trace"
+  chmod 755 "$LIBDIR/dn-trace"
+fi
+
 # Build the launcher. One binary, dispatched by its own argv[0] basename.
 if [ ! -x "$BINDIR/dn-shell" ] || [ "$SRC/dn-launch.c" -nt "$BINDIR/dn-shell" ]; then
   clang -O2 -o "$BINDIR/dn-shell" "$SRC/dn-launch.c"

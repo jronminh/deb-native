@@ -55,6 +55,23 @@ it instead of building a tracer first. Two caveats, both already visible:
 `ptrace` overhead on every syscall, and `proot`'s bind model errors on a
 missing host path (`dn-run.c`'s comment).
 
+## Solved (2026-09-26): NSS, case 2
+
+Measured on `fe2`: the missing piece was not the syscall layer but the *path*.
+`PROOT_VERBOSE=2` shows Termux's glibc reads its **sysconfdir**
+`$PREFIX/glibc/etc/passwd` — a host path outside the prefix — not the guest
+`/etc/passwd`. So neither the LD_PRELOAD shim nor a plain `/etc` bind reaches
+it, which is why `getpwnam` returned `NOTFOUND` even under `proot`.
+
+Fix: on the NSS route, bind the prefix's `/etc` over Termux glibc's sysconfdir
+(`-b $INSTDIR/etc:$PREFIX/glibc/etc`). Then `getpwnam("dnshim")` resolves in
+the prefix. `native/dn-run.c` now gives a glibc ELF an **NSS-import attribute**
+(scan for `getpwnam`/`getpwuid`/`getaddrinfo`/… in the binary) and routes it
+through the tracer (`dn-trace`, else Termux `proot`) with that bind; static
+binaries take the tracer route too. Verified by `tests/tracer-nss/run.sh`
+(PASS). glibc still synthesizes `root`/`nobody`/Android uids; the bind only
+makes the prefix's `passwd`, `group`, `hosts`, `resolv.conf` authoritative.
+
 ## Method
 
 `scripts/scan-direct-syscalls.py` reports the cases above: it parses the ELF,

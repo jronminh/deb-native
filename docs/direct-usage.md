@@ -131,6 +131,8 @@ tracer that makes the no-`proot` ideal true (option 3).
 | 2026-09-26 | fork-lite phase 1: build stock `termux/proot` on `fe2` | builds with Termux clang + `libtalloc`; `proot -b $R/etc:/etc busybox cat /etc/dn-test` prints the fake file | foundation validated — a static binary redirected at the syscall layer; pruning can start |
 | 2026-09-26 | fork-lite: prune the extension suite | 50 files / ~9k lines removed; framework `extension.c` kept; still builds (221 KB) and the static bind still works | 1.3 M → 888 K; next is multi-arch |
 | 2026-09-26 | fork-lite: arm64-only prune | `arch.h` hard-errors on non-aarch64; 32-bit ARM ABI, `-m32` loader + makefile rules, and other-arch `sysnums-*.h`/`assembly-*.h` removed | builds (213 KB), static bind works; next is the `cli/` → binder rewrite |
+| 2026-09-26 | fork-lite: bind-only fast path | normalize + prefix-substitute instead of per-component `lstat`; `..` falls back to canonicalize | `ls -lR` stat loop ~1.6x (`scripts/bench-tracer.sh`); see `bind-only.md` |
+| 2026-09-26 | NSS (case 2): `PROOT_VERBOSE=2` under `proot` | glibc reads its **sysconfdir** `$PREFIX/glibc/etc/passwd`, not guest `/etc/passwd` — shim and a plain `/etc` bind both miss it | fix = bind `$INSTDIR/etc:$PREFIX/glibc/etc`; `dn-run.c` routes glibc+NSS to the tracer; `tests/tracer-nss` PASS |
 
 ## Working notes
 
