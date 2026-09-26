@@ -38,10 +38,11 @@ mechanisms each step installs are documented in
    unpack / `patch-elfs` / re-patch scripts / configure **one package at a
    time in apt's order** (strict Pre-Depends like base-files→awk need this).
 
-5. **Finalize and activate.** `make-launchers.sh` (wrappers; now also tags
-   NSS and direct-syscall binaries), `make-apt-wrappers.sh` (arch-aware
-   apt/dpkg), `dn-activate.sh` (PATH). `install.sh` then runs
-   `normalize-symlinks.sh` for the bind-only tracer.
+5. **Finalize and activate.** `make-launchers.sh` (wrappers; also tags NSS and
+   direct-syscall binaries), `make-apt-wrappers.sh` (arch-aware apt/dpkg),
+   `dn-activate.sh` (PATH), and `normalize-symlinks.sh`. Normalization runs
+   from **`apt-hook-post.sh`** and from `apt-install.sh`, so any apt/dpkg
+   install — not just `install.sh` — keeps the tree bind-only-safe.
 
 6. **Now `apt-get install` works.** The apt.conf hooks
    (`setup-apt-prefix.sh:67-68`, `DPkg::Pre-Install-Pkgs` / `Post-Invoke`) keep
@@ -64,6 +65,24 @@ mechanisms each step installs are documented in
 One-liner: **runtime (shim + `dn-run` + tracer) → auto-patch each `.deb` →
 seed native glibc deps → bootstrap base in one transaction → wire
 launchers/apt/PATH → any `apt-get install` works.**
+
+## The apt/dpkg hooks
+
+`setup-apt-prefix.sh` wires two hooks into `apt.conf`
+(`DPkg::Pre-Install-Pkgs` / `DPkg::Post-Invoke`); the generated `dpkg` wrapper
+calls the same two scripts for a direct `dpkg -i`:
+
+- **`apt-hook-pre.sh`** — builds the runtime (`setup-runtime.sh`) and patches
+  every `.deb` (`patch-deb.sh`) *before* dpkg unpacks it.
+- **`apt-hook-post.sh`** — `patch-elfs.sh` → `normalize-symlinks.sh` →
+  `make-launchers.sh`. Never fails the transaction.
+
+`normalize-symlinks.sh` was **added to the post hook (2026-09-26)**: the
+bind-only tracer needs a normalized tree, and without it an apt/dpkg install
+that did not go through `install.sh` left absolute symlinks the tracer would
+resolve against the real host root. Verified: `apt-get install sysvbanner`
+through the wrapper logs the patch, the normalize, and the launcher regen, and
+`banner` then runs by name.
 
 ## End-to-end test
 

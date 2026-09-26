@@ -77,6 +77,8 @@ dpkg --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
 # ELF interpreter) copy -- found the hard way with dash.
 rm -f "$ARCHIVES"/*.deb
 
-# Generate/refresh launcher wrappers for every program now in the prefix,
-# so it runs by name (scripts/make-launchers.sh).
+# Normalize absolute symlinks so the bind-only tracer resolves them inside
+# the prefix (docs/bind-only.md), then generate/refresh launcher wrappers for
+# every program now in the prefix (scripts/make-launchers.sh).
+"$HERE/normalize-symlinks.sh" "$NEWPREFIX/root"
 "$HERE/make-launchers.sh" "$NEWPREFIX/root"
