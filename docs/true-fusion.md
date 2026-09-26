@@ -1,5 +1,24 @@
 # True fusion: Termux's prefix transformed into a Debian arm64 system
 
+> [!CAUTION]
+> **One-way, experimental, and far less safe than `main`.** `main` installs
+> Debian into its own prefix (`~/.dn`) beside Termux: a bad package breaks
+> only that prefix, deleting it restores Termux exactly, and Termux keeps
+> its repos and updates. True fusion installs Debian packages *into
+> Termux's own `$PREFIX`*, sharing Termux's dpkg database, and every Debian
+> maintainer script runs with write access to Termux's live system. The
+> worst case is not "a Debian program fails" but "Termux itself breaks";
+> near misses already hit in testing: `awk` broken system-wide by a `mawk`
+> reinstall, `main`'s runtime setup about to overwrite Termux's own
+> `chown`/`chgrp`/`update-alternatives`, and doubled
+> `$PREFIX/data/data/...` paths from `update-alternatives`/`dpkg-divert`.
+> Protection here is guards (floor guard, collision check, pins, holds),
+> not separation. There is no switch back: the backup restores dpkg/apt
+> state, not every file packages wrote into `$PREFIX`, and Termux's floor
+> packages (`apt`, `openssl`, `curl`, glibc) get no updates, security
+> fixes included, until phase 3. Use `main` unless you want exactly this
+> trade, and only on a device/Termux install you can wipe.
+
 Experiment on the `fusion-debian-mode` branch (built on `fusion-no-prefix`).
 Termux's own prefix is transformed, **one way**, into a Debian `arm64`
 system: Debian becomes apt's only source, Debian packages are installed
