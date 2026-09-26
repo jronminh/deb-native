@@ -1,7 +1,7 @@
 # dpkg multi-arch mechanics: what they are, and what they aren't
 
 Reference doc, shared across both the classic (separate-prefix) design and
-the true fusion branch (`fusion-debian-mode`, formerly `fusion-debian-mode`) — the mechanics here are dpkg's own, and
+the true fusion branch (`fusion-debian-mode`, formerly `fusion-no-prefix`) — the mechanics here are dpkg's own, and
 apply identically regardless of which install strategy is on top of them.
 Written after a real, live incident on the fusion branch (`docs/
 findings.md` there, "Cross-check: a second, genuinely different package")
