@@ -39,9 +39,9 @@ awk 'body { print } /^$/ { body = 1 }' > "$PLAN"
 refused=""
 while read -r pkg ov oa oma cmp nv na nma action; do
   [ -n "$pkg" ] || continue
-  # Something Termux's (old arch not arm64, and not "none" = new install)
+  # Something Termux's (old arch not arm64; "-" or "none" = new install)
   # being removed or replaced by another architecture.
-  if [ "$oa" != none ] && [ "$oa" != arm64 ]; then
+  if [ "$oa" != - ] && [ "$oa" != none ] && [ "$oa" != arm64 ]; then
     case "$action" in
       '**REMOVE**') refused="$refused $pkg:$oa(remove)" ;;
       '**CONFIGURE**') ;;
