@@ -1,5 +1,7 @@
 # deb-native
 
+![status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)
+
 **Termux, made into a Debian you can install into.** Real `arm64` Debian
 `.deb` packages — installed with `apt`/`dpkg`, run by name — inside Termux,
 with **no root, no kernel namespaces, and no proot/container**.
@@ -9,6 +11,12 @@ fuses two things Termux already has — its own `apt`/`dpkg` and its glibc
 side-install — with a small **shim we build ourselves** that fakes the one
 thing Debian assumes and Android lacks: a writable `/usr`, `/etc`, `/var`,
 `/opt`.
+
+> [!WARNING]
+> **Pre-alpha.** Experimental and unaudited. It installs software outside
+> Termux's own package management, the interface and on-disk layout may change
+> without notice, and it can break your Termux setup. Use a throwaway
+> Termux/device until it stabilizes.
 
 > [!CAUTION]
 > **AI-assisted and unaudited.** The scripts, shim and docs were written with
@@ -36,7 +44,7 @@ root, no proot, no chroot:
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 
-Status: **working prototype** (2026-09-26). A fresh prefix bootstraps the
+Status: **pre-alpha** (2026-09-26). A fresh prefix bootstraps the
 full Debian base set (28 packages, all `Status: install ok installed`) and
 installs leaf packages on top of it. See [Status](#status) for what works
 and [Roadmap](TODO.md) for what is next.
@@ -210,24 +218,41 @@ a different prefix. Under the hood:
 
 ## Status
 
-The base environment and install path are solid; the run/integrate/service
-half is still being built. Coverage is measured the way `sudo-less` measures
-its own — a random per-section sample (see `docs/survey*.md`); the last
-number predates the base-env fix and is being re-measured. The full,
-chronological engineering log — including every dead end and the syscall
-evidence — is in [`docs/`](docs/).
+**Pre-alpha.** The base environment and install path are solid; the
+run/integrate/service half is still being built, and the syscall tracer is
+mid-rewrite (`tracer/`). The libc shim's coverage is measured against a
+section-scoped corpus ([`docs/shim-coverage.md`](docs/shim-coverage.md)); what
+lies beyond it is mapped in
+[`docs/syscall-boundary.md`](docs/syscall-boundary.md) with the live plan in
+[`docs/direct-usage.md`](docs/direct-usage.md), and package scope is
+[`docs/standard.md`](docs/standard.md). The chronological engineering log —
+every dead end and the syscall evidence — is in
+[`docs/findings.md`](docs/findings.md).
 
-Next steps are tracked in [`TODO.md`](TODO.md).
+A `termux-dn-doctor` command checks (and with `--fix`, repairs) the common
+breakages — a leaked `APT_CONFIG`, a clobbered Termux `sources.list`, stale
+wrappers. Next steps are tracked in [`TODO.md`](TODO.md).
 
 ## Documentation
 
 - [`docs/design.md`](docs/design.md) — how it works end to end: faking the
   Debian layout, native dependency reuse, the install path, run-time
   wrappers, the apt/dpkg hooks, services, and prior art.
+- [`docs/standard.md`](docs/standard.md) — the package scope (Debian-section
+  based triage: `user` / `admin` / `never`).
+- [`docs/shim-coverage.md`](docs/shim-coverage.md) — measured libc-shim
+  coverage against a 258-package corpus, and what is left.
+- [`docs/syscall-boundary.md`](docs/syscall-boundary.md) — the cases libc
+  interposition cannot reach.
+- [`docs/direct-usage.md`](docs/direct-usage.md) — the live investigation and
+  the **fork-lite** tracer plan.
 - [`docs/findings.md`](docs/findings.md) — the engineering log (every dead
   end, and the syscall evidence behind the decisions).
 - [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) — the method, side by side
   with `sudo-less`.
+- [`tracer/README.md`](tracer/README.md) — the reduced proot (`fork-lite`),
+  its origin and prune status.
+- [`TODO.md`](TODO.md) — roadmap; [`AGENTS.md`](AGENTS.md) — repo conventions.
 
 ## Prior art / credit
 
