@@ -8,6 +8,7 @@
 # Usage: dn-activate.sh INSTDIR
 set -eu
 INSTDIR=${1:?usage: dn-activate.sh INSTDIR}
+case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 LAUNCHDIR="$INSTDIR/usr/lib/deb-native/bin"
 RC=${DN_BASHRC:-$HOME/.bashrc}
 MARK="# deb-native launchers (managed)"

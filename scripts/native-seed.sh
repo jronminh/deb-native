@@ -15,6 +15,7 @@
 
 set -eu
 ADMINDIR=${1:?usage: native-seed.sh ADMINDIR}
+case "$ADMINDIR" in /*) ;; *) ADMINDIR="$PWD/$ADMINDIR" ;; esac
 GLIBC_ROOT=${DN_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
 mkdir -p "$ADMINDIR"
 

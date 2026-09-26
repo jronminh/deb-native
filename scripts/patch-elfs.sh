@@ -12,6 +12,7 @@
 # Usage: patch-elfs.sh ROOT
 set -eu
 ROOT=${1:?usage: patch-elfs.sh ROOT}
+case "$ROOT" in /*) ;; *) ROOT="$PWD/$ROOT" ;; esac
 
 find "$ROOT" -type f -perm -u+x 2>/dev/null |
   while IFS= read -r f; do

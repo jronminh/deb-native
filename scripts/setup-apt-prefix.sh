@@ -17,6 +17,7 @@
 # as-is — see "Open work" in docs/design.md.
 set -eu
 NEWPREFIX=${1:?usage: setup-apt-prefix.sh NEWPREFIX [suite]}
+case "$NEWPREFIX" in /*) ;; *) NEWPREFIX="$PWD/$NEWPREFIX" ;; esac
 SUITE=${2:-stable}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/.." && pwd)

@@ -23,6 +23,7 @@
 # Usage: bootstrap-base.sh NEWPREFIX
 set -eu
 NEWPREFIX=${1:?usage: bootstrap-base.sh NEWPREFIX}
+case "$NEWPREFIX" in /*) ;; *) NEWPREFIX="$PWD/$NEWPREFIX" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 # base-files/base-passwd: the actual Priority:required packages that ship

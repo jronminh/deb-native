@@ -21,6 +21,7 @@
 # Usage: setup-runtime.sh INSTDIR
 set -eu
 INSTDIR=${1:?usage: setup-runtime.sh INSTDIR}
+case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SRC="$HERE/../native"
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}

@@ -24,6 +24,7 @@ for a in "$@"; do
     *) DN_PREFIX=$a ;;
   esac
 done
+case "$DN_PREFIX" in ""|/*) ;; *) DN_PREFIX="$PWD/$DN_PREFIX" ;; esac
 
 if [ -z "$DN_PREFIX" ]; then
   old_ifs=$IFS; IFS=:

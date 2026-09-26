@@ -18,6 +18,7 @@
 set -eu
 DEB=${1:?usage: patch-deb.sh DEB_FILE INSTDIR}
 INSTDIR=${2:?usage: patch-deb.sh DEB_FILE INSTDIR}
+case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 # The maintainer-script runtime (glibc bash + shim + no-op chown/chgrp) comes

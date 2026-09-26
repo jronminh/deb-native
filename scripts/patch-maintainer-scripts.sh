@@ -38,6 +38,8 @@
 set -eu
 ADMINDIR=${1:?usage: patch-maintainer-scripts.sh ADMINDIR INSTDIR}
 INSTDIR=${2:?usage: patch-maintainer-scripts.sh ADMINDIR INSTDIR}
+case "$ADMINDIR" in /*) ;; *) ADMINDIR="$PWD/$ADMINDIR" ;; esac
+case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 "$HERE/setup-runtime.sh" "$INSTDIR"
 WRAPPER="$INSTDIR/usr/bin/dn-shell"

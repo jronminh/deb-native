@@ -16,6 +16,7 @@
 # Usage: make-apt-wrappers.sh INSTDIR
 set -eu
 INSTDIR=${1:?usage: make-apt-wrappers.sh INSTDIR}
+case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
 DNPREFIX=$(dirname "$INSTDIR")

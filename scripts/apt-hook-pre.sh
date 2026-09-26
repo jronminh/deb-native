@@ -12,6 +12,7 @@
 # Usage: apt-hook-pre.sh NEWPREFIX [DEB...] < DEB-LIST
 set -eu
 NEWPREFIX=${1:?usage: apt-hook-pre.sh NEWPREFIX [DEB...]}
+case "$NEWPREFIX" in /*) ;; *) NEWPREFIX="$PWD/$NEWPREFIX" ;; esac
 shift || true
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT="$NEWPREFIX/root"

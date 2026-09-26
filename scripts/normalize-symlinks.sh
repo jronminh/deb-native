@@ -12,6 +12,7 @@
 set -eu
 
 ROOT=${1:?usage: normalize-symlinks.sh PREFIX_ROOT}
+case "$ROOT" in /*) ;; *) ROOT="$PWD/$ROOT" ;; esac
 BOUND="usr etc var opt bin sbin"
 
 [ -d "$ROOT" ] || exit 0

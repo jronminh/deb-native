@@ -8,6 +8,7 @@
 # Usage: apt-hook-post.sh NEWPREFIX
 set -eu
 NEWPREFIX=${1:?usage: apt-hook-post.sh NEWPREFIX}
+case "$NEWPREFIX" in /*) ;; *) NEWPREFIX="$PWD/$NEWPREFIX" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT="$NEWPREFIX/root"
 LOG="$NEWPREFIX/var/log/deb-native-hook.log"

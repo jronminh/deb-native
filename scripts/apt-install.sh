@@ -19,6 +19,7 @@
 # Usage: apt-install.sh $NEWPREFIX package [package...]
 set -eu
 NEWPREFIX=${1:?usage: apt-install.sh NEWPREFIX package...}
+case "$NEWPREFIX" in /*) ;; *) NEWPREFIX="$PWD/$NEWPREFIX" ;; esac
 shift
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ARCHIVES="$NEWPREFIX/var/cache/apt/archives"
