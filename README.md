@@ -19,13 +19,13 @@ runs by name.
 
 ```sh
 # pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.0.2-prealpha/install.sh | DEB_NATIVE_REF=v0.0.2-prealpha sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.0.3-prealpha/install.sh | DEB_NATIVE_REF=v0.0.3-prealpha sh
 
 exec bash          # or: . ~/.bashrc
 figlet hi          # an installed program, run by name
 ```
 
-Or the rolling edge: replace both `v0.0.1-prealpha` occurrences with `main`.
+Or the rolling edge: replace both `v0.0.3-prealpha` occurrences with `main`.
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 
