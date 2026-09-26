@@ -68,8 +68,15 @@ int main(int argc, char **argv) {
   if (fuse) {
     snprintf(inst, sizeof inst, "%s", fuse_instdir);
     snprintf(shim, sizeof shim, "%s", fuse_shim);
-    snprintf(path, sizeof path, "%s/bin:%s/games:%s/glibc/bin:%s/bin",
-             inst, inst, pfx, pfx);
+    /* fusion-bin comes first: it holds wrappers (scripts/fuse-runtime.sh)
+     * for commands that are DPKG_ROOT-aware but ALSO have a compiled-in
+     * absolute --altdir/--admindir-style default (update-alternatives --
+     * docs/findings.md, "Bug 4"). $inst/bin here IS Termux's own real bin/
+     * (fusion mode has no separate sandbox tree), so such a wrapper must
+     * live somewhere that never collides with -- or shadows -- Termux's
+     * own real binaries; it is not $inst/bin itself. */
+    snprintf(path, sizeof path, "%s/lib/deb-native/fusion-bin:%s/bin:%s/games:%s/glibc/bin:%s/bin",
+             inst, inst, inst, pfx, pfx);
     setenv("DN_FUSE_USR", "1", 1);
   } else {
     snprintf(inst, sizeof inst, "%s", self);

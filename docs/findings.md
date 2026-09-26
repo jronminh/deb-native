@@ -1120,3 +1120,191 @@ uniformly. The only libc-layer alternative — interposing the public
 partial reimplementation and not worth it against the tracer. So the shim is
 complete at its layer; the remaining gaps all belong to the tracer.
 
+## Findings: fusion-no-prefix, `update-alternatives` doesn't get the shim (2026-09-26)
+
+`fusion-no-prefix` (branch) drops the separate sandboxed prefix entirely:
+packages install straight into Termux's own live `$PREFIX`, via Termux's own
+real `dpkg` with `arm64` added as a foreign architecture
+(`dpkg --add-architecture arm64`). Tested by hand against `figlet:arm64`
+(has maintainer scripts; `sysvbanner:arm64`, no scripts, already installs
+and runs cleanly with zero extra steps — the baseline this compares
+against).
+
+### Bug 1: `dpkg --configure` crashes with SIGSYS — dpkg's own `chroot()`
+
+`strace -f` on a hung `-i` traced it exactly: the crashing process calls
+`chroot()` before running the postinst, and Android's seccomp filter always
+blocks `chroot()` regardless of uid. Fix: pass `--force-script-chrootless`
+to `dpkg`. Confirmed: the crash is gone and the postinst runs.
+
+### Bug 2: `dn-launch`'s self-location math is wrong for a flat prefix
+
+`dn-launch.c` derives `$INSTDIR` two ways: an explicit override
+(`DN_INSTDIR` + `DN_FUSE_SHIM` env vars, trusted completely) or, absent
+those, `/proc/self/exe` with three path components stripped — math written
+for the classic design's own `$INSTDIR/usr/bin/dn-shell` layout. Fusion mode
+has no such nested tree (the postinst's interpreter binary lived directly
+under a test scratchpad dir), so the fallback computes a nonsense path and
+the maintainer script's own subprocesses fail to load the shim (`CANNOT LINK
+EXECUTABLE ... library ... not found`). The explicit-override path already
+exists for exactly this reason (see the comment above it in
+`native/dn-launch.c`) — it just has to actually be used: export
+`DN_INSTDIR="$PREFIX"` and `DN_FUSE_SHIM=<path to path-redirect.so>` before
+invoking `dpkg --configure`, don't rely on the fallback.
+
+### Non-bug, confirmed by reading the code first: no second shim is needed
+
+Both `dpkg` and `update-alternatives` on Termux are its own native Bionic
+builds (`file`: `interpreter /system/bin/linker64, built by NDK r27`), not
+glibc — confirmed before touching anything further, per the standing rule
+about researching a tool's real behavior before probing it live. This
+matters because `path-redirect.so` is a glibc-only `LD_PRELOAD` shim; the
+existing `execve()` dispatch in `native/path-redirect.c` already detects a
+non-glibc exec target (`target_is_glibc()`) and strips `LD_PRELOAD` before
+handing it to a Bionic child (`bionic_env()`) — by design, not a gap.
+`update-alternatives` runs with no shim at all, and that's correct: the
+"two shims, static vs. dynamic" split the classic design needed is already
+just this one dispatch, reused as-is.
+
+### Bug 3: `update-alternatives` needs a real nested `usr/`, and fusion mode has none
+
+With bug 1 and 2 fixed, the postinst's
+`update-alternatives --install /usr/bin/figlet figlet /usr/bin/figlet-figlet …`
+still hard-failed:
+
+```
+update-alternatives: error: alternative path /data/data/com.termux/files/usr/usr/bin/figlet-figlet doesn't exist
+```
+
+— a **doubled** `usr/usr`, from `update-alternatives` joining its own root
+(`$PREFIX`, i.e. `DPKG_ROOT`, which dpkg auto-exports to maintainer scripts
+from `--instdir`) with the literal `/usr/bin/figlet-figlet` argument the
+(unmodified) Debian postinst script passes. The classic design and
+`sudo-less` never hit this: both give the prefix a *real* nested `usr/`
+(`sudo-less` via a mount-namespace view where `$PREFIX/usr` and `/usr` are
+bind-mounted to the same tree; the classic prefix design lays one out on
+disk), so the join was always valid there. Fusion mode's whole premise is no
+nested `usr/` — this is the one place that premise collides with a
+Termux-native tool's own path handling, and no `LD_PRELOAD` shim can catch
+it (previous section).
+
+**Fix, reusing what already works instead of patching dpkg-native tools**:
+`ln -s . "$PREFIX/usr"` — a self-referential symlink. `$PREFIX/usr/bin/x`
+now really does resolve to `$PREFIX/bin/x` on disk, no code changes
+anywhere. With that in place, the same `dpkg --configure figlet` run
+completes with no error and `Status: install ok installed`.
+
+### Bug 4 (root-caused via `strace`, not guessed): the alternative was still functionally dangling
+
+Even on the clean "installed" run, `$PREFIX/bin/figlet` (created via the
+`usr` symlink) pointed at `$PREFIX/etc/alternatives/figlet`, and that target
+was never created. Flag-probing `update-alternatives --list`/`--display`
+by hand gave inconsistent errors depending on `--root`/`DPKG_ROOT` — the
+wrong way to chase this (this repo's own standing rule: research a tool's
+real behavior before probing it live), so this was re-done with `strace -f`
+on the actual syscalls instead, which found **two separate, stackable
+bugs**, both already known in shape from elsewhere in this repo:
+
+1. **`--altdir` double-prefixes, same as the documented `mawk` bug.**
+   `DPKG_ROOT=$PREFIX` alone (matching what `dpkg` auto-exports to a
+   maintainer script) makes `update-alternatives` join `DPKG_ROOT` with its
+   own compiled-in *absolute* `--altdir`/`--admindir` defaults —
+   `$PREFIX/$PREFIX/etc/alternatives/…` — traced directly:
+   `symlinkat("/usr/bin/figlet-figlet", …, ".../usr/data/data/com.termux/files/usr/etc/alternatives/figlet.dpkg-tmp")`.
+   The master link (`$PREFIX/bin/figlet`, via the `usr` symlink) ends up
+   correct while the file it points at gets physically written to that
+   doubled, unrelated path — hence "dangling" despite a clean install.
+   `commit af6500b` on the classic-prefix branch already root-caused and
+   fixed the *general* shape of this (`--admindir`/`--altdir` need forcing
+   as explicit, space-separated flags, not `=`-joined, and not left to
+   `DPKG_ROOT` alone) — fusion mode hadn't picked that fix up yet. Verified
+   fix: pass both explicitly —
+   `--altdir "$PREFIX/etc/alternatives" --admindir "$PREFIX/var/lib/dpkg/alternatives"`
+   alongside `DPKG_ROOT="$PREFIX"` — and the files land in the right place,
+   traced clean (`symlinkat`/`renameat2` on the correct, single-prefixed
+   paths, `exit=0`).
+
+2. **Fixing (1) makes it write *portable*, host-root-absolute symlink
+   targets — `/etc/alternatives/figlet`, `/usr/bin/figlet-figlet`, no
+   `$PREFIX` — which is exactly `sudo-less`'s own documented
+   `0102-relative-symlinks` problem** (`docs/apt-dpkg-port.md:145-155`,
+   quoted earlier in this log): valid where a mount-namespace view makes
+   `/etc` and `$PREFIX/etc` the same tree, wrong here, where there is no
+   view and the kernel chases a multi-hop symlink in one `execve`/`openat`
+   — never re-entering userspace per hop — so `LD_PRELOAD` cannot rewrite
+   the intermediate targets. This is also exactly what this repo's own
+   `normalize-symlinks.sh` already exists to fix for the classic design
+   (rewrite an absolute target under `usr/etc/var/opt/bin/sbin` to a
+   relative one, so kernel resolution never leaves the prefix) — it just
+   assumes a real nested `usr/`, which fusion mode's `$PREFIX$target`
+   computation would need to strip the same way `path-redirect.c`'s
+   `DN_FUSE_USR` does before this applies cleanly here.
+
+**Fixed and verified this session**, reusing both mechanisms the classic
+branch already built for this exact bug class rather than inventing new
+ones:
+
+- `scripts/fuse-runtime.sh` (new) generates an `update-alternatives`
+  wrapper at `$INSTDIR/lib/deb-native/fusion-bin/update-alternatives` — an
+  `af6500b`-style fix (force `--altdir`/`--admindir` explicitly, space-
+  separated), just placed in its own directory instead of
+  `$INSTDIR/usr/bin`: that path aliases to Termux's own real `bin/` in
+  fusion mode (no separate sandbox tree), so a same-named file there would
+  replace Termux's own binary system-wide, not shadow it. `native/dn-launch.c`'s
+  fuse-mode `PATH` now puts `fusion-bin` first so maintainer scripts find
+  it ahead of the real one.
+- `scripts/normalize-symlinks.sh` gained two opt-in env vars:
+  `NORMALIZE_FUSE_USR=1` (strip a leading `/usr` before joining with ROOT,
+  matching `path-redirect.c`'s `DN_FUSE_USR`) and `NORMALIZE_SCAN_DIRS`
+  (scan only the given ROOT-relative dirs, non-recursive, instead of all of
+  ROOT — fusion's ROOT is Termux's own live, shared `$PREFIX`, so a full
+  recursive scan would touch every symlink on the system, not just a
+  package's own; classic design's ROOT is its own small sandbox, where the
+  original full-tree behavior is intentional and stays the default).
+
+Verified end to end, from a clean `--remove-all figlet`: the postinst
+(rebuilt `dn-launch`, invoked directly since dpkg won't re-run configure on
+an already-`ii` package) reports success with the new wrapper active, disk
+state shows both alternatives links landing in the *correct*, single-
+prefixed location this time — then, before normalizing,
+`$PREFIX/usr/bin/figlet` still fails (`No such file or directory`): the
+links are correctly placed but their *targets* are host-root-absolute
+(`/etc/alternatives/figlet`, `/usr/bin/figlet-figlet`, no `$PREFIX`) —
+exactly the predicted problem 2. Running
+`NORMALIZE_FUSE_USR=1 NORMALIZE_SCAN_DIRS="etc/alternatives bin share/man/man6" normalize-symlinks.sh "$PREFIX"`
+rewrites them to correct relative targets
+(`../etc/alternatives/figlet`, `../../bin/figlet-figlet`), and `grun
+$PREFIX/bin/figlet-figlet` then executes — following the *entire* chain
+(`$PREFIX/bin/figlet` → `.../etc/alternatives/figlet` →
+`.../bin/figlet-figlet`) to the exact right, real, foreign-arch ELF binary.
+Bug 4 is closed.
+
+### New, distinct finding: the runtime stage was never adapted for fusion mode at all
+
+`grun $PREFIX/bin/figlet-figlet` gets past loading (interpreter
+`/lib/ld-linux-aarch64.so.1`, a real Debian glibc arm64 binary) but fails
+at its own first `open()`: `Unable to open font file`, even though
+`$PREFIX/share/figlet/standard.flf` genuinely exists. `DN_REDIRECT_DEBUG=1`
+under `grun` prints **zero** rewrite lines — the shim never loads into the
+child process at all, unlike under `dn-launch` (install stage), where it
+demonstrably does. `grun` most likely manages its own `LD_PRELOAD`/glibc
+environment and doesn't pass ours through. This is what install-flow.md
+calls out as a *separate* concern from install (`dn-run`, launchers,
+`patch-elfs.sh` in the classic design) — fusion mode has only ever
+exercised the install stage (`dn-launch`, maintainer scripts) so far, never
+actually running an installed foreign binary. Not investigated yet; next
+session's next question.
+
+### Live system state as of this session
+
+- `figlet:arm64`: `Status: install ok installed`, and the alternative now
+  genuinely resolves to the right file (previous section) — actually
+  *running* it still doesn't work (next section).
+- `$PREFIX/usr` remains a real symlink (`-> .`) on this device — permanent,
+  deliberate, depended on by bug 3's fix.
+- `$PREFIX/lib/deb-native/fusion-bin/update-alternatives` (new) — a
+  permanent addition to this device, harmless to Termux itself (its own
+  directory, not on anyone else's `PATH`).
+- `sysvbanner:arm64`: genuinely installed and working, untouched.
+- `arm64` remains a registered foreign architecture in Termux's dpkg.
+
