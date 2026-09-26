@@ -48,6 +48,58 @@ find ~/debcorpus/debs -name '*.deb' -exec dpkg-deb -x {} ~/debcorpus/root \;
 python3 ~/deb-native/scripts/scan-direct-syscalls.py ~/debcorpus/root --verify --list
 ```
 
+## Solutions
+
+### Existing: `proot` (Termux's)
+
+`native/dn-run.c` route #2 execs `proot -b <instdir>/<dir>:/<dir>` for
+binaries with no `PT_INTERP`. It is a `ptrace` syscall interceptor: it traps
+each syscall and rewrites the path arguments, so it is *syscall-level* and
+therefore covers cases 2–5 (libc-internal / static bindings, inline `svc`,
+explicit `syscall()`, and static executables) in one mechanism. That is why the
+project reaches for it rather than building a tracer first.
+
+Its costs and limits, all visible in the code or its model:
+
+- **`ptrace`-stop per syscall** — the overhead Q3 measures.
+- **`-b` needs the host path to exist** (`dn-run.c` binds only dirs that
+  `stat()`); a missing guest path is an error, not an empty view.
+- **External dependency** — Termux's `proot` binary, against the project's
+  stated no-`proot` ideal; it is a pragmatic fallback, not the design.
+- **A fixed syscall table** — proot translates the syscalls it knows. Newer or
+  asynchronous submission paths (`openat2`, and `io_uring`'s
+  `IORING_OP_OPENAT`, where the path is in a shared ring, not a syscall
+  argument) are the ones to check. *Unverified — add to the log.*
+
+### Direct-usage: interposer + tracer
+
+Two layers, cheapest first:
+
+1. **`syscall()` interposer in the shim** (case 3). `syscall()` is a public
+   symbol, so the shim can add one function that reads the syscall number and
+   rewrites the path argument for the open/stat family — no `ptrace`, no
+   `proot`. It covers only callers that *import* `syscall` (Q2); inline `svc`
+   is invisible to it.
+2. **A purpose-built tracer** (`SECCOMP_RET_USER_NOTIF` or `ptrace`) for cases
+   2/4/5. It is the endgame: it can replace `proot` (same coverage, in-process,
+   no external binary) and, unlike a syscall-argument rewriter, is where an
+   `io_uring` answer would have to live.
+
+Coverage, by case:
+
+| case | shim | `syscall()` interposer | `proot` | own tracer |
+|---|---|---|---|---|
+| 1 libc path call | **yes** | — | yes | yes |
+| 2 libc-internal / static binding | no | no | **yes** | **yes** |
+| 3 explicit `syscall()` | no | **yes** | yes | yes |
+| 4 inline `svc #0` | no | no | **yes** | **yes** |
+| 5 static executable | no | no | **yes** | **yes** |
+
+So "existing" and "direct-usage" are not rivals: `proot` already *is* a
+direct-usage solution. The decision is whether to keep leaning on it
+(option 1), add the cheap shim wrapper (option 2), or build the in-process
+tracer that makes the no-`proot` ideal true (option 3).
+
 ## Experiment log
 
 | date | experiment | result | conclusion |
@@ -56,6 +108,7 @@ python3 ~/deb-native/scripts/scan-direct-syscalls.py ~/debcorpus/root --verify -
 | — | Q1: in-scope programs only | *pending* | — |
 | — | Q2: `syscall()` interposer | *pending* | — |
 | — | Q3: `proot` overhead | *pending* | — |
+| — | Q4b: `proot` syscall coverage (`openat2`, `io_uring`) | *pending* | — |
 
 ## Working notes
 
