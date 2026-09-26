@@ -1,5 +1,5 @@
 #!/bin/sh
-# True fusion (fusion-debian-mode): wrappers for commands that are
+# True fusion (naibed): wrappers for commands that are
 # DPKG_ROOT-aware but ALSO have a compiled-in absolute --altdir/--admindir-
 # style default, so DPKG_ROOT alone double-prefixes them instead of being
 # ignored (docs/findings.md, "Bug 4": traced with strace, same shape as the

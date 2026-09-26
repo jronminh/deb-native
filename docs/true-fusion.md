@@ -19,7 +19,7 @@
 > fixes included, until phase 3. Use `main` unless you want exactly this
 > trade, and only on a device/Termux install you can wipe.
 
-Experiment on the `fusion-debian-mode` branch, which absorbs the earlier
+Experiment on the `naibed` branch, which absorbs the earlier
 `fusion-no-prefix` branch and its history.
 Termux's own prefix is transformed, **one way**, into a Debian `arm64`
 system: Debian becomes apt's only source, Debian packages are installed

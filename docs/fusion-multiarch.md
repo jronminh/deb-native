@@ -26,7 +26,7 @@ handles: a package's own **shipped** file landing on an existing path —
 that's what `fuse-classify.sh`'s pre-flight refusal, `docs/findings.md`,
 already catches, by refusing before dpkg ever unpacks.)
 
-## So what is actually new here, specific to fusion-debian-mode
+## So what is actually new here, specific to naibed
 
 On a real Debian system, this scenario barely comes up: `gawk` would
 *also* be a dpkg-managed package, registered into the *same* `awk`

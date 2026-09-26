@@ -1,5 +1,5 @@
 #!/bin/sh
-# True fusion (fusion-debian-mode): repackage a .deb so its own data
+# True fusion (naibed): repackage a .deb so its own data
 # archive matches Termux's flat layout instead of a real Debian root's.
 # Termux's $PREFIX has no nested usr/ of its own -- $PREFIX/bin IS what
 # /usr/bin means on a real Debian root -- so a package's usr/* content is

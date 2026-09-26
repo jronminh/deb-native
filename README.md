@@ -33,7 +33,7 @@ On a Termux you can afford to lose:
 pkg install git clang patchelf glibc-repo
 pkg install glibc-runner bash-glibc coreutils-glibc perl-glibc
 
-git clone -b fusion-debian-mode https://github.com/jronminh/deb-native ~/deb-native-fusion
+git clone -b naibed https://github.com/jronminh/deb-native ~/deb-native-fusion
 cd ~/deb-native-fusion
 sh scripts/dn-backup.sh     # required: dn-fuse.sh refuses without a backup
 sh scripts/dn-fuse.sh       # the one-way step
