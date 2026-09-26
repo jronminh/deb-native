@@ -46,6 +46,30 @@ So anything inside `tailscaled` that probes the distribution sees Android, not
 the fake Debian. That is exactly the gap the tracer closes, and the concrete
 reason this goal is worth doing: **a real static, path-sensitive daemon.**
 
+### Observed: Tailscale's own installer fails in raw Termux
+
+`curl -fsSL https://tailscale.com/install.sh | sh` run directly in Termux
+(not through the prefix) prints:
+
+```
+Couldn't determine what kind of Linux is running.
+...
+OS=other-linux
+UNAME=Linux localhost 5.10.240-android12-9-… aarch64 Android
+No /etc/os-release
+```
+
+Expected, and not our pipeline: the script runs under Android's `/bin/sh` on
+the real root, where there is no `/etc/os-release` and `uname` reports
+`Android`, so it cannot classify the system. Our prefix *does* carry
+`ID=debian` (from `base-files`), but only a process launched **under the shim**
+sees it — and their installer never was.
+
+So do **not** run Tailscale's installer. Install the `.deb` into the prefix
+(add their repo to the prefix's apt sources, or `dpkg -i` the file), or run
+their installer through `dn-shell` so `/etc/os-release` resolves to the prefix.
+Either way the shipped binaries remain static → runtime still needs the tracer.
+
 ## Plan
 
 1. **Tracer first.** Make fork-lite redirect a static binary's syscalls
