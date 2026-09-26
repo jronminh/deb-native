@@ -87,10 +87,11 @@ chmod 755 "$BINDIR/chown" "$BINDIR/chgrp" "$BINDIR/dpkg-statoverride"
 # alternatives directory instead of the prefix's own (found via a genuinely
 # dangling `figlet -> $PREFIX_DIR/etc/alternatives/figlet` symlink). Force
 # the prefix's own directories with a wrapper, same idea as the no-op shims
-# above.
+# above. --log too: its default log path is joined with DPKG_ROOT the same
+# way (found as $PREFIX/data/data/com.termux/files/usr/var/log/alternatives.log).
 cat > "$BINDIR/update-alternatives" <<EOF
 #!/system/bin/sh
-exec "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" "\$@"
+exec "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log "$INSTDIR/var/log/alternatives.log" "\$@"
 EOF
 chmod 755 "$BINDIR/update-alternatives"
 # dpkg-divert has the same shape of bug: under DPKG_ROOT (which dpkg exports

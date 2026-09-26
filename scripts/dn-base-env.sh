@@ -8,6 +8,7 @@
 #   3. runtime pieces, via main's setup-runtime.sh
 #   4. libc6:arm64 identity package: Termux's glibc under Debian's name
 #   5. tier-1 stand-ins for floor packages: dn-dash, dn-openssl, dn-ca-certificates
+#   6. tier-2 Debian base (main's bootstrap-base.sh set), then held
 #
 # Usage: dn-base-env.sh
 set -eu
@@ -194,3 +195,16 @@ standin openssl openssl-tool \
   lib/ssl/cert.pem=etc/tls/cert.pem \
   lib/ssl/certs=etc/ssl/certs \
   lib/ssl/openssl.cnf=etc/tls/openssl.cnf
+
+# 6. Tier 2: the Debian base every other package assumes (main's
+# bootstrap-base.sh set, minus what tier 1 fills), installed through the
+# pipeline (fusion-custom/ has the per-package changes) and then held, so
+# nothing reshapes it except a deliberate refresh.
+TIER2="mawk:arm64 base-files:arm64 base-passwd:arm64 debconf:arm64 cdebconf:arm64"
+missing=""
+for p in $TIER2; do
+  [ "$(dpkg-query -W -f='${db:Status-Abbrev}' "$p" 2>/dev/null)" = "ii " ] || missing="$missing $p"
+done
+[ -z "$missing" ] || apt-get install -y $missing
+apt-mark hold $TIER2 >/dev/null
+echo "base-env: tier 2 installed and held: $TIER2"
