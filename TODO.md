@@ -43,6 +43,10 @@ for what just landed.
 
 ## Then, in order
 
+- [ ] **Run Tailscale natively (userspace networking)** — the target case for
+      fork-lite: a static Go daemon the shim cannot see, needing the tracer.
+      Package findings, blockers and the plan are in
+      [`docs/tailscale.md`](docs/tailscale.md).
 - [ ] **Stage 4 run wrappers** (`prefix-wrap` equivalent) — the biggest
       unbuilt piece. For each binary a package puts on `PATH`, detect
       whether it needs path help (interpreter not present, interpreter's
