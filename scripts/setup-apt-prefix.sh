@@ -42,10 +42,8 @@ mkdir -p "$NEWPREFIX/etc/apt/apt.conf.d" "$NEWPREFIX/etc/apt/sources.list.d" \
          "$NEWPREFIX/etc/apt/trusted.gpg.d" \
          "$NEWPREFIX/var/lib/apt/lists/partial" \
          "$NEWPREFIX/var/cache/apt/archives/partial" \
-         "$NEWPREFIX/var/lib/dpkg" \
-         "$NEWPREFIX/root/etc" "$NEWPREFIX/root/usr" \
-         "$NEWPREFIX/root/var/lib" "$NEWPREFIX/root/var/log" \
-         "$NEWPREFIX/root/var/cache" "$NEWPREFIX/root/opt"
+         "$NEWPREFIX/var/lib/dpkg" "$NEWPREFIX/var/log" \
+         "$NEWPREFIX/usr" "$NEWPREFIX/opt"
 [ -f "$NEWPREFIX/var/lib/dpkg/status" ] || : > "$NEWPREFIX/var/lib/dpkg/status"
 touch "$NEWPREFIX/etc/apt/trusted.gpg"
 
@@ -66,7 +64,7 @@ Dir::Etc::trusted "$NEWPREFIX/etc/apt/trusted.gpg";
 Dir::Etc::trustedparts "$NEWPREFIX/etc/apt/trusted.gpg.d";
 APT::Architecture "arm64";
 APT::Architectures:: "arm64";
-Dpkg::options:: "--instdir=$NEWPREFIX/root";
+Dpkg::options:: "--instdir=$NEWPREFIX";
 Dpkg::options:: "--admindir=$NEWPREFIX/var/lib/dpkg";
 Dpkg::options:: "--force-not-root";
 Dpkg::options:: "--force-script-chrootless";
@@ -93,9 +91,9 @@ echo "    piecemeal, matters here"
 "$HERE/bootstrap-base.sh" "$NEWPREFIX"
 
 echo "==> generating launchers, the dn front-end, and activating PATH"
-"$HERE/setup-runtime.sh" "$NEWPREFIX/root"
-"$HERE/make-launchers.sh" "$NEWPREFIX/root"
-"$HERE/make-apt-wrappers.sh" "$NEWPREFIX/root"
-"$HERE/dn-activate.sh" "$NEWPREFIX/root"
+"$HERE/setup-runtime.sh" "$NEWPREFIX"
+"$HERE/make-launchers.sh" "$NEWPREFIX"
+"$HERE/make-apt-wrappers.sh" "$NEWPREFIX"
+"$HERE/dn-activate.sh" "$NEWPREFIX"
 
 echo "==> ready: APT_CONFIG=$NEWPREFIX/etc/apt.conf apt-get install -y <package>"

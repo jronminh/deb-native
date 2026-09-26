@@ -29,13 +29,13 @@ case "$DN_PREFIX" in ""|/*) ;; *) DN_PREFIX="$PWD/$DN_PREFIX" ;; esac
 if [ -z "$DN_PREFIX" ]; then
   old_ifs=$IFS; IFS=:
   for d in $PATH; do
-    case "$d" in */root/usr/lib/deb-native/bin) DN_PREFIX=${d%/root/usr/lib/deb-native/bin} ;; esac
+    case "$d" in */usr/lib/deb-native/bin) DN_PREFIX=${d%/usr/lib/deb-native/bin} ;; esac
   done
   IFS=$old_ifs
   [ -n "$DN_PREFIX" ] || DN_PREFIX=$HOME/.dn
 fi
 
-ROOT="$DN_PREFIX/root"
+ROOT="$DN_PREFIX"
 LAUNCHDIR="$ROOT/usr/lib/deb-native/bin"
 fail=0
 ok()   { printf '  ok    %s\n' "$1"; }

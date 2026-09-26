@@ -49,7 +49,7 @@ debs=$(find "$ARCHIVES" -maxdepth 1 -name '*.deb')
 [ -n "$debs" ] || { echo "nothing to install (already installed?)"; exit 0; }
 
 echo "==> patching control scripts inside each .deb before unpack"
-for d in $debs; do "$HERE/patch-deb.sh" "$d" "$NEWPREFIX/root"; done
+for d in $debs; do "$HERE/patch-deb.sh" "$d" "$NEWPREFIX"; done
 
 deb_for_pkg() {  # $1 = package name (as it appears in apt's Get: line)
   find "$ARCHIVES" -maxdepth 1 -iname "${1}_*.deb" -print -quit
@@ -62,20 +62,20 @@ for pkg in $order; do
   seen="$seen $pkg"
   deb=$(deb_for_pkg "$pkg")
   [ -n "$deb" ] || continue
-  "$DPKG" --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
+  "$DPKG" --instdir="$NEWPREFIX" --admindir="$NEWPREFIX/var/lib/dpkg" \
        $DPKG_FLAGS --unpack "$deb" || true
   # Repoint new ELFs at Termux's glibc loader (and skip our own runtime).
-  "$HERE/patch-elfs.sh" "$NEWPREFIX/root"
+  "$HERE/patch-elfs.sh" "$NEWPREFIX"
   # Re-patch: dash (or its wrapper) may not have existed yet when this
   # exact package's own control scripts were patched above, if this
   # package was earlier in apt's order than dash itself.
-  "$HERE/patch-maintainer-scripts.sh" "$NEWPREFIX/var/lib/dpkg" "$NEWPREFIX/root" || true
-  "$DPKG" --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
+  "$HERE/patch-maintainer-scripts.sh" "$NEWPREFIX/var/lib/dpkg" "$NEWPREFIX" || true
+  "$DPKG" --instdir="$NEWPREFIX" --admindir="$NEWPREFIX/var/lib/dpkg" \
        $DPKG_FLAGS --configure "$pkg" || true
 done
 
 echo "==> configuring, final sweep (resolves ordering, not real failures)"
-"$DPKG" --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
+"$DPKG" --instdir="$NEWPREFIX" --admindir="$NEWPREFIX/var/lib/dpkg" \
      $DPKG_FLAGS --configure -a || true
 
 # apt keeps downloaded .debs in $ARCHIVES by default; a LATER
@@ -88,5 +88,5 @@ rm -f "$ARCHIVES"/*.deb
 # Normalize absolute symlinks so the bind-only tracer resolves them inside
 # the prefix (docs/bind-only.md), then generate/refresh launcher wrappers for
 # every program now in the prefix (scripts/make-launchers.sh).
-"$HERE/normalize-symlinks.sh" "$NEWPREFIX/root"
-"$HERE/make-launchers.sh" "$NEWPREFIX/root"
+"$HERE/normalize-symlinks.sh" "$NEWPREFIX"
+"$HERE/make-launchers.sh" "$NEWPREFIX"

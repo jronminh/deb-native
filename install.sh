@@ -76,10 +76,10 @@ if [ ! -s "$DNPREFIX/var/lib/dpkg/status" ]; then
 else
     step "refreshing the existing prefix"
     kv "state" "reused (already bootstrapped)"
-    "$HERE/scripts/setup-runtime.sh" "$DNPREFIX/root"
-    "$HERE/scripts/make-launchers.sh" "$DNPREFIX/root"
-    "$HERE/scripts/make-apt-wrappers.sh" "$DNPREFIX/root"
-    "$HERE/scripts/dn-activate.sh" "$DNPREFIX/root"
+    "$HERE/scripts/setup-runtime.sh" "$DNPREFIX"
+    "$HERE/scripts/make-launchers.sh" "$DNPREFIX"
+    "$HERE/scripts/make-apt-wrappers.sh" "$DNPREFIX"
+    "$HERE/scripts/dn-activate.sh" "$DNPREFIX"
 fi
 
 if [ $# -gt 0 ]; then
@@ -88,7 +88,7 @@ if [ $# -gt 0 ]; then
 fi
 
 step "normalizing prefix symlinks"
-"$HERE/scripts/normalize-symlinks.sh" "$DNPREFIX/root"
+"$HERE/scripts/normalize-symlinks.sh" "$DNPREFIX"
 
 # --- summary ---------------------------------------------------------------
 T1=$(date +%s)

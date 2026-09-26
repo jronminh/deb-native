@@ -10,7 +10,7 @@ set -eu
 NEWPREFIX=${1:?usage: apt-hook-post.sh NEWPREFIX}
 case "$NEWPREFIX" in /*) ;; *) NEWPREFIX="$PWD/$NEWPREFIX" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-ROOT="$NEWPREFIX/root"
+ROOT="$NEWPREFIX"
 LOG="$NEWPREFIX/var/log/deb-native-hook.log"
 mkdir -p "$NEWPREFIX/var/log"
 
