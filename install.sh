@@ -22,6 +22,18 @@ DNPREFIX=${1:-$HOME/.dn}
 [ $# -gt 0 ] && shift
 case "$DNPREFIX" in /*) ;; *) DNPREFIX="$PWD/$DNPREFIX" ;; esac
 
+# Never install into Termux's own prefix: setup-apt-prefix.sh writes
+# sources.list under $DNPREFIX/etc/apt, which would overwrite Termux's and
+# make its repo disappear.
+TERMUX_PREFIX=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
+case "$DNPREFIX" in
+  "$TERMUX_PREFIX"|"$TERMUX_PREFIX"/*)
+    echo "install.sh: refusing prefix $DNPREFIX" >&2
+    echo "  it is inside Termux's prefix ($TERMUX_PREFIX); that would clobber Termux's apt." >&2
+    echo "  Use a separate prefix, e.g. \$HOME/.dn (the default)." >&2
+    exit 1 ;;
+esac
+
 if [ ! -s "$DNPREFIX/var/lib/dpkg/status" ]; then
     echo "==> bootstrapping a Debian glibc base into $DNPREFIX"
     "$HERE/scripts/setup-apt-prefix.sh" "$DNPREFIX"

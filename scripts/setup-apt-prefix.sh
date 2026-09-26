@@ -21,6 +21,17 @@ SUITE=${2:-stable}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
 
+# Safety: never write apt config into Termux's own prefix. Pointing this at
+# $PREFIX overwrites Termux's sources.list and makes its repo disappear.
+TERMUX_PREFIX=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
+case "$NEWPREFIX" in
+  "$TERMUX_PREFIX"|"$TERMUX_PREFIX"/*)
+    echo "setup-apt-prefix: refusing NEWPREFIX=$NEWPREFIX" >&2
+    echo "  it is inside Termux's prefix ($TERMUX_PREFIX); that would clobber Termux's apt." >&2
+    echo "  Use a separate prefix, e.g. \$HOME/.dn (the installer's default)." >&2
+    exit 1 ;;
+esac
+
 # Build the path-redirect shim from source if it is missing (it is a build
 # artifact; see scripts/build-path-redirect.sh for the toolchain notes).
 [ -f "$HERE/../native/path-redirect.so" ] || "$HERE/build-path-redirect.sh"
