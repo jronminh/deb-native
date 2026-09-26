@@ -15,7 +15,7 @@ MARK="# deb-native launchers (managed)"
 [ -d "$LAUNCHDIR" ] || { echo "dn-activate: no launchers at $LAUNCHDIR (run make-launchers.sh)" >&2; exit 1; }
 
 if grep -qF "$MARK" "$RC" 2>/dev/null; then
-  sed -i "\|$MARK|d; \|/usr/lib/deb-native/bin|d; \|APT_CONFIG=.*etc/apt.conf|d" "$RC"
+  sed -i "\|$MARK|d; \|/usr/lib/deb-native/bin|d; \|APT_CONFIG=|d" "$RC"
 fi
 {
   echo ""

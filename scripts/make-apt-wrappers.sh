@@ -29,6 +29,9 @@ for n in apt apt-get apt-cache; do
 cat > "$LAUNCHDIR/$n" <<EOF
 #!/system/bin/sh
 # deb-native arch-aware $n (generated; do not edit).
+# A leaked APT_CONFIG (some installs export it) would hijack the Termux call
+# below too, so both would reach Debian; drop it and set it inline for Debian.
+unset APT_CONFIG
 REAL="$TP/bin/$n"
 AC="$AC"
 cmd=""
@@ -75,6 +78,7 @@ cat > "$LAUNCHDIR/dpkg" <<EOF
 #!/system/bin/sh
 # deb-native arch-aware dpkg (generated; do not edit).
 REAL="$TP/bin/dpkg"
+unset APT_CONFIG
 DN="$DNPREFIX"; ROOT="$INSTDIR"; REPO="$REPO"
 arch=aarch64
 for f in "\$@"; do
