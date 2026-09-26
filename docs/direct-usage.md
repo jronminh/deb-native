@@ -61,15 +61,34 @@ project reaches for it rather than building a tracer first.
 
 Its costs and limits, all visible in the code or its model:
 
-- **`ptrace`-stop per syscall** — the overhead Q3 measures.
+- **Tracing overhead** — `ptrace`, but filtered by `seccomp-bpf` to only the
+  syscalls it translates (below), so it is not a stop on *every* syscall. Q3
+  still measures the real cost.
 - **`-b` needs the host path to exist** (`dn-run.c` binds only dirs that
   `stat()`); a missing guest path is an error, not an empty view.
 - **External dependency** — Termux's `proot` binary, against the project's
   stated no-`proot` ideal; it is a pragmatic fallback, not the design.
-- **A fixed syscall table** — proot translates the syscalls it knows. Newer or
-  asynchronous submission paths (`openat2`, and `io_uring`'s
-  `IORING_OP_OPENAT`, where the path is in a shared ring, not a syscall
-  argument) are the ones to check. *Unverified — add to the log.*
+- **A fixed syscall table** — checked against proot's source
+  (`termux/proot` `src/syscall/enter.c` and `exit.c`). The path-handling set is
+  broad and current: `open`/`openat`/**`openat2`**,
+  `stat`/`stat64`/`newfstatat`/`fstatat64`/**`statx`**, `access`/**`faccessat2`**,
+  `creat`, `readlink`/`at`, `chdir`/`fchdir`/`getcwd`, `mkdir`/`at`,
+  `mknod`/`at`, `unlink`/`at`, `rmdir`, `rename`/`at`/`at2`, `link`/`at`,
+  `symlink`/`at`, `chmod`/`fchmodat`, `chown`/`lchown`/`fchownat`,
+  `truncate`/`64`, `utime`/`utimes`/`utimensat`/`futimesat`,
+  `statfs`/`64`, the xattr family, `inotify_add_watch`, and the socket calls
+  `bind`/`connect`/`sendto`/`sendmsg`/`recvfrom`/`recvmsg`. It runs `ptrace`
+  accelerated by a **`seccomp-bpf` filter** so only the syscalls it cares about
+  are trapped (with a `PROOT_NO_SECCOMP` fallback), which is why its overhead
+  is not the naive per-syscall figure.
+- **What it does *not* translate** — the **`io_uring`** syscalls are in neither
+  table, so an `IORING_OP_OPENAT` (path in a shared ring, not a syscall
+  argument) is not rewritten; also the new mount API
+  (`fsopen`/`open_tree`/`move_mount`/`mount_setattr`), `open_by_handle_at`
+  (only `name_to_handle_at` is present) and `fanotify_mark`. For this project
+  the mount API and fanotify are out of scope; **`io_uring` is the one to
+  verify, and Android's own seccomp may already block it for apps** — which
+  would make it moot.
 
 ### Direct-usage: interposer + tracer
 
@@ -108,7 +127,7 @@ tracer that makes the no-`proot` ideal true (option 3).
 | — | Q1: in-scope programs only | *pending* | — |
 | — | Q2: `syscall()` interposer | *pending* | — |
 | — | Q3: `proot` overhead | *pending* | — |
-| — | Q4b: `proot` syscall coverage (`openat2`, `io_uring`) | *pending* | — |
+| 2026-09-26 | Q4b: proot syscall coverage (source check) | `openat2`/`statx`/`faccessat2`/xattr/sockets handled; `io_uring` absent | `io_uring` is proot's blind spot; verify Android's seccomp blocks it |
 
 ## Working notes
 
