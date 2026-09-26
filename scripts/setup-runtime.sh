@@ -26,8 +26,9 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SRC="$HERE/../native"
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
-BINDIR="$INSTDIR/usr/bin"
-LIBDIR="$INSTDIR/usr/lib/deb-native"
+. "$HERE/dn-layout.sh"
+BINDIR="$DN_RTBIN"
+LIBDIR="$DN_LIBDIR"
 
 [ -x "$GLIBC/bin/bash" ] || { echo "setup-runtime: no glibc bash at $GLIBC/bin/bash" >&2; exit 1; }
 

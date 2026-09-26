@@ -122,9 +122,36 @@ calls problem 0):
 1. `arm64` registered as a dpkg foreign architecture.
 2. `$PREFIX/usr -> .`, so Debian's `/usr/...` paths resolve into the flat
    prefix.
-3. Runtime pieces via `fuse-runtime.sh`: path shim, `dn-run`, the
-   `update-alternatives` wrapper.
+3. Runtime pieces via `main`'s own `setup-runtime.sh`.
 4. The **`libc6:arm64` identity package**.
+
+### Reusing main's base environment, not re-deriving it
+
+Debian mode must get everything `main`'s prefix setup gives a Debian
+package, or packages that work in `~/.dn` fail here. `main`'s methods, one
+by one:
+
+| main (`setup-apt-prefix.sh` and what it calls) | Debian mode |
+|---|---|
+| `build-path-redirect.sh` (the shim) | same, via `setup-runtime.sh` |
+| `setup-runtime.sh`: `dn-run`, tracer (`dn-trace`), `dn-shell`/`dn-perl` maintainer-script interpreter, no-op `chown`/`chgrp`/`dpkg-statoverride`, `update-alternatives` wrapper | same script, run by `dn-base-env.sh`; files placed under `lib/deb-native/` (below) |
+| `native-seed.sh` (Debian names marked installed, satisfied by Termux `*-glibc`) | only `libc6` is bridged, as a real identity package; every other library comes from Debian (pure Debian) |
+| apt config: `--force-not-root`, `--force-script-chrootless`, `--instdir`, hooks | Debian-mode apt snippet (pipeline step) |
+| `bootstrap-base.sh`: `mawk base-files base-passwd dash debianutils debconf cdebconf openssl ca-certificates` in one transaction | **required**, as base-env step 5, once the pipeline is wired: maintainer scripts across Debian assume these (`. /usr/share/debconf/confmodule`, `update-shells`, `/etc/passwd`). Several collide by name with Termux packages (`dash`, `openssl`, `ca-certificates`), which is the "bare platform" question |
+| `make-launchers.sh`, `dn-activate.sh` | pipeline Post-Invoke step; needs scoping to the arm64 packages' own files first (it refuses in Debian mode until then) |
+| `make-apt-wrappers.sh` ("Termux wins" routing) | not used: one supply at a time |
+
+**Layout rule** (`scripts/dn-layout.sh`, sourced by `setup-runtime.sh`,
+`patch-deb.sh`, `patch-maintainer-scripts.sh`, `make-launchers.sh`): when
+INSTDIR is Termux's own prefix, `usr/bin` *is* Termux's real `bin/` (via
+`usr -> .`), so `main`'s runtime files would replace Termux's own binaries
+-- the no-op `chown`/`chgrp` over coreutils', and the
+`update-alternatives` wrapper over the very binary it execs. In that case
+they go to `$PREFIX/lib/deb-native/` (shim, `dn-run`, `dn-trace`) and
+`$PREFIX/lib/deb-native/fusion-bin/` (`dn-shell`, `dn-perl`, no-ops,
+wrapper). `dn-launch` puts `fusion-bin` first on a maintainer script's
+`PATH`, and self-locates from that path, so dpkg-run scripts need no env
+from the caller. The classic prefix layout is unchanged.
 
 ### libc6:arm64 identity package
 

@@ -26,7 +26,8 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # package is unpacked -- no dash chicken-and-egg. Created here because this
 # runs before every --unpack, so even preinst scripts get a working shebang.
 "$HERE/setup-runtime.sh" "$INSTDIR"
-WRAPPER="$INSTDIR/usr/bin/dn-shell"
+. "$HERE/dn-layout.sh"
+WRAPPER="$DN_RTBIN/dn-shell"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT

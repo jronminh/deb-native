@@ -42,7 +42,8 @@ case "$ADMINDIR" in /*) ;; *) ADMINDIR="$PWD/$ADMINDIR" ;; esac
 case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 "$HERE/setup-runtime.sh" "$INSTDIR"
-WRAPPER="$INSTDIR/usr/bin/dn-shell"
+. "$HERE/dn-layout.sh"
+WRAPPER="$DN_RTBIN/dn-shell"
 
 [ -d "$ADMINDIR/info" ] || exit 0
 for f in "$ADMINDIR"/info/*.postinst "$ADMINDIR"/info/*.preinst \

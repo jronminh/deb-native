@@ -5,7 +5,7 @@
 #
 #   1. arm64 registered as a dpkg foreign architecture
 #   2. $PREFIX/usr -> . (Debian's /usr/... paths resolve into the flat prefix)
-#   3. runtime pieces: path shim, dn-run, update-alternatives wrapper
+#   3. runtime pieces, via main's setup-runtime.sh
 #   4. libc6:arm64 identity package: Termux's glibc under Debian's name
 #
 # Usage: dn-base-env.sh
@@ -29,9 +29,12 @@ else
 fi
 echo "base-env: $P/usr -> . ok"
 
-# 3. runtime pieces
-"$HERE/fuse-runtime.sh" "$P"
-echo "base-env: runtime (shim, dn-run, update-alternatives wrapper) ok"
+# 3. runtime pieces -- main's own setup-runtime.sh, which places them under
+# lib/deb-native/ when INSTDIR is Termux's prefix (scripts/dn-layout.sh):
+# the shim, dn-run, the tracer, the dn-shell/dn-perl maintainer-script
+# interpreter, no-op chown/chgrp/dpkg-statoverride, update-alternatives wrapper.
+"$HERE/setup-runtime.sh" "$P"
+echo "base-env: runtime ($P/lib/deb-native, fusion-bin) ok"
 
 # 4. libc6:arm64 identity package.
 #

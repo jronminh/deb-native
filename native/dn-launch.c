@@ -68,6 +68,19 @@ int main(int argc, char **argv) {
   if (fuse) {
     snprintf(inst, sizeof inst, "%s", fuse_instdir);
     snprintf(shim, sizeof shim, "%s", fuse_shim);
+  } else {
+    /* Debian mode installs this binary as
+     * $INSTDIR/lib/deb-native/fusion-bin/dn-shell (scripts/dn-layout.sh), so
+     * dpkg-run maintainer scripts self-locate with no env from the caller. */
+    const char *mark = "/lib/deb-native/fusion-bin/";
+    char *m = strstr(self, mark);
+    if (m && !strchr(m + strlen(mark), '/')) {
+      snprintf(inst, sizeof inst, "%.*s", (int)(m - self), self);
+      snprintf(shim, sizeof shim, "%s/lib/deb-native/path-redirect.so", inst);
+      fuse = 1;
+    }
+  }
+  if (fuse) {
     /* fusion-bin comes first: it holds wrappers (scripts/fuse-runtime.sh)
      * for commands that are DPKG_ROOT-aware but ALSO have a compiled-in
      * absolute --altdir/--admindir-style default (update-alternatives --

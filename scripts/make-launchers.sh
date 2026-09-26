@@ -22,12 +22,17 @@ case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
-SHIM="$INSTDIR/usr/lib/deb-native/path-redirect.so"
-LAUNCHDIR="$INSTDIR/usr/lib/deb-native/bin"
+. "$HERE/dn-layout.sh"
+# In Debian mode INSTDIR's bin/ is Termux's own, holding every Termux
+# program: scanning it would wrap all of them. Needs per-package scoping
+# (dpkg -L of the arm64 packages) first -- not built yet.
+[ "$DN_FUSION" = 0 ] || { echo "make-launchers: Debian mode needs per-package scoping; not built yet" >&2; exit 1; }
+SHIM="$DN_LIBDIR/path-redirect.so"
+LAUNCHDIR="$DN_LAUNCHDIR"
 
 [ -f "$SHIM" ] || { echo "make-launchers: missing $SHIM" >&2; exit 1; }
-[ -x "$INSTDIR/usr/lib/deb-native/dn-run" ] || { echo "make-launchers: run setup-runtime.sh first (no dn-run)" >&2; exit 1; }
-[ -x "$INSTDIR/usr/bin/dn-shell" ] || { echo "make-launchers: run setup-runtime.sh first" >&2; exit 1; }
+[ -x "$DN_LIBDIR/dn-run" ] || { echo "make-launchers: run setup-runtime.sh first (no dn-run)" >&2; exit 1; }
+[ -x "$DN_RTBIN/dn-shell" ] || { echo "make-launchers: run setup-runtime.sh first" >&2; exit 1; }
 
 mkdir -p "$LAUNCHDIR"
 tmp="$LAUNCHDIR/.tmp.$$"
@@ -79,8 +84,8 @@ EOF
   else
     first=$(head -c 64 "$real" 2>/dev/null | head -1)
     case "$first" in
-      '#!'*perl*) interp="$INSTDIR/usr/bin/dn-perl" ;;
-      '#!'*)      interp="$INSTDIR/usr/bin/dn-shell" ;;
+      '#!'*perl*) interp="$DN_RTBIN/dn-perl" ;;
+      '#!'*)      interp="$DN_RTBIN/dn-shell" ;;
       *)          return 0 ;;
     esac
     cat > "$tmp" <<EOF
