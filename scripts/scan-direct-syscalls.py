@@ -14,6 +14,7 @@ Also classifies each ELF: ET_EXEC / PIE executable / shared object, and
 flags Go and Rust builds.
 
 Usage: scan-direct-syscalls.py DIR [--verify] [--list]
+       scan-direct-syscalls.py DIR --trace-list   # paths needing the tracer
 """
 import os
 import shutil
@@ -89,8 +90,37 @@ def objdump_svc(path):
     return sum(1 for line in out.splitlines() if "\tsvc" in line or " svc" in line)
 
 
+def needs_tracer(data, info, path):
+    """True if the ELF issues syscalls the libc shim cannot see: it imports
+    the public `syscall` symbol (case 3), or its own code emits `svc` (case 4).
+    With no objdump, a byte candidate is kept (conservative)."""
+    if b"\x00syscall\x00" in data:
+        return True
+    if candidate_svc(data, info["execsecs"]):
+        return (objdump_svc(path) > 0) if OBJDUMP else True
+    return False
+
+
+def trace_list(root):
+    """Print the paths of ELFs in DIR that must be launched under the tracer."""
+    for dirpath, _, files in os.walk(root):
+        for fn in files:
+            p = os.path.join(dirpath, fn)
+            try:
+                with open(p, "rb") as fh:
+                    data = fh.read()
+            except OSError:
+                continue
+            info = parse(data)
+            if info and needs_tracer(data, info, p):
+                print(p)
+
+
 def main():
     root = sys.argv[1]
+    if "--trace-list" in sys.argv:
+        trace_list(root)
+        return
     verify = "--verify" in sys.argv
     listing = "--list" in sys.argv
     counts = {"exec": 0, "pie": 0, "lib": 0}

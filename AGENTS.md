@@ -47,7 +47,9 @@ replace the view's path-resolution job.
   rewrites). **NSS (case 2) is now solved** by the tracer route plus a bind of
   the prefix `/etc` over Termux glibc's sysconfdir (`dn-run.c` routes a
   glibc+NSS ELF through `dn-trace`; `tests/tracer-nss/run.sh` passes).
-  Raw-`syscall()`/static stay the tracer's job.
+  **Direct-syscall binaries (cases 3/4) are routed too**: `scan-direct-syscalls.py
+  --trace-list` + `make-launchers.sh` tag them `dn-run --trace` at install time;
+  static binaries use the tracer as before.
 - **fork-lite** (`tracer/`): proot base imported and pruned — extensions
   removed (framework kept) and made AArch64-only. It **builds on `fe2`**
   (`make CC=clang`, needs `libtalloc`) and a static binary reads through a

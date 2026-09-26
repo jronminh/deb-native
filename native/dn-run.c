@@ -231,7 +231,7 @@ static void launch_trace(char **args, int nss) {
 
 int main(int argc, char **argv) {
   if (argc < 2) {
-    fprintf(stderr, "usage: dn-run REAL [args...]\n");
+    fprintf(stderr, "usage: dn-run [--trace] REAL [args...]\n");
     return 2;
   }
   const char *e = getenv("DN_INSTDIR");
@@ -241,9 +241,27 @@ int main(int argc, char **argv) {
     return 127;
   }
 
-  char **args = &argv[1];
+  /* --trace: forced by the launcher for a binary that issues its own syscalls
+   * (inline `svc` or a `syscall()` import), which the shim cannot see. */
+  int argi = 1;
+  int force_trace = 0;
+  if (strcmp(argv[1], "--trace") == 0) {
+    force_trace = 1;
+    argi = 2;
+    if (argc < 3) {
+      fprintf(stderr, "usage: dn-run [--trace] REAL [args...]\n");
+      return 2;
+    }
+  }
+
+  char **args = &argv[argi];
   int nss = 0;
-  switch (classify(args[0], &nss)) {
+  int cls = classify(args[0], &nss);
+
+  if (force_trace)
+    launch_trace(args, nss);
+
+  switch (cls) {
     case C_GLIBC:
       if (nss) launch_trace(args, 1);
       else     launch_glibc(args);

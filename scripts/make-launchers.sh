@@ -6,9 +6,9 @@
 # $PREFIX/glibc/lib/ld-linux, and needs the right launch mechanism for its
 # hardcoded /usr, /etc, /var, /opt paths to resolve into the prefix. The
 # wrapper hands the real binary to dn-run, which classifies it at launch:
-# glibc -> LD_PRELOAD the path-redirect shim, static -> `proot -b` syscall
-# rewrite, Bionic -> plain exec. Scripts still get the glibc shell/perl
-# wrappers below.
+# glibc -> LD_PRELOAD the path-redirect shim; static, NSS, and direct-syscall
+# binaries -> the syscall tracer; Bionic -> plain exec. Scripts still get the
+# glibc shell/perl wrappers below.
 #
 # Where they go: NOT $INSTDIR/bin -- base-files' usrmerge makes that a
 # symlink to usr/bin, so writing there would clobber real binaries (found
@@ -30,6 +30,21 @@ LAUNCHDIR="$INSTDIR/usr/lib/deb-native/bin"
 
 mkdir -p "$LAUNCHDIR"
 tmp="$LAUNCHDIR/.tmp.$$"
+BIN_DIRS="$INSTDIR/usr/bin $INSTDIR/usr/sbin $INSTDIR/sbin $INSTDIR/bin $INSTDIR/usr/games"
+
+# Programs whose own code issues syscalls (inline `svc #0`) or imports
+# `syscall()`; the shim cannot see those, so force the tracer. Computed once
+# here because disassembling per launch would be far too slow. See
+# docs/syscall-boundary.md, "Remaining: the direct-syscall attribute".
+DIRECT_LIST="$tmp.direct"
+: > "$DIRECT_LIST"
+if command -v python3 >/dev/null 2>&1; then
+  for d in $BIN_DIRS; do
+    [ -d "$d" ] || continue
+    [ -L "$d" ] && continue
+    python3 "$HERE/scan-direct-syscalls.py" "$d" --trace-list >> "$DIRECT_LIST" 2>/dev/null || true
+  done
+fi
 
 is_elf() {
   [ "$(head -c4 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "7f454c46" ]
@@ -46,13 +61,20 @@ wrap() {
     dn-shell|dn-perl|chown|chgrp|path-redirect.so|'') return 0 ;;
   esac
   if is_elf "$real"; then
-    # One uniform wrapper for every ELF: dn-run classifies the target at
-    # launch and sets up the shim (glibc), a plain exec (Bionic), or a
-    # proot syscall rewrite (static). See native/dn-run.c.
-    cat > "$tmp" <<EOF
+    # dn-run classifies at launch: shim (glibc), tracer (static/NSS), or a
+    # plain exec (Bionic). A binary with its own syscalls is tagged --trace so
+    # it skips the classifier's shim route. See native/dn-run.c.
+    if grep -qxF "$real" "$DIRECT_LIST"; then
+      cat > "$tmp" <<EOF
+#!/system/bin/sh
+exec "$LAUNCHDIR/../dn-run" --trace "$real" "\$@"
+EOF
+    else
+      cat > "$tmp" <<EOF
 #!/system/bin/sh
 exec "$LAUNCHDIR/../dn-run" "$real" "\$@"
 EOF
+    fi
   else
     first=$(head -c 64 "$real" 2>/dev/null | head -1)
     case "$first" in
@@ -70,7 +92,7 @@ EOF
 }
 
 # Real bin dirs (skip the usrmerge symlinks: bin -> usr/bin, sbin -> usr/sbin).
-for d in "$INSTDIR/usr/bin" "$INSTDIR/usr/sbin" "$INSTDIR/sbin" "$INSTDIR/bin" "$INSTDIR/usr/games"; do
+for d in $BIN_DIRS; do
   [ -d "$d" ] || continue
   [ -L "$d" ] && continue
   for f in "$d"/*; do
@@ -98,5 +120,5 @@ for d in "$INSTDIR/usr/bin" "$INSTDIR/usr/sbin" "$INSTDIR/sbin" "$INSTDIR/bin" "
   done
 done
 
-rm -f "$tmp"
+rm -f "$tmp" "$DIRECT_LIST"
 echo "==> launchers in $LAUNCHDIR ($(ls -1 "$LAUNCHDIR" | wc -l) programs)"
