@@ -1,71 +1,30 @@
-# Multi-arch mechanics, and why none of them solve this branch's real collision
+# This branch's real collision: two packaging systems, one filesystem
+
+General dpkg multi-arch mechanics (`Multi-Arch` field, `update-
+alternatives`, `dpkg-divert`, `--force-architecture` vs.
+`--add-architecture`) now live in
+[`docs/multiarch-mechanics.md`](multiarch-mechanics.md) — shared with
+`main`, since none of that layer differs between the two designs. This
+doc is the fusion-specific part: why the collision below happened here and
+nowhere else, and what to build next.
 
 Prompted by a real, concrete incident (below): installing `mawk:arm64`
 replaced Termux's own `$PREFIX/bin/awk -> gawk` symlink, which briefly broke
 `awk` system-wide (including this project's own `normalize-symlinks.sh`,
 whose `relpath()` is implemented in `awk`). The question was whether real
 Debian has an "architecture-aware" mechanism that should have prevented
-this. Researched against Debian's actual policy and manual pages (not
-guessed) — short answer: **no**, and the reason why is worth writing down,
-because it clarifies what fusion mode actually needs to build instead.
-
-## What `Multi-Arch` actually is (and isn't)
-
-Quoting Debian Policy directly: "A Debian installation can combine packages
-from multiple architectures. The `Multi-Arch` field enables individual
-packages to declare their support for this feature, and influences the way
-**dependencies** are handled."
-
-- `Multi-Arch: no` (the default) — a `Depends`/`Provides`/etc. relation is
-  satisfied only by a package of the *same* architecture.
-- `Multi-Arch: same` — packages with the exact same name/version but
-  different architectures can be installed **concurrently** (the classic
-  case: a library, coexisting via an arch-tripled path like
-  `/usr/lib/aarch64-linux-gnu/`).
-- `Multi-Arch: foreign` — this package's own architecture is irrelevant to
-  *whoever depends on it*: it satisfies a `Depends: awk` from a package of
-  any architecture. This is the field `mawk`'s own control file actually
-  carries (confirmed: `dpkg-deb -e` on the real `.deb`), alongside
-  `Provides: awk`.
-- `Multi-Arch: allowed` — like `no`, but a dependent package may opt in to
-  treating it like `foreign` by writing `pkg:any`.
-
-All four are about **dpkg's dependency graph and library coexistence on
-disk** (arch-tripled paths). None of them are about **which file ends up at
-a given PATH when two providers of the same command exist** — that's a
-completely different concern, and Multi-Arch has nothing to say about it
-(confirmed against both Debian Policy's control-fields chapter and the
-Debian wiki's Multiarch/Hints page: file conflicts under `Multi-Arch: same`
-are explicitly called out as something *outside* the mechanism — the
-guidance is "redesign the package" or drop back to `Multi-Arch: no`, not
-"Multi-Arch resolves it for you").
-
-## The two real mechanisms, and which one actually applies
-
-- **`update-alternatives`** — real Debian's actual, and *only*, answer to
-  "multiple providers can install the same command name; pick one by
-  policy." It is **completely architecture-agnostic by design**: it is
-  just a name → path → priority table with an auto/manual mode flag. It
-  doesn't know or care what architecture registered an entry. This is
-  exactly the mechanism this branch is already using correctly (`docs/
-  findings.md`, "Bug 4" and the runtime-stage fix) — `mawk`'s postinst
-  calling `update-alternatives --install /usr/bin/awk awk /usr/bin/mawk 5`
-  is real Debian's normal, correct, unremarkable behavior. Nothing about
-  it is fusion-mode-specific or wrong.
-- **`dpkg-divert`** — the other real mechanism, checked directly against
-  its man page: it lets an admin or a package's maintainer scripts move a
-  *specific path* out of the way before a package's own unpack step would
-  otherwise overwrite it, including a path dpkg doesn't own at all (a
-  locally-modified or non-package file — the `--local` option is for
-  exactly that). This **does not apply to today's incident**: `mawk`
-  never ships a `/usr/bin/awk` file in its own archive (only
-  `/usr/bin/mawk`); `/usr/bin/awk` is created entirely at postinst time,
-  by `update-alternatives`, which has no concept of diversions at all.
-  Diversion is the right tool for the *other* collision class this branch
-  already handles differently: a package's own **shipped** file landing on
-  an existing path — that's what `fuse-classify.sh`'s pre-flight refusal
-  (`docs/findings.md`) already catches, by refusing before dpkg ever
-  unpacks, rather than diverting.
+this. Short answer, worked out in `multiarch-mechanics.md`: **no** — real
+Debian's own `update-alternatives` handling of `mawk`'s postinst
+(`update-alternatives --install /usr/bin/awk awk /usr/bin/mawk 5 …`) is
+normal, correct, unremarkable behavior; nothing about it is wrong or
+fusion-specific. `dpkg-divert` doesn't apply either: `mawk` never ships a
+`/usr/bin/awk` file in its own archive, only `/usr/bin/mawk` — the
+colliding path is created entirely at postinst time by `update-
+alternatives`, which has no concept of diversions at all. (Diversion is
+the right tool for a *different* collision class this branch already
+handles: a package's own **shipped** file landing on an existing path —
+that's what `fuse-classify.sh`'s pre-flight refusal, `docs/findings.md`,
+already catches, by refusing before dpkg ever unpacks.)
 
 ## So what is actually new here, specific to fusion-no-prefix
 
