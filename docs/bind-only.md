@@ -138,13 +138,41 @@ The core bind-only path plus the safe mechanics for the three traps landed:
   host prefix for getcwd/readlink/`/proc/self/cwd`.  Verified.
 - **Verified on `fe2`**: bind read; `..` clamp (`/etc/../../etc/x`) matches
   canonicalize; absolute-symlink before/after; `/proc/self/cwd` -> `/etc`.
-- **Benchmark** (`scripts/bench-tracer.sh`, binds `$PREFIX:/usr`; medians):
-  20 000 path lookups in one process — og (stock Termux proot) 2.26s,
-  fork-lite canonicalize 2.26s, **fork-lite bind-only 1.40s (~1.6x)**.
-  `find -type f` over 67k files (I/O-bound): 2.66s / 2.80s / 2.45s (~8%).
+- **Benchmark** — `scripts/bench-tracer.sh`, medians on `fe2`, binds
+  `$PREFIX:/usr`:
+
+  | workload | og (stock proot) | fork-lite canonicalize | fork-lite bind-only |
+  |---|---|---|---|
+  | 20 000 path lookups, one process | 2.26s | 2.26s | **1.40s (~1.6x)** |
+  | `find -type f` over 67k files | 2.66s | 2.80s | 2.45s (~8%) |
+
+  og ≈ fork-lite-canonicalize, so the gain is the fast path, not the extension
+  prune; the walk is I/O-bound.
 - **Not done**: getcwd kernel-passthrough, whitelist pruning, and deleting
   `glue.*`/`f2fs-bug.*`/`readlink_proc` — kept because canonicalize is still
   the fallback.
+
+## Scope — our proot vs general proot
+
+The fast path is a **deb-native optimization, not an upstream proot
+improvement**. It is safe only under assumptions stock proot does not make:
+
+| our fork-lite assumes | general proot must support |
+|---|---|
+| rootfs `/` (no `-r` chroot) | chroot rootfs; `..`/symlinks clamp to it |
+| flat top-level binds | nested/asymmetric binds, bind-into-bind |
+| guest tree symlink-normalized by `install.sh` | resolves absolute symlinks itself |
+| no path-manipulating extensions | `hidden_files`, `link2symlink`, `fake_id0`, `kompat` hook every path |
+
+Break any of these and prefix-rewrite answers wrongly (the symlink/`..` traps).
+The escape hatches keep it *safe*, not *optimal*: `..` auto-falls back to
+`canonicalize()`, and `PROOT_NO_BIND_ONLY=1` restores full behavior.
+
+What stays general: the `ptrace` core, syscall enter/exit tables, exec/loader
+injection, detranslation. What is ours: the fast path plus the symlink
+normalizer (a property of our prefix, not a proot feature). Upstreaming it
+would mean an opt-in fast translate with a caller-maintained symlink invariant
+and a canonicalize fallback — a larger design change.
 
 ## Suggested order
 

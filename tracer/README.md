@@ -17,7 +17,39 @@ and the multi-arch machinery is removed: `arch.h` is AArch64-only with a hard
 `#error` otherwise, the 32-bit ARM ABI and `-m32` loader are gone, and the
 `sysnums-{arm,i386,x86_64,x32,sh4}.h` / `assembly-{arm,x86,x86_64}.h` files
 are deleted. It builds on Termux (`make CC=clang`, needs `libtalloc`) and a
-static binary reads through a bind. Remaining: the `cli/` → binder rewrite.
+static binary reads through a bind. **The bind-only fast path has landed**
+(see below). Remaining: the `cli/` → binder rewrite (`dn-trace`).
+
+## Bind-only fast path (deb-native-specific)
+
+`translate_path` (`path/path.c`) no longer walks every component with
+`lstat(2)`. It normalizes the guest path (collapse `.`/`//`, keep one trailing
+`/`) and prefix-substitutes the leading bound component, letting the kernel
+resolve the rest. This is correct only because deb-native's scope guarantees
+rootfs `/` (no chroot), flat top-level binds, and a symlink-normalized guest
+tree. **It is not a general proot optimization** — it assumes what stock proot
+cannot: see [`../docs/bind-only.md`](../docs/bind-only.md).
+
+Safe mechanics for the three traps:
+
+- **absolute symlinks** — `scripts/normalize-symlinks.sh` rewrites absolute
+  targets under bound dirs to relative; run by `install.sh` after install.
+- **`..` across a bind** — detected in `normalize_guest_path()`, falls back to
+  `canonicalize()`.
+- **output detranslation** — `detranslate_path` unchanged (getcwd, readlink,
+  `/proc/self/cwd`).
+
+`PROOT_NO_BIND_ONLY=1` forces the old canonicalize path (A/B and escape hatch).
+
+Benchmark (`scripts/bench-tracer.sh`, medians on `fe2`, binds `$PREFIX:/usr`):
+
+| workload | og (stock proot) | fork-lite canonicalize | fork-lite bind-only |
+|---|---|---|---|
+| 20 000 path lookups, one process | 2.26s | 2.26s | **1.40s (~1.6x)** |
+| `find -type f` over 67k files | 2.66s | 2.80s | 2.45s (~8%) |
+
+The stat loop isolates translation cost (og ≈ fork-lite-canonicalize, so the
+gain is the fast path, not the extension prune); the walk is I/O-bound.
 
 ## Origin
 

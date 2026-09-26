@@ -48,7 +48,9 @@ replace the view's path-resolution job.
 - **fork-lite** (`tracer/`): proot base imported and pruned — extensions
   removed (framework kept) and made AArch64-only. It **builds on `fe2`**
   (`make CC=clang`, needs `libtalloc`) and a static binary reads through a
-  `-b` bind. **Next: replace `cli/` with our `dn-trace` binder** (bind
+  `-b` bind. **Bind-only fast path landed** (`docs/bind-only.md`,
+  `scripts/normalize-symlinks.sh`, ~1.6x stat-dense; `PROOT_NO_BIND_ONLY=1`
+  reverts). **Next: replace `cli/` with our `dn-trace` binder** (bind
   `$INSTDIR` over `/usr /etc /var /opt`, handle missing paths), then point
   `dn-run.c` at it and test static / `abbtr` / NSS.
 - Corpus on the phone: `~/debcorpus/` (Packages.gz, `debs/`, `root/`).
