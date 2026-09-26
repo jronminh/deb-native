@@ -9,6 +9,33 @@ for what just landed.
 
 ## Done recently
 
+- [x] **Fixed fresh bootstrap being broken outright** (`setup-apt-prefix.sh`
+      never called `setup-runtime.sh`, so `make-launchers.sh` died on a
+      missing `path-redirect.so`) — the existing-prefix reuse path hid it.
+- [x] **Fixed cross-prefix apt/dpkg hijacking** — internal scripts called
+      bare `apt-get`/`dpkg`, which resolve through `PATH` to ANOTHER
+      already-activated prefix's arch-aware wrapper instead of the real
+      binaries. Also: `apt remove`/`purge`/`reinstall` routed by repo
+      *availability* instead of actual *install location*, so a name
+      packaged by both Termux and Debian (`bc`, `tree`) had no working
+      `apt remove` for the prefix-installed copy.
+- [x] **Hardened every prefix/instdir path argument to absolute** — none of
+      the pipeline scripts defended against a relative path, even though
+      each one's usage comment documents direct invocation; a relative path
+      could corrupt `apt.conf` or get baked into a generated wrapper/shebang.
+- [x] **`dn-activate.sh` warns on prefix swap** instead of silently
+      replacing which prefix is on `PATH`.
+- [x] **Flattened the prefix layout** — `$DNPREFIX` is now the instdir
+      directly, dropping the nested `root/` subdirectory (removed a
+      genuinely empty, never-used duplicate dpkg admindir, and resolved a
+      name collision with Debian's own `/root`).
+- [x] **`update-alternatives` writes into Termux's own prefix** (root cause:
+      it defaults `--altdir`/`--admindir` to its own compiled-in absolute
+      path, which the shim correctly never touches) — fixed with a
+      generated wrapper forcing the prefix's own directories. Fixes both
+      the `figlet` and `awk -> mawk` cases in one place.
+- [x] no-op shim for `dpkg-statoverride` (Termux's `dpkg` doesn't ship it;
+      `ca-certificates` logged `command not found` but still reached `ii`).
 - [x] **`termux-dn-doctor`** — a generated command (in the launcher dir, so it
       runs by name) that checks the Termux↔prefix seams: a leaked
       `APT_CONFIG` in the shell rc (which made `apt update` show only Debian),
@@ -81,13 +108,6 @@ for what just landed.
 
 ## Quick wins
 
-- [ ] no-op shim for `dpkg-statoverride` (Termux's `dpkg` doesn't ship it;
-      `ca-certificates` logs `command not found` but still reaches `ii`).
-- [ ] **`update-alternatives` writes links into Termux's own prefix**
-      (`$PREFIX/usr/bin/awk -> $TERMUX_PREFIX/etc/alternatives/awk`), so
-      alternative names are dangling. `make-launchers.sh` covers the
-      `<name>-<pkg>` case (`figlet -> figlet-figlet`) but not `awk -> mawk`.
-      Either fix the link target or resolve providers from the alternatives db.
 - [ ] **forked Bionic `sed`/`find`** in some postinsts can't see prefix paths
       (`ca-certificates` logs `sed: can't read /etc/ca-certificates.conf` but
       still reaches `ii`). The shim only covers the glibc shell's own calls;
