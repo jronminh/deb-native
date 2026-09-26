@@ -5,7 +5,7 @@
 # so runtime files sit under usr/ (dn-shell and the no-op chown/chgrp in
 # usr/bin, the shim and dn-run in usr/lib/deb-native).
 #
-# Fusion / Debian mode (docs/debian-mode.md): INSTDIR is Termux's own prefix,
+# True fusion (docs/true-fusion.md): INSTDIR is Termux's own prefix,
 # and $PREFIX/usr is a symlink to "." -- so usr/bin IS Termux's real bin/.
 # Writing runtime files there would replace Termux's own binaries: the no-op
 # chown/chgrp would shadow coreutils', and the update-alternatives wrapper

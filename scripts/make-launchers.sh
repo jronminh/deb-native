@@ -23,13 +23,13 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
 . "$HERE/dn-layout.sh"
-# In Debian mode INSTDIR's bin/ is Termux's own, holding every Termux
+# In true fusion INSTDIR's bin/ is Termux's own, holding every Termux
 # program: scanning it would wrap all of them. Needs per-package scoping
 # (dpkg -L of the arm64 packages) first -- not built yet.
 # DN_LAUNCH_FILES=FILE (absolute paths, one per line) is that scoping: Debian
 # mode's post-install hook passes the just-installed arm64 packages' own
 # programs, and only those get launchers.
-[ "$DN_FUSION" = 0 ] || [ -n "${DN_LAUNCH_FILES:-}" ] || { echo "make-launchers: Debian mode needs DN_LAUNCH_FILES (per-package scoping)" >&2; exit 1; }
+[ "$DN_FUSION" = 0 ] || [ -n "${DN_LAUNCH_FILES:-}" ] || { echo "make-launchers: the fused prefix needs DN_LAUNCH_FILES (per-package scoping)" >&2; exit 1; }
 SHIM="$DN_LIBDIR/path-redirect.so"
 LAUNCHDIR="$DN_LAUNCHDIR"
 
@@ -59,7 +59,7 @@ is_elf() {
   [ "$(head -c4 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "7f454c46" ]
 }
 
-# Debian mode: dn-run finds INSTDIR from its own path by stripping
+# True fusion: dn-run finds INSTDIR from its own path by stripping
 # usr/lib/deb-native, which the flat prefix does not have; it already takes
 # DN_INSTDIR instead, and its "$INSTDIR/usr/..." paths resolve via usr -> .
 ENVLINE=""

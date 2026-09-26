@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     snprintf(inst, sizeof inst, "%s", fuse_instdir);
     snprintf(shim, sizeof shim, "%s", fuse_shim);
   } else {
-    /* Debian mode installs this binary as
+    /* True fusion installs this binary as
      * $INSTDIR/lib/deb-native/fusion-bin/dn-shell (scripts/dn-layout.sh), so
      * dpkg-run maintainer scripts self-locate with no env from the caller. */
     const char *mark = "/lib/deb-native/fusion-bin/";

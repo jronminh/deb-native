@@ -1,5 +1,5 @@
 #!/bin/sh
-# Debian mode apt DPkg::Post-Invoke hook (docs/debian-mode.md): after dpkg
+# True fusion apt DPkg::Post-Invoke hook (docs/true-fusion.md): after dpkg
 # ran, rewrite the absolute symlinks the just-installed packages brought in
 # -- shipped ones, and the update-alternatives links their postinsts made --
 # to relative ones inside the prefix. The kernel follows a symlink by itself,

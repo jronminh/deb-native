@@ -34,7 +34,7 @@
 #
 #   NORMALIZE_LINKS_FILE=FILE
 #                          Exactly these links (absolute host paths, one
-#                          per line) instead of scanning -- Debian mode's
+#                          per line) instead of scanning -- true fusion's
 #                          post-install hook passes the links the
 #                          just-installed packages brought in.
 set -eu

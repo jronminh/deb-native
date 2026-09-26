@@ -1,5 +1,5 @@
 #!/bin/sh
-# Debian mode base environment (docs/debian-mode.md, "Base environment"):
+# True fusion base environment (docs/true-fusion.md, "Base environment"):
 # the one-time, idempotent preparation that must exist before any Debian
 # package lands in Termux's prefix.
 #
@@ -7,7 +7,7 @@
 #   2. $PREFIX/usr -> . (Debian's /usr/... paths resolve into the flat prefix)
 #   3. runtime pieces, via main's setup-runtime.sh
 #   4. libc6:arm64 identity package: Termux's glibc under Debian's name
-#   5. tier-1 stand-ins: dn-dash, dn-debianutils, dn-openssl, dn-ca-certificates
+#   5. tier-1 stand-ins for floor packages: dn-dash, dn-openssl, dn-ca-certificates
 #
 # Usage: dn-base-env.sh
 set -eu
@@ -53,7 +53,7 @@ echo "base-env: runtime ($P/lib/deb-native, fusion-bin) ok"
 # uses, into $PREFIX/glibc/lib. The file list is taken from Debian's real
 # libc6 .deb and matched by soname. The version is the real Termux glibc
 # version, so "libc6 (>= X)" still tells the truth; upgrades to Debian's own
-# libc6 are blocked by the apt pin dn-mode.sh writes, not by the version.
+# libc6 are blocked by the apt pin dn-fuse.sh writes, not by the version.
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
@@ -67,11 +67,11 @@ build_libc6() {
   fi
 
   # Debian's real libc6 .deb, only for its file list. Its Filename comes from
-  # whatever Debian index apt has (Debian mode lists), else the caller passes one.
+  # whatever Debian index apt has (the fused Debian lists), else the caller passes one.
   REAL=${DN_LIBC6_DEB:-}
   if [ -z "$REAL" ]; then
     FN=$(apt-cache show libc6:arm64 2>/dev/null | awk '/^Filename:/ {print $2; exit}')
-    [ -n "$FN" ] || { echo "base-env: no Debian libc6 in the apt index; run dn-mode.sh debian && apt update, or set DN_LIBC6_DEB" >&2; exit 1; }
+    [ -n "$FN" ] || { echo "base-env: no Debian libc6 in the apt index; run dn-fuse.sh, or set DN_LIBC6_DEB" >&2; exit 1; }
     REAL="$WORK/libc6-debian.deb"
     curl -fsSL -o "$REAL" "$MIRROR/$FN"
   fi
@@ -124,12 +124,13 @@ EOF
 }
 build_libc6
 
-# 5. Tier-1 Termux-backed stand-ins (docs/debian-mode.md, "Package tiers").
+# 5. Tier-1 Termux-backed stand-ins (docs/true-fusion.md, "Package tiers"),
+# for floor packages only: everything else Debian replaces outright.
 # A Debian name that an installed Termux package already fills: the
 # stand-in is named dn-NAME (a package named NAME:arm64 would crossgrade
 # Termux's NAME away), Provides NAME at the Termux version, and ships only
 # links at Debian's paths into Termux's files. Debian's own NAME is pinned
-# to -1 by dn-mode.sh.
+# to -1 by dn-fuse.sh.
 #
 # Path of $2 relative to directory $1 (same helper as normalize-symlinks.sh).
 relpath() {
@@ -183,7 +184,6 @@ EOF
 }
 
 standin dash dash
-standin debianutils debianutils
 standin ca-certificates ca-certificates \
   etc/ssl/certs/ca-certificates.crt=etc/tls/cert.pem
 # Termux's "openssl" is the library; the CLI is openssl-tool. Debian's

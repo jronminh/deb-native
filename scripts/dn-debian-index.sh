@@ -1,5 +1,5 @@
 #!/bin/sh
-# Debian mode index translation (docs/debian-mode.md): rewrite
+# True fusion index translation (docs/true-fusion.md): rewrite
 # "Architecture: all" to "arm64" in every Debian binary-arm64 Packages list,
 # so Debian's arch-independent packages live on the arm64 side and resolve
 # their dependencies against Debian, never against Termux's same-named "all"

@@ -7,7 +7,7 @@
 #
 # Same-package exception, arm64 only: a path already owned by PKG:arm64 is
 # this package's own (upgrade/reinstall). This is safe only because Debian
-# mode rewrites "Architecture: all" to arm64 (docs/debian-mode.md), so every
+# mode rewrites "Architecture: all" to arm64 (docs/true-fusion.md), so every
 # fused Debian package is recorded as :arm64 and never as Termux's native
 # side. (Before that rule, cowsay showed why there could be no exception:
 # Termux's and Debian's both reported "all" and were indistinguishable.)
@@ -42,6 +42,9 @@ dpkg-deb -c "$DEB" | while IFS= read -r line; do
   owner=$(dpkg -S "$path" 2>/dev/null | head -1 | sed 's/: .*//')
   # The same package being upgraded or reinstalled owns its own files.
   [ "$owner" = "$PKG:arm64" ] && continue
+  # A Termux package this same apt run crossgrades to Debian's (dn-hook-pre.sh
+  # sets DN_REPLACING): dpkg replaces its files as part of the crossgrade.
+  case " ${DN_REPLACING:-} " in *" $PKG "*) [ "$owner" = "$PKG" ] && continue ;; esac
   if [ -n "$owner" ]; then
     echo "fuse-classify: REFUSE $DEB -- $target already owned by $owner" >&2
   else

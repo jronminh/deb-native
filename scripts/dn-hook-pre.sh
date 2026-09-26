@@ -1,7 +1,7 @@
 #!/bin/sh
-# Debian mode apt DPkg::Pre-Install-Pkgs hook (docs/debian-mode.md, "Install
+# True fusion apt DPkg::Pre-Install-Pkgs hook (docs/true-fusion.md, "Install
 # pipeline"). apt feeds its full plan on stdin in hook protocol version 3
-# (set by dn-mode.sh):
+# (set by dn-fuse.sh):
 #
 #   VERSION 3
 #   <apt config, one item per line>
@@ -11,8 +11,9 @@
 # where action is the .deb path, **CONFIGURE** or **REMOVE**.
 #
 # 1. Plan guard (tier 0): refuse the whole run if it would remove or
-#    replace any package that is not arm64 -- i.e. anything Termux's. A
-#    crossgrade (jq:aarch64 -> jq:arm64) shows up as exactly that.
+#    crossgrade a floor package (dn-floor.sh, snapshotted by dn-fuse.sh) --
+#    what the Termux app, apt and dpkg run on. Other Termux packages may be
+#    replaced by Debian's (a crossgrade: foo:aarch64 -> foo:arm64).
 # 2. Translate every .deb about to be unpacked, in place, before dpkg sees
 #    it: fuse-repack.sh (usr/ merged into the flat prefix, Architecture all
 #    -> arm64, ELFs repointed at the libc6:arm64 identity paths),
@@ -36,29 +37,36 @@ trap 'rm -f "$PLAN"' EXIT
 awk 'body { print } /^$/ { body = 1 }' > "$PLAN"
 { echo "== $(date '+%F %T') plan"; cat "$PLAN"; } >>"$LOG"
 
+FLOOR="$STATE/floor"
+[ -s "$FLOOR" ] || { echo "dn-hook-pre: no floor snapshot ($FLOOR); run dn-fuse.sh" >&2; exit 1; }
 refused=""
+replacing=""
 while read -r pkg ov oa oma cmp nv na nma action; do
   [ -n "$pkg" ] || continue
-  # Something Termux's (old arch not arm64; "-" or "none" = new install)
-  # being removed or replaced by another architecture.
+  # A Termux package (old arch not arm64; "-"/"none" = new install) removed
+  # or replaced by another architecture.
   if [ "$oa" != - ] && [ "$oa" != none ] && [ "$oa" != arm64 ]; then
     case "$action" in
-      '**REMOVE**') refused="$refused $pkg:$oa(remove)" ;;
       '**CONFIGURE**') ;;
-      *) [ "$na" = "$oa" ] || refused="$refused $pkg:$oa(->$na)" ;;
+      '**REMOVE**') grep -qxF "$pkg" "$FLOOR" && refused="$refused $pkg:$oa(remove)" ;;
+      *) if [ "$na" != "$oa" ]; then
+           if grep -qxF "$pkg" "$FLOOR"; then refused="$refused $pkg:$oa(->$na)"
+           else replacing="$replacing $pkg"; fi
+         fi ;;
     esac
   fi
-  # Nothing but arm64 may be installed from Debian mode.
+  # Nothing but arm64 may be installed.
   case "$action" in
     '**REMOVE**'|'**CONFIGURE**') ;;
     *) [ "$na" = arm64 ] || [ "$na" = all ] || refused="$refused $pkg:$na(install)" ;;
   esac
 done < "$PLAN"
 if [ -n "$refused" ]; then
-  echo "dn-hook-pre: refusing: this plan would change Termux packages (tier 0):$refused" >&2
-  echo "dn-hook-pre: switch to Termux mode (dn-mode.sh termux) to change Termux packages" >&2
+  echo "dn-hook-pre: refusing: this plan would change Termux's floor (tier 0):$refused" >&2
   exit 1
 fi
+# fuse-classify.sh may let a crossgraded package overwrite its own old files.
+export DN_REPLACING="$replacing"
 
 while read -r pkg ov oa oma cmp nv na nma action; do
   case "$action" in '**REMOVE**'|'**CONFIGURE**'|'') continue ;; esac
