@@ -25,6 +25,24 @@ figlet hi          # an installed program, run by name
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 
+## Why this exists
+
+The usual way to get Debian on Android is a **separate rootfs image under
+proot** (or root): two environments side by side, every syscall through
+proot. `deb-native` instead installs *into* Termux and fakes only what Debian
+assumes:
+
+- **No second rootfs.** Termux's own `apt`/`dpkg`, glibc side-install and
+  coreutils are reused, not duplicated.
+- **A libc shim, not proot, for the common case** — path rewrites happen
+  in-process; only static binaries, inline `svc` and NSS reads need the
+  tracer.
+- **Termux's `apt` is the interface**, routing per package ("Termux wins").
+
+No root, no `chroot`, no kernel namespaces — the mount-namespace "view" that
+would do this on a real Debian host is unavailable here. Not an emulator and
+not isolation: **install and run, not emulate**.
+
 ## How it works
 
 The idea is to **fake only the Debian layout and reuse everything else.** A
