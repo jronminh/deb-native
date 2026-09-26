@@ -1334,11 +1334,58 @@ trusting it.
 `"$INSTDIR/usr/lib/deb-native/..."` resolves here via the same symlink,
 not a coincidence left unstated).
 
+### Cross-check: a second, genuinely different package (mawk, 2026-09-26)
+
+Chosen deliberately to stress two things figlet couldn't: three `--slave`
+links in one `--install` (`awk.1.gz`, `nawk`, `nawk.1.gz`) and a man page
+under `man1/` instead of `man6/` (probing `NORMALIZE_SCAN_DIRS`'s
+generalization). Both worked once scoped correctly
+(`NORMALIZE_SCAN_DIRS="etc/alternatives bin share/man/man1"`) — confirmed
+`relpath()`'s own multi-level math too: `share/man/man1/awk.1.gz` (three
+levels down) correctly got `../../../etc/alternatives/awk.1.gz`, not
+hand-derivable without the same off-by-one risk hit during recovery
+(next section).
+
+Surfaced a real collision this project's own tooling hadn't hit yet:
+`mawk`'s postinst (unmodified, real Debian text) registers `/usr/bin/awk`
+via `update-alternatives`, auto-selecting itself since nothing else was
+registered — silently displacing Termux's own, completely unmanaged
+`$PREFIX/bin/awk -> gawk` plain symlink. Investigated properly instead of
+patching around it blind: see `docs/fusion-multiarch.md` (new) for the
+full research (Debian's `Multi-Arch` field is about dependency-graph
+satisfaction and library coexistence only, confirmed against Debian Policy
+directly — not this; `dpkg-divert` doesn't apply either, since
+`update-alternatives`-created paths aren't part of a package's own shipped
+file list) and the concrete incident: `normalize-symlinks.sh`'s own
+`relpath()` shells out to `awk`, so the tool meant to fix the resulting
+dangling `awk` broke on its own dependency mid-run, twice (once from the
+real collision, once again from a by-hand recovery attempt with an
+off-by-one in the relative-path math — confirmed via `strace` pinning the
+failure to one `newfstatat` returning `ENOENT` for the whole chain, exactly
+what a wrong intermediate hop looks like). Resolved per that doc's own
+recommendation: registered Termux's `gawk` as a *bona fide* competing
+alternative at a higher priority
+(`update-alternatives --install /usr/bin/awk awk /bin/gawk 10`, needs
+`DPKG_ROOT=$PREFIX` set even for an interactive call, not just inside a
+dpkg-driven maintainer script — same as the "path" argument's own root-
+joining throughout this log) rather than leaving it as an unmanaged
+symlink a future package can silently clobber again. Verified: `awk` is
+`gawk` again by default, `mawk` remains fully installed, selectable
+(`update-alternatives --config awk`), and independently runnable through
+`dn-run` — no regression to `figlet`.
+
 ### Live system state as of this session
 
 - `figlet:arm64`: `Status: install ok installed`, the alternative resolves
   correctly, and running it through `dn-run` genuinely renders text —
   fully working end to end for the first time this branch.
+- `mawk:arm64` (new): `Status: install ok installed`, alternative correctly
+  registered (priority 5) but not selected — `gawk` (Termux's own, now
+  registered at priority 10) wins in auto mode. Both fully functional.
+- `$PREFIX/bin/awk` now resolves through `update-alternatives`
+  (`$PREFIX/etc/alternatives/awk -> ../../bin/gawk`) instead of being a
+  plain, unmanaged symlink as before this session — a deliberate,
+  permanent change in *kind*, not just in target.
 - `$PREFIX/usr` remains a real symlink (`-> .`) on this device — permanent,
   deliberate, depended on by bug 3's fix and now also by the runtime stage.
 - `$PREFIX/lib/deb-native/` (new, permanent): `path-redirect.so`, `dn-run`,
