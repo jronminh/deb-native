@@ -115,6 +115,10 @@ not a promise: anything that goes around libc — static binaries, raw
 in [`TODO.md`](TODO.md) and [#1](https://github.com/jronminh/deb-native/issues/1).
 Being incomplete there is fine, as long as the common case is solid.
 
+Which packages are in scope is [`docs/standard.md`](docs/standard.md); the libc
+entry points the shim must therefore intercept — measured against that corpus —
+are in [`docs/shim-coverage.md`](docs/shim-coverage.md).
+
 ## How it relates to `sudo-less`
 
 [`sudo-less`](https://github.com/jronminh/sudo-less) does the same job on a
