@@ -43,6 +43,13 @@ merge_up() {
   fi
 }
 
+# Merged-/usr links (base-files ships bin -> usr/bin, lib -> usr/lib, ...):
+# in the flat prefix bin/ already IS usr/bin (usr -> .), so drop them.
+for f in "$WORK/pkg/"*; do
+  [ -L "$f" ] || continue
+  [ "$(readlink "$f")" = "usr/${f##*/}" ] && rm "$f"
+done
+
 if [ -d "$WORK/pkg/usr" ]; then
   for f in "$WORK/pkg/usr/"* "$WORK/pkg/usr/".[!.]*; do
     [ -e "$f" ] || [ -L "$f" ] || continue
