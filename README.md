@@ -129,6 +129,18 @@ and the syscall tracer are still being built. `termux-dn-doctor` checks the
 common breakages (a leaked `APT_CONFIG`, a clobbered Termux `sources.list`,
 stale wrappers) and `--fix`es them.
 
+### Experimental: true fusion (separate branch, not for general use)
+
+The [`fusion-debian-mode`](https://github.com/jronminh/deb-native/tree/fusion-debian-mode)
+branch builds on this project's core to go one step further: it
+transforms Termux's own `$PREFIX` into a Debian `arm64` system -- Debian
+as apt's only source, packages installed straight into Termux's prefix
+and dpkg database, Termux reduced to the packages it runs on. It is
+**one-way and far less safe than `main`**: a bad package can break Termux
+itself, not just a Debian program, and there is no switch back. See its
+[`docs/true-fusion.md`](https://github.com/jronminh/deb-native/blob/fusion-debian-mode/docs/true-fusion.md)
+before touching it. `main`'s separate prefix stays the recommended path.
+
 ## Requirements
 
 Termux with `git`, `clang`, and the glibc side-install
