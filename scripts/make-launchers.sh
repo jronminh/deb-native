@@ -26,7 +26,10 @@ GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
 # In Debian mode INSTDIR's bin/ is Termux's own, holding every Termux
 # program: scanning it would wrap all of them. Needs per-package scoping
 # (dpkg -L of the arm64 packages) first -- not built yet.
-[ "$DN_FUSION" = 0 ] || { echo "make-launchers: Debian mode needs per-package scoping; not built yet" >&2; exit 1; }
+# DN_LAUNCH_FILES=FILE (absolute paths, one per line) is that scoping: Debian
+# mode's post-install hook passes the just-installed arm64 packages' own
+# programs, and only those get launchers.
+[ "$DN_FUSION" = 0 ] || [ -n "${DN_LAUNCH_FILES:-}" ] || { echo "make-launchers: Debian mode needs DN_LAUNCH_FILES (per-package scoping)" >&2; exit 1; }
 SHIM="$DN_LIBDIR/path-redirect.so"
 LAUNCHDIR="$DN_LAUNCHDIR"
 
@@ -44,7 +47,7 @@ BIN_DIRS="$INSTDIR/usr/bin $INSTDIR/usr/sbin $INSTDIR/sbin $INSTDIR/bin $INSTDIR
 # docs/syscall-boundary.md, "Remaining: the direct-syscall attribute".
 DIRECT_LIST="$tmp.direct"
 : > "$DIRECT_LIST"
-if command -v python3 >/dev/null 2>&1; then
+if [ -z "${DN_LAUNCH_FILES:-}" ] && command -v python3 >/dev/null 2>&1; then
   for d in $BIN_DIRS; do
     [ -d "$d" ] || continue
     [ -L "$d" ] && continue
@@ -96,6 +99,16 @@ EOF
   chmod 755 "$tmp"
   mv -f "$tmp" "$LAUNCHDIR/$name"
 }
+
+if [ -n "${DN_LAUNCH_FILES:-}" ]; then
+  # (The direct-syscall scan above works per directory; in this mode every
+  # ELF goes through dn-run's launch-time classification only.)
+  while IFS= read -r f; do
+    [ -f "$f" ] && [ -x "$f" ] || continue
+    wrap "$(basename "$f")" "$f"
+  done < "$DN_LAUNCH_FILES"
+  BIN_DIRS=""
+fi
 
 # Real bin dirs (skip the usrmerge symlinks: bin -> usr/bin, sbin -> usr/sbin).
 for d in $BIN_DIRS; do

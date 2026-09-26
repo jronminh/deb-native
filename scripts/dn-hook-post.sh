@@ -13,7 +13,8 @@ P=${PREFIX:-/data/data/com.termux/files/usr}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 STATE="$P/var/lib/deb-native"
 LOG="$P/var/log/deb-native-debian-mode.log"
-[ -s "$STATE/pending" ] || exit 0
+[ -s "$STATE/pending" ] || [ -n "$(ls "$P"/lib/deb-native/bin 2>/dev/null)" ] || exit 0
+touch "$STATE/pending"
 
 LINKS=$(mktemp)
 trap 'rm -f "$LINKS"' EXIT
@@ -34,9 +35,26 @@ for a in "$P"/var/lib/dpkg/alternatives/*; do
   echo "$P/etc/alternatives/${a##*/}"
 done >> "$LINKS"
 
+# Programs the new packages put on a bin path get launchers (main's
+# make-launchers.sh, scoped to exactly these files): run by name, a glibc
+# program must not inherit Termux's Bionic LD_PRELOAD (termux-exec), and
+# needs the path shim -- dn-run sets both.
+PROGS=$(mktemp)
+trap 'rm -f "$LINKS" "$PROGS"' EXIT
+sort -u "$STATE/pending" | while read -r pkg; do
+  dpkg-query -L "$pkg:arm64" 2>/dev/null | grep -E '^/(bin|sbin|games)/[^/]+$' | sed "s|^|$P|"
+done > "$PROGS"
+
 {
   echo "== $(date '+%F %T') post: $(sort -u "$STATE/pending" | tr '\n' ' ')"
   NORMALIZE_FUSE_USR=1 NORMALIZE_LINKS_FILE="$LINKS" "$HERE/normalize-symlinks.sh" "$P"
+  [ -s "$PROGS" ] && DN_LAUNCH_FILES="$PROGS" "$HERE/make-launchers.sh" "$P"
+  # Drop launchers whose program was removed.
+  for l in "$P"/lib/deb-native/bin/*; do
+    [ -f "$l" ] || continue
+    real=$(sed -n 's/^exec "[^"]*" \(--trace \)\{0,1\}"\([^"]*\)".*/\2/p' "$l" | tail -1)
+    [ -z "$real" ] || [ -e "$real" ] || { rm -f "$l"; echo "removed stale launcher $l"; }
+  done
 } >>"$LOG" 2>&1
 : > "$STATE/pending"
 exit 0

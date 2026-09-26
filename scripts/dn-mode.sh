@@ -12,6 +12,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SWITCH="$P/etc/apt/apt.conf.d/99-dn-debian-mode"
 ETC="$P/etc/deb-native/debian-mode"
 LISTS="$P/var/lib/apt/lists-debian"
+PROFILE="$P/etc/profile.d/deb-native-debian-mode.sh"
 CACHE="$(dirname "$(apt-config shell C Dir::Cache/d | sed "s/^C='\(.*\)'$/\1/")")/apt-debian"
 
 status() {
@@ -67,10 +68,16 @@ DPkg::Tools::Options::$HERE/dn-hook-pre.sh::Version "3";
 DPkg::Post-Invoke { "$HERE/dn-hook-post.sh"; };
 EOF
     mv "$SWITCH.tmp" "$SWITCH"
+    # Launchers for installed Debian programs (dn-hook-post.sh) go first on
+    # PATH for new login shells (Termux's etc/profile sources profile.d).
+    cat > "$PROFILE" <<EOF
+# deb-native Debian mode (scripts/dn-mode.sh): launchers for fused Debian programs
+case ":\$PATH:" in *":$P/lib/deb-native/bin:"*) ;; *) export PATH="$P/lib/deb-native/bin:\$PATH" ;; esac
+EOF
     echo "switched to debian mode; run: apt update"
     status ;;
   termux)
-    rm -f "$SWITCH"
+    rm -f "$SWITCH" "$PROFILE"
     echo "switched to termux mode (Debian lists kept in $LISTS)"
     status ;;
   status) status ;;
