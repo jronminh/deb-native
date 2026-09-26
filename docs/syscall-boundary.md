@@ -82,6 +82,9 @@ python3 scripts/scan-direct-syscalls.py DIR --verify --list
 
 ## Open questions
 
+These are tracked, with an experiment log and the mechanism decision, in
+[`direct-usage.md`](direct-usage.md).
+
 - The corpus is dominated by **libraries** (415 of 668). What matters is the
   in-scope **programs** on `PATH`; that breakdown is not yet done.
 - Does interposing `syscall()` actually catch the 12 importers, and at what
