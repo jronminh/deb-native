@@ -1,2 +1,11 @@
 native/*.so
 tests/shim-libc/test
+tracer/**/*.o
+tracer/**/*.d
+tracer/proot
+tracer/build.h
+tracer/licenses
+tracer/loader/loader
+tracer/loader/loader-m32
+tracer/.check_*
+!tracer/.check_*.c
