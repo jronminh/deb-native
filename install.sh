@@ -3,10 +3,14 @@
 #   curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/install.sh | sh
 #   sh install.sh [PREFIX] [pkg ...]        # from a checkout
 #
+# Pin a release (clones that tag/ref) instead of rolling main:
+#   curl -fsSL .../v0.0.1-prealpha/install.sh | DEB_NATIVE_REF=v0.0.1-prealpha sh
+#
 # Sets up a Debian glibc prefix under Termux, installs packages into it, and
 # makes them runnable by name. Idempotent: an existing prefix is reused.
 set -eu
 REPO=https://github.com/jronminh/deb-native
+REF=${DEB_NATIVE_REF:-main}
 DIR=${DEB_NATIVE_DIR:-$HOME/.deb-native}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || echo .)
 
@@ -31,8 +35,12 @@ fail() { printf '%s error:%s %s\n' "$Y" "$R" "$*" >&2; exit 1; }
 if [ ! -f "$HERE/scripts/setup-apt-prefix.sh" ]; then
     banner
     command -v git >/dev/null 2>&1 || fail "git is required (pkg install git)"
-    printf '\n%s[1/1]%s fetching deb-native into %s\n' "$C" "$R" "$DIR"
-    [ -d "$DIR/.git" ] || git clone --depth 1 "$REPO" "$DIR"
+    printf '\n%s[1/1]%s fetching deb-native (%s) into %s\n' "$C" "$R" "$REF" "$DIR"
+    if [ ! -d "$DIR/.git" ]; then
+        git clone --depth 1 --branch "$REF" "$REPO" "$DIR"
+    elif [ "$REF" != "main" ]; then
+        git -C "$DIR" fetch -q --depth 1 origin "$REF" && git -C "$DIR" checkout -q FETCH_HEAD
+    fi
     exec sh "$DIR/install.sh" "$@"
 fi
 
