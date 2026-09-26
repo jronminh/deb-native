@@ -1279,32 +1279,75 @@ $PREFIX/bin/figlet-figlet` then executes — following the *entire* chain
 `.../bin/figlet-figlet`) to the exact right, real, foreign-arch ELF binary.
 Bug 4 is closed.
 
-### New, distinct finding: the runtime stage was never adapted for fusion mode at all
+### Runtime stage: root-caused and fixed (github.com/jronminh/deb-native issue #2)
 
 `grun $PREFIX/bin/figlet-figlet` gets past loading (interpreter
 `/lib/ld-linux-aarch64.so.1`, a real Debian glibc arm64 binary) but fails
 at its own first `open()`: `Unable to open font file`, even though
 `$PREFIX/share/figlet/standard.flf` genuinely exists. `DN_REDIRECT_DEBUG=1`
-under `grun` prints **zero** rewrite lines — the shim never loads into the
-child process at all, unlike under `dn-launch` (install stage), where it
-demonstrably does. `grun` most likely manages its own `LD_PRELOAD`/glibc
-environment and doesn't pass ours through. This is what install-flow.md
-calls out as a *separate* concern from install (`dn-run`, launchers,
-`patch-elfs.sh` in the classic design) — fusion mode has only ever
-exercised the install stage (`dn-launch`, maintainer scripts) so far, never
-actually running an installed foreign binary. Not investigated yet; next
-session's next question.
+under `grun` prints **zero** rewrite lines. Root-caused by reading
+`grun`'s own source (`$PREFIX/opt/glibc-runner/glibc-runner.sh`, a bash
+script, not a binary): `_glibc-runner_set_up_shell()` does `unset
+LD_PRELOAD` unconditionally on entry, and only ever restores something
+into it via its own `--teg` flag (its own `termux-exec-glibc` preload, not
+ours) — `grun` is simply the wrong tool for this, not a bug in it.
+
+The classic (non-fusion) branch's `native/dn-run.c` never uses `grun` at
+all (confirmed by reading it) — `patch-elfs.sh` repoints a binary's own ELF
+interpreter once, at install time (`grun --configure`'s own `patchelf
+--set-rpath --set-interpreter`, reused directly — that part of `grun` has
+no `LD_PRELOAD`-stripping problem, only its *launch* path does); `dn-run`
+then just sets `LD_PRELOAD`/`DN_INSTDIR`/`PATH` itself in C and `execv`s
+the (already-patched) binary directly, so nothing ever strips the shim.
+
+Turned out to need **zero code changes to `dn-run.c` itself** for fusion
+mode: it already supports a `DN_INSTDIR` env override (no self-location
+math to fix, unlike `dn-launch.c` before this branch's earlier fix), and
+both its hardcoded shim path and its `PATH` string are built from
+`"$INSTDIR/usr/..."` — which the `$INSTDIR/usr` self-symlink (bug 3's fix)
+already resolves correctly, for free. Verified:
+`DN_INSTDIR="$PREFIX" dn-run "$PREFIX/usr/bin/figlet" "..."` renders real
+ASCII art, following the *entire* chain (alternative → `/etc/alternatives`
+→ the patched binary) end to end.
+
+One real gap needed a real fix, not reuse: a fusion-mode equivalent of
+`patch-elfs.sh` to do the one-time ELF patch. **Never do this as
+`patch-elfs.sh`'s own blind `find $ROOT -type f -perm -u+x` +
+`grun --configure`** — fusion's `$ROOT` is Termux's own real, shared
+`$PREFIX`, holding thousands of Termux's own native Bionic binaries, and
+`grun --configure` calls `patchelf --set-interpreter` unconditionally on
+whatever it's given, with no glibc/Bionic check of its own (read the
+source, confirmed, not assumed) — it would corrupt them. `scripts/fuse-
+patch-elfs.sh` (new) scopes to one package's own files via `dpkg -L`, and
+independently re-checks each file's own ELF `PT_INTERP` for `ld-linux`
+before patching (belt and suspenders, given the tool it delegates to has
+none). Caught one real bug in an early draft of this script before
+committing it: `dpkg -L`'s paths are raw stored strings ("/bin/x"), never
+joined with any root by dpkg itself here — an unjoined existence check
+silently matched nothing at all, and the first "success" was leftover
+state from an earlier manual `grun --configure` call, not the script
+working. Re-verified from a genuinely restored, unpatched binary before
+trusting it.
+
+`scripts/fuse-runtime.sh` now also builds the shim and `dn-run` into
+`$INSTDIR/lib/deb-native/` (the real path; `dn-run.c`'s own hardcoded
+`"$INSTDIR/usr/lib/deb-native/..."` resolves here via the same symlink,
+not a coincidence left unstated).
 
 ### Live system state as of this session
 
-- `figlet:arm64`: `Status: install ok installed`, and the alternative now
-  genuinely resolves to the right file (previous section) — actually
-  *running* it still doesn't work (next section).
+- `figlet:arm64`: `Status: install ok installed`, the alternative resolves
+  correctly, and running it through `dn-run` genuinely renders text —
+  fully working end to end for the first time this branch.
 - `$PREFIX/usr` remains a real symlink (`-> .`) on this device — permanent,
-  deliberate, depended on by bug 3's fix.
-- `$PREFIX/lib/deb-native/fusion-bin/update-alternatives` (new) — a
-  permanent addition to this device, harmless to Termux itself (its own
-  directory, not on anyone else's `PATH`).
+  deliberate, depended on by bug 3's fix and now also by the runtime stage.
+- `$PREFIX/lib/deb-native/` (new, permanent): `path-redirect.so`, `dn-run`,
+  and `fusion-bin/update-alternatives` — all harmless to Termux itself
+  (their own directory, not on anyone else's `PATH`).
+- `$PREFIX/bin/figlet-figlet`'s ELF interpreter is now permanently patched
+  (`patchelf`, via `grun --configure`) to Termux's real glibc `ld.so`. A
+  backup of the original, pre-patch binary is at
+  `$PREFIX/tmp/figlet-figlet.orig.bak`.
 - `sysvbanner:arm64`: genuinely installed and working, untouched.
 - `arm64` remains a registered foreign architecture in Termux's dpkg.
 
