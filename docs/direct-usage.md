@@ -128,6 +128,7 @@ tracer that makes the no-`proot` ideal true (option 3).
 | — | Q2: `syscall()` interposer | *pending* | — |
 | — | Q3: `proot` overhead | *pending* | — |
 | 2026-09-26 | Q4b: proot syscall coverage (source check) | `openat2`/`statx`/`faccessat2`/xattr/sockets handled; `io_uring` absent | `io_uring` is proot's blind spot; verify Android's seccomp blocks it |
+| 2026-09-26 | fork-lite phase 1: build stock `termux/proot` on `fe2` | builds with Termux clang + `libtalloc`; `proot -b $R/etc:/etc busybox cat /etc/dn-test` prints the fake file | foundation validated — a static binary redirected at the syscall layer; pruning can start |
 
 ## Working notes
 
@@ -169,7 +170,9 @@ only, no extensions**. Not a full fork.
 Layout: `third_party/proot-lite/` (GPLv2+ headers kept). Phases:
 
 1. clone `termux/proot`, prune non-arm64 + extensions, **build arm64-only on
-   `fe2`** (first de-risk: does the stock tree even build with Termux clang?).
+   `fe2`**. *De-risked:* the stock tree builds on `fe2` with clang + `libtalloc`,
+   and a static binary reads through a bind (see the log). Next: prune and
+   rebuild.
 2. replace the CLI with our binder → `dn-trace`.
 3. wire `dn-run.c`'s direct-usage route to `dn-trace`, keeping `proot` as the
    fallback.
