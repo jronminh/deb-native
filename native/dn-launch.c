@@ -87,9 +87,14 @@ int main(int argc, char **argv) {
      * docs/findings.md, "Bug 4"). $inst/bin here IS Termux's own real bin/
      * (fusion mode has no separate sandbox tree), so such a wrapper must
      * live somewhere that never collides with -- or shadows -- Termux's
-     * own real binaries; it is not $inst/bin itself. */
-    snprintf(path, sizeof path, "%s/lib/deb-native/fusion-bin:%s/bin:%s/games:%s/glibc/bin:%s/bin",
-             inst, inst, inst, pfx, pfx);
+     * own real binaries; it is not $inst/bin itself.
+     * Termux's glibc tools come BEFORE $inst/bin: that is Termux's Bionic
+     * coreutils, and a Bionic child never gets the shim (path-redirect.c
+     * strips it for non-glibc targets), so `head /etc/x` from a maintainer
+     * script would read the host path instead of the prefix's. The classic
+     * layout gets this order for free: its $inst/bin holds no Bionic tools. */
+    snprintf(path, sizeof path, "%s/lib/deb-native/fusion-bin:%s/glibc/bin:%s/bin:%s/games",
+             inst, pfx, inst, inst);
     setenv("DN_FUSE_USR", "1", 1);
   } else {
     snprintf(inst, sizeof inst, "%s", self);
