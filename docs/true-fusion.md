@@ -196,10 +196,36 @@ program runs by full path. To investigate before crossgrading: whether
   the train, and ncurses reads Termux's terminfo through the shim.
 - Tier 1: `dn-dash`, `dn-openssl`, `dn-ca-certificates` installed; Debian's
   `dash`, `openssl`, `ca-certificates` have no candidate.
-- Tier 2: `base-files` first failed on its merged-/usr links and its
-  merged-/usr preinst check (the flat prefix is merged the other way
-  round, `usr -> .`); `fusion-custom/base-files.sh` addresses both and its
-  `var/run` migration. Re-test pending.
+- `dn-fuse.sh` run (2026-09-27): floor 117 packages; Termux's
+  `sources.list` and `glibc.list` moved to `etc/deb-native/termux-sources/`;
+  apt reads only Debian.
+- Tier 2 installed through the pipeline and held: `base-files`,
+  `base-passwd`, `debconf`, `cdebconf` (+ 9 Debian libraries), `mawk`.
+  `base-files` needed `fusion-custom/base-files.sh` (merged-/usr check
+  inverted; its merged-/usr links dropped by the repack step). It ran in
+  its earlier variant, which left Termux's `var/run` in place (the
+  `var/run` -> `run` move only runs on a first install), so `var/run` is
+  still Termux's directory. `etc/passwd`/`group` created by `base-passwd`;
+  `debconf-communicate` answers. DEP17 diversions landed in
+  `$PREFIX/var/lib/dpkg/diversions` through the `dpkg-divert` wrapper.
+  (`apt-get install --reinstall` of a held package drops the hold;
+  re-running `dn-base-env.sh` restores it.)
+- Incident: reinstalling `mawk` broke `awk`. `update-alternatives` wrote
+  absolute links (`bin/awk -> /etc/alternatives/awk -> /bin/gawk`), and
+  the post hook that rewrites them runs `awk`. Fixed by
+  `dn-fix-alternatives.sh` (Termux's `gawk` by full path), run by the
+  fusion `update-alternatives` wrapper right after each call. Two more
+  double-prefix leaks found on the way: `update-alternatives` joins
+  `DPKG_ROOT` onto an explicit `--log` too (wrapper now passes
+  `/var/log/alternatives.log` with `DPKG_ROOT` set), and the stray
+  `$PREFIX/data/data/com.termux/...` tree it had left was removed. Re-test:
+  `awk` stays `gawk` 5.3.0 throughout, links relative.
+- Run by name from a login shell: `hello`, `lua5.4`, `ncdu`, `sl`,
+  `banner`, `mawk`, and `figlet` -- an alternatives link, which needed a
+  launcher of its own (the post hook now adds launchers for alternatives
+  links whose program an `arm64` package owns). Without one it failed
+  exactly as the phase-2 risk predicts: `libc.so: invalid ELF header`.
+- `apt-get check` clean; 28 `arm64` packages installed.
 
 ## Backup
 
