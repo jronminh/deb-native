@@ -24,8 +24,8 @@ tar -czf "$F" --exclude='var/lib/dpkg/lock*' --exclude=var/lib/apt/lists/lock \
 {
   echo "# Termux package state before true fusion, $TS"
   echo "# restore: cd \$PREFIX && tar -xzf $F"
-  echo; echo "## sources"; cat etc/apt/sources.list etc/apt/sources.list.d/* 2>/dev/null
-  echo; echo "## chosen_mirrors"; cat etc/termux/chosen_mirrors 2>/dev/null
+  echo; echo "## sources"; cat etc/apt/sources.list etc/apt/sources.list.d/* 2>/dev/null || true
+  echo; echo "## chosen_mirrors"; cat etc/termux/chosen_mirrors 2>/dev/null || true
   echo; echo "## dpkg"
   echo "native=$(dpkg --print-architecture) foreign=$(dpkg --print-foreign-architectures | tr '\n' ' ')"
   echo "packages=$(dpkg -l | grep -c '^ii')"
