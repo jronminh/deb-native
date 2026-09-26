@@ -46,20 +46,39 @@ int main(int argc, char **argv) {
   if (n <= 0) { fprintf(stderr, "dn-launch: readlink /proc/self/exe failed\n"); return 127; }
   self[n] = '\0';
 
-  char inst[4096];
-  snprintf(inst, sizeof inst, "%s", self);
-  up_dirs(inst, 3); /* .../usr/bin/dn-shell -> INSTDIR */
-
   const char *pfx = getenv("DN_TERMUX_PREFIX");
   if (!pfx || !*pfx) pfx = getenv("PREFIX");
   if (!pfx || !*pfx) pfx = "/data/data/com.termux/files/usr";
 
-  char shim[4096];
-  snprintf(shim, sizeof shim, "%s/usr/lib/deb-native/path-redirect.so", inst);
-  char path[8192];
-  snprintf(path, sizeof path,
-           "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/usr/games:%s/glibc/bin:%s/bin",
-           inst, inst, inst, inst, inst, pfx, pfx);
+  /* Fusion mode (branch experiment, not the default prefix design): the
+   * self-location math below (up 3 dirs from .../usr/bin/dn-shell) and the
+   * PATH/shim construction both assume the prefix design's own nested
+   * usr/lib/deb-native tree, which doesn't exist when INSTDIR is Termux's
+   * real, flat prefix. Rather than reworking that math for a layout this
+   * binary was never placed into for this experiment, an explicit caller
+   * that already knows both values (DN_INSTDIR + DN_FUSE_SHIM) is trusted
+   * completely instead of self-locating -- e.g. set by hand before running
+   * `dpkg --configure` on a repackaged .deb during this proof-of-concept.
+   * DN_FUSE_USR is implied and forced on for the shim in this path. */
+  const char *fuse_instdir = getenv("DN_INSTDIR");
+  const char *fuse_shim = getenv("DN_FUSE_SHIM");
+  int fuse = fuse_instdir && *fuse_instdir && fuse_shim && *fuse_shim;
+
+  char inst[4096], shim[4096], path[8192];
+  if (fuse) {
+    snprintf(inst, sizeof inst, "%s", fuse_instdir);
+    snprintf(shim, sizeof shim, "%s", fuse_shim);
+    snprintf(path, sizeof path, "%s/bin:%s/games:%s/glibc/bin:%s/bin",
+             inst, inst, pfx, pfx);
+    setenv("DN_FUSE_USR", "1", 1);
+  } else {
+    snprintf(inst, sizeof inst, "%s", self);
+    up_dirs(inst, 3); /* .../usr/bin/dn-shell -> INSTDIR */
+    snprintf(shim, sizeof shim, "%s/usr/lib/deb-native/path-redirect.so", inst);
+    snprintf(path, sizeof path,
+             "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/usr/games:%s/glibc/bin:%s/bin",
+             inst, inst, inst, inst, inst, pfx, pfx);
+  }
 
   /* Preserve whatever preload we inherited (on Termux, termux-exec) so the
    * shim can hand it back to a Bionic child it execs -- see bionic_env()
