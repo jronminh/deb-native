@@ -20,6 +20,7 @@
 # Exit 0: clear to install. Exit 1: refused (see stderr for which path).
 set -eu
 DEB=${1:?usage: fuse-classify.sh DEB_FILE}
+case "$DEB" in /*) ;; *) DEB="$PWD/$DEB" ;; esac
 TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 PKG=$(dpkg-deb -f "$DEB" Package)
 
