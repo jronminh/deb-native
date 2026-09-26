@@ -23,10 +23,17 @@ shift
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ARCHIVES="$NEWPREFIX/var/cache/apt/archives"
 DPKG_FLAGS="--force-not-root --force-script-chrootless --force-architecture"
+# Absolute paths: a bare apt-get/dpkg can resolve to ANOTHER prefix's
+# arch-aware wrapper (make-apt-wrappers.sh puts one on PATH per activated
+# prefix), which substitutes its own APT_CONFIG/--instdir/--admindir --
+# silently operating on the wrong prefix. Never rely on PATH here.
+TERMUX_PREFIX=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
+APT_GET="$TERMUX_PREFIX/bin/apt-get"
+DPKG="$TERMUX_PREFIX/bin/dpkg"
 
 echo "==> resolving and downloading (no install yet)"
 DLLOG=$(mktemp)
-APT_CONFIG="$NEWPREFIX/etc/apt.conf" apt-get install -y --no-install-recommends \
+APT_CONFIG="$NEWPREFIX/etc/apt.conf" "$APT_GET" install -y --no-install-recommends \
   --download-only "$@" | tee "$DLLOG"
 
 # apt's own "Get:" lines list packages in the order it resolved to fetch
@@ -54,7 +61,7 @@ for pkg in $order; do
   seen="$seen $pkg"
   deb=$(deb_for_pkg "$pkg")
   [ -n "$deb" ] || continue
-  dpkg --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
+  "$DPKG" --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
        $DPKG_FLAGS --unpack "$deb" || true
   # Repoint new ELFs at Termux's glibc loader (and skip our own runtime).
   "$HERE/patch-elfs.sh" "$NEWPREFIX/root"
@@ -62,12 +69,12 @@ for pkg in $order; do
   # exact package's own control scripts were patched above, if this
   # package was earlier in apt's order than dash itself.
   "$HERE/patch-maintainer-scripts.sh" "$NEWPREFIX/var/lib/dpkg" "$NEWPREFIX/root" || true
-  dpkg --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
+  "$DPKG" --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
        $DPKG_FLAGS --configure "$pkg" || true
 done
 
 echo "==> configuring, final sweep (resolves ordering, not real failures)"
-dpkg --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
+"$DPKG" --instdir="$NEWPREFIX/root" --admindir="$NEWPREFIX/var/lib/dpkg" \
      $DPKG_FLAGS --configure -a || true
 
 # apt keeps downloaded .debs in $ARCHIVES by default; a LATER

@@ -19,7 +19,7 @@ runs by name.
 
 ```sh
 # pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.0.1-prealpha/install.sh | DEB_NATIVE_REF=v0.0.1-prealpha sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.0.2-prealpha/install.sh | DEB_NATIVE_REF=v0.0.2-prealpha sh
 
 exec bash          # or: . ~/.bashrc
 figlet hi          # an installed program, run by name

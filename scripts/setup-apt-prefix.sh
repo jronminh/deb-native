@@ -80,7 +80,11 @@ DPkg::Post-Invoke { "$REPO/scripts/apt-hook-post.sh $NEWPREFIX || true"; };
 EOF
 
 "$HERE/native-seed.sh" "$NEWPREFIX/var/lib/dpkg"
-APT_CONFIG="$NEWPREFIX/etc/apt.conf" apt-get update
+# Absolute path: a bare "apt-get" can resolve to ANOTHER prefix's arch-aware
+# wrapper (make-apt-wrappers.sh puts one on PATH per activated prefix), which
+# unsets APT_CONFIG and substitutes its own -- silently bootstrapping the
+# wrong prefix. Never rely on PATH here.
+APT_CONFIG="$NEWPREFIX/etc/apt.conf" "$TERMUX_PREFIX/bin/apt-get" update
 
 echo "==> bootstrapping base packages (dash, debconf, cdebconf, ...) in one"
 echo "    transaction -- see scripts/bootstrap-base.sh for why one, not"
@@ -88,6 +92,7 @@ echo "    piecemeal, matters here"
 "$HERE/bootstrap-base.sh" "$NEWPREFIX"
 
 echo "==> generating launchers, the dn front-end, and activating PATH"
+"$HERE/setup-runtime.sh" "$NEWPREFIX/root"
 "$HERE/make-launchers.sh" "$NEWPREFIX/root"
 "$HERE/make-apt-wrappers.sh" "$NEWPREFIX/root"
 "$HERE/dn-activate.sh" "$NEWPREFIX/root"

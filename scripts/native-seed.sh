@@ -43,9 +43,12 @@ libzstd1:zstd-glibc
 
 status="$ADMINDIR/status"
 : > "$status.native-seed"
+# Absolute path: a bare "dpkg" can resolve to a deb-native prefix's own
+# arch-aware wrapper on PATH instead of Termux's real dpkg.
+TERMUX_PREFIX=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 echo "$map" | while IFS=: read -r deb_name termux_pkg; do
   [ -n "$deb_name" ] || continue
-  termux_version=$(dpkg -s "$termux_pkg" 2>/dev/null | awk -F': ' '/^Version:/{print $2; exit}')
+  termux_version=$("$TERMUX_PREFIX/bin/dpkg" -s "$termux_pkg" 2>/dev/null | awk -F': ' '/^Version:/{print $2; exit}')
   [ -n "$termux_version" ] || { echo "skip $deb_name: $termux_pkg not installed" >&2; continue; }
   # Epoch 9999: deliberately, not a guess at Debian's real epoch for this
   # library. dpkg compares epoch before anything else, and Debian's own

@@ -63,11 +63,15 @@ if [ ! -x "$BINDIR/dn-shell" ] || [ "$SRC/dn-launch.c" -nt "$BINDIR/dn-shell" ];
   cp -f "$BINDIR/dn-shell" "$BINDIR/dn-perl"
 fi
 
-# No-op shims for root-only commands a maintainer script may call by bare
-# name: an unprivileged process cannot chown/chgrp no matter what path the
-# shim points it at (findings.md, next step 1).
+# No-op shims for root-only/unshipped commands a maintainer script may call
+# by bare name: an unprivileged process cannot chown/chgrp no matter what
+# path the shim points it at (findings.md, next step 1); dpkg-statoverride
+# isn't shipped by Termux's own dpkg either (TODO.md quick wins), and
+# without a shim its postinst call prints a bare "command not found" on
+# every install (e.g. ca-certificates) even though it still reaches ii.
 # These are fine as scripts -- they are reached through PATH (a normal
 # exec, not a shebang chain), so the one-level rule does not apply.
 printf '#!/system/bin/sh\nexit 0\n' > "$BINDIR/chown"
 printf '#!/system/bin/sh\nexit 0\n' > "$BINDIR/chgrp"
-chmod 755 "$BINDIR/chown" "$BINDIR/chgrp"
+printf '#!/system/bin/sh\nexit 0\n' > "$BINDIR/dpkg-statoverride"
+chmod 755 "$BINDIR/chown" "$BINDIR/chgrp" "$BINDIR/dpkg-statoverride"
