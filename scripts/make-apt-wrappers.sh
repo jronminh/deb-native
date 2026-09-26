@@ -40,6 +40,15 @@ for a in "\$@"; do
 done
 have_tm() { "$TP/bin/apt-cache" show "\$1" >/dev/null 2>&1; }
 have_dn() { APT_CONFIG="\$AC" "$TP/bin/apt-cache" show "\$1" >/dev/null 2>&1; }
+# Repo AVAILABILITY (above) picks where a NEW install goes ("Termux wins").
+# It is the wrong question for remove/purge/reinstall: a package can be
+# available in BOTH repos under the same name (bc, tree, ...) while only
+# actually installed in one of them, and apt-cache has no way to say which.
+# Route those three by actual INSTALLED location instead, or a same-named
+# Termux package makes "apt remove" silently report "not installed" (true
+# for Termux) and exit 0 while the real, prefix-installed copy is untouched.
+inst_tm() { "$TP/bin/dpkg" -s "\$1" >/dev/null 2>&1; }
+inst_dn() { "$TP/bin/dpkg" --admindir="$DNPREFIX/var/lib/dpkg" -s "\$1" >/dev/null 2>&1; }
 case "\$cmd" in
   install|reinstall|remove|purge)
     args=""; pkgs=""; seen=0
@@ -52,9 +61,18 @@ case "\$cmd" in
     done
     tm=""; dn=""
     for p in \$pkgs; do
-      if have_tm "\$p"; then tm="\$tm \$p"
-      elif have_dn "\$p"; then dn="\$dn \$p"
-      else tm="\$tm \$p"; fi
+      case "\$cmd" in
+        remove|purge|reinstall)
+          if inst_dn "\$p"; then dn="\$dn \$p"
+          elif inst_tm "\$p"; then tm="\$tm \$p"
+          else tm="\$tm \$p"
+          fi ;;
+        *)
+          if have_tm "\$p"; then tm="\$tm \$p"
+          elif have_dn "\$p"; then dn="\$dn \$p"
+          else tm="\$tm \$p"
+          fi ;;
+      esac
     done
     rc=0
     [ -n "\$tm" ] && { "\$REAL" \$cmd \$args \$tm; rc=\$?; }
