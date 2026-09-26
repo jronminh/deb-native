@@ -158,7 +158,7 @@ needs (`apt`, `dpkg`, `dpkg-deb`) ships with Termux.
 - [`docs/runtime-failures.md`](docs/runtime-failures.md) — what breaks when *running* a program.
 - [`docs/tailscale.md`](docs/tailscale.md) — the static-daemon goal (userspace networking).
 - [`docs/findings.md`](docs/findings.md) — engineering log.
-- [`docs/multiarch-mechanics.md`](docs/multiarch-mechanics.md) — dpkg multi-arch mechanics, shared with `fusion-no-prefix`.
+- [`docs/multiarch-mechanics.md`](docs/multiarch-mechanics.md) — dpkg multi-arch mechanics, shared with the true fusion branch (`fusion-debian-mode`).
 - [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) — method, side by side with `sudo-less`.
 - [`tracer/README.md`](tracer/README.md) — the reduced proot (`fork-lite`).
 - [`TODO.md`](TODO.md) — roadmap · [`AGENTS.md`](AGENTS.md) — conventions.

@@ -1,7 +1,7 @@
 # dpkg multi-arch mechanics: what they are, and what they aren't
 
 Reference doc, shared across both the classic (separate-prefix) design and
-the `fusion-no-prefix` branch — the mechanics here are dpkg's own, and
+the true fusion branch (`fusion-debian-mode`, formerly `fusion-debian-mode`) — the mechanics here are dpkg's own, and
 apply identically regardless of which install strategy is on top of them.
 Written after a real, live incident on the fusion branch (`docs/
 findings.md` there, "Cross-check: a second, genuinely different package")
@@ -83,7 +83,7 @@ starts completely empty and is *only ever* going to hold arm64 content —
 there's nothing else in it whose real identity would be lost by the
 pretense.
 
-`fusion-no-prefix`, by contrast, **must** use the proper mechanism: it
+`fusion-debian-mode`, by contrast, **must** use the proper mechanism: it
 reuses Termux's own real, pre-populated dpkg database, which already has
 thousands of packages under its own native identity. That identity is
 worth confirming precisely, not assumed:
@@ -108,7 +108,7 @@ database, which is exactly fusion mode's whole premise.
 | | Multi-Arch field | update-alternatives | `--force-architecture` | `--add-architecture` |
 |---|---|---|---|---|
 | Classic (separate prefix) | used for stub `Provides` (`native-seed.sh`) | used normally, no cross-namespace issue possible | used, sufficient (fresh, single-arch db) | not needed |
-| `fusion-no-prefix` | used identically | used, **plus** needs bridging Termux's own non-dpkg providers into it (see `docs/fusion-multiarch.md` on that branch) | used too (still needed for the same dpkg-vs-package arch checks) | **needed** — shares Termux's real, pre-populated, `aarch64`-native database |
+| `fusion-debian-mode` | used identically | used, **plus** needs bridging Termux's own non-dpkg providers into it (see `docs/fusion-multiarch.md` on that branch) | used too (still needed for the same dpkg-vs-package arch checks) | **needed** — shares Termux's real, pre-populated, `aarch64`-native database |
 
 Neither `Multi-Arch` nor `update-alternatives` differs between the two
 designs — they're dpkg's own layer, unmodified either way. What differs is
