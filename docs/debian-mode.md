@@ -66,8 +66,8 @@ or `LD_PRELOAD` shim can change what libc does internally.
 build, not in the launcher.
 
 So Debian's `libc6` is satisfied by Termux's glibc (2.44 >= Debian's
-2.41, the compatible direction), exactly as `main`'s `native-seed.sh`
-already maps `libc6:glibc`. Every other package can come from Debian.
+2.41, the compatible direction). Every other package can come from Debian.
+How, see "Base environment" below.
 (The syscall tracer can also run stock Debian glibc, since it answers any
 seccomp-blocked call with `ENOSYS` — that remains the later optimization
 step documented in `docs/syscall-boundary.md`, not this experiment.)
@@ -85,6 +85,7 @@ overwrite each other:
 | Setting | Debian mode value | Why |
 |---|---|---|
 | `Dir::Etc::SourceList` / `SourceParts` | `$PREFIX/etc/deb-native/debian-mode/sources.list(.d)` | Termux's sources untouched |
+| `Dir::Etc::Preferences(Parts)` | `$PREFIX/etc/deb-native/debian-mode/preferences.d/dn-glibc` | pins Debian's glibc family (`libc6`, `libc-bin`, `libc6-dev`, `libc-dev-bin`, `libc-l10n`, `locales`) to `-1`: Debian's own glibc can never install |
 | `Dir::State::Lists` | `$PREFIX/var/lib/apt/lists-debian/` | `apt update` would otherwise delete Termux's lists |
 | `Dir::Cache` | `<termux cache>/apt-debian` | separate `pkgcache.bin` / archives |
 | `Acquire::PDiffs` | `false` | the index is rewritten after download (below); a pdiff against a rewritten file would fail its hash |
@@ -112,6 +113,51 @@ Debian stable `main` (+ `stable-updates`, `stable-security`), marked
 `[trusted=yes arch=arm64]` like `main`'s prefix — Termux has no Debian
 keyring. This is a known gap inherited from `main`, not solved here.
 
+## Base environment
+
+`scripts/dn-base-env.sh`, one-time and idempotent, run before any Debian
+package lands (the "environment bootstrap" `docs/fusion-next-steps.md`
+calls problem 0):
+
+1. `arm64` registered as a dpkg foreign architecture.
+2. `$PREFIX/usr -> .`, so Debian's `/usr/...` paths resolve into the flat
+   prefix.
+3. Runtime pieces via `fuse-runtime.sh`: path shim, `dn-run`, the
+   `update-alternatives` wrapper.
+4. The **`libc6:arm64` identity package**.
+
+### libc6:arm64 identity package
+
+Not a status-file stub: a real package named `libc6`, `Architecture:
+arm64`, `Multi-Arch: same`, installed with `dpkg -i`. Its files are
+symlinks at the exact paths Debian's `libc6` uses, into Termux's glibc:
+
+```
+lib/aarch64-linux-gnu/libc.so.6              -> ../../glibc/lib/libc.so.6
+lib/aarch64-linux-gnu/ld-linux-aarch64.so.1  -> ../../glibc/lib/ld-linux-aarch64.so.1
+lib/aarch64-linux-gnu/gconv                  -> ../../glibc/lib/gconv
+lib/ld-linux-aarch64.so.1                    -> aarch64-linux-gnu/ld-linux-aarch64.so.1
+...
+```
+
+- The file list comes from Debian's real `libc6` `.deb`, matched **by
+  soname** against `$PREFIX/glibc/lib` (the gap `native-seed.sh`'s
+  hand-kept name map documents). Sonames Termux lacks are reported, not
+  linked.
+- `dpkg -L libc6:arm64` lists real files; the links are owned by
+  `libc6:arm64`, their targets stay owned by Termux's `glibc`. Removable
+  with `dpkg --purge libc6:arm64`.
+- It gives Debian binaries Debian's own layout: one library directory
+  (`$PREFIX/lib/aarch64-linux-gnu/`, Debian's libraries next to libc) and
+  one loader path (`$PREFIX/lib/ld-linux-aarch64.so.1`). The ELF patch step
+  points every binary there.
+- **Version = Termux's real glibc version** (`2.44-0dn1`), so
+  `libc6 (>= X)` keeps telling the truth: a Debian package built against a
+  newer glibc than Termux has is refused by apt instead of failing at
+  runtime with `GLIBC_2.xx not found`. Upgrades to Debian's own `libc6` are
+  blocked by the apt pin (above), not by an inflated version. After a
+  Termux glibc upgrade, re-running `dn-base-env.sh` tracks the new version.
+
 ## Install pipeline (next step, not wired yet)
 
 | apt hook | Step | Source |
@@ -119,7 +165,6 @@ keyring. This is a known gap inherited from `main`, not solved here.
 | `DPkg::Pre-Install-Pkgs` | control rewrite (`all` -> `arm64`), flatten `usr/` into `$PREFIX`, maintainer-script patching, refuse on file collision | `fuse-repack.sh`, `patch-deb.sh`, `fuse-classify.sh` |
 | `DPkg::Pre-Install-Pkgs` | plan guard: refuse any run that removes an `aarch64` package | new |
 | `DPkg::Post-Invoke` | ELF patching (scoped per package), symlink normalizing, launchers | `fuse-patch-elfs.sh`, `normalize-symlinks.sh`, `make-launchers.sh` |
-| one-time | `libc6:arm64` (+ glibc library packages) registered as provided by Termux's glibc | `native-seed.sh` mapping |
 
 First target package: `sl` (resolved cleanly in the dry run: 9 Debian
 libraries, no Termux package removed).

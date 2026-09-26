@@ -21,11 +21,22 @@ status() {
 
 case "${1:-status}" in
   debian)
-    if [ -f "$SWITCH" ]; then echo "already in debian mode"; status; exit 0; fi
+    # Idempotent: re-running regenerates every file (picks up changes here).
     ls "$HOME"/dn-fusion-backup/termux-pkgstate-*.tar.gz >/dev/null 2>&1 \
       || { echo "dn-mode: no backup in ~/dn-fusion-backup/ -- make one first" >&2; exit 1; }
     dpkg --print-foreign-architectures | grep -qx arm64 || dpkg --add-architecture arm64
-    mkdir -p "$ETC/sources.list.d" "$LISTS/partial" "$CACHE/archives/partial"
+    mkdir -p "$ETC/sources.list.d" "$ETC/preferences.d" "$LISTS/partial" "$CACHE/archives/partial"
+    # Debian's own glibc family must never install: it dies under Android's
+    # seccomp filter. libc6:arm64 is Termux's glibc (dn-base-env.sh).
+    cat > "$ETC/preferences.d/dn-glibc" <<EOF
+Package: libc6 libc-bin libc6-dev libc-dev-bin libc-l10n locales
+Pin: origin deb.debian.org
+Pin-Priority: -1
+
+Package: libc6 libc-bin libc6-dev libc-dev-bin libc-l10n locales
+Pin: origin security.debian.org
+Pin-Priority: -1
+EOF
     cat > "$ETC/sources.list" <<EOF
 deb [trusted=yes arch=arm64] https://deb.debian.org/debian stable main
 deb [trusted=yes arch=arm64] https://deb.debian.org/debian stable-updates main
@@ -36,6 +47,8 @@ EOF
 // Delete this file (or run dn-mode.sh termux) to return to stock Termux.
 Dir::Etc::SourceList "$ETC/sources.list";
 Dir::Etc::SourceParts "$ETC/sources.list.d";
+Dir::Etc::Preferences "$ETC/preferences";
+Dir::Etc::PreferencesParts "$ETC/preferences.d";
 Dir::State::Lists "$LISTS/";
 Dir::Cache "$CACHE/";
 Acquire::PDiffs "false";
