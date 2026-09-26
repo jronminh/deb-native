@@ -1,156 +1,132 @@
-# deb-native
+# deb-native — true fusion
 
-![status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)
+![status: experimental](https://img.shields.io/badge/status-experimental-red)
+![one-way](https://img.shields.io/badge/transformation-one--way-critical)
 
-**Install and run real Debian `arm64` `.deb` packages inside Termux — no root,
-no `chroot`, no kernel namespaces.** `apt install PKG` works, and the program
-runs by name.
+**Transform Termux itself into a Debian `arm64` system — no root, no
+`chroot`, no proot.** Debian becomes apt's only source, Debian packages
+install straight into Termux's own `$PREFIX` and dpkg database, and Termux
+is reduced to the packages it runs on.
 
-> [!WARNING]
-> **Pre-alpha, AI-assisted, not security-reviewed.** The install pipeline
-> itself is tested — fresh bootstrap, both routing paths, and the full
-> install/remove/purge/reinstall lifecycle are verified working, and it
-> never touches Termux's own `sources.list`/`dpkg` status/binaries
-> (`setup-apt-prefix.sh` refuses to target Termux's own prefix; checked, not
-> just assumed). What's still true regardless: written with AI assistants
-> and not independently audited, so read `install.sh`/`scripts/` before
-> running them; the interface and on-disk layout can still change between
-> releases; and package coverage is still small (a handful of packages
-> verified by hand, not the full Debian archive) — use a throwaway
-> Termux/device until it's had wider testing.
+This is the second branch of [`deb-native`](https://github.com/jronminh/deb-native).
+[`main`](https://github.com/jronminh/deb-native/tree/main) installs Debian
+packages into a separate prefix beside Termux; this branch takes `main`'s
+core one step further and merges the two into one system.
+
+> [!CAUTION]
+> **One-way, experimental, and far less safe than `main`.** A bad package
+> can break Termux itself, not just a Debian program: every Debian
+> maintainer script runs with write access to Termux's live system. There
+> is no switch back — the backup restores apt/dpkg state, not every file
+> packages wrote. Termux's own base packages (`apt`, `openssl`, `curl`,
+> glibc) get no updates, security fixes included, until Termux's repos are
+> brought back (phase 3). Written with AI assistance and not independently
+> audited. **Use `main` unless you want exactly this trade, and only on a
+> Termux install you can wipe.** Details:
+> [`docs/true-fusion.md`](docs/true-fusion.md).
+
+## Install
+
+On a Termux you can afford to lose:
 
 ```sh
-# pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.1.1-prealpha/install.sh | DEB_NATIVE_REF=v0.1.1-prealpha sh
+pkg install git clang patchelf glibc-repo
+pkg install glibc-runner bash-glibc coreutils-glibc perl-glibc
 
-exec bash          # or: . ~/.bashrc
-figlet hi          # an installed program, run by name
+git clone -b fusion-debian-mode https://github.com/jronminh/deb-native ~/deb-native-fusion
+cd ~/deb-native-fusion
+sh scripts/dn-backup.sh     # required: dn-fuse.sh refuses without a backup
+sh scripts/dn-fuse.sh       # the one-way step
+
+exec bash -l                # new login shell: launchers on PATH
+apt install sl && sl
 ```
 
-Or the rolling edge: replace both `v0.1.1-prealpha` occurrences with `main`.
-
-![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
-
-## Why this exists
-
-The usual way to get Debian on Android is a **separate rootfs image under
-proot** (or root): two environments side by side, every syscall through
-proot. `deb-native` instead installs *into* Termux and fakes only what Debian
-assumes:
-
-- **No second rootfs.** Termux's own `apt`/`dpkg`, glibc side-install and
-  coreutils are reused, not duplicated.
-- **A libc shim, not proot, for the common case** — path rewrites happen
-  in-process; only static binaries, inline `svc` and NSS reads need the
-  tracer.
-- **Termux's `apt` is the interface**, routing per package ("Termux wins").
-
-No root, no `chroot`, no kernel namespaces — the mount-namespace "view" that
-would do this on a real Debian host is unavailable here. Not an emulator and
-not isolation: **install and run, not emulate**.
+Keep the checkout where it is: apt's hooks run its scripts on every install.
+After the transformation Termux's `pkg` refuses (it would rewrite apt's
+sources); use `apt`.
 
 ## How it works
 
-The idea is to **fake only the Debian layout and reuse everything else.** A
-`.deb` assumes a real Debian `/`; on Android there is no writable
-`/usr /etc /var /opt`, `dpkg` refuses to run unprivileged, and packages are
-glibc ELF while Android is Bionic. `deb-native` supplies the missing layout
-and reuses the rest.
+Every Debian `.deb` assumes a real Debian root. Each layer fakes or fixes
+one of those assumptions inside Termux's prefix:
 
-**The shim.** `native/path-redirect.c` is an `LD_PRELOAD` layer that
-interposes the path-taking libc calls (`open`/`openat`/`stat`/`statx`/`exec*`/
-`mkdir`/`unlink`/`symlink`/`rename`/…) and rewrites any literal `/usr /etc
-/var /opt` to the same path under `$INSTDIR`. To the process, Debian's layout
-simply exists; files keep the real app uid and nothing runs as root. (This
-stands in for the kernel "view" `sudo-less` uses, which Android forbids:
-`unshare(CLONE_NEWUSER)` fails `EINVAL` here — see
-[`docs/findings.md`](docs/findings.md).)
+- **Layout.** `$PREFIX/usr -> .`, so Debian's `/usr/bin/x` and Termux's
+  `$PREFIX/bin/x` are the same place; packages are repacked with `usr/`
+  flattened into the prefix and installed with `dpkg --instdir=$PREFIX`.
+- **apt and dpkg.** `arm64` added as a foreign architecture; Debian stable
+  as the only source; `Architecture: all` rewritten to `arm64` in the index
+  and in each package, so Debian never shares a name space with Termux.
+- **libc.** Debian's own `libc6` is killed by Android's seccomp filter at
+  startup. Termux's glibc, patched for Android at the source level, is
+  installed *as* `libc6:arm64`: a real package whose files are links at
+  Debian's libc paths. Every Debian binary is repointed at it.
+- **The Debian base** (`base-files`, `base-passwd`, `debconf`, `cdebconf`,
+  `mawk`) installed through the pipeline, customized where the flat prefix
+  differs (`scripts/fusion-custom/`), then held.
+- **Maintainer scripts** run through `main`'s `dn-shell` and path shim, so
+  `/etc`, `/usr`, `/var` resolve into the prefix; `update-alternatives` and
+  `dpkg-divert` are wrapped, and alternatives links are made relative the
+  moment they are written.
+- **Programs run by name** through `main`'s launchers and `dn-run`, which
+  clear Termux's Bionic preload and load the shim.
 
-**Maintainer scripts run inside the fake Debian.** A `postinst`'s shebang is
-resolved by the kernel, which follows only one `#!` level; `native/dn-launch.c`
-is a tiny Bionic ELF that sets up the shim and execs Termux's glibc
-`bash`/`perl`, so a script runs in the prefix — including `preinst`, before
-`dpkg` has unpacked anything.
+### Package tiers
 
-**Real prefix, real `dpkg`.** Packages unpack with Termux's own `dpkg`
-(`--instdir`/`--admindir`/`--force-script-chrootless`) into `$INSTDIR`,
-driven by a prefix-scoped `apt.conf` pointed at the Debian `arm64` repository.
+| Tier | What | Protection |
+|---|---|---|
+| 0. Floor | Termux's Essential packages and their dependencies (117 of 260 on the test device): what the app, apt and dpkg run on | never removed or crossgraded (plan guard) |
+| 1. Termux-backed identity | Debian names a floor package fills: `libc6`, `dn-dash`, `dn-openssl`, `dn-ca-certificates` | Debian's originals pinned to -1 |
+| 2. Debian base | `base-files`, `base-passwd`, `debconf`, `cdebconf`, `mawk` | held |
+| 3. Packages | everything else, from Debian | normal apt |
 
-**Real glibc, reused.** Termux's `$PREFIX/glibc` side-install is repointed at
-with `grun --configure` (a one-time ELF `PT_INTERP` edit), so Debian glibc
-binaries run unmodified. Debian dependencies Termux already provides are
-seeded as installed rather than duplicated (`scripts/native-seed.sh`).
+### The install pipeline
 
-**Hooked into `apt`/`dpkg`.** `DPkg::Pre-Install-Pkgs` patches each `.deb`
-before unpack (so even `preinst` sees the fake Debian); `DPkg::Post-Invoke`
-repoints new ELFs at Termux's glibc and regenerates launchers. A `dpkg`
-wrapper does the same for `dpkg -i`. The user types `apt install PKG`; nothing
-else.
+| apt hook | Step |
+|---|---|
+| `DPkg::Pre-Install-Pkgs` | floor guard on apt's full plan; per package: repack (layout, customizations, `all` -> `arm64`, ELFs repointed), collision check, maintainer-script patching |
+| `DPkg::Post-Invoke` | alternatives and package symlinks made relative; launchers for the new programs; stale launchers removed |
 
-**Run by name.** Each installed program gets a launcher under
-`$INSTDIR/usr/lib/deb-native/bin`, put first on `PATH` — ELF targets get the
-shim, scripts go through the glibc shell. Termux's own `termux-exec` is never
-disabled.
+## Roadmap
 
-**Beyond libc.** Static binaries, inline `svc`, and libc-internal reads (NSS)
-bypass the shim; a syscall-level tracer (`tracer/`, a reduced proot) handles
-them — see [`docs/syscall-boundary.md`](docs/syscall-boundary.md).
-
-## Routing: Termux wins
-
-Termux's own `apt` and `dpkg` are wrapped and route per package — no new
-command, no new name. A package Termux also provides installs normally
-(aarch64, Bionic, untouched); only a name that exists in the Debian `arm64`
-repo and *not* in Termux goes through the prefix:
-
-```sh
-apt install bsdmainutils   # Debian-only -> the prefix
-apt install cowsay         # Termux has it -> normal Termux install
-dpkg -i ./pkg_arm64.deb    # arm64 -> the prefix; aarch64 -> Termux
-```
-
-`install.sh` is idempotent. Pick a prefix / packages from a checkout:
-`sh install.sh ~/.dn figlet tree`.
-
-## Scope
-
-Install (reach `dpkg` status `ii`) and run by name, unprivileged — not a
-faithful Debian, not isolation. Coverage is a *named boundary*, not a promise:
-[`docs/standard.md`](docs/standard.md) (which packages),
-[`docs/shim-coverage.md`](docs/shim-coverage.md) (measured libc coverage),
-[`docs/syscall-boundary.md`](docs/syscall-boundary.md) (the rest). No fake
-root and no isolation; no services yet (`runit` is the candidate); not for
-packages that need root (system users, `setuid`, TUN, kernel modules).
+1. **Make Debian run smoothly** on the transformed prefix — *in progress*.
+2. **Replace** the non-floor Termux packages with Debian's.
+3. **Bring Termux's repos back as the secondary supply**, forced to follow
+   Debian's multiarch rules: the roles are switched, Termux's packages have
+   to fit the transformed system.
 
 ## Status
 
-**Pre-alpha.** The base install and run path are solid; run/integrate/service
-and the syscall tracer are still being built. `termux-dn-doctor` checks the
-common breakages (a leaked `APT_CONFIG`, a clobbered Termux `sources.list`,
-stale wrappers) and `--fix`es them.
+Verified on one device (Termux, arm64, Debian stable `trixie`): the
+transformation, tiers 0–2, and `hello`, `lua5.4`, `ncdu`, `sl`, `figlet`,
+`sysvbanner`, `mawk`, `debconf` installed through the pipeline and running
+by name; `apt-get check` clean.
 
-## Requirements
+Known limits:
 
-Termux with `git`, `clang`, and the glibc side-install
-(`termux-pacman/glibc-packages`: `glibc-runner`, `coreutils-glibc`,
-`bash-glibc`, `perl`, the loader and libraries). Everything else the project
-needs (`apt`, `dpkg`, `dpkg-deb`) ships with Termux.
+- **Runtime:** a replaced Termux program becomes a glibc binary; started by
+  full path from Termux's Bionic side it inherits `termux-exec`'s preload
+  and fails to load. Launchers cover programs started by name. To solve
+  before phase 2.
+- The floor gets no updates until phase 3.
+- Debian sources use `[trusted=yes]` (Termux has no Debian keyring), a gap
+  inherited from `main`.
+- `apt-get install --reinstall` of a held base package drops the hold;
+  re-run `scripts/dn-base-env.sh` to restore it.
 
 ## Documentation
 
-- [`docs/design.md`](docs/design.md) — the design end to end.
-- [`docs/standard.md`](docs/standard.md) — package scope.
-- [`docs/shim-coverage.md`](docs/shim-coverage.md) — measured shim coverage.
-- [`docs/syscall-boundary.md`](docs/syscall-boundary.md) — beyond libc.
-- [`docs/direct-usage.md`](docs/direct-usage.md) — tracer investigation + fork-lite plan.
-- [`docs/runtime-failures.md`](docs/runtime-failures.md) — what breaks when *running* a program.
-- [`docs/tailscale.md`](docs/tailscale.md) — the static-daemon goal (userspace networking).
-- [`docs/findings.md`](docs/findings.md) — engineering log.
-- [`docs/multiarch-mechanics.md`](docs/multiarch-mechanics.md) — dpkg multi-arch mechanics, shared with `main`.
-- [`docs/fusion-multiarch.md`](docs/fusion-multiarch.md) — this branch's own collision problem multi-arch doesn't solve.
-- [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) — method, side by side with `sudo-less`.
-- [`tracer/README.md`](tracer/README.md) — the reduced proot (`fork-lite`).
-- [`TODO.md`](TODO.md) — roadmap · [`AGENTS.md`](AGENTS.md) — conventions.
+- [`docs/true-fusion.md`](docs/true-fusion.md) — the design, tiers,
+  pipeline, and what was verified.
+- [`docs/fusion-multiarch.md`](docs/fusion-multiarch.md) and
+  [`docs/multiarch-mechanics.md`](docs/multiarch-mechanics.md) — dpkg
+  multiarch mechanics, and why coexistence in one database fails.
+- [`docs/findings.md`](docs/findings.md) — engineering log (this branch
+  absorbs the earlier `fusion-no-prefix` experiments).
+- `main`'s design docs apply to the shared core:
+  [`docs/design.md`](docs/design.md),
+  [`docs/shim-coverage.md`](docs/shim-coverage.md),
+  [`docs/syscall-boundary.md`](docs/syscall-boundary.md).
 
 ## Credit & license
 
@@ -161,7 +137,8 @@ Built on other people's work — see [`CREDITS.md`](CREDITS.md):
   reduced fork with its headers kept.
 - **[Termux](https://github.com/termux/termux-packages)** and
   [`glibc-packages`](https://github.com/termux-pacman/glibc-packages) — the
-  host, the non-root `apt`/`dpkg` patches, and the glibc userland.
+  host, the non-root `apt`/`dpkg` patches, and the glibc userland this
+  branch presents as Debian's `libc6`.
 - **[sudo-less](https://github.com/jronminh/sudo-less)** — the prefix-install
   approach and the `apt`/`dpkg` lifecycle-hook idea.
 

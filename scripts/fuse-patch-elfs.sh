@@ -1,5 +1,5 @@
 #!/bin/sh
-# Branch experiment (fusion-no-prefix): repoint a just-installed package's
+# True fusion (fusion-debian-mode): repoint a just-installed package's
 # own glibc ELFs at Termux's real glibc loader (the same one-time
 # PT_INTERP + RUNPATH edit the classic branch's patch-elfs.sh does via
 # `grun --configure`), scoped to that package's own files via `dpkg -L`.

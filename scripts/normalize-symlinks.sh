@@ -10,7 +10,7 @@
 #
 #   scripts/normalize-symlinks.sh PREFIX_ROOT      # e.g. ~/dn6/root
 #
-# Two opt-in env vars, added for fusion-no-prefix (docs/findings.md, "Bug 4"):
+# Two opt-in env vars, added for true fusion (fusion-debian-mode) (docs/findings.md, "Bug 4"):
 #
 #   NORMALIZE_FUSE_USR=1   ROOT has no real nested usr/ (fusion mode's own
 #                          premise) -- strip a leading /usr the same way

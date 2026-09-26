@@ -1,5 +1,5 @@
 #!/bin/sh
-# Branch experiment (fusion-no-prefix): refuse BEFORE dpkg ever touches
+# True fusion (fusion-debian-mode): refuse BEFORE dpkg ever touches
 # Termux's real root if a repackaged .deb (scripts/fuse-repack.sh already
 # run) would write over anything that already exists there. There is no
 # prefix to discard if this gets it wrong, so this runs as a pre-flight
