@@ -191,14 +191,26 @@ mark stage "downloading the base"
 mark count Get: auto packages
 $TAPT install -y --download-only $BASE $KEYRING
 
-# 4. Translate, in Termux's environment (no apt hooks involved).
+# 4. Translate, in Termux's environment (no apt hooks involved), several
+# packages at once (DN_JOBS, default: the CPU count): each is independent
+# -- its own temp dir, its own .deb -- and translation was the largest
+# stage of the bootstrap (41 of 97 s on fe2, one at a time).
 mark stage "translating packages for the prefix"
-n=0; total=$(ls "$T"/debs/*.deb | wc -l)
-for deb in "$T"/debs/*.deb; do
-  n=$((n + 1))
-  mark progress "$n" "$total" "$(dpkg-deb -f "$deb" Package)"
-  "$HERE/dn-translate-deb.sh" "$deb" "$DN"
-done
+J=${DN_JOBS:-$(nproc)}
+total=$(ls "$T"/debs/*.deb | wc -l)
+{ rc=0
+  ls "$T"/debs/*.deb | xargs -P "$J" -I{} sh -c \
+    '"$1" "$2" "$3" && echo "::translated $(dpkg-deb -f "$2" Package)"' \
+    sh "$HERE/dn-translate-deb.sh" {} "$DN" || rc=$?
+  echo "$rc" > "$T/translate.rc"; } | {
+  n=0
+  while IFS= read -r line; do
+    case "$line" in
+      "::translated "*) n=$((n + 1)); mark progress "$n" "$total" "${line#::translated }" ;;
+      *) printf '%s\n' "$line" ;;
+    esac
+  done; }
+[ "$(cat "$T/translate.rc")" = 0 ] || { echo "E: translating the base failed" >&2; exit 1; }
 
 # 5. Install with the prefix's dpkg. Unpack order: libraries, then the tools,
 # then everything else (preinsts run at unpack).

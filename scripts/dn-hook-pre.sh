@@ -50,10 +50,20 @@ fi
 while IFS= read -r deb; do
   [ -n "$deb" ] || continue
   [ -f "$deb" ] || { echo "E: $deb not found" >&2; exit 1; }
+done < "$DEBS"
+
+# Translate several packages at once (DN_JOBS, default: the CPU count):
+# each is independent -- its own temp dir, its own .deb.
+echo "== $(date '+%F %T') translating $(grep -c . "$DEBS") package(s)" >>"$LOG"
+J=${DN_JOBS:-$(nproc)}
+grep . "$DEBS" | logged xargs -P "$J" -I{} sh -c \
+  '"$1" "$2" "$3" || { echo "E: translating $(dpkg-deb -f "$2" Package) failed" >&2; exit 255; }' \
+  sh "$HERE/dn-translate-deb.sh" {} "$DN" \
+  || { echo "E: translating packages failed" >&2; exit 1; }
+
+while IFS= read -r deb; do
+  [ -n "$deb" ] || continue
   pkg=$(dpkg-deb -f "$deb" Package)
-  echo "== $(date '+%F %T') $deb" >>"$LOG"
-  logged "$HERE/dn-translate-deb.sh" "$deb" "$DN" \
-    || { echo "E: translating $pkg failed" >&2; exit 1; }
 
   # Collision check against the prefix's own database.
   clash=$(dpkg-deb -c "$deb" | awk '{print $6}' | grep -v '/$' | sed 's|^\.||' |
