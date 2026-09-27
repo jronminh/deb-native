@@ -127,8 +127,10 @@ combine):
   fits the default `~/.dn` (the same on every Termux); other paths fall
   back to today's local bootstrap. Likely the largest win; close to how
   Termux itself installs (a bootstrap zip).
-- **Parallel translation:** several packages at once (phones have many
-  cores).
+- [x] **Parallel translation** (done on `dev-0.2.0`, `DN_JOBS`, default
+  the CPU count -- `nproc` says 4 on fe2): translate 41s -> **14s**, fresh
+  install 1m37s -> **1m5s** (fe2, 20:42). Configure (21s) is now the
+  largest stage.
 - **Slimmer configure:** find what the 23s is (probably
   `ca-certificates`' rebuild, `debconf`) before cutting.
 - **Clean the apt cache after bootstrap** (-85 MB): trivial, could go
