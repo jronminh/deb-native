@@ -99,7 +99,7 @@ render() {
         case "$line" in
             "::show "*|"::show")
                 endbar; t=${line#::show}; t=${t# }
-                printf '%s\n' "$t"; printf '%s\n' "$t" >&3 ;;
+                printf '%s\n' "$t"; printf '%s\n' "$t" | sed 's/\x1b\[[0-9;]*m//g' >&3 ;;
             "::stage "*)
                 endbar; cprefix=""; t=${line#::stage }
                 printf '   - %s\n' "$t"; printf '== %s %s\n' "$(date +%T)" "$t" >&3 ;;
