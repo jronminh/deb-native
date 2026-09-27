@@ -1,19 +1,26 @@
 #!/bin/sh
-# Generate launcher wrappers for a prefix's installed programs, so a user
-# can just type `prog` instead of running it through dn-shell by hand.
+# Expose a prefix's installed programs by name: one entry per program in
+# $INSTDIR/usr/lib/deb-native/bin, which dn-activate.sh puts first on PATH.
 #
-# Why wrappers at all: an installed Debian ELF is grun-repointed at
-# $PREFIX/glibc/lib/ld-linux, and needs the right launch mechanism for its
-# hardcoded /usr, /etc, /var, /opt paths to resolve into the prefix. The
-# wrapper hands the real binary to dn-run, which classifies it at launch:
-# glibc -> LD_PRELOAD the path-redirect shim; static, NSS, and direct-syscall
-# binaries -> the syscall tracer; Bionic -> plain exec. Scripts still get the
-# glibc shell/perl wrappers below.
+# Since 0.2.0 a Debian program sets itself up however it is started: its
+# interpreter is ld-dn (dn-translate-deb.sh, native/ld-dn.c), and a program
+# script's "#!" line points into the prefix. So most entries are plain
+# symlinks -- no wrapper, no extra process. A wrapper is kept only where the
+# program itself cannot do it:
+#   - static binaries and programs making their own syscalls: no loader to
+#     set anything up, the shim cannot see them -> dn-run --trace (tracer);
+#   - anything installed before ld-dn (a glibc program on another loader, a
+#     script with an untranslated "#!") -> dn-run / dn-shell / dn-perl, as
+#     in 0.1.x.
 #
-# Where they go: NOT $INSTDIR/bin -- base-files' usrmerge makes that a
-# symlink to usr/bin, so writing there would clobber real binaries (found
-# the hard way). A dedicated dir under usr/lib/deb-native instead, which
-# scripts/dn-activate.sh puts first on PATH.
+# Not exposed: the prefix's base system (setup-apt-prefix.sh) and the
+# stand-ins' files -- their ls, sed, grep, awk, which ... are there for
+# maintainer scripts and must not shadow Termux's own in the user's shell.
+# Alternatives links count as the program they resolve to (awk -> mawk).
+#
+# Where: NOT $INSTDIR/bin -- base-files makes that a symlink to usr/bin.
+# Regenerated from scratch each run; termux-apt, termux-dpkg and
+# termux-dn-doctor (make-apt-wrappers.sh) are left alone.
 #
 # Usage: make-launchers.sh INSTDIR
 set -eu
@@ -21,125 +28,96 @@ INSTDIR=${1:?usage: make-launchers.sh INSTDIR}
 case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
-GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
-SHIM="$INSTDIR/usr/lib/deb-native/path-redirect.so"
-LAUNCHDIR="$INSTDIR/usr/lib/deb-native/bin"
+LIBDIR="$INSTDIR/usr/lib/deb-native"
+LAUNCHDIR="$LIBDIR/bin"
+LDDN="$LIBDIR/ld-dn"
 
-[ -f "$SHIM" ] || { echo "E: missing $SHIM (run setup-runtime.sh)" >&2; exit 1; }
-[ -x "$INSTDIR/usr/lib/deb-native/dn-run" ] || { echo "E: no dn-run (run setup-runtime.sh)" >&2; exit 1; }
+[ -x "$LDDN" ] || { echo "E: no ld-dn (run setup-runtime.sh)" >&2; exit 1; }
+[ -x "$LIBDIR/dn-run" ] || { echo "E: no dn-run (run setup-runtime.sh)" >&2; exit 1; }
 [ -x "$INSTDIR/usr/bin/dn-shell" ] || { echo "E: no dn-shell (run setup-runtime.sh)" >&2; exit 1; }
 
 mkdir -p "$LAUNCHDIR"
 tmp="$LAUNCHDIR/.tmp.$$"
-BIN_DIRS="$INSTDIR/usr/bin $INSTDIR/usr/sbin $INSTDIR/sbin $INSTDIR/bin $INSTDIR/usr/games"
+BIN_DIRS="$INSTDIR/usr/bin $INSTDIR/usr/sbin $INSTDIR/usr/games"
+
+# Start over: drop every entry this script made (symlinks, and 0.1.x or
+# fallback wrappers), keep the termux-* commands.
+for e in "$LAUNCHDIR"/* ; do
+  [ -e "$e" ] || [ -L "$e" ] || continue
+  case "${e##*/}" in termux-*) continue ;; esac
+  if [ -L "$e" ] || grep -q 'dn-run\|dn-shell\|dn-perl' "$e"; then rm -f "$e"; fi
+done
 
 # Programs whose own code issues syscalls (inline `svc #0`) or imports
-# `syscall()`; the shim cannot see those, so force the tracer. Computed once
-# here because disassembling per launch would be far too slow. See
+# `syscall()`; the shim cannot see those, so force the tracer. See
 # docs/syscall-boundary.md, "Remaining: the direct-syscall attribute".
 DIRECT_LIST="$tmp.direct"
 : > "$DIRECT_LIST"
 if [ -n "$(command -v python3 || true)" ]; then
   for d in $BIN_DIRS; do
     [ -d "$d" ] || continue
-    [ -L "$d" ] && continue
     python3 "$HERE/scan-direct-syscalls.py" "$d" --trace-list >> "$DIRECT_LIST" || true
   done
 fi
 
-# The prefix's base system (setup-apt-prefix.sh) gets no launchers: its
-# coreutils, sed, grep are there for maintainer scripts, and must not shadow
-# Termux's own in the user's shell.
+# Files of the base and of the stand-ins (dpkg-maintscript-helper, ...).
 BASE_FILES="$tmp.base"
-: > "$BASE_FILES"
-if [ -s "$INSTDIR/var/lib/deb-native/base-packages" ]; then
-  while IFS= read -r p; do
-    "$PREFIX_DIR/bin/dpkg-query" --admindir="$INSTDIR/var/lib/dpkg" -L "$p:arm64"
-  done < "$INSTDIR/var/lib/deb-native/base-packages" | sed "s|^|$INSTDIR|" > "$BASE_FILES"
-fi
+{
+  [ -s "$INSTDIR/var/lib/deb-native/base-packages" ] && cat "$INSTDIR/var/lib/deb-native/base-packages"
+  echo libc6; echo dpkg; echo apt
+} | while IFS= read -r p; do
+  "$PREFIX_DIR/bin/dpkg-query" --admindir="$INSTDIR/var/lib/dpkg" -L "$p:arm64" || true
+done | sed "s|^/bin/|/usr/bin/|; s|^/sbin/|/usr/sbin/|; s|^|$INSTDIR|" > "$BASE_FILES"
 
 is_elf() {
   [ "$(head -c4 "$1" | od -An -tx1 | tr -d ' \n')" = "7f454c46" ]
 }
-
-# Wrap $name -> $real. Wrapper type depends on the target: an ELF is handed
-# to dn-run for launch-time classification; a #! script is run through the
-# glibc shell wrappers (so its own hardcoded paths are covered and its
-# interpreter resolves), because handing a Bionic /bin/sh a glibc LD_PRELOAD
-# crashes.
-wrap() {
-  name=$1; real=$2
-  case "$name" in
-    dn-shell|dn-perl|chown|chgrp|path-redirect.so|'') return 0 ;;
-    # The prefix's own apt/dpkg (dn-standins.sh): the routing wrappers of
-    # the same names (make-apt-wrappers.sh) must stay in charge on PATH.
-    apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split|termux-dn-doctor) return 0 ;;
-  esac
-  # dpkg lists /usr/bin/x, and /bin/x (base-files' usrmerge links) for some.
-  if grep -qxF -e "$real" -e "$INSTDIR/usr${real#$INSTDIR}" "$BASE_FILES"; then
-    rm -f "$LAUNCHDIR/$name"
-    return 0
-  fi
-  if is_elf "$real"; then
-    # dn-run classifies at launch: shim (glibc), tracer (static/NSS), or a
-    # plain exec (Bionic). A binary with its own syscalls is tagged --trace so
-    # it skips the classifier's shim route. See native/dn-run.c.
-    if grep -qxF "$real" "$DIRECT_LIST"; then
-      cat > "$tmp" <<EOF
-#!/system/bin/sh
-exec "$LAUNCHDIR/../dn-run" --trace "$real" "\$@"
-EOF
-    else
-      cat > "$tmp" <<EOF
-#!/system/bin/sh
-exec "$LAUNCHDIR/../dn-run" "$real" "\$@"
-EOF
-    fi
-  else
-    first=$(head -c 64 "$real" | head -1)
-    case "$first" in
-      '#!'*perl*) interp="$INSTDIR/usr/bin/dn-perl" ;;
-      '#!'*)      interp="$INSTDIR/usr/bin/dn-shell" ;;
-      *)          return 0 ;;
-    esac
-    cat > "$tmp" <<EOF
-#!/system/bin/sh
-exec "$interp" "$real" "\$@"
-EOF
-  fi
+wrapper() {  # NAME COMMAND...  (a /system/bin/sh wrapper, 0.1.x style)
+  n=$1; shift
+  printf '#!/system/bin/sh\nexec %s "$@"\n' "$*" > "$tmp"
   chmod 755 "$tmp"
-  mv -f "$tmp" "$LAUNCHDIR/$name"
+  mv -f "$tmp" "$LAUNCHDIR/$n"
 }
 
-# Real bin dirs (skip the usrmerge symlinks: bin -> usr/bin, sbin -> usr/sbin).
+# Expose $name, found at $f (maybe an alternatives link) in a bin dir.
+expose() {
+  name=$1; f=$2
+  case "$name" in
+    dn-shell|dn-perl|chown|chgrp|''|termux-*) return 0 ;;
+    # The prefix's own apt/dpkg are reached through dn-activate.sh's aliases.
+    apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split) return 0 ;;
+  esac
+  real=$(readlink -f "$f") || return 0
+  [ -f "$real" ] || return 0
+  grep -qxF "$real" "$BASE_FILES" && return 0
+  if is_elf "$real"; then
+    interp=$(patchelf --print-interpreter "$real" 2>&1) || interp=""
+    if grep -qxF "$real" "$DIRECT_LIST"; then
+      wrapper "$name" "\"$LIBDIR/dn-run\" --trace \"$f\""
+    elif [ "$interp" = "$LDDN" ]; then
+      ln -sfn "$f" "$LAUNCHDIR/$name"
+    else
+      wrapper "$name" "\"$LIBDIR/dn-run\" \"$f\""
+    fi
+  else
+    first=$(head -n1 "$real")
+    case "$first" in
+      "#!$INSTDIR/"*) ln -sfn "$f" "$LAUNCHDIR/$name" ;;
+      '#!'*perl*)     wrapper "$name" "\"$INSTDIR/usr/bin/dn-perl\" \"$f\"" ;;
+      '#!'*)          wrapper "$name" "\"$INSTDIR/usr/bin/dn-shell\" \"$f\"" ;;
+      *)              return 0 ;;
+    esac
+  fi
+}
+
 for d in $BIN_DIRS; do
   [ -d "$d" ] || continue
-  [ -L "$d" ] && continue
   for f in "$d"/*; do
     [ -e "$f" ] || continue
     [ -x "$f" ] || continue
-    [ -f "$f" ] || continue
-    wrap "$(basename "$f")" "$f"
-  done
-  # Also expose a program's alternative name if a <name>-<pkg> provider
-  # exists next to a STILL-dangling alternatives symlink (setup-runtime.sh's
-  # update-alternatives wrapper fixes the common case; this remains a
-  # fallback for whatever isn't covered yet, e.g. awk -> mawk, TODO.md).
-  # A working symlink is already picked up by the loop above (-f/-x follow
-  # it), so this only ever fires for one that still doesn't resolve.
-  for f in "$d"/*; do
-    [ -L "$f" ] || continue
-    name=$(basename "$f")
-    [ -e "$f" ] && continue
-    provider=
-    for cand in "$d/$name-"*; do
-      [ -e "$cand" ] || continue
-      provider=$cand
-      break
-    done
-    [ -n "$provider" ] && wrap "$name" "$provider"
+    expose "$(basename "$f")" "$f"
   done
 done
 
 rm -f "$tmp" "$DIRECT_LIST" "$BASE_FILES"
-echo "Updated launchers in $LAUNCHDIR ($(ls -1 "$LAUNCHDIR" | wc -l) programs)."
+echo "Updated launchers in $LAUNCHDIR ($(ls -1 "$LAUNCHDIR" | wc -l) entries)."

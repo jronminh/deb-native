@@ -6,12 +6,18 @@
 #   - "Architecture: all" -> "arm64", the same rule dn-debian-index.sh
 #     applied to the index apt planned from, so apt and dpkg agree;
 #   - custom/<package>.sh, if any: per-package fixes;
-#   - glibc ELFs repointed at the libc6 stand-in: interpreter
-#     $DN/usr/lib/ld-linux-aarch64.so.1, and $DN/usr/lib/aarch64-linux-gnu
-#     first in every dynamic ELF's RUNPATH (shared libraries too: RUNPATH is
-#     not inherited, and Termux's ld.so searches only $PREFIX/glibc/lib by
+#   - glibc programs' interpreter set to ld-dn ($DN/usr/lib/deb-native/ld-dn,
+#     native/ld-dn.c): the kernel runs it first however the program is
+#     started, and it sets up the shim and hands over to glibc's real
+#     loader, the libc6 stand-in's; $DN/usr/lib/aarch64-linux-gnu first in
+#     every dynamic ELF's RUNPATH (shared libraries too: RUNPATH is not
+#     inherited, and Termux's ld.so searches only $PREFIX/glibc/lib by
 #     itself). Done here, not after install, so it is right before any
 #     maintainer script runs the binary;
+#   - program scripts' "#!" line pointed into the prefix (sh/bash/dash ->
+#     dn-shell, perl -> dn-perl, any other /usr, /bin, /sbin interpreter ->
+#     the same path under $DN), so a script started directly -- from
+#     Termux's side too -- runs with the prefix's interpreter;
 #   - maintainer-script shebangs -> dn-shell (patch-scripts-tree.sh, the
 #     loop patch-deb.sh runs).
 #
@@ -27,7 +33,7 @@ DN=${2:?usage: dn-translate-deb.sh DEB_FILE PREFIX}
 case "$DEB" in /*) ;; *) DEB="$PWD/$DEB" ;; esac
 case "$DN" in /*) ;; *) DN="$PWD/$DN" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-LD="$DN/usr/lib/ld-linux-aarch64.so.1"
+LD="$DN/usr/lib/deb-native/ld-dn"
 LIBDIR="$DN/usr/lib/aarch64-linux-gnu"
 
 WORK=$(mktemp -d)
@@ -49,7 +55,7 @@ find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print | while IFS= 
   # (captured, not shown -- it is the expected answer, not an error).
   interp=$(patchelf --print-interpreter "$f" 2>&1) || interp=""
   case "$interp" in
-    */ld-linux-aarch64.so.1) [ "$interp" = "$LD" ] || patchelf --set-interpreter "$LD" "$f" ;;
+    */ld-linux-aarch64.so.1|*/ld-dn) [ "$interp" = "$LD" ] || patchelf --set-interpreter "$LD" "$f" ;;
   esac
   old=$(patchelf --print-rpath "$f" 2>&1) || continue   # not dynamic
   case ":$old:" in *":$LIBDIR:"*) continue ;; esac
@@ -57,6 +63,26 @@ find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print | while IFS= 
 done
 
 "$HERE/patch-scripts-tree.sh" "$WORK/pkg" "$DN"
+
+# Program scripts (maintainer scripts are patch-scripts-tree.sh's).
+for d in usr/bin usr/sbin usr/games usr/libexec bin sbin; do
+  [ -d "$WORK/pkg/$d" ] || continue
+  find "$WORK/pkg/$d" -type f | while IFS= read -r f; do
+    [ "$(head -c2 "$f")" = "#!" ] || continue
+    line=$(head -n1 "$f")
+    interp=$(printf '%s' "$line" | sed -E 's/^#![[:space:]]*([^[:space:]]+).*/\1/')
+    case "$interp" in
+      /bin/sh|/bin/bash|/bin/dash|/usr/bin/sh|/usr/bin/bash|/usr/bin/dash) new="$DN/usr/bin/dn-shell" ;;
+      /usr/bin/perl|/bin/perl) new="$DN/usr/bin/dn-perl" ;;
+      /usr/*|/bin/*|/sbin/*) new="$DN$interp" ;;
+      *) continue ;;
+    esac
+    rest=$(printf '%s' "$line" | sed -E 's/^#![[:space:]]*[^[:space:]]+//')
+    printf '#!%s%s\n' "$new" "$rest" > "$WORK/line"
+    tail -n +2 "$f" >> "$WORK/line"
+    cat "$WORK/line" > "$f"
+  done
+done
 
 dpkg-deb -Znone -b "$WORK/pkg" "$WORK/out.deb"
 mv -f "$WORK/out.deb" "$DEB"

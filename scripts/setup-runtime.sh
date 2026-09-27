@@ -67,6 +67,16 @@ if stale "$CACHE/dn-run" "$SRC/dn-run.c"; then
 fi
 put "$CACHE/dn-run" "$LIBDIR/dn-run"
 
+# The loader stub every Debian program names as its interpreter
+# (dn-translate-deb.sh): sets up the shim, then hands over to glibc's real
+# loader. Freestanding static PIE -- no libc, no relocations.
+if stale "$CACHE/ld-dn" "$SRC/ld-dn.c"; then
+  echo "Building ld-dn ..."
+  clang -O2 -static -nostdlib -ffreestanding -fno-builtin -fno-stack-protector \
+        -fPIE -Wl,-pie -Wl,--no-dynamic-linker -o "$CACHE/ld-dn" "$SRC/ld-dn.c"
+fi
+put "$CACHE/ld-dn" "$LIBDIR/ld-dn"
+
 # The syscall tracer (fork-lite) used for static binaries and glibc NSS. Built
 # from tracer/ (`make CC=clang`, needs libtalloc); install a prebuilt one if
 # present, otherwise dn-run falls back to Termux's proot.
