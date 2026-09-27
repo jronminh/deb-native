@@ -55,6 +55,8 @@
 #include <spawn.h>
 #include <sys/inotify.h>
 #include <mntent.h>
+#include <grp.h>
+#include <sys/syscall.h>
 
 /* Cached once, at load. rewrite() is on the hot path of every intercepted
  * open/stat/exec call, so it must not call getenv()/strlen() per call or
@@ -67,14 +69,59 @@ static int g_debug;
 static const char *g_bionic_preload;
 static int g_init;
 
+/* Fake root (since 0.2.3): inside the prefix a program sees itself as
+ * root, as on a Debian where apt, dpkg and maintainer scripts run as root
+ * and base-passwd's only user is root (HOME=/root is already Termux's
+ * home). Only the identity is faked -- nothing gains a right it did not
+ * have. What a program learns its identity from, and the fake:
+ *   - get[e]uid/get[e]gid/getres[ug]id/getgroups -> 0;
+ *   - stat()'s owner: files owned by the real uid/gid show as root's
+ *     (else git's "dubious ownership", ssh's "bad owner" once uid is 0);
+ *   - set*id()/setgroups() and chown() to someone else "succeed" (nothing
+ *     is recorded: a chowned file still shows as root's);
+ *   - USER/LOGNAME = root.
+ * DN_ID=user turns it off for one command and its children (programs that
+ * refuse root: postgres, Chromium's sandbox). Static programs under
+ * dn-trace do not get it (the shim is not loaded there). */
+static int g_fakeroot;
+static uid_t g_ruid;
+static gid_t g_rgid;
+
 static void dn_init(void) {
   g_root = getenv("DN_INSTDIR");
   g_rootlen = g_root ? strlen(g_root) : 0;
   g_debug = getenv("DN_REDIRECT_DEBUG") != NULL;
   g_bionic_preload = getenv("DN_BIONIC_PRELOAD");
+  const char *id = getenv("DN_ID");
+  g_fakeroot = g_root && !(id && strcmp(id, "user") == 0);
+  g_ruid = (uid_t)syscall(SYS_getuid);
+  g_rgid = (gid_t)syscall(SYS_getgid);
+  if (g_fakeroot) {
+    setenv("USER", "root", 1);
+    setenv("LOGNAME", "root", 1);
+  }
   g_init = 1;
 }
 __attribute__((constructor)) static void dn_ctor(void) { dn_init(); }
+
+/* The owner a stat() result shows under fake root. */
+#define FAKE_OWNER(st) do {                                          \
+    if (g_fakeroot) {                                                \
+      if ((st)->st_uid == g_ruid) (st)->st_uid = 0;                  \
+      if ((st)->st_gid == g_rgid) (st)->st_gid = 0;                  \
+    }                                                                \
+  } while (0)
+#define FAKE_OWNER_X(stx) do {                                       \
+    if (g_fakeroot) {                                                \
+      if ((stx)->stx_uid == g_ruid) (stx)->stx_uid = 0;              \
+      if ((stx)->stx_gid == g_rgid) (stx)->stx_gid = 0;              \
+    }                                                                \
+  } while (0)
+/* A chown()/set*id() that fails only for lack of rights "succeeds". */
+#define FAKE_OK(r) do {                                              \
+    if ((r) != 0 && g_fakeroot && errno == EPERM) { errno = 0; return 0; } \
+    return (r);                                                      \
+  } while (0)
 
 static const char *rewrite(const char *path, char *buf, size_t bufsz) {
   if (!g_init) dn_init();
@@ -322,7 +369,9 @@ int fstatat(int dirfd, const char *pathname, struct stat *st, int flags) {
   static fstatat_t real;
   if (!real) real = (fstatat_t)dlsym(RTLD_NEXT, "fstatat");
   char buf[4096];
-  return real(dirfd, rewrite(pathname, buf, sizeof buf), st, flags);
+  int r = real(dirfd, rewrite(pathname, buf, sizeof buf), st, flags);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 typedef int (*fxstatat_t)(int, int, const char *, struct stat *, int);
@@ -331,7 +380,9 @@ int __fxstatat(int ver, int dirfd, const char *pathname, struct stat *st, int fl
   if (!real) real = (fxstatat_t)dlsym(RTLD_NEXT, "__fxstatat");
   if (!real) return -1;
   char buf[4096];
-  return real(ver, dirfd, rewrite(pathname, buf, sizeof buf), st, flags);
+  int r = real(ver, dirfd, rewrite(pathname, buf, sizeof buf), st, flags);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 /* Legacy stat entry points: a binary built against glibc < 2.33 reaches
@@ -344,7 +395,9 @@ int __xstat(int ver, const char *pathname, struct stat *st) {
   if (!real) real = (xstat_t)dlsym(RTLD_NEXT, "__xstat");
   if (!real) return -1;
   char buf[4096];
-  return real(ver, rewrite(pathname, buf, sizeof buf), st);
+  int r = real(ver, rewrite(pathname, buf, sizeof buf), st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 int __lxstat(int ver, const char *pathname, struct stat *st) {
@@ -352,7 +405,9 @@ int __lxstat(int ver, const char *pathname, struct stat *st) {
   if (!real) real = (xstat_t)dlsym(RTLD_NEXT, "__lxstat");
   if (!real) return -1;
   char buf[4096];
-  return real(ver, rewrite(pathname, buf, sizeof buf), st);
+  int r = real(ver, rewrite(pathname, buf, sizeof buf), st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 typedef int (*xstat64_t)(int, const char *, struct stat64 *);
@@ -361,7 +416,9 @@ int __xstat64(int ver, const char *pathname, struct stat64 *st) {
   if (!real) real = (xstat64_t)dlsym(RTLD_NEXT, "__xstat64");
   if (!real) return -1;
   char buf[4096];
-  return real(ver, rewrite(pathname, buf, sizeof buf), st);
+  int r = real(ver, rewrite(pathname, buf, sizeof buf), st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 int __lxstat64(int ver, const char *pathname, struct stat64 *st) {
@@ -369,7 +426,9 @@ int __lxstat64(int ver, const char *pathname, struct stat64 *st) {
   if (!real) real = (xstat64_t)dlsym(RTLD_NEXT, "__lxstat64");
   if (!real) return -1;
   char buf[4096];
-  return real(ver, rewrite(pathname, buf, sizeof buf), st);
+  int r = real(ver, rewrite(pathname, buf, sizeof buf), st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 typedef int (*stat_t)(const char *, struct stat *);
@@ -377,7 +436,9 @@ int stat(const char *pathname, struct stat *st) {
   static stat_t real;
   if (!real) real = (stat_t)dlsym(RTLD_NEXT, "stat");
   char buf[4096];
-  return real(rewrite(pathname, buf, sizeof buf), st);
+  int r = real(rewrite(pathname, buf, sizeof buf), st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 typedef int (*stat64_t)(const char *, struct stat64 *);
@@ -385,14 +446,18 @@ int stat64(const char *pathname, struct stat64 *st) {
   static stat64_t real;
   if (!real) real = (stat64_t)dlsym(RTLD_NEXT, "stat64");
   char buf[4096];
-  return real(rewrite(pathname, buf, sizeof buf), st);
+  int r = real(rewrite(pathname, buf, sizeof buf), st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 int lstat64(const char *pathname, struct stat64 *st) {
   static stat64_t real;
   if (!real) real = (stat64_t)dlsym(RTLD_NEXT, "lstat64");
   char buf[4096];
-  return real(rewrite(pathname, buf, sizeof buf), st);
+  int r = real(rewrite(pathname, buf, sizeof buf), st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 typedef int (*lstat_t)(const char *, struct stat *);
@@ -400,7 +465,9 @@ int lstat(const char *pathname, struct stat *st) {
   static lstat_t real;
   if (!real) real = (lstat_t)dlsym(RTLD_NEXT, "lstat");
   char buf[4096];
-  return real(rewrite(pathname, buf, sizeof buf), st);
+  int r = real(rewrite(pathname, buf, sizeof buf), st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 typedef int (*statx_t)(int, const char *, int, unsigned int, struct statx *);
@@ -410,7 +477,9 @@ int statx(int dirfd, const char *pathname, int flags, unsigned int mask,
   if (!real) real = (statx_t)dlsym(RTLD_NEXT, "statx");
   if (!real) return -1;
   char buf[4096];
-  return real(dirfd, rewrite(pathname, buf, sizeof buf), flags, mask, stx);
+  int r = real(dirfd, rewrite(pathname, buf, sizeof buf), flags, mask, stx);
+  if (r == 0) FAKE_OWNER_X(stx);
+  return r;
 }
 
 typedef int (*statfs_t)(const char *, struct statfs *);
@@ -702,7 +771,9 @@ int fstatat64(int dirfd, const char *pathname, struct stat64 *st, int flags) {
   static fstatat64_t real;
   if (!real) real = (fstatat64_t)dlsym(RTLD_NEXT, "fstatat64");
   char buf[4096];
-  return real(dirfd, rewrite(pathname, buf, sizeof buf), st, flags);
+  int r = real(dirfd, rewrite(pathname, buf, sizeof buf), st, flags);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
 }
 
 typedef int (*truncate64_t)(const char *, off64_t);
@@ -992,7 +1063,8 @@ int chown(const char *pathname, uid_t owner, gid_t group) {
   static chown_t real;
   if (!real) real = (chown_t)dlsym(RTLD_NEXT, "chown");
   char buf[4096];
-  return real(rewrite(pathname, buf, sizeof buf), owner, group);
+  int r = real(rewrite(pathname, buf, sizeof buf), owner, group);
+  FAKE_OK(r);
 }
 
 typedef int (*lchown_t)(const char *, uid_t, gid_t);
@@ -1000,7 +1072,8 @@ int lchown(const char *pathname, uid_t owner, gid_t group) {
   static lchown_t real;
   if (!real) real = (lchown_t)dlsym(RTLD_NEXT, "lchown");
   char buf[4096];
-  return real(rewrite(pathname, buf, sizeof buf), owner, group);
+  int r = real(rewrite(pathname, buf, sizeof buf), owner, group);
+  FAKE_OK(r);
 }
 
 typedef int (*fchownat_t)(int, const char *, uid_t, gid_t, int);
@@ -1009,9 +1082,116 @@ int fchownat(int dirfd, const char *pathname, uid_t owner, gid_t group,
   static fchownat_t real;
   if (!real) real = (fchownat_t)dlsym(RTLD_NEXT, "fchownat");
   char buf[4096];
-  return real(dirfd, rewrite(pathname, buf, sizeof buf), owner, group,
-              flags);
+  int r = real(dirfd, rewrite(pathname, buf, sizeof buf), owner, group,
+               flags);
+  FAKE_OK(r);
 }
+
+/* fd-based stat and chown: no path to rewrite, only the fake owner. */
+typedef int (*fstat_t)(int, struct stat *);
+int fstat(int fd, struct stat *st) {
+  static fstat_t real;
+  if (!real) real = (fstat_t)dlsym(RTLD_NEXT, "fstat");
+  int r = real(fd, st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
+}
+
+typedef int (*fstat64_t)(int, struct stat64 *);
+int fstat64(int fd, struct stat64 *st) {
+  static fstat64_t real;
+  if (!real) real = (fstat64_t)dlsym(RTLD_NEXT, "fstat64");
+  int r = real(fd, st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
+}
+
+typedef int (*fxstat_t)(int, int, struct stat *);
+int __fxstat(int ver, int fd, struct stat *st) {
+  static fxstat_t real;
+  if (!real) real = (fxstat_t)dlsym(RTLD_NEXT, "__fxstat");
+  if (!real) return -1;
+  int r = real(ver, fd, st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
+}
+
+typedef int (*fxstat64_t)(int, int, struct stat64 *);
+int __fxstat64(int ver, int fd, struct stat64 *st) {
+  static fxstat64_t real;
+  if (!real) real = (fxstat64_t)dlsym(RTLD_NEXT, "__fxstat64");
+  if (!real) return -1;
+  int r = real(ver, fd, st);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
+}
+
+typedef int (*fchown_t)(int, uid_t, gid_t);
+int fchown(int fd, uid_t owner, gid_t group) {
+  static fchown_t real;
+  if (!real) real = (fchown_t)dlsym(RTLD_NEXT, "fchown");
+  int r = real(fd, owner, group);
+  FAKE_OK(r);
+}
+
+/* ---- identity (fake root, see dn_init) ------------------------------ */
+
+#define REAL_ID(name, type)                                          \
+  static type (*real)(void);                                         \
+  if (!real) real = (type (*)(void))dlsym(RTLD_NEXT, name);
+
+uid_t getuid(void)  { REAL_ID("getuid", uid_t)  return g_fakeroot ? 0 : real(); }
+uid_t geteuid(void) { REAL_ID("geteuid", uid_t) return g_fakeroot ? 0 : real(); }
+gid_t getgid(void)  { REAL_ID("getgid", gid_t)  return g_fakeroot ? 0 : real(); }
+gid_t getegid(void) { REAL_ID("getegid", gid_t) return g_fakeroot ? 0 : real(); }
+
+typedef int (*getres_t)(unsigned int *, unsigned int *, unsigned int *);
+int getresuid(uid_t *r, uid_t *e, uid_t *s) {
+  static getres_t real;
+  if (!real) real = (getres_t)dlsym(RTLD_NEXT, "getresuid");
+  if (!g_fakeroot) return real(r, e, s);
+  *r = *e = *s = 0;
+  return 0;
+}
+int getresgid(gid_t *r, gid_t *e, gid_t *s) {
+  static getres_t real;
+  if (!real) real = (getres_t)dlsym(RTLD_NEXT, "getresgid");
+  if (!g_fakeroot) return real(r, e, s);
+  *r = *e = *s = 0;
+  return 0;
+}
+
+typedef int (*getgroups_t)(int, gid_t *);
+int getgroups(int size, gid_t list[]) {
+  static getgroups_t real;
+  if (!real) real = (getgroups_t)dlsym(RTLD_NEXT, "getgroups");
+  if (!g_fakeroot) return real(size, list);
+  if (size == 0) return 1;
+  if (size < 0) { errno = EINVAL; return -1; }
+  list[0] = 0;
+  return 1;
+}
+
+/* Dropping or changing identity "succeeds": a daemon that switches to its
+ * service user keeps running as the app user. */
+#define FAKE_SETID(name, proto, args)                                \
+  typedef int (*name##_t) proto;                                     \
+  int name proto {                                                   \
+    static name##_t real;                                            \
+    if (!real) real = (name##_t)dlsym(RTLD_NEXT, #name);             \
+    if (g_fakeroot) return 0;                                        \
+    return real args;                                                \
+  }
+FAKE_SETID(setuid, (uid_t u), (u))
+FAKE_SETID(setgid, (gid_t g), (g))
+FAKE_SETID(seteuid, (uid_t u), (u))
+FAKE_SETID(setegid, (gid_t g), (g))
+FAKE_SETID(setreuid, (uid_t r, uid_t e), (r, e))
+FAKE_SETID(setregid, (gid_t r, gid_t e), (r, e))
+FAKE_SETID(setresuid, (uid_t r, uid_t e, uid_t s), (r, e, s))
+FAKE_SETID(setresgid, (gid_t r, gid_t e, gid_t s), (r, e, s))
+FAKE_SETID(setgroups, (size_t n, const gid_t *l), (n, l))
+FAKE_SETID(initgroups, (const char *u, gid_t g), (u, g))
 
 typedef int (*utime_t)(const char *, const struct utimbuf *);
 int utime(const char *pathname, const struct utimbuf *times) {
