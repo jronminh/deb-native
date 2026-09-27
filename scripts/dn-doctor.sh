@@ -55,7 +55,7 @@ esac
 # 2. A leaked APT_CONFIG in the shell rc hijacks the wrapper's Termux call.
 for rc in "$HOME/.bashrc" "$HOME/.profile" "$HOME/.bash_profile"; do
   [ -f "$rc" ] || continue
-  if grep -q "APT_CONFIG=" "$rc" 2>/dev/null; then
+  if [ -f "$rc" ] && grep -q "APT_CONFIG=" "$rc"; then
     warn "$rc exports APT_CONFIG (makes apt show only Debian)"
     if [ "$FIX" = 1 ]; then
       cp "$rc" "$rc.dn-doctor.bak"
@@ -104,7 +104,7 @@ fi
 
 # 5. Prefix state.
 if [ -s "$DN_PREFIX/var/lib/dpkg/status" ]; then
-  n=$(grep -c "install ok installed" "$DN_PREFIX/var/lib/dpkg/status" 2>/dev/null || true)
+  n=$([ -f "$DN_PREFIX/var/lib/dpkg/status" ] && grep -c "install ok installed" "$DN_PREFIX/var/lib/dpkg/status" || true)
   ok "prefix dpkg db has ${n:-0} installed packages"
 else
   warn "no dpkg db at $DN_PREFIX (not bootstrapped yet?)"

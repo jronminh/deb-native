@@ -100,7 +100,7 @@ fi
 # file is the prefix's, so the stand-ins count as installed.
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/lists/partial" "$T/cache" "$T/debs/partial" "$T/etc" "$T/log"
+mkdir -p "$T/lists/partial" "$T/cache" "$T/debs/partial" "$T/etc/apt.conf.d" "$T/log"
 write_sources "$T/sources.list"
 write_pins "$T/prefs"
 cat > "$T/apt.conf" <<EOF
@@ -125,7 +125,7 @@ $TAPT update
 # Keep the raw lists for stage 1's apt update (unchanged files are not
 # fetched again), then rewrite Architecture: all -> arm64 in the temp copy.
 mkdir -p "$DN/var/lib/apt/lists/partial"
-cp "$T"/lists/*_Packages "$T"/lists/*Release "$DN/var/lib/apt/lists/" 2>/dev/null || true
+cp "$T"/lists/*_Packages "$T"/lists/*Release "$DN/var/lib/apt/lists/" || true
 "$HERE/dn-debian-index.sh" "$T/lists"
 DN_APT_CONFIG="$T/apt.conf" "$HERE/dn-standins.sh" "$DN"
 
@@ -134,9 +134,12 @@ $TAPT install -y --download-only $BASE
 echo "==> [0] downloaded $(ls "$T"/debs/*.deb | wc -l) packages"
 
 # 4. Translate, in Termux's environment (no apt hooks involved).
+n=0; total=$(ls "$T"/debs/*.deb | wc -l)
 for deb in "$T"/debs/*.deb; do
-  "$HERE/dn-translate-deb.sh" "$deb" "$DN" >/dev/null
-  "$HERE/patch-deb.sh" "$deb" "$DN" >/dev/null
+  n=$((n + 1))
+  echo "==> [0] translating $n/$total $(dpkg-deb -f "$deb" Package)"
+  "$HERE/dn-translate-deb.sh" "$deb" "$DN"
+  "$HERE/patch-deb.sh" "$deb" "$DN"
 done
 echo "==> [0] translated"
 
@@ -155,7 +158,7 @@ for p in $BASE; do echo "$p:arm64 hold"; done | "$TP/bin/dpkg" --admindir="$DN/v
 # make-launchers.sh gives it no launchers, so Termux's ls/sed/grep stay first.
 echo $BASE | tr ' ' '\n' > "$DN/var/lib/deb-native/base-packages"
 "$HERE/dn-fix-alternatives.sh" "$DN"
-"$HERE/normalize-symlinks.sh" "$DN" >/dev/null
+"$HERE/normalize-symlinks.sh" "$DN"
 echo "==> [0] base installed and held: $BASE"
 
 # === Stage 1: package database and apt config ============================

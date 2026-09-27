@@ -12,7 +12,7 @@ set -eu
 REPO=https://github.com/jronminh/deb-native
 REF=${DEB_NATIVE_REF:-main}
 DIR=${DEB_NATIVE_DIR:-$HOME/.deb-native}
-HERE=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || echo .)
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd || echo .)
 
 # --- display ---------------------------------------------------------------
 if [ -t 1 ]; then
@@ -34,7 +34,7 @@ fail() { printf '%s error:%s %s\n' "$Y" "$R" "$*" >&2; exit 1; }
 # Piped (curl | sh) or run outside a checkout: fetch the repo, then re-exec.
 if [ ! -f "$HERE/scripts/setup-apt-prefix.sh" ]; then
     banner
-    command -v git >/dev/null 2>&1 || fail "git is required (pkg install git)"
+    command -v git || fail "git is required (pkg install git)"
     printf '\n%s[1/1]%s fetching deb-native (%s) into %s\n' "$C" "$R" "$REF" "$DIR"
     if [ ! -d "$DIR/.git" ]; then
         git clone --depth 1 --branch "$REF" "$REPO" "$DIR"
@@ -110,7 +110,7 @@ step "normalizing prefix symlinks"
 T1=$(date +%s)
 secs=$((T1 - T0))
 [ "$secs" -lt 60 ] && took="${secs}s" || took="$((secs / 60))m$((secs % 60))s"
-installed=$(grep -c "install ok installed" "$DNPREFIX/var/lib/dpkg/status" 2>/dev/null || true)
+installed=$([ -f "$DNPREFIX/var/lib/dpkg/status" ] && grep -c "install ok installed" "$DNPREFIX/var/lib/dpkg/status" || true)
 
 printf '\n%s done%s in %s\n' "$G" "$R" "$took"
 kv "prefix" "$DNPREFIX"

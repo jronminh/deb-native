@@ -20,7 +20,7 @@ MARK="# deb-native launchers (managed)"
 # AND the pipeline's own internal ones) actually reaches. That's not a
 # cosmetic detail: it's the exact mechanism behind cross-prefix apt/dpkg
 # hijacking (findings.md). Make the swap visible instead of silent.
-if grep -qF "$MARK" "$RC" 2>/dev/null; then
+if [ -f "$RC" ] && grep -qF "$MARK" "$RC"; then
   OLD=$(grep -oE '/[^"]*/usr/lib/deb-native/bin' "$RC" | head -1)
   if [ -n "$OLD" ] && [ "$OLD" != "$LAUNCHDIR" ]; then
     echo "==> WARNING: replacing the active prefix on PATH" >&2

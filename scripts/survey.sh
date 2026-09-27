@@ -109,7 +109,7 @@ survey_one() {
 
   DN_PREFIX="$pfx" "$HERE/prototype-install.sh" "$deb" >>"$log" 2>&1
   inst=ok
-  if ! DN_PREFIX="$pfx" dpkg-query --admindir="$pfx/var/lib/dpkg" -W -f '${db:Status-Abbrev}' "$pkg" 2>/dev/null | grep -q '^ii'; then
+  if ! DN_PREFIX="$pfx" dpkg-query --admindir="$pfx/var/lib/dpkg" -W -f '${db:Status-Abbrev}' "$pkg" | grep -q '^ii'; then
     detail=$(install_failure "$log")
     inst=${detail%% *}
     detail=${detail#* }
@@ -131,7 +131,7 @@ survey_one() {
       cat "$OUT/run.out" >> "$log"
       progs="${progs:+$progs,}${p##*/}:$r"
       case $r in ok) ok=$((ok + 1)) ;; fail) bad=$((bad + 1)) ;; *) unt=$((unt + 1)) ;; esac
-    done < <(dpkg --admindir="$pfx/var/lib/dpkg" -L "$pkg" 2>/dev/null | grep -E '^/(usr/)?(s?bin|games)/[^/]+$')
+    done < <(dpkg --admindir="$pfx/var/lib/dpkg" -L "$pkg" | grep -E '^/(usr/)?(s?bin|games)/[^/]+$')
     if [ $((ok + bad + unt)) -eq 0 ]; then run=none
     elif [ $bad -eq 0 ] && [ $ok -gt 0 ]; then run=ok
     elif [ $bad -eq 0 ]; then run=untested

@@ -41,9 +41,9 @@ while [ "$changed" -eq 1 ] && [ "$pass" -lt 5 ]; do
     pass=$((pass + 1))
     changed=0
 
-    find "$ROOT" -xdev -type l > "$tmp" 2>/dev/null || true
+    find "$ROOT" -xdev -type l > "$tmp" || true
     while IFS= read -r link; do
-        target=$(readlink "$link" 2>/dev/null) || continue
+        target=$(readlink "$link") || continue
 
         # Only absolute targets can escape the prefix.
         case "$target" in /*) ;; *) continue ;; esac

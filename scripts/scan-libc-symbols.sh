@@ -20,19 +20,19 @@ trap cleanup EXIT
 if [ "$mode" = debs ]; then
   tmp=$(mktemp -d)
   find "$target" -name '*.deb' | while IFS= read -r d; do
-    dpkg-deb -x "$d" "$tmp/x" 2>/dev/null || continue
+    dpkg-deb -x "$d" "$tmp/x" || continue
   done
   target=$tmp/x
 fi
 
-find "$target" -type f 2>/dev/null | while IFS= read -r f; do
-  [ "$(head -c4 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "7f454c46" ] || continue
-  if ! readelf -d "$f" >/dev/null 2>&1; then
+find "$target" -type f | while IFS= read -r f; do
+  [ "$(head -c4 "$f" | od -An -tx1 | tr -d ' \n')" = "7f454c46" ] || continue
+  if ! out=$(readelf -d "$f" 2>&1); then
     echo "1 STATIC_ELF"
     continue
   fi
-  if readelf -lW "$f" 2>/dev/null | grep -q 'INTERP'; then :; else
+  if readelf -lW "$f" | grep -q 'INTERP'; then :; else
     echo "1 NO_INTERP"
   fi
-  nm -D -u "$f" 2>/dev/null | awk 'NF{print $NF}' | sed 's/@.*//'
+  nm -D -u "$f" | awk 'NF{print $NF}' | sed 's/@.*//'
 done | sort | uniq -c | sort -rn

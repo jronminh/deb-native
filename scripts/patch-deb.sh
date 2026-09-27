@@ -93,5 +93,5 @@ for f in "$WORK/pkg/DEBIAN/preinst" "$WORK/pkg/DEBIAN/postinst" \
   fi
 done
 
-dpkg-deb -b "$WORK/pkg" "$WORK/out.deb" >/dev/null
+dpkg-deb -b "$WORK/pkg" "$WORK/out.deb"
 mv -f "$WORK/out.deb" "$DEB"

@@ -39,8 +39,9 @@ cmd=""
 for a in "\$@"; do
   case "\$a" in -*) ;; *) cmd="\$a"; break ;; esac
 done
-have_tm() { "$TP/bin/apt-cache" show "\$1" >/dev/null 2>&1; }
-have_dn() { APT_CONFIG="\$AC" "$TP/bin/apt-cache" show "\$1" >/dev/null 2>&1; }
+# "Has a candidate": apt-cache policy prints nothing for an unknown name.
+have_tm() { [ -n "\$("$TP/bin/apt-cache" policy "\$1" | sed -n 's/^ *Candidate: //p' | grep -v '(none)')" ]; }
+have_dn() { [ -n "\$(APT_CONFIG="\$AC" "$TP/bin/apt-cache" policy "\$1" | sed -n 's/^ *Candidate: //p' | grep -v '(none)')" ]; }
 # Repo AVAILABILITY (above) picks where a NEW install goes ("Termux wins").
 # It is the wrong question for remove/purge/reinstall: a package can be
 # available in BOTH repos under the same name (bc, tree, ...) while only
@@ -48,8 +49,8 @@ have_dn() { APT_CONFIG="\$AC" "$TP/bin/apt-cache" show "\$1" >/dev/null 2>&1; }
 # Route those three by actual INSTALLED location instead, or a same-named
 # Termux package makes "apt remove" silently report "not installed" (true
 # for Termux) and exit 0 while the real, prefix-installed copy is untouched.
-inst_tm() { "$TP/bin/dpkg" -s "\$1" >/dev/null 2>&1; }
-inst_dn() { "$TP/bin/dpkg" --admindir="$DNPREFIX/var/lib/dpkg" -s "\$1" >/dev/null 2>&1; }
+inst_tm() { [ "\$("$TP/bin/dpkg-query" -W -f='\${db:Status-Abbrev}' "\$1" 2>&1)" = "ii " ]; }
+inst_dn() { [ "\$("$TP/bin/dpkg-query" --admindir="$DNPREFIX/var/lib/dpkg" -W -f='\${db:Status-Abbrev}' "\$1" 2>&1)" = "ii " ]; }
 case "\$cmd" in
   install|reinstall|remove|purge)
     args=""; pkgs=""; seen=0
@@ -84,8 +85,8 @@ case "\$cmd" in
     APT_CONFIG="\$AC" "\$REAL" "\$@" || true
     exit 0 ;;
   search|show|policy)
-    "\$REAL" "\$@" 2>/dev/null
-    APT_CONFIG="\$AC" "\$REAL" "\$@" 2>/dev/null
+    "\$REAL" "\$@"
+    APT_CONFIG="\$AC" "\$REAL" "\$@"
     exit 0 ;;
   *) exec "\$REAL" "\$@" ;;
 esac
@@ -102,7 +103,7 @@ DN="$DNPREFIX"; ROOT="$INSTDIR"; REPO="$REPO"
 arch=aarch64
 for f in "\$@"; do
   case "\$f" in
-    *.deb) arch=\$("$TP/bin/dpkg-deb" -f "\$f" Architecture 2>/dev/null || echo aarch64) ;;
+    *.deb) arch=\$("$TP/bin/dpkg-deb" -f "\$f" Architecture || echo aarch64) ;;
   esac
 done
 case "\$arch" in

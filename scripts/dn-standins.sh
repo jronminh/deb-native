@@ -34,7 +34,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 ver() { v=$("$TP/bin/dpkg-query" -W -f='${Version}' "$1"); echo "${v%%-*}-0dn1"; }
 installed() {  # PACKAGE VERSION
-  [ "$("$TP/bin/dpkg-query" --admindir="$DN/var/lib/dpkg" -W -f='${Version} ${db:Status-Abbrev}' "$1:arm64" 2>/dev/null)" = "$2 ii " ]
+  [ "$("$TP/bin/dpkg-query" --admindir="$DN/var/lib/dpkg" -W -f='${Version} ${db:Status-Abbrev}' "$1:arm64" 2>&1)" = "$2 ii " ]
 }
 control() {  # NAME VERSION MULTIARCH DESCRIPTION
   mkdir -p "$WORK/$1/DEBIAN"
@@ -52,8 +52,8 @@ Description: $4 (deb-native stand-in)
 EOF
 }
 install_pkg() {  # NAME VERSION
-  dpkg-deb -b --root-owner-group "$WORK/$1" "$WORK/$1_$2_arm64.deb" >/dev/null
-  $DPKG -i "$WORK/$1_$2_arm64.deb" >/dev/null
+  dpkg-deb -b --root-owner-group "$WORK/$1" "$WORK/$1_$2_arm64.deb"
+  $DPKG -i "$WORK/$1_$2_arm64.deb"
   echo "standins: $1 $2 installed"
 }
 launcher() {  # PKGDIR NAME COMMAND...
@@ -67,7 +67,7 @@ launcher() {  # PKGDIR NAME COMMAND...
 V=$(ver glibc)
 if installed libc6 "$V"; then echo "standins: libc6 $V already installed"; else
   # The bootstrap has no prefix apt config yet: it passes its temporary one.
-  FN=$(APT_CONFIG="${DN_APT_CONFIG:-$DN/etc/apt.conf}" "$TP/bin/apt-cache" show libc6:arm64 2>/dev/null | awk '/^Filename:/ {print $2; exit}')
+  FN=$(APT_CONFIG="${DN_APT_CONFIG:-$DN/etc/apt.conf}" "$TP/bin/apt-cache" show libc6:arm64 | awk '/^Filename:/ {print $2; exit}')
   [ -n "$FN" ] || { echo "standins: Debian's libc6 is not in the prefix's apt index; run apt update first" >&2; exit 1; }
   curl -fsSL -o "$WORK/libc6-debian.deb" "$MIRROR/$FN"
   control libc6 "$V" same "Termux glibc presented as Debian's libc6"

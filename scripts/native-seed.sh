@@ -49,7 +49,7 @@ status="$ADMINDIR/status"
 TERMUX_PREFIX=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 echo "$map" | while IFS=: read -r deb_name termux_pkg; do
   [ -n "$deb_name" ] || continue
-  termux_version=$("$TERMUX_PREFIX/bin/dpkg" -s "$termux_pkg" 2>/dev/null | awk -F': ' '/^Version:/{print $2; exit}')
+  termux_version=$("$TERMUX_PREFIX/bin/dpkg" -s "$termux_pkg" | awk -F': ' '/^Version:/{print $2; exit}')
   [ -n "$termux_version" ] || { echo "skip $deb_name: $termux_pkg not installed" >&2; continue; }
   # Epoch 9999: deliberately, not a guess at Debian's real epoch for this
   # library. dpkg compares epoch before anything else, and Debian's own
@@ -77,5 +77,5 @@ EOF
   echo "seeded: $deb_name <- $termux_pkg $termux_version"
 done
 
-cat "$status.native-seed" >> "$status" 2>/dev/null || true
+cat "$status.native-seed" >> "$status" || true
 rm -f "$status.native-seed"

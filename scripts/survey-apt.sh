@@ -43,7 +43,7 @@ survey_one() {
   "$HERE/setup-apt-prefix.sh" "$pfx" >>"$log" 2>&1
   "$HERE/apt-install.sh" "$pfx" "$pkg" >>"$log" 2>&1
   local inst=ok detail=""
-  if ! dpkg-query --admindir="$pfx/var/lib/dpkg" -W -f '${db:Status-Abbrev}' "$pkg" 2>/dev/null | grep -q '^ii'; then
+  if ! dpkg-query --admindir="$pfx/var/lib/dpkg" -W -f '${db:Status-Abbrev}' "$pkg" | grep -q '^ii'; then
     detail=$(install_failure "$log")
     inst=${detail%% *}
     detail=${detail#* }

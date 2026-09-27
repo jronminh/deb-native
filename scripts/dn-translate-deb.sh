@@ -37,16 +37,18 @@ if [ -x "$HERE/../custom/$PKG.sh" ]; then
 fi
 
 find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print | while IFS= read -r f; do
-  [ "$(head -c4 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = 7f454c46 ] || continue
-  interp=$(patchelf --print-interpreter "$f" 2>/dev/null) || interp=""
+  [ "$(head -c4 "$f" | od -An -tx1 | tr -d ' \n')" = 7f454c46 ] || continue
+  # Libraries and static programs have no interpreter: patchelf says so
+  # (captured, not shown -- it is the expected answer, not an error).
+  interp=$(patchelf --print-interpreter "$f" 2>&1) || interp=""
   case "$interp" in
     */ld-linux-aarch64.so.1) [ "$interp" = "$LD" ] || patchelf --set-interpreter "$LD" "$f" ;;
   esac
-  old=$(patchelf --print-rpath "$f" 2>/dev/null) || continue   # not dynamic
+  old=$(patchelf --print-rpath "$f" 2>&1) || continue   # not dynamic
   case ":$old:" in *":$LIBDIR:"*) continue ;; esac
   patchelf --set-rpath "$LIBDIR${old:+:$old}" "$f"
 done
 
-dpkg-deb -b "$WORK/pkg" "$WORK/out.deb" >/dev/null
+dpkg-deb -b "$WORK/pkg" "$WORK/out.deb"
 mv -f "$WORK/out.deb" "$DEB"
 echo "dn-translate-deb: translated $PKG"

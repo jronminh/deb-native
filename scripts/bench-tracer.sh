@@ -20,7 +20,7 @@ BIND="$T:/usr"
 
 # TIMEFORMAT=%R makes `time` print just the elapsed seconds.
 run() {
-    "$BASH_BIN" -c 'TIMEFORMAT=%R; time "$@" >/dev/null' _ "$@"
+    "$BASH_BIN" -c 'TIMEFORMAT=%R; time "$@" >>"${BENCH_OUT:-bench-tracer.out}"' _ "$@"
 }
 
 bench() {

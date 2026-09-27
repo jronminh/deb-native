@@ -39,11 +39,11 @@ BIN_DIRS="$INSTDIR/usr/bin $INSTDIR/usr/sbin $INSTDIR/sbin $INSTDIR/bin $INSTDIR
 # docs/syscall-boundary.md, "Remaining: the direct-syscall attribute".
 DIRECT_LIST="$tmp.direct"
 : > "$DIRECT_LIST"
-if command -v python3 >/dev/null 2>&1; then
+if [ -n "$(command -v python3 || true)" ]; then
   for d in $BIN_DIRS; do
     [ -d "$d" ] || continue
     [ -L "$d" ] && continue
-    python3 "$HERE/scan-direct-syscalls.py" "$d" --trace-list >> "$DIRECT_LIST" 2>/dev/null || true
+    python3 "$HERE/scan-direct-syscalls.py" "$d" --trace-list >> "$DIRECT_LIST" || true
   done
 fi
 
@@ -54,12 +54,12 @@ BASE_FILES="$tmp.base"
 : > "$BASE_FILES"
 if [ -s "$INSTDIR/var/lib/deb-native/base-packages" ]; then
   while IFS= read -r p; do
-    "$PREFIX_DIR/bin/dpkg-query" --admindir="$INSTDIR/var/lib/dpkg" -L "$p:arm64" 2>/dev/null
+    "$PREFIX_DIR/bin/dpkg-query" --admindir="$INSTDIR/var/lib/dpkg" -L "$p:arm64"
   done < "$INSTDIR/var/lib/deb-native/base-packages" | sed "s|^|$INSTDIR|" > "$BASE_FILES"
 fi
 
 is_elf() {
-  [ "$(head -c4 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "7f454c46" ]
+  [ "$(head -c4 "$1" | od -An -tx1 | tr -d ' \n')" = "7f454c46" ]
 }
 
 # Wrap $name -> $real. Wrapper type depends on the target: an ELF is handed
@@ -76,7 +76,7 @@ wrap() {
     apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split|termux-dn-doctor) return 0 ;;
   esac
   # dpkg lists /usr/bin/x, and /bin/x (base-files' usrmerge links) for some.
-  if grep -qxF -e "$real" -e "$INSTDIR/usr${real#$INSTDIR}" "$BASE_FILES" 2>/dev/null; then
+  if grep -qxF -e "$real" -e "$INSTDIR/usr${real#$INSTDIR}" "$BASE_FILES"; then
     rm -f "$LAUNCHDIR/$name"
     return 0
   fi
@@ -96,7 +96,7 @@ exec "$LAUNCHDIR/../dn-run" "$real" "\$@"
 EOF
     fi
   else
-    first=$(head -c 64 "$real" 2>/dev/null | head -1)
+    first=$(head -c 64 "$real" | head -1)
     case "$first" in
       '#!'*perl*) interp="$INSTDIR/usr/bin/dn-perl" ;;
       '#!'*)      interp="$INSTDIR/usr/bin/dn-shell" ;;

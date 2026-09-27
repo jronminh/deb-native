@@ -52,7 +52,7 @@ while IFS= read -r deb; do
     while IFS= read -r path; do
       [ -e "$DN$path" ] || [ -L "$DN$path" ] || continue
       if [ -d "$DN$path" ] && [ ! -L "$DN$path" ]; then continue; fi
-      "$TP/bin/dpkg-query" --admindir="$DN/var/lib/dpkg" -S "$path" >/dev/null 2>&1 && continue
+      owner=$("$TP/bin/dpkg-query" --admindir="$DN/var/lib/dpkg" -S "$path" 2>&1) && continue
       printf ' %s' "$path"
     done) || true
   if [ -n "$clash" ]; then

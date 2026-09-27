@@ -61,8 +61,8 @@ echo "==> patching new ELF binaries with grun --configure"
 dpkg --admindir="$ADMINDIR" -L "$pkg_name" | while IFS= read -r f; do
   full="$INSTDIR$f"
   [ -f "$full" ] || continue
-  case "$(head -c4 "$full" 2>/dev/null | od -An -tx1 | tr -d ' \n')" in
-    7f454c46) grun --configure "$full" >/dev/null 2>&1 && echo "   patched: $f" ;;
+  case "$(head -c4 "$full" | od -An -tx1 | tr -d ' \n')" in
+    7f454c46) grun --configure "$full" && echo "   patched: $f" ;;
   esac
 done
 

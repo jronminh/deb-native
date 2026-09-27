@@ -14,7 +14,7 @@ set -eu
 ROOT=${1:?usage: patch-elfs.sh ROOT}
 case "$ROOT" in /*) ;; *) ROOT="$PWD/$ROOT" ;; esac
 
-find "$ROOT" -type f -perm -u+x 2>/dev/null |
+find "$ROOT" -type f -perm -u+x |
   while IFS= read -r f; do
     case "$f" in
       "$ROOT/lib/deb-native/"*|\
@@ -22,7 +22,7 @@ find "$ROOT" -type f -perm -u+x 2>/dev/null |
       "$ROOT/usr/bin/dn-shell"|\
       "$ROOT/usr/bin/dn-perl") continue ;;
     esac
-    case "$(head -c4 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')" in
-      7f454c46) grun --configure "$f" >/dev/null 2>&1 || true ;;
+    case "$(head -c4 "$f" | od -An -tx1 | tr -d ' \n')" in
+      7f454c46) grun --configure "$f" || true ;;
     esac
   done
