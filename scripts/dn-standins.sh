@@ -32,7 +32,15 @@ DPKG="$TP/bin/dpkg --admindir=$DN/var/lib/dpkg --instdir=$DN --force-not-root --
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-ver() { v=$("$TP/bin/dpkg-query" -W -f='${Version}' "$1"); echo "${v%%-*}-0dn1"; }
+# <termux version>-0dnN; N counts changes to a stand-in's own content.
+ver() { v=$("$TP/bin/dpkg-query" -W -f='${Version}' "$1"); echo "${v%%-*}-0dn${2:-1}"; }
+# Fetch Debian's own copy of a package (pinned -1, never installed) for
+# files the stand-ins take from it.
+debian_deb() {  # PACKAGE OUTFILE
+  fn=$(APT_CONFIG="${DN_APT_CONFIG:-$DN/etc/apt.conf}" "$TP/bin/apt-cache" show "$1:arm64" | awk '/^Filename:/ {print $2; exit}')
+  [ -n "$fn" ] || { echo "E: Debian's $1 is not in the prefix's apt index; run apt update first" >&2; exit 1; }
+  curl -fsSL -o "$2" "$MIRROR/$fn"
+}
 installed() {  # PACKAGE VERSION
   [ "$("$TP/bin/dpkg-query" --admindir="$DN/var/lib/dpkg" -W -f='${Version} ${db:Status-Abbrev}' "$1:arm64" 2>&1)" = "$2 ii " ]
 }
@@ -67,9 +75,7 @@ launcher() {  # PKGDIR NAME COMMAND...
 V=$(ver glibc)
 if installed libc6 "$V"; then echo "libc6:arm64 is already the newest version ($V)."; else
   # The bootstrap has no prefix apt config yet: it passes its temporary one.
-  FN=$(APT_CONFIG="${DN_APT_CONFIG:-$DN/etc/apt.conf}" "$TP/bin/apt-cache" show libc6:arm64 | awk '/^Filename:/ {print $2; exit}')
-  [ -n "$FN" ] || { echo "E: Debian's libc6 is not in the prefix's apt index; run apt update first" >&2; exit 1; }
-  curl -fsSL -o "$WORK/libc6-debian.deb" "$MIRROR/$FN"
+  debian_deb libc6 "$WORK/libc6-debian.deb"
   control libc6 "$V" same "Termux glibc presented as Debian's libc6"
   L="$WORK/libc6/usr/lib/aarch64-linux-gnu"
   mkdir -p "$L"
@@ -87,7 +93,7 @@ if installed libc6 "$V"; then echo "libc6:arm64 is already the newest version ($
 fi
 
 # --- dpkg --------------------------------------------------------------
-V=$(ver dpkg)
+V=$(ver dpkg 2)
 if installed dpkg "$V"; then echo "dpkg:arm64 is already the newest version ($V)."; else
   control dpkg "$V" foreign "Termux's dpkg, pointed at the prefix"
   A="--admindir=$DN/var/lib/dpkg"
@@ -95,6 +101,13 @@ if installed dpkg "$V"; then echo "dpkg:arm64 is already the newest version ($V)
   launcher dpkg dpkg-query "exec $TP/bin/dpkg-query $A"
   launcher dpkg dpkg-deb "exec $TP/bin/dpkg-deb"
   launcher dpkg dpkg-split "exec $TP/bin/dpkg-split $A"
+  # Termux's dpkg lacks dpkg-maintscript-helper, which many Debian packages'
+  # scripts call to move or remove old conffiles (debian-archive-keyring's
+  # preinst: "dpkg-maintscript-helper: command not found"). Debian's own is
+  # a shell script, DPKG_ROOT-aware, calling dpkg/dpkg-query by name --
+  # which in a maintainer script are the prefix's launchers above.
+  debian_deb dpkg "$WORK/dpkg-debian.deb"
+  dpkg-deb --fsys-tarfile "$WORK/dpkg-debian.deb" | tar -x -C "$WORK/dpkg" ./usr/bin/dpkg-maintscript-helper
   install_pkg dpkg "$V"
 fi
 
