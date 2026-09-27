@@ -208,8 +208,6 @@ static int handle_seccomp_event_common(Tracee *tracee)
 	case PR_setgid:
 	case PR_setreuid:
 	case PR_setregid:
-	case PR_setresuid:
-	case PR_setresgid:
 	case PR_setfsuid:
 	case PR_setfsgid:
 		set_result_after_seccomp(tracee, dn_fake_root() ? 0 : -ENOSYS);
@@ -635,6 +633,9 @@ static int handle_seccomp_event_common(Tracee *tracee)
 			ret = -EPERM;
 		if (sxid != sxid_ && sxid != -1)
 			ret = -EPERM;
+		/* deb-native fake root: the change "succeeds".  */
+		if (ret != 0 && dn_fake_root())
+			ret = 0;
 		set_result_after_seccomp(tracee, ret);
 		break;
 	}
