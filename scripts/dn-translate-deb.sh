@@ -9,8 +9,9 @@
 #   - glibc programs' interpreter set to ld-dn ($DN/usr/lib/deb-native/ld-dn,
 #     native/ld-dn.c): the kernel runs it first however the program is
 #     started, and it sets up the shim and hands over to glibc's real
-#     loader, the libc6 stand-in's; $DN/usr/lib/aarch64-linux-gnu first in
-#     every dynamic ELF's RUNPATH (shared libraries too: RUNPATH is not
+#     loader, the libc6 stand-in's; $DN/usr/lib/aarch64-linux-gnu and
+#     $DN/usr/lib first in every dynamic ELF's RUNPATH, and its absolute
+#     entries moved into $DN (shared libraries too: RUNPATH is not
 #     inherited, and Termux's ld.so searches only $PREFIX/glibc/lib by
 #     itself). Done here, not after install, so it is right before any
 #     maintainer script runs the binary;
@@ -34,7 +35,7 @@ case "$DEB" in /*) ;; *) DEB="$PWD/$DEB" ;; esac
 case "$DN" in /*) ;; *) DN="$PWD/$DN" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LD="$DN/usr/lib/deb-native/ld-dn"
-LIBDIR="$DN/usr/lib/aarch64-linux-gnu"
+LIBPATH="$DN/usr/lib/aarch64-linux-gnu:$DN/usr/lib"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -71,8 +72,16 @@ find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print | while IFS= 
     */ld-linux-aarch64.so.1|*/ld-dn) [ "$interp" = "$LD" ] || patchelf --set-interpreter "$LD" "$f" ;;
   esac
   old=$(patchelf --print-rpath "$f" 2>&1) || continue   # not dynamic
-  case ":$old:" in *":$LIBDIR:"*) continue ;; esac
-  patchelf --set-rpath "$LIBDIR${old:+:$old}" "$f"
+  # The prefix's copies of Debian's default library dirs first (Termux's
+  # ld.so knows only its own: librnd lives in /usr/lib, survey
+  # 2026-09-27), then the ELF's own entries, absolute ones moved into the
+  # prefix ($ORIGIN ones stay).
+  new=$LIBPATH
+  for e in $(printf '%s' "$old" | tr ':' ' '); do
+    case "$e" in "$DN"/*|'$ORIGIN'*) ;; /*) e=$DN$e ;; esac
+    case ":$new:" in *":$e:"*) ;; *) new=$new:$e ;; esac
+  done
+  [ "$new" = "$old" ] || patchelf --set-rpath "$new" "$f"
 done
 
 "$HERE/patch-scripts-tree.sh" "$WORK/pkg" "$DN"
