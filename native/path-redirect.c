@@ -80,18 +80,22 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
   if (!g_init) dn_init();
   if (!g_root || !path || path[0] != '/') return path;
 
-  /* Only /usr, /etc, /var, /opt qualify; dispatch on the second byte so a
-   * non-matching path costs one compare instead of four strncmp()s. */
+  /* Only /usr, /etc, /var, /opt and /root qualify; dispatch on the second
+   * byte so a non-matching path costs one compare instead of five
+   * strncmp()s. /root: the prefix's root links to Termux's home (base-passwd's
+   * only user is root, and maintainer scripts write to its home). */
   const char *pre;
+  size_t prelen = 4;
   switch (path[1]) {
     case 'u': pre = "/usr"; break;
     case 'e': pre = "/etc"; break;
     case 'v': pre = "/var"; break;
     case 'o': pre = "/opt"; break;
+    case 'r': pre = "/root"; prelen = 5; break;
     default: return path;
   }
-  if (strncmp(path, pre, 4) != 0) return path;
-  if (path[4] != '/' && path[4] != '\0') return path;
+  if (strncmp(path, pre, prelen) != 0) return path;
+  if (path[prelen] != '/' && path[prelen] != '\0') return path;
 
   size_t plen = strlen(path);
   if (g_rootlen + plen + 1 > bufsz) return path;

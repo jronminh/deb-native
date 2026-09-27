@@ -1,99 +1,127 @@
 #!/bin/sh
-# Point Termux's own apt at a real Debian arm64 repository, scoped to a
-# separate prefix — the piece design.md always intended but
-# this repo never actually built until the survey
-# (docs/findings.md) showed it was the #1 gap: without
-# it, only the one requested .deb ever gets installed, never its
-# dependencies.
+# Bootstrap a self-contained prefix (docs/design-0.2.0.md): a small, complete
+# Debian root of its own -- its own apt/dpkg (Termux's, through stand-in
+# launchers), database, libc6 and Debian base -- so installing into it is
+# plain apt, as on Debian. Termux is never touched: everything lives under
+# NEWPREFIX, and the prefix's apt reads only its own config.
 #
-# Usage: setup-apt-prefix.sh $NEWPREFIX [debian-suite (default: stable)]
+#   1. directories, the prefix's dpkg database with arm64 as a foreign
+#      architecture, Debian sources, pins, the prefix's apt.conf with the
+#      install pipeline (dn-hook-pre.sh / dn-hook-post.sh)
+#   2. runtime (shim, dn-shell, dn-run, privilege layer); $NEWPREFIX/root
+#      linked to Termux's home
+#   3. apt update (dn-debian-index.sh rewrites Architecture: all -> arm64)
+#   4. stand-ins libc6, dpkg, apt (dn-standins.sh)
+#   5. the Debian base through the prefix's own apt, then held
+#   6. launchers, routing wrappers, PATH
 #
-# After this, use apt-get (or scripts/apt-install.sh) with:
-#   APT_CONFIG=$NEWPREFIX/etc/apt.conf apt-get install -y <package>
+# Usage: setup-apt-prefix.sh NEWPREFIX [debian-suite (default: stable)]
 #
-# KNOWN INSECURE SHORTCUT: sources.list uses [trusted=yes], skipping
-# signature verification entirely, because Termux ships no Debian archive
-# keyring to verify against. Fine for this prototype; do not ship this
-# as-is — see "Open work" in docs/design.md.
+# KNOWN INSECURE SHORTCUT: sources.list uses [trusted=yes] -- Termux ships no
+# Debian archive keyring. A signed deb-native repo is the next release's fix.
 set -eu
 NEWPREFIX=${1:?usage: setup-apt-prefix.sh NEWPREFIX [suite]}
 case "$NEWPREFIX" in /*) ;; *) NEWPREFIX="$PWD/$NEWPREFIX" ;; esac
 SUITE=${2:-stable}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
+DN=$NEWPREFIX
+TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 
-# Safety: never write apt config into Termux's own prefix. Pointing this at
-# $PREFIX overwrites Termux's sources.list and makes its repo disappear.
-TERMUX_PREFIX=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
-case "$NEWPREFIX" in
-  "$TERMUX_PREFIX"|"$TERMUX_PREFIX"/*)
-    echo "setup-apt-prefix: refusing NEWPREFIX=$NEWPREFIX" >&2
-    echo "  it is inside Termux's prefix ($TERMUX_PREFIX); that would clobber Termux's apt." >&2
-    echo "  Use a separate prefix, e.g. \$HOME/.dn (the installer's default)." >&2
+# Safety: never inside Termux's own prefix (that is the naibed branch's
+# one-way transformation, not this).
+case "$DN" in
+  "$TP"|"$TP"/*)
+    echo "setup-apt-prefix: refusing NEWPREFIX=$DN" >&2
+    echo "  it is inside Termux's prefix ($TP); use a separate prefix, e.g. \$HOME/.dn." >&2
     exit 1 ;;
 esac
 
-# Build the path-redirect shim from source if it is missing (it is a build
-# artifact; see scripts/build-path-redirect.sh for the toolchain notes).
-[ -f "$HERE/../native/path-redirect.so" ] || "$HERE/build-path-redirect.sh"
+# --- 1. database, sources, pins, apt.conf --------------------------------
+# Only usr/* is created here: base-files ships bin, lib, sbin as links to
+# usr/*, and its preinst refuses if they already exist as directories.
+mkdir -p "$DN/etc/apt/apt.conf.d" "$DN/etc/apt/sources.list.d" \
+         "$DN/etc/apt/preferences.d" "$DN/etc/apt/trusted.gpg.d" \
+         "$DN/var/lib/apt/lists/partial" "$DN/var/cache/apt/archives/partial" \
+         "$DN/var/lib/dpkg/updates" "$DN/var/lib/dpkg/info" "$DN/var/log/apt" \
+         "$DN/usr/bin" "$DN/usr/lib"
+[ -f "$DN/var/lib/dpkg/status" ] || : > "$DN/var/lib/dpkg/status"
+[ -f "$DN/var/lib/dpkg/available" ] || : > "$DN/var/lib/dpkg/available"
+touch "$DN/etc/apt/trusted.gpg"
+"$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --print-foreign-architectures | grep -qx arm64 \
+  || "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --add-architecture arm64
 
-mkdir -p "$NEWPREFIX/etc/apt/apt.conf.d" "$NEWPREFIX/etc/apt/sources.list.d" \
-         "$NEWPREFIX/etc/apt/preferences.d" \
-         "$NEWPREFIX/etc/apt/trusted.gpg.d" \
-         "$NEWPREFIX/var/lib/apt/lists/partial" \
-         "$NEWPREFIX/var/cache/apt/archives/partial" \
-         "$NEWPREFIX/var/lib/dpkg" "$NEWPREFIX/var/log" \
-         "$NEWPREFIX/usr" "$NEWPREFIX/opt"
-[ -f "$NEWPREFIX/var/lib/dpkg/status" ] || : > "$NEWPREFIX/var/lib/dpkg/status"
-touch "$NEWPREFIX/etc/apt/trusted.gpg"
-
-cat > "$NEWPREFIX/etc/apt/sources.list" <<EOF
-deb [trusted=yes] https://deb.debian.org/debian $SUITE main contrib non-free-firmware
-deb [trusted=yes] https://deb.debian.org/debian ${SUITE}-updates main contrib non-free-firmware
-deb [trusted=yes] https://security.debian.org/debian-security ${SUITE}-security main contrib non-free-firmware
+cat > "$DN/etc/apt/sources.list" <<EOF
+deb [trusted=yes arch=arm64] https://deb.debian.org/debian $SUITE main contrib non-free-firmware
+deb [trusted=yes arch=arm64] https://deb.debian.org/debian ${SUITE}-updates main contrib non-free-firmware
+deb [trusted=yes arch=arm64] https://security.debian.org/debian-security ${SUITE}-security main contrib non-free-firmware
 EOF
 
-cat > "$NEWPREFIX/etc/apt.conf" <<EOF
-Dir::State "$NEWPREFIX/var/lib/apt";
-Dir::State::status "$NEWPREFIX/var/lib/dpkg/status";
-Dir::Cache "$NEWPREFIX/var/cache/apt";
-Dir::Etc "$NEWPREFIX/etc/apt";
-Dir::Etc::sourcelist "$NEWPREFIX/etc/apt/sources.list";
-Dir::Etc::sourceparts "$NEWPREFIX/etc/apt/sources.list.d";
-Dir::Etc::trusted "$NEWPREFIX/etc/apt/trusted.gpg";
-Dir::Etc::trustedparts "$NEWPREFIX/etc/apt/trusted.gpg.d";
-APT::Architecture "arm64";
-APT::Architectures:: "arm64";
-Dpkg::options:: "--instdir=$NEWPREFIX";
-Dpkg::options:: "--admindir=$NEWPREFIX/var/lib/dpkg";
-Dpkg::options:: "--force-not-root";
-Dpkg::options:: "--force-script-chrootless";
-Dpkg::options:: "--force-architecture";
-// Hook the deb-native pipeline into apt's own lifecycle (the sudo-less
-// approach): patch each .deb before dpkg unpacks it, and regenerate
-// launchers after. So a plain apt-get install (through the arch-aware apt
-// wrapper, which points APT_CONFIG here for Debian-only names) installs
-// Debian arm64 packages seamlessly.
-DPkg::Pre-Install-Pkgs { "$REPO/scripts/apt-hook-pre.sh $NEWPREFIX"; };
-DPkg::Post-Invoke { "$REPO/scripts/apt-hook-post.sh $NEWPREFIX || true"; };
+# Debian's own copies of the stand-ins must never install: its libc6 dies
+# under Android's seccomp filter, its dpkg/apt would replace the launchers.
+# sudo/doas: setuid-root binaries that cannot work here; the names are kept
+# for deb-native's own later (TODO.md, "sudo").
+PINNED="libc6:arm64 libc-bin:arm64 libc6-dev:arm64 libc-dev-bin:arm64 libc-l10n:arm64 locales:arm64 dpkg:arm64 apt:arm64 sudo:arm64 doas:arm64"
+for o in deb.debian.org security.debian.org; do
+  printf 'Package: %s\nPin: origin %s\nPin-Priority: -1\n\n' "$PINNED" "$o"
+done > "$DN/etc/apt/preferences.d/deb-native"
+
+cat > "$DN/etc/apt.conf" <<EOF
+// deb-native prefix (generated by scripts/setup-apt-prefix.sh; docs/design-0.2.0.md).
+Dir::State "$DN/var/lib/apt";
+Dir::State::status "$DN/var/lib/dpkg/status";
+Dir::Cache "$DN/var/cache/apt";
+Dir::Log "$DN/var/log/apt";
+Dir::Etc "$DN/etc/apt";
+Dir::Etc::sourcelist "$DN/etc/apt/sources.list";
+Dir::Etc::sourceparts "$DN/etc/apt/sources.list.d";
+Dir::Etc::trusted "$DN/etc/apt/trusted.gpg";
+Dir::Etc::trustedparts "$DN/etc/apt/trusted.gpg.d";
+Dir::Etc::preferences "$DN/etc/apt/preferences";
+Dir::Etc::preferencesparts "$DN/etc/apt/preferences.d";
+// Termux's dpkg is natively "aarch64"; Debian's packages stay arm64, a
+// foreign architecture in the prefix's own database.
+APT::Architectures { "aarch64"; "arm64"; };
+APT::Install-Recommends "false";
+Acquire::PDiffs "false";          // the index is rewritten after download
+Acquire::Languages "none";
+APT::Update::Post-Invoke-Success { "$HERE/dn-debian-index.sh $DN/var/lib/apt/lists"; };
+Dpkg::Options:: "--instdir=$DN";
+Dpkg::Options:: "--admindir=$DN/var/lib/dpkg";
+Dpkg::Options:: "--force-not-root";
+Dpkg::Options:: "--force-script-chrootless";
+DPkg::Pre-Install-Pkgs { "$HERE/dn-hook-pre.sh $DN"; };
+DPkg::Tools::Options::$HERE/dn-hook-pre.sh "";
+DPkg::Tools::Options::$HERE/dn-hook-pre.sh::Version "3";
+DPkg::Post-Invoke { "$HERE/dn-hook-post.sh $DN"; };
 EOF
+APT="env APT_CONFIG=$DN/etc/apt.conf $TP/bin/apt-get"
 
-"$HERE/native-seed.sh" "$NEWPREFIX/var/lib/dpkg"
-# Absolute path: a bare "apt-get" can resolve to ANOTHER prefix's arch-aware
-# wrapper (make-apt-wrappers.sh puts one on PATH per activated prefix), which
-# unsets APT_CONFIG and substitutes its own -- silently bootstrapping the
-# wrong prefix. Never rely on PATH here.
-APT_CONFIG="$NEWPREFIX/etc/apt.conf" "$TERMUX_PREFIX/bin/apt-get" update
+# --- 2. runtime, /root ----------------------------------------------------
+"$HERE/setup-runtime.sh" "$DN"
+# base-passwd's only user is root, home /root, and maintainer scripts write
+# there: make it Termux's home (the shim rewrites /root into the prefix).
+if [ ! -e "$DN/root" ] && [ ! -L "$DN/root" ]; then
+  ln -s "$HOME" "$DN/root"
+elif [ ! -L "$DN/root" ]; then
+  echo "setup-apt-prefix: $DN/root exists and is not a link; leaving it" >&2
+fi
 
-echo "==> bootstrapping base packages (dash, debconf, cdebconf, ...) in one"
-echo "    transaction -- see scripts/bootstrap-base.sh for why one, not"
-echo "    piecemeal, matters here"
-"$HERE/bootstrap-base.sh" "$NEWPREFIX"
+# --- 3. index -------------------------------------------------------------
+$APT update
 
-echo "==> generating launchers, the dn front-end, and activating PATH"
-"$HERE/setup-runtime.sh" "$NEWPREFIX"
-"$HERE/make-launchers.sh" "$NEWPREFIX"
-"$HERE/make-apt-wrappers.sh" "$NEWPREFIX"
-"$HERE/dn-activate.sh" "$NEWPREFIX"
+# --- 4. stand-ins ---------------------------------------------------------
+"$HERE/dn-standins.sh" "$DN"
 
-echo "==> ready: APT_CONFIG=$NEWPREFIX/etc/apt.conf apt-get install -y <package>"
+# --- 5. Debian base, held -------------------------------------------------
+# What every Debian package assumes is there (the bootstrap-base.sh set).
+# One apt run: dpkg's own Pre-Depends ordering (base-files needs awk first).
+BASE="mawk base-files base-passwd dash debianutils debconf cdebconf openssl ca-certificates"
+$APT install -y $BASE
+env APT_CONFIG="$DN/etc/apt.conf" "$TP/bin/apt-mark" hold $BASE >/dev/null
+echo "==> base installed and held: $BASE"
+
+# --- 6. launchers, routing, PATH ------------------------------------------
+"$HERE/make-launchers.sh" "$DN"
+"$HERE/make-apt-wrappers.sh" "$DN"
+"$HERE/dn-activate.sh" "$DN"
+echo "==> ready: apt install <package>   (Debian-only names go to $DN)"

@@ -28,10 +28,16 @@ PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
 BINDIR="$INSTDIR/usr/bin"
 LIBDIR="$INSTDIR/usr/lib/deb-native"
+# The privilege layer (docs/design-0.2.0.md, TODO.md "sudo"): every command
+# an unprivileged prefix has to fake or redirect lives here, first on a
+# maintainer script's PATH (dn-launch.c), so a Debian package's real
+# chown/update-alternatives never shadows it, and a later sudo/fake-root
+# mode can replace this one directory.
+PRIV="$LIBDIR/priv"
 
 [ -x "$GLIBC/bin/bash" ] || { echo "setup-runtime: no glibc bash at $GLIBC/bin/bash" >&2; exit 1; }
 
-mkdir -p "$BINDIR" "$LIBDIR"
+mkdir -p "$BINDIR" "$LIBDIR" "$PRIV"
 
 # The shim is a build artifact; keep a copy inside the prefix so the
 # launcher (and any wrapper) has a stable, self-contained path.
@@ -72,10 +78,12 @@ fi
 # every install (e.g. ca-certificates) even though it still reaches ii.
 # These are fine as scripts -- they are reached through PATH (a normal
 # exec, not a shebang chain), so the one-level rule does not apply.
-printf '#!/system/bin/sh\nexit 0\n' > "$BINDIR/chown"
-printf '#!/system/bin/sh\nexit 0\n' > "$BINDIR/chgrp"
-printf '#!/system/bin/sh\nexit 0\n' > "$BINDIR/dpkg-statoverride"
-chmod 755 "$BINDIR/chown" "$BINDIR/chgrp" "$BINDIR/dpkg-statoverride"
+for n in chown chgrp dpkg-statoverride; do
+  printf '#!/system/bin/sh\nexit 0\n' > "$PRIV/$n"
+  chmod 755 "$PRIV/$n"
+  # 0.1.x put them in usr/bin, where a Debian package's real one would land.
+  if [ -f "$BINDIR/$n" ] && head -c 40 "$BINDIR/$n" | grep -q '^#!/system/bin/sh'; then rm -f "$BINDIR/$n"; fi
+done
 
 # update-alternatives defaults its --altdir/--admindir to Termux's own real,
 # compiled-in absolute path ($PREFIX_DIR/etc/alternatives, .../var/lib/dpkg/
@@ -87,8 +95,25 @@ chmod 755 "$BINDIR/chown" "$BINDIR/chgrp" "$BINDIR/dpkg-statoverride"
 # dangling `figlet -> $PREFIX_DIR/etc/alternatives/figlet` symlink). Force
 # the prefix's own directories with a wrapper, same idea as the no-op shims
 # above.
-cat > "$BINDIR/update-alternatives" <<EOF
+# --log too, root-relative with DPKG_ROOT set: update-alternatives joins
+# DPKG_ROOT onto its log path even when given explicitly (found as
+# $INSTDIR/data/data/com.termux/files/usr/var/log/alternatives.log, in 0.1.x
+# prefixes and on the naibed branch). Its links are absolute, which the
+# kernel follows against Android's root, so they are made relative at once
+# (dn-fix-alternatives.sh): until then the command itself (awk) is broken.
+cat > "$PRIV/update-alternatives" <<EOF
 #!/system/bin/sh
-exec "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" "\$@"
+DPKG_ROOT="$INSTDIR" "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log /var/log/alternatives.log "\$@"
+rc=\$?
+"$HERE/dn-fix-alternatives.sh" "$INSTDIR"
+exit \$rc
 EOF
-chmod 755 "$BINDIR/update-alternatives"
+chmod 755 "$PRIV/update-alternatives"
+rm -f "$BINDIR/update-alternatives"   # 0.1.x location
+# dpkg-divert has the same bug: under DPKG_ROOT it joins DPKG_ROOT with its
+# compiled-in admindir (traced on naibed: $ROOT$PREFIX/var/lib/dpkg/diversions).
+cat > "$PRIV/dpkg-divert" <<EOF
+#!/system/bin/sh
+exec "$PREFIX_DIR/bin/dpkg-divert" --admindir "$INSTDIR/var/lib/dpkg" --instdir "$INSTDIR" "\$@"
+EOF
+chmod 755 "$PRIV/dpkg-divert"

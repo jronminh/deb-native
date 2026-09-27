@@ -109,11 +109,11 @@ case "\$arch" in
   arm64)
     debs=""
     for a in "\$@"; do case "\$a" in *.deb) debs="\$debs \$a" ;; esac; done
-    "\$REPO/scripts/apt-hook-pre.sh" "\$DN" \$debs
+    "\$REPO/scripts/dn-hook-pre.sh" "\$DN" \$debs || exit 1
     "\$REAL" --instdir="\$ROOT" --admindir="\$DN/var/lib/dpkg" \\
-        --force-not-root --force-script-chrootless --force-architecture "\$@"
+        --force-not-root --force-script-chrootless "\$@"
     rc=\$?
-    "\$REPO/scripts/apt-hook-post.sh" "\$DN" || true
+    "\$REPO/scripts/dn-hook-post.sh" "\$DN" || true
     exit \$rc ;;
   *) exec "\$REAL" "\$@" ;;
 esac

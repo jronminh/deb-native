@@ -60,6 +60,9 @@ wrap() {
   name=$1; real=$2
   case "$name" in
     dn-shell|dn-perl|chown|chgrp|path-redirect.so|'') return 0 ;;
+    # The prefix's own apt/dpkg (dn-standins.sh): the routing wrappers of
+    # the same names (make-apt-wrappers.sh) must stay in charge on PATH.
+    apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split|termux-dn-doctor) return 0 ;;
   esac
   if is_elf "$real"; then
     # dn-run classifies at launch: shim (glibc), tracer (static/NSS), or a

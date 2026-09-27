@@ -57,9 +57,13 @@ int main(int argc, char **argv) {
   char shim[4096];
   snprintf(shim, sizeof shim, "%s/usr/lib/deb-native/path-redirect.so", inst);
   char path[8192];
+  /* priv/ first: the privilege layer (no-op chown/chgrp/dpkg-statoverride,
+   * the update-alternatives and dpkg-divert wrappers) must win over any
+   * Debian package's real command of the same name (setup-runtime.sh). */
   snprintf(path, sizeof path,
-           "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/usr/games:%s/glibc/bin:%s/bin",
-           inst, inst, inst, inst, inst, pfx, pfx);
+           "%s/usr/lib/deb-native/priv:%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:"
+           "%s/usr/games:%s/glibc/bin:%s/bin",
+           inst, inst, inst, inst, inst, inst, pfx, pfx);
 
   /* Preserve whatever preload we inherited (on Termux, termux-exec) so the
    * shim can hand it back to a Bionic child it execs -- see bionic_env()
