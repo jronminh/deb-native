@@ -116,12 +116,12 @@ put "$CACHE/dn-shell" "$BINDIR/dn-perl"
 # every install (e.g. ca-certificates) even though it still reaches ii.
 # These are fine as scripts -- they are reached through PATH (a normal
 # exec, not a shebang chain), so the one-level rule does not apply.
-# update-rc.d/invoke-rc.d register and start a package's init script: the
-# prefix has no init system and no boot, so a package that merely ships
-# one (nethack-common's save recovery, survey 2026-09-27) installs, and the
-# service is not run. Running services is the planned runit translation
+# update-rc.d/invoke-rc.d (deb-systemd-helper/-invoke for a systemd unit)
+# register and start a package's service: the prefix has no init system
+# and no boot, so a package that merely ships one (nethack-common's save
+# recovery, survey 2026-09-27) installs, and the service is not run. Running services is the planned runit translation
 # (TODO.md), not this.
-for n in chown chgrp dpkg-statoverride update-rc.d invoke-rc.d; do
+for n in chown chgrp dpkg-statoverride update-rc.d invoke-rc.d deb-systemd-helper deb-systemd-invoke; do
   printf '#!/system/bin/sh\nexit 0\n' > "$PRIV/$n"
   chmod 755 "$PRIV/$n"
   # 0.1.x put them in usr/bin, where a Debian package's real one would land.
