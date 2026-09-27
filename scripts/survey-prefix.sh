@@ -11,7 +11,9 @@
 # saved once to OUT/base.tar and restored before every package, so one
 # broken package cannot affect the next; the prefix is back to that state
 # at the end. Downloaded .debs are shared in OUT/archives. Resumable: a
-# package already in OUT/results.tsv is skipped.
+# package already in OUT/results.tsv is skipped. One survey per prefix (a
+# lock beside it); stop one with `kill PID` (the pid is in the lock file):
+# it restores the prefix before exiting. Never move OUT while it runs.
 #
 # LIST.tsv: "section<TAB>package" lines (header "section..." skipped),
 # made by scripts/survey-sample.py.
@@ -51,15 +53,45 @@ RES=$OUT/results.tsv
 BASE=$OUT/base.tar
 [ -s "$RES" ] || printf 'section\tpackage\tinstall\tdetail\trun\tprograms\tseconds\n' > "$RES"
 
+# One survey per prefix: a second run would delete the prefix under the
+# first. The lock sits beside the prefix, not in OUT, so two OUTs clash too.
+LOCK=${DN%/*}/.dn-survey.lock
+if [ -f "$LOCK" ] && [ -d "/proc/$(cat "$LOCK")" ]; then
+  echo "E: a survey is already running (pid $(cat "$LOCK"), $LOCK); stop it with: kill $(cat "$LOCK")" >&2
+  exit 1
+fi
+echo $$ > "$LOCK"
+
 if [ ! -s "$BASE" ]; then
   echo "Saving the prefix to $BASE ..."
   tar -C "${DN%/*}" -cf "$BASE" --exclude="${DN##*/}/var/cache/apt/archives/*.deb" "${DN##*/}"
 fi
 
+# The prefix is deleted only when the snapshot to rebuild it is there.
 restore() {
+  [ -s "$BASE" ] || { echo "E: $BASE is gone; the prefix at $DN is left as it is" >&2; exit 1; }
   rm -rf "$DN"
   tar -C "${DN%/*}" -xf "$BASE"
 }
+
+# `kill PID` (the lock's pid) stops cleanly: the running install is
+# stopped, the prefix restored, the lock removed.
+killtree() {
+  local c
+  for c in $(pgrep -P "$1"); do killtree "$c"; done
+  kill -TERM "$1" 2>&1 | grep -v 'No such process'
+}
+stop() {
+  trap - TERM INT
+  local c
+  for c in $(pgrep -P $$); do killtree "$c"; done
+  wait
+  restore
+  rm -f "$LOCK"
+  echo "Stopped; the prefix is restored."
+  exit 130
+}
+trap stop TERM INT
 
 # No desktop session: Termux:X11 or VNC may be running.
 headless() {
@@ -139,7 +171,9 @@ survey_one() {
     headless
     timeout 1800 "$DN/usr/bin/apt-get" install -y --no-install-recommends \
       -o Dir::Cache::Archives="$OUT/archives" "$pkg"
-  ) >"$log" 2>&1
+  ) >"$log" 2>&1 &
+  # In the background and waited for, so `kill` reaches stop() at once.
+  wait $!
   local rc=$?
   if [ $rc = 0 ] &&
      "$DN/usr/bin/dpkg-query" -W -f '${db:Status-Abbrev}' "$pkg:arm64" 2>&1 | grep -q '^ii'; then
@@ -187,10 +221,14 @@ survey_one() {
   printf '%-13s %-34s %-6s %-8s %s\n' "$section" "$pkg" "$inst" "$run" "${progs:-$detail}" | cut -c1-160
 }
 
-while IFS=$'\t' read -r section pkg _; do
+# Read once: a git pull that rewrites LIST must not change a running survey.
+mapfile -t ENTRIES < "$LIST"
+for e in "${ENTRIES[@]}"; do
+  IFS=$'\t' read -r section pkg _ <<< "$e"
   case $section in section|'') continue ;; esac
   if cut -f2 "$RES" | grep -qxF -- "$pkg"; then continue; fi   # resumable
   survey_one "$section" "$pkg"
-done < "$LIST"
+done
 restore
+rm -f "$LOCK"
 echo "Done: $RES"
