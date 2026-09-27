@@ -76,25 +76,26 @@ with the decisions below).
 
 **Build order**
 
-- [ ] 1. Prefix bootstrap: directories, `etc/apt` config (Debian sources,
+- [x] 1. Prefix bootstrap: directories, `etc/apt` config (Debian sources,
       `arm64` foreign, no Recommends, no pdiffs, hooks), prefix
       `apt`/`dpkg` launchers, index `all` -> `arm64` rewrite.
-- [ ] 2. Stand-ins `libc6`, `dpkg`, `apt`; pins (-1) on Debian's `libc6`,
+- [x] 2. Stand-ins `libc6`, `dpkg`, `apt`; pins (-1) on Debian's `libc6`,
       `libc-bin`, `libc6-dev`, `libc-dev-bin`, `libc-l10n`, `locales`,
       `dpkg`, `apt`, `sudo`, `doas`.
-- [ ] 3. Hooks from naibed, adapted to the nested root (pre: control
+- [x] 3. Hooks from naibed, adapted to the nested root (pre: control
       rewrite, ELF repoint, `custom/`, collision check, `patch-deb`;
       post: alternatives, symlinks, scoped launchers, stale launchers).
-- [ ] 4. Runtime: naibed's wrapper fixes in `setup-runtime.sh`; shim
+- [x] 4. Runtime: naibed's wrapper fixes in `setup-runtime.sh`; shim
       rewrites `/root`; `$DN/root` -> Termux home.
-- [ ] 5. Debian base through the prefix's own apt (`mawk base-files
+- [x] 5. Debian base through the prefix's own apt (`mawk base-files
       base-passwd dash debianutils debconf cdebconf openssl
       ca-certificates`), then held.
-- [ ] 6. `install.sh` and routing on top; retire the main pieces above.
-- [ ] 7. Verify **on a vanilla Termux** (the test device's Termux is fused
-      by `naibed` and gets reinstalled): `figlet`, `lua5.4`, `tree`, `sl`,
-      `hello`, `ncdu` by name; `apt-get check`; delete the prefix and
-      confirm Termux is untouched.
+- [x] 6. `install.sh` and routing on top; retire the main pieces above.
+- [x] 7. Verify **on a vanilla Termux**: fresh install (3m13s) and the
+      100-package survey ([`docs/survey-0.2.0.md`](docs/survey-0.2.0.md):
+      99 install, 98 run within the survey's limits, the other 2 fixed);
+      `apt-get check` clean.
+- [ ] 8. Delete the prefix and confirm Termux is untouched.
 
 **Next release (not 0.2.0): the repo** -- the same translation at repo
 build time in [`deb-native-repo`](https://github.com/jronminh/deb-native-repo)
@@ -102,6 +103,38 @@ build time in [`deb-native-repo`](https://github.com/jronminh/deb-native-repo)
 sources themselves are verified since 0.2.0: the bootstrap fetches
 `debian-archive-keyring` and checks it against pinned fingerprints),
 the device hooks stay as a fallback.
+
+**Next (0.2.x): `libc6` as Debian's exact identity.** The stand-in wraps
+Termux's patched glibc but is versioned like Termux's (`2.44-0dn1`), so
+`libc6-dev`, which needs `libc6 (= 2.41-12+deb13u4)`, cannot install: every
+toolchain is blocked (survey run 1, via `ghc`). Plan:
+- [ ] stand-in version = Debian's current `libc6` (read from the prefix's
+      index at bootstrap), Termux's real version recorded in the package
+      (e.g. `X-Termux-Glibc: 2.44`);
+- [ ] rebuilt after `apt update` when Debian's `libc6` version moves (the
+      index hook), so point releases do not break it again;
+- [ ] revisit the -1 pins on `libc6-dev`, `libc-dev-bin`, `libc-bin`,
+      `locales`: Debian's own are fine once `libc6` matches (only `libc6`
+      itself stays the stand-in);
+- [ ] verify: `gcc` hello-world in the prefix (`libc6-dev`'s linker script
+      names `/lib/aarch64-linux-gnu`, which the shim does not rewrite);
+- [ ] re-run the unfiltered survey sample for a number on heavy packages;
+      check Perl XS modules (`dn-perl` is Termux's Perl 5.42, trixie builds
+      for 5.40).
+
+**After 0.2.0, in order: services, then sudo.** Same scope as sudo-less;
+a service needs something to run it and the rights it expects.
+- [ ] 1. **runit translation**: a real `update-rc.d`/`invoke-rc.d` (and
+      `deb-systemd-helper`) in priv that turns a package's init script or
+      systemd unit into a termux-services (runit) service under the prefix,
+      started by `sv`, at boot through Termux:Boot -- deb-native's
+      counterpart of sudo-less's `systemd --user` translation. Until then
+      they are no-ops: a package that ships a service installs, the service
+      does not run.
+- [ ] 2. **sudo modes** (below): fake root + `base-passwd`'s users so
+      `adduser`/`chown service-user` in maintainer scripts succeed.
+- [ ] 3. Both together: packages that need a system user *and* run a
+      daemon -- sudo-less's service support, matched.
 
 **Idea for later, not in 0.2.0: busybox as the maintainer-script toolbox.**
 Debian's dynamic `busybox` (glibc, so ld-dn + shim, no tracer) with its
@@ -119,10 +152,12 @@ means Android root. Three kinds, stackable: pass-through (installers that
 just prefix `sudo`), fake root (`fakeroot`-style: uid 0 believed, ownership
 recorded), a real extra identity (Android's shell uid via
 `termux-adb-bridge`, or a bounded identity as in `dsb`). In 0.2.0 only:
-- [ ] pin Debian's `sudo`/`doas` to -1 (setuid-root binaries that cannot
+- [x] pin Debian's `sudo`/`doas` to -1 (setuid-root binaries that cannot
       work here, and the name is reserved for ours);
-- [ ] group the no-op `chown`/`chgrp`/`dpkg-statoverride` into one privilege
-      layer (e.g. `$DN/usr/lib/deb-native/priv/`) a later mode can replace;
+- [x] group the no-op `chown`/`chgrp`/`dpkg-statoverride` into one privilege
+      layer (`$DN/usr/lib/deb-native/priv/`) a later mode can replace
+      (now also `getent`, `update-rc.d`, `invoke-rc.d`,
+      `deb-systemd-helper`, `deb-systemd-invoke`);
 - [ ] keep `dn-run`/`dn-shell` preload handling general enough for a
       second `LD_PRELOAD` (a fake-root library beside the shim);
 - [ ] keep `base-passwd`'s `root` user and `sudo` group as Debian has them.
