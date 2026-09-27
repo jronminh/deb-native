@@ -29,14 +29,14 @@ How that differs from proot-distro, chroot and the rest:
 
 ```sh
 # pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.2.1-prealpha/install.sh | DEB_NATIVE_REF=v0.2.1-prealpha sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.2.2-prealpha/install.sh | DEB_NATIVE_REF=v0.2.2-prealpha sh
 
 # then restart Termux (or: . ~/.bashrc)
 apt install figlet # the prefix's apt: Debian's packages
 figlet hi          # an installed program, run by name
 ```
 
-Or the rolling edge: replace both `v0.2.1-prealpha` occurrences with `main`.
+Or the rolling edge: replace both `v0.2.2-prealpha` occurrences with `main`.
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 
@@ -165,6 +165,17 @@ reach them. To undo: `sed -i '/# deb-native/d' ~/.bashrc` and delete
 
 `install.sh` is idempotent. From a checkout: `sh install.sh [PREFIX] [pkg ...]`.
 The full install log is in `~/.dn/var/log/`.
+
+Two more commands:
+
+- **`dn-shell`** — a shell inside the prefix (Termux's glibc bash with the
+  path shim, the prefix first on `PATH`), for scripts that expect Debian's
+  layout. `exit` returns to Termux.
+- **`dn-adopt FILE...`** — make a glibc arm64 program obtained outside apt
+  (a release download, a direct installer's binary) run through the prefix:
+  its interpreter becomes `ld-dn`. The file is changed in place; anything
+  else (Termux's own programs, static ones, scripts) is left alone. Example:
+  Claude Code's native Linux binary runs once adopted.
 
 ## Scope
 

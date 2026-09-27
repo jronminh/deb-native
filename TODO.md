@@ -127,7 +127,7 @@ combine):
   fits the default `~/.dn` (the same on every Termux); other paths fall
   back to today's local bootstrap. Likely the largest win; close to how
   Termux itself installs (a bootstrap zip).
-- [x] **Parallel translation** (done on `dev-0.2.0`, `DN_JOBS`, default
+- [x] **Parallel translation** (released in v0.2.2-prealpha, `DN_JOBS`, default
   the CPU count -- `nproc` says 4 on fe2): translate 41s -> **14s**, fresh
   install 1m37s -> **1m5s** (fe2, 20:42). Configure (21s) is now the
   largest stage.
