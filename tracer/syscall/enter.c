@@ -66,7 +66,6 @@
 #include "syscall/socket.h"
 #include "ptrace/ptrace.h"
 #include "ptrace/wait.h"
-#include "syscall/heap.h"
 #include "extension/extension.h"
 #include "execve/execve.h"
 #include "tracee/tracee.h"
@@ -1895,11 +1894,6 @@ int translate_syscall_enter(Tracee *tracee)
 	case PR_wait4:
 	case PR_waitpid:
 		status = translate_wait_enter(tracee);
-		break;
-
-	case PR_brk:
-		translate_brk_enter(tracee);
-		status = 0;
 		break;
 
 	case PR_getcwd:

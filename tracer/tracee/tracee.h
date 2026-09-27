@@ -64,13 +64,6 @@ typedef struct {
 	char *cwd;
 } FileSystemNameSpace;
 
-/* Virtual heap, emulated with a regular memory mapping.  */
-typedef struct {
-	word_t base;
-	size_t size;
-	bool disabled;
-} Heap;
-
 /* Information related to a tracee process. */
 typedef struct tracee {
 	/**********************************************************************
@@ -355,8 +348,6 @@ typedef struct tracee {
 	/* Information related to a file-system name-space.  */
 	FileSystemNameSpace *fs;
 
-	/* Virtual heap, emulated with a regular memory mapping.  */
-	Heap *heap;
 
 
 	/**********************************************************************

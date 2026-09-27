@@ -14,11 +14,12 @@ arguments — so proot's `ptrace` core is the hard part worth reusing. See
 
 **AArch64-only.** The extension suite is gone (framework `extension.c` kept)
 and the multi-arch machinery is removed: `arch.h` is AArch64-only with a hard
-`#error` otherwise, the 32-bit ARM ABI and `-m32` loader are gone, and the
+`#error` otherwise, the 32-bit ARM ABI and PRoot's loader are gone, and the
 `sysnums-{arm,i386,x86_64,x32,sh4}.h` / `assembly-{arm,x86,x86_64}.h` files
 are deleted. It builds on Termux (`make CC=clang`, needs `libtalloc`) and a
 static binary reads through a bind. **The bind-only fast path has landed**
-(see below). Remaining: the `cli/` → binder rewrite (`dn-trace`).
+(see below), and so have the `dn-trace` front end and kernel exec (see
+"Prune plan").
 
 ## Bind-only fast path (deb-native-specific)
 
@@ -37,8 +38,8 @@ Safe mechanics for the three traps:
 - **`..` across a bind** — detected in `normalize_guest_path()`, falls back to
   `canonicalize()`.
 - **`/proc` links** — paths under `/proc` also fall back to `canonicalize()`,
-  which emulates `/proc/<pid>/exe` and friends; under PRoot's loader the
-  kernel's `/proc/self/exe` is the loader (a static busybox re-executing
+  which emulates `/proc/<pid>/exe` and friends; under PRoot's loader (since
+  removed) the kernel's `/proc/self/exe` was the loader (a static busybox re-executing
   itself for an applet died with SIGBUS).
 - **output detranslation** — `detranslate_path` unchanged (getcwd, readlink,
   `/proc/self/cwd`).
@@ -88,15 +89,26 @@ Drop (done):
 - `extension/*/` — every concrete extension (`fake_id0`, `link2symlink`,
   `sysvipc`, `ashmem_memfd`, `kompat`, `hidden_files`, `mountinfo`,
   `port_switch`, `fix_symlink_size`).
-- `loader/` m32 and the non-arm64 loaders (`HAS_LOADER_32BIT` removed from
-  `arch.h`, `assembly-{arm,x86,x86_64}.h` deleted), and the other-arch
-  `sysnums-*.h`.
-
+- the other-arch `sysnums-*.h`.
 - `cli/cli.c`, `cli/proot.c` — PRoot's command line, replaced by
   `cli/dn-trace.c`: `dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--] PROGRAM`,
   guest root = host `/`, cwd = the current one, a `-b` with a missing host
   path skipped. The same arguments work with Termux's `proot`, which
   `native/dn-run.c` falls back to.
+- `loader/`, its load script (`execve/exit.c`), `execve/ldso.c`,
+  `execve/auxv.c`, `syscall/heap.c` (brk emulation) and the qemu runner:
+  the kernel now execs the translated program itself (`execve/enter.c`).
+  PRoot's loader exists to map a program whose `PT_INTERP` is a guest path;
+  in a deb-native prefix every interpreter is a host path (ld-dn, Termux's
+  glibc loader, Bionic's linker64) and static programs have none. Only the
+  program path and a script's `#!` interpreter are translated, so an
+  untranslated Debian ELF (`PT_INTERP` = `/lib/ld-linux-aarch64.so.1`)
+  fails with ENOENT under the tracer; `dn-translate-deb.sh` rewrites them all.
+  `/proc/self/exe` is still emulated from the committed guest path. Lost
+  with the loader: the arm64 `PTRACE_POKEDATA` workaround (its stub ran in
+  the loader), used only when `process_vm_writev` also fails. Measured on
+  fe2 (interleaved minimums, 12 runs): 21 execs 421 → 388 ms, `find` the
+  same; binary 191 → 153 KB.
 
 ## Seccomp acceleration: kept on
 
@@ -111,4 +123,3 @@ default stays.
 Its SIGSYS emulation (`tracee/seccomp.c`) is separate: it is what lets a
 static binary survive Android's app seccomp filter (untraced,
 `busybox find` is killed with SIGSYS).
-

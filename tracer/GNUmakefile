@@ -29,8 +29,6 @@ OBJECTS += \
 	execve/exit.o		\
 	execve/shebang.o	\
 	execve/elf.o		\
-	execve/ldso.o		\
-	execve/auxv.o		\
 	execve/aoxp.o		\
 	path/binding.o		\
 	path/glue.o		\
@@ -46,7 +44,6 @@ OBJECTS += \
 	syscall/exit.o		\
 	syscall/sysnum.o	\
 	syscall/socket.o	\
-	syscall/heap.o		\
 	syscall/rlimit.o	\
 	syscall/pipe_shadow.o	\
 	tracee/tracee.o		\
@@ -59,23 +56,6 @@ OBJECTS += \
 	ptrace/user.o		\
 	ptrace/wait.o		\
 	extension/extension.o
-
-define define_from_arch.h
-$2$1 := $(shell $(CC) $1 -E -dM -DNO_LIBC_HEADER $(SRC)/arch.h | grep -w $2 | cut -f 3 -d ' ')
-endef
-
-$(eval $(call define_from_arch.h,,HAS_POKEDATA_WORKAROUND))
-
-ifdef PROOT_UNBUNDLE_LOADER
-  CFLAGS += "-DPROOT_UNBUNDLE_LOADER=\"$(PROOT_UNBUNDLE_LOADER)\""
-dn-trace: | loader/loader
-else
-  OBJECTS += loader/loader-wrapped.o
-endif
-
-ifdef HAS_POKEDATA_WORKAROUND
-  OBJECTS += loader/loader-info.o
-endif
 
 .DEFAULT_GOAL = dn-trace
 all: dn-trace
@@ -143,15 +123,6 @@ ROSEGMENT := $(shell printf 'int main(void){return 0;}\n' | $(LD) -xc - -Wl,--ro
 COMPILE = $($(quiet)CC) $(CPPFLAGS) $(CFLAGS) -MD -c $(SRC)$< -o $@
 LINK    = $($(quiet)LD) -o $@ $^ $(LDFLAGS)
 
-OBJIFY = $($(quiet)GEN)									\
-	$(OBJCOPY)									\
-		--input-target=binary								\
-		--output-target=`env LANG=C $(OBJDUMP) -f cli/note.o |				\
-			grep 'file format' | awk '{print $$4}'`				\
-		--binary-architecture `env LANG=C $(OBJDUMP) -f cli/note.o |		\
-				grep architecture | cut -f 1 -d , | awk '{print $$2}'`	\
-		$< $@
-
 dn-trace: $(OBJECTS)
 	$(LINK)
 
@@ -165,49 +136,12 @@ $(USE_BUILD_H): build.h
 	$(COMPILE)
 
 ######################################################################
-# Build rules for the loader
-
-define build_loader
-LOADER$1_OBJECTS = loader/loader$1.o loader/assembly$1.o
-
-$(eval $(call define_from_arch.h,$1,LOADER_ARCH_CFLAGS))
-$(eval $(call define_from_arch.h,$1,LOADER_ADDRESS))
-
-LOADER_CFLAGS$1  += -fPIC -ffreestanding $(LOADER_ARCH_CFLAGS$1)
-LOADER_LDFLAGS$1 += -static -nostdlib -Wl$(BUILD_ID_NONE),-Ttext=$(LOADER_ADDRESS$1)$(ROSEGMENT),-z,noexecstack
-
-loader/loader$1.o: loader/loader.c
-	@mkdir -p $$(dir $$@)
-	$$(COMPILE) $1 $$(LOADER_CFLAGS$1)
-
-loader/assembly$1.o: loader/assembly.S
-	@mkdir -p $$(dir $$@)
-	$$(COMPILE) $1 $$(LOADER_CFLAGS$1)
-
-loader/loader$1: $$(LOADER$1_OBJECTS)
-	$$($$(quiet)LD) $1 -o $$@ $$^ $$(LOADER_LDFLAGS$1)
-
-.INTERMEDIATE: loader$1.exe
-loader$1.exe: loader/loader$1
-	$$(Q)cp $$< $$@
-	$$(Q)$(STRIP) $$@
-
-loader/loader$1-wrapped.o: loader$1.exe cli/note.o
-	$$(OBJIFY)
-endef
-
-$(eval $(build_loader))
-
-loader/loader-info.c: loader/loader
-	readelf -s $< | awk -f loader/loader-info.awk > $@
-
-######################################################################
 # Dependencies
 
 .DELETE_ON_ERROR:
-$(OBJECTS) $(LOADER_OBJECTS): $(firstword $(MAKEFILE_LIST))
+$(OBJECTS): $(firstword $(MAKEFILE_LIST))
 
-DEPS = $(OBJECTS:.o=.d) $(LOADER_OBJECTS:.o=.d) $(CHECK_OBJECTS:.o=.d)
+DEPS = $(OBJECTS:.o=.d) $(CHECK_OBJECTS:.o=.d)
 -include $(DEPS)
 
 ######################################################################
@@ -218,16 +152,10 @@ BINDIR ?= $(PREFIX)/bin
 
 .PHONY: clean distclean install uninstall
 clean distclean:
-	-$(RM) -f $(CHECK_OBJECTS) $(CHECK_PROGRAMS) $(CHECK_RESULTS) $(OBJECTS) $(LOADER_OBJECTS) dn-trace loader/loader $(DEPS) build.h licenses
+	-$(RM) -f $(CHECK_OBJECTS) $(CHECK_PROGRAMS) $(CHECK_RESULTS) $(OBJECTS) dn-trace $(DEPS) build.h licenses
 
 install: dn-trace
 	$($(quiet)INSTALL) -D $< $(DESTDIR)$(BINDIR)/$<
-ifdef PROOT_UNBUNDLE_LOADER
-	$(INSTALL) -D loader/loader $(PROOT_UNBUNDLE_LOADER)/loader
-endif
 
 uninstall:
 	-$(RM) -f $(DESTDIR)$(BINDIR)/dn-trace
-ifdef PROOT_UNBUNDLE_LOADER
-	$(INSTALL) -D loader/loader $(PROOT_UNBUNDLE_LOADER)/loader
-endif

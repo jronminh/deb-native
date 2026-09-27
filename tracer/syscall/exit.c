@@ -34,7 +34,6 @@
 #include "syscall/sysnum.h"
 #include "syscall/socket.h"
 #include "syscall/chain.h"
-#include "syscall/heap.h"
 #include "syscall/rlimit.h"
 #include "execve/execve.h"
 #include "tracee/tracee.h"
@@ -88,10 +87,6 @@ void translate_syscall_exit(Tracee *tracee)
 	syscall_number = get_sysnum(tracee, ORIGINAL);
 	syscall_result = peek_reg(tracee, CURRENT, SYSARG_RESULT);
 	switch (syscall_number) {
-	case PR_brk:
-		translate_brk_exit(tracee);
-		goto end;
-
 	case PR_getcwd: {
 		char path[PATH_MAX];
 		size_t new_size;

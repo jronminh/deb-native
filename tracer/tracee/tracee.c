@@ -193,11 +193,10 @@ Tracee *new_dummy_tracee(TALLOC_CTX *context)
 		goto no_mem;
 
 	/* By default new tracees have an empty file-system
-	 * name-space and heap.  */
+	 * name-space.  */
 	tracee->fs = talloc_zero(tracee, FileSystemNameSpace);
-	tracee->heap = talloc_zero(tracee, Heap);
 	tracee->auxv_fd = -1;
-	if (tracee->fs == NULL || tracee->heap == NULL)
+	if (tracee->fs == NULL)
 		goto no_mem;
 
 	return tracee;
@@ -679,15 +678,6 @@ static int attach_child(Tracee *parent, word_t clone_flags, pid_t pid)
 	 *
 	 * -- clone(2) man-page
 	 */
-	TALLOC_FREE(child->heap);
-	child->heap = ((clone_flags & CLONE_VM) != 0)
-		? talloc_reference(child, parent->heap)
-		: talloc_memdup(child, parent->heap, sizeof(Heap));
-	if (child->heap == NULL)
-		return -ENOMEM;
-
-	child->load_info = talloc_reference(child, parent->load_info);
-
 	/* If CLONE_PARENT is set, then the parent of the new child
 	 * (as returned by getppid(2)) will be the same as that of the
 	 * calling process.

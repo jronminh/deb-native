@@ -87,6 +87,9 @@ TRACER="$HERE/../tracer"
 if [ -x "$(command -v make || true)" ] && [ -e "$PREFIX_DIR/lib/libtalloc.so" ]; then
   if [ ! -x "$TRACER/dn-trace" ] || [ -n "$(find "$TRACER" -name '*.[ch]' -newer "$TRACER/dn-trace" | head -n1)" ]; then
     echo "Building the tracer (dn-trace) ..."
+    # From clean: dependency files of a removed source break an
+    # incremental build ("No rule to make target").
+    make -s -C "$TRACER" clean
     make -C "$TRACER" CC=clang
   fi
 else

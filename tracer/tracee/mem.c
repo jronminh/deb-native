@@ -36,7 +36,6 @@
 
 #include "tracee/mem.h"
 #include "tracee/abi.h"
-#include "syscall/heap.h"
 #include "arch.h"            /* word_t, NO_MISALIGNED_ACCESS */
 #include "build.h"           /* HAVE_PROCESS_VM,  */
 #include "cli/note.h"

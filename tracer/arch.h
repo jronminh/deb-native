@@ -62,10 +62,7 @@ typedef unsigned char byte_t;
     #define OFFSETOF_STAT_UID_32 24
     #define OFFSETOF_STAT_GID_32 28
 
-    #define LOADER_ADDRESS     0x2000000000
-    #define EXEC_PIC_ADDRESS   0x3000000000
-    #define INTERP_PIC_ADDRESS 0x3f00000000
-    #define HAS_POKEDATA_WORKAROUND true
+    /* deb-native: no HAS_POKEDATA_WORKAROUND, its stub lived in the loader. */
 
     /* Syscall -2 appears to cause some odd side effects, use -1. */
     /* See https://github.com/termux/termux-packages/pull/390 */
