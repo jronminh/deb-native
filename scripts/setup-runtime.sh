@@ -85,15 +85,15 @@ put "$CACHE/ld-dn" "$LIBDIR/ld-dn"
 # (dn-run falls back to Termux's proot if installed).
 TRACER="$HERE/../tracer"
 if [ -x "$(command -v make || true)" ] && [ -e "$PREFIX_DIR/lib/libtalloc.so" ]; then
-  if [ ! -x "$TRACER/proot" ] || [ -n "$(find "$TRACER" -name '*.[ch]' -newer "$TRACER/proot" | head -n1)" ]; then
+  if [ ! -x "$TRACER/dn-trace" ] || [ -n "$(find "$TRACER" -name '*.[ch]' -newer "$TRACER/dn-trace" | head -n1)" ]; then
     echo "Building the tracer (dn-trace) ..."
     make -C "$TRACER" CC=clang
   fi
 else
   echo "W: tracer not built (needs: pkg install make libtalloc); static programs will run untranslated"
 fi
-if [ -x "$TRACER/proot" ]; then
-  put "$TRACER/proot" "$LIBDIR/dn-trace"
+if [ -x "$TRACER/dn-trace" ]; then
+  put "$TRACER/dn-trace" "$LIBDIR/dn-trace"
 fi
 
 # The maintainer-script launcher. One binary, dispatched by its own argv[0]

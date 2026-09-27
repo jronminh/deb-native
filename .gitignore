@@ -3,7 +3,7 @@ tests/shim-libc/test
 tests/tracer-nss/nss-probe
 tracer/**/*.o
 tracer/**/*.d
-tracer/proot
+tracer/dn-trace
 tracer/build.h
 tracer/licenses
 tracer/loader/loader

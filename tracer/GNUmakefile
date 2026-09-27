@@ -23,8 +23,7 @@ ifdef PROOT_WITH_LIBANDROID_SHMEM
 endif
 
 OBJECTS += \
-	cli/cli.o		\
-	cli/proot.o		\
+	cli/dn-trace.o		\
 	cli/note.o		\
 	execve/enter.o		\
 	execve/exit.o		\
@@ -69,7 +68,7 @@ $(eval $(call define_from_arch.h,,HAS_POKEDATA_WORKAROUND))
 
 ifdef PROOT_UNBUNDLE_LOADER
   CFLAGS += "-DPROOT_UNBUNDLE_LOADER=\"$(PROOT_UNBUNDLE_LOADER)\""
-proot: | loader/loader
+dn-trace: | loader/loader
 else
   OBJECTS += loader/loader-wrapped.o
 endif
@@ -78,8 +77,8 @@ ifdef HAS_POKEDATA_WORKAROUND
   OBJECTS += loader/loader-info.o
 endif
 
-.DEFAULT_GOAL = proot
-all: proot
+.DEFAULT_GOAL = dn-trace
+all: dn-trace
 
 ######################################################################
 # Beautified output
@@ -147,13 +146,13 @@ LINK    = $($(quiet)LD) -o $@ $^ $(LDFLAGS)
 OBJIFY = $($(quiet)GEN)									\
 	$(OBJCOPY)									\
 		--input-target=binary								\
-		--output-target=`env LANG=C $(OBJDUMP) -f cli/cli.o |				\
+		--output-target=`env LANG=C $(OBJDUMP) -f cli/note.o |				\
 			grep 'file format' | awk '{print $$4}'`				\
-		--binary-architecture `env LANG=C $(OBJDUMP) -f cli/cli.o |		\
+		--binary-architecture `env LANG=C $(OBJDUMP) -f cli/note.o |		\
 				grep architecture | cut -f 1 -d , | awk '{print $$2}'`	\
 		$< $@
 
-proot: $(OBJECTS)
+dn-trace: $(OBJECTS)
 	$(LINK)
 
 # Special case to compute which files depend on the auto-generated
@@ -164,9 +163,6 @@ $(USE_BUILD_H): build.h
 %.o: %.c
 	@mkdir -p $(dir $@)
 	$(COMPILE)
-
-cli/%-licenses.o: licenses cli/cli.o
-	$(OBJIFY)
 
 ######################################################################
 # Build rules for the loader
@@ -196,7 +192,7 @@ loader$1.exe: loader/loader$1
 	$$(Q)cp $$< $$@
 	$$(Q)$(STRIP) $$@
 
-loader/loader$1-wrapped.o: loader$1.exe cli/cli.o
+loader/loader$1-wrapped.o: loader$1.exe cli/note.o
 	$$(OBJIFY)
 endef
 
@@ -222,16 +218,16 @@ BINDIR ?= $(PREFIX)/bin
 
 .PHONY: clean distclean install uninstall
 clean distclean:
-	-$(RM) -f $(CHECK_OBJECTS) $(CHECK_PROGRAMS) $(CHECK_RESULTS) $(OBJECTS) $(LOADER_OBJECTS) proot loader/loader $(DEPS) build.h licenses
+	-$(RM) -f $(CHECK_OBJECTS) $(CHECK_PROGRAMS) $(CHECK_RESULTS) $(OBJECTS) $(LOADER_OBJECTS) dn-trace loader/loader $(DEPS) build.h licenses
 
-install: proot
+install: dn-trace
 	$($(quiet)INSTALL) -D $< $(DESTDIR)$(BINDIR)/$<
 ifdef PROOT_UNBUNDLE_LOADER
 	$(INSTALL) -D loader/loader $(PROOT_UNBUNDLE_LOADER)/loader
 endif
 
 uninstall:
-	-$(RM) -f $(DESTDIR)$(BINDIR)/proot
+	-$(RM) -f $(DESTDIR)$(BINDIR)/dn-trace
 ifdef PROOT_UNBUNDLE_LOADER
 	$(INSTALL) -D loader/loader $(PROOT_UNBUNDLE_LOADER)/loader
 endif
