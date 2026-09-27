@@ -27,7 +27,10 @@
 #include <linux/ioctl.h> /* _IOW, */
 #include <linux/prctl.h> /* PR_GET_AUXV, */
 #include <string.h>      /* strlen(3), */
-#include <unistd.h>      /* readlink(2), */
+#include <unistd.h>      /* readlink(2), getuid(2), */
+#include <stdlib.h>      /* getenv(3), */
+#include <stdint.h>      /* uint32_t, */
+#include <stdbool.h>     /* bool, */
 
 #include "cli/note.h"
 #include "syscall/syscall.h"
@@ -47,6 +50,36 @@
 #include "ptrace/wait.h"
 #include "extension/extension.h"
 #include "arch.h"
+
+/* deb-native fake root: a traced program sees itself as root, as prefix
+ * programs do through the shim (native/path-redirect.c, dn_init): the
+ * identity calls report 0, files owned by the real uid/gid show as
+ * root's, and set*id()/chown() refused only for lack of rights succeed.
+ * Nothing is recorded; no right is gained. DN_ID=user (in dn-trace's
+ * environment) turns it off.  */
+bool dn_fake_root(void)
+{
+	static int on = -1;
+
+	if (on < 0) {
+		const char *id = getenv("DN_ID");
+		on = !(id != NULL && strcmp(id, "user") == 0);
+	}
+	return on;
+}
+
+/* Rewrite the owner fields at @uid_addr/@gid_addr of a stat buffer in the
+ * tracee from the real ids to 0.  */
+static void fake_owner(Tracee *tracee, word_t uid_addr, word_t gid_addr)
+{
+	uint32_t id;
+	const uint32_t zero = 0;
+
+	if (read_data(tracee, &id, uid_addr, sizeof(id)) == 0 && id == (uint32_t) getuid())
+		(void) write_data(tracee, uid_addr, &zero, sizeof(zero));
+	if (read_data(tracee, &id, gid_addr, sizeof(id)) == 0 && id == (uint32_t) getgid())
+		(void) write_data(tracee, gid_addr, &zero, sizeof(zero));
+}
 
 /**
  * Translate the output arguments of the current @tracee's syscall in
@@ -725,7 +758,79 @@ void translate_syscall_exit(Tracee *tracee)
 
 	case PR_statx:
 		status = handle_statx_syscall(tracee, false);
+		/* struct statx: stx_uid at 20, stx_gid at 24.  */
+		if (status >= 0 && dn_fake_root()) {
+			word_t buf = peek_reg(tracee, ORIGINAL, SYSARG_5);
+			fake_owner(tracee, buf + 20, buf + 24);
+		}
 		break;
+
+	/* deb-native fake root (see dn_fake_root()).  */
+	case PR_getuid:
+	case PR_geteuid:
+	case PR_getgid:
+	case PR_getegid:
+		if (dn_fake_root())
+			poke_reg(tracee, SYSARG_RESULT, 0);
+		goto end;
+
+	case PR_getresuid:
+	case PR_getresgid: {
+		const uint32_t zero = 0;
+		int i;
+
+		if (!dn_fake_root() || (int) syscall_result < 0)
+			goto end;
+		for (i = 0; i < 3; i++) {
+			word_t addr = peek_reg(tracee, ORIGINAL, i == 0 ? SYSARG_1 : i == 1 ? SYSARG_2 : SYSARG_3);
+			if (addr != 0)
+				(void) write_data(tracee, addr, &zero, sizeof(zero));
+		}
+		goto end;
+	}
+
+	case PR_getgroups: {
+		const uint32_t zero = 0;
+
+		if (!dn_fake_root() || (int) syscall_result < 0)
+			goto end;
+		if ((int) peek_reg(tracee, ORIGINAL, SYSARG_1) > 0)
+			(void) write_data(tracee, peek_reg(tracee, ORIGINAL, SYSARG_2), &zero, sizeof(zero));
+		poke_reg(tracee, SYSARG_RESULT, 1);
+		goto end;
+	}
+
+	case PR_fstat:
+	case PR_newfstatat: {
+		/* arm64 struct stat: st_uid at 24, st_gid at 28.  */
+		word_t buf;
+
+		if (!dn_fake_root() || (int) syscall_result < 0)
+			goto end;
+		buf = peek_reg(tracee, ORIGINAL, syscall_number == PR_fstat ? SYSARG_2 : SYSARG_3);
+		fake_owner(tracee, buf + 24, buf + 28);
+		goto end;
+	}
+
+	case PR_fchown:
+	case PR_fchownat:
+	case PR_setuid:
+	case PR_setgid:
+	case PR_setreuid:
+	case PR_setregid:
+	case PR_setresuid:
+	case PR_setresgid:
+	case PR_setgroups:
+		if (dn_fake_root() && (int) syscall_result == -EPERM)
+			poke_reg(tracee, SYSARG_RESULT, 0);
+		goto end;
+
+	case PR_setfsuid:
+	case PR_setfsgid:
+		/* They return the previous fs id, never an error.  */
+		if (dn_fake_root())
+			poke_reg(tracee, SYSARG_RESULT, 0);
+		goto end;
 
 	case PR_ioctl:
 		if (peek_reg(tracee, ORIGINAL, SYSARG_2) == _IOW(0x94, 9, int) /* FICLONE */ &&

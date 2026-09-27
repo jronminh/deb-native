@@ -202,6 +202,19 @@ static int handle_seccomp_event_common(Tracee *tracee)
 		set_result_after_seccomp(tracee, 0);
 		break;
 
+	/* Android's app filter traps the set*id calls; under deb-native's
+	 * fake root (syscall/exit.c) they "succeed", as through the shim.  */
+	case PR_setuid:
+	case PR_setgid:
+	case PR_setreuid:
+	case PR_setregid:
+	case PR_setresuid:
+	case PR_setresgid:
+	case PR_setfsuid:
+	case PR_setfsgid:
+		set_result_after_seccomp(tracee, dn_fake_root() ? 0 : -ENOSYS);
+		break;
+
 	/* The Android parent process commonly installs a seccomp
 	 * filter that traps mount/umount/pivot_root/unshare/setns
 	 * with SIGSYS.  Mirror what enter.c does for these: pretend
