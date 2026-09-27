@@ -9,6 +9,9 @@
 # Sets up a Debian glibc prefix under Termux, installs packages into it, and
 # makes them runnable by name. Idempotent: an existing prefix is reused.
 set -eu
+# Termux defaults to 077; the prefix's directories should be Debian's usual
+# 755 (var/ was created 700 by the log step below).
+umask 022
 REPO=https://github.com/jronminh/deb-native
 REF=${DEB_NATIVE_REF:-main}
 DIR=${DEB_NATIVE_DIR:-$HOME/.deb-native}

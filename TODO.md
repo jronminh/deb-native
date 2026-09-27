@@ -49,9 +49,11 @@ with the decisions below).
 - **Termux's home linked as the prefix's `/root`** (`$DN/root` -> Termux
   home): `base-passwd`'s only user is `root` with home `/root`, maintainer
   scripts assume root, and a later fake-root `sudo` resolves root's home.
-  `$DN/home` stays a normal empty directory. Needs the shim to rewrite
+  No `$DN/home` (not mapped, see below). Needs the shim to rewrite
   `/root` too (today: `/usr`, `/etc`, `/var`, `/opt` only). Check at
-  bootstrap that `base-files` does not drop a `.profile` into Termux's home.
+  bootstrap that `base-files` does not drop a `.profile` into Termux's home
+  (done: `custom/base-files.sh` skips it, and the prefix keeps only
+  `usr etc var opt`, `bin lib sbin` and `root`).
 - **Retired from main:** `native-seed.sh` (stub entries), `--force-architecture`,
   post-install `patch-elfs.sh`, `apt-install.sh`'s one-at-a-time loop.
 - **Kept from main:** runtime layer, "Termux wins" routing, `termux-dn-doctor`.
