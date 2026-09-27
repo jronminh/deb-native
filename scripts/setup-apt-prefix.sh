@@ -14,14 +14,14 @@
 #     2. a throwaway apt config in a temp dir: Debian index, then the
 #        stand-ins libc6/dpkg/apt (dn-standins.sh) straight into the prefix
 #     3. download the base and its dependencies (apt --download-only)
-#     4. translate every .deb in Termux's environment (dn-translate-deb.sh,
-#        patch-deb.sh), as a batch
+#     4. translate every .deb in Termux's environment (dn-translate-deb.sh:
+#        one unpack/repack each, maintainer scripts included), as a batch
 #     5. install with the prefix's own dpkg: unpack all, then configure all
 #        -- every file of the base is on disk before any postinst runs
 #        (Debian never declares its Essential tools as dependencies);
 #        hold the base
 #   Stage 1, package database and apt config: sources, pins, apt.conf with
-#     the install hooks, apt update (reusing stage 0's download)
+#     the install hooks, and stage 0's verified, rewritten index
 #   Stage 2, front end: launchers, routing wrappers, PATH
 #
 # Usage: setup-apt-prefix.sh NEWPREFIX [debian-suite (default: stable)]
@@ -178,17 +178,17 @@ done
 cp "$T"/keyring/x/etc/apt/trusted.gpg.d/*.asc "$T/etc/trusted.gpg.d/"
 write_sources "$T/sources.list"
 $TAPT update
-# Keep the raw lists for stage 1's apt update (unchanged files are not
-# fetched again), then rewrite Architecture: all -> arm64 in the temp copy.
-mkdir -p "$DN/var/lib/apt/lists/partial"
-cp "$T"/lists/*_Packages "$T"/lists/*Release "$DN/var/lib/apt/lists/" || true
+# Rewrite Architecture: all -> arm64 once; stage 1 reuses these verified,
+# rewritten lists instead of downloading and rewriting them again.
 "$HERE/dn-debian-index.sh" "$T/lists"
 mark stage "installing the stand-ins libc6, dpkg, apt"
 DN_APT_CONFIG="$T/apt.conf" "$HERE/dn-standins.sh" "$DN"
 
 # 3. Download the base and its dependencies.
 mark stage "downloading the base"
-mark count Get: "$($TAPT -s install $BASE $KEYRING | grep -c '^Inst')" packages
+# The total comes from apt's own "N newly installed" line (install.sh reads
+# it), not from a separate dry run over the whole index.
+mark count Get: auto packages
 $TAPT install -y --download-only $BASE $KEYRING
 
 # 4. Translate, in Termux's environment (no apt hooks involved).
@@ -198,7 +198,6 @@ for deb in "$T"/debs/*.deb; do
   n=$((n + 1))
   mark progress "$n" "$total" "$(dpkg-deb -f "$deb" Package)"
   "$HERE/dn-translate-deb.sh" "$deb" "$DN"
-  "$HERE/patch-deb.sh" "$deb" "$DN"
 done
 
 # 5. Install with the prefix's dpkg. Unpack order: libraries, then the tools,
@@ -261,7 +260,10 @@ DPkg::Tools::Options::$HERE/dn-hook-pre.sh "";
 DPkg::Tools::Options::$HERE/dn-hook-pre.sh::Version "3";
 DPkg::Post-Invoke { "$HERE/dn-hook-post.sh $DN"; };
 EOF
-env APT_CONFIG="$DN/etc/apt.conf" "$TP/bin/apt-get" update
+# The index: stage 0's lists, verified and already rewritten -- no second
+# download or rewrite. The prefix's next `apt update` refreshes them.
+mkdir -p "$DN/var/lib/apt/lists/partial"
+cp "$T"/lists/*_Packages "$T"/lists/*Release "$DN/var/lib/apt/lists/"
 
 # === Stage 2: front end ===================================================
 mark stage "launchers, routing and PATH"

@@ -39,38 +39,50 @@ PRIV="$LIBDIR/priv"
 
 mkdir -p "$BINDIR" "$LIBDIR" "$PRIV"
 
-# The shim is a build artifact; keep a copy inside the prefix so the
-# launcher (and any wrapper) has a stable, self-contained path.
-if [ ! -f "$LIBDIR/path-redirect.so" ] || [ "$SRC/path-redirect.c" -nt "$LIBDIR/path-redirect.so" ]; then
-  "$HERE/build-path-redirect.sh" "$LIBDIR/path-redirect.so"
+# Build once per checkout, copy into each prefix: the shim, dn-run and
+# dn-shell are compiled into native/.build/ (not in git) only when that copy
+# is missing or its source is newer -- a fresh prefix, or a second one, then
+# costs a copy instead of three clang runs. The prefix keeps its own copies
+# so its launchers and wrappers have stable, self-contained paths.
+CACHE="$SRC/.build"
+mkdir -p "$CACHE"
+stale() { [ ! -e "$1" ] || [ "$2" -nt "$1" ]; }   # ARTIFACT SOURCE
+put() {                                            # FROM TO
+  if [ ! -e "$2" ] || ! cmp -s "$1" "$2"; then cp -f "$1" "$2"; chmod 755 "$2"; fi
+}
+
+# The path-redirect shim (glibc LD_PRELOAD library).
+if stale "$CACHE/path-redirect.so" "$SRC/path-redirect.c"; then
+  "$HERE/build-path-redirect.sh" "$CACHE/path-redirect.so"
 fi
+put "$CACHE/path-redirect.so" "$LIBDIR/path-redirect.so"
 
 # Launch dispatcher: classifies a target's ELF PT_INTERP at launch and picks
 # the shim (glibc), plain exec (Bionic), or `proot -b` syscall rewrite
 # (static, which the shim cannot reach). Built with Termux's own clang -- it
 # is a Bionic binary and must run before any glibc env is set up.
-if [ ! -x "$LIBDIR/dn-run" ] || [ "$SRC/dn-run.c" -nt "$LIBDIR/dn-run" ]; then
+if stale "$CACHE/dn-run" "$SRC/dn-run.c"; then
   echo "Building dn-run ..."
-  clang -O2 -o "$LIBDIR/dn-run" "$SRC/dn-run.c"
-  chmod 755 "$LIBDIR/dn-run"
+  clang -O2 -o "$CACHE/dn-run" "$SRC/dn-run.c"
 fi
+put "$CACHE/dn-run" "$LIBDIR/dn-run"
 
 # The syscall tracer (fork-lite) used for static binaries and glibc NSS. Built
 # from tracer/ (`make CC=clang`, needs libtalloc); install a prebuilt one if
 # present, otherwise dn-run falls back to Termux's proot.
 TRACER_SRC="$HERE/../tracer/proot"
-if [ -x "$TRACER_SRC" ] && { [ ! -x "$LIBDIR/dn-trace" ] || [ "$TRACER_SRC" -nt "$LIBDIR/dn-trace" ]; }; then
-  cp -f "$TRACER_SRC" "$LIBDIR/dn-trace"
-  chmod 755 "$LIBDIR/dn-trace"
+if [ -x "$TRACER_SRC" ]; then
+  put "$TRACER_SRC" "$LIBDIR/dn-trace"
 fi
 
-# Build the launcher. One binary, dispatched by its own argv[0] basename.
-if [ ! -x "$BINDIR/dn-shell" ] || [ "$SRC/dn-launch.c" -nt "$BINDIR/dn-shell" ]; then
+# The maintainer-script launcher. One binary, dispatched by its own argv[0]
+# basename (dn-shell, dn-perl).
+if stale "$CACHE/dn-shell" "$SRC/dn-launch.c"; then
   echo "Building dn-shell ..."
-  clang -O2 -o "$BINDIR/dn-shell" "$SRC/dn-launch.c"
-  chmod 755 "$BINDIR/dn-shell"
-  cp -f "$BINDIR/dn-shell" "$BINDIR/dn-perl"
+  clang -O2 -o "$CACHE/dn-shell" "$SRC/dn-launch.c"
 fi
+put "$CACHE/dn-shell" "$BINDIR/dn-shell"
+put "$CACHE/dn-shell" "$BINDIR/dn-perl"
 
 # No-op shims for root-only/unshipped commands a maintainer script may call
 # by bare name: an unprivileged process cannot chown/chgrp no matter what

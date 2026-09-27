@@ -78,7 +78,8 @@ esac
 #   ::stage TEXT             a stage, as "   - TEXT"
 #   ::progress I N LABEL     a progress bar, redrawn in place
 #   ::count PREFIX N LABEL   a progress bar advanced by each following output
-#                            line starting with PREFIX ("Unpacking", "Get:")
+#                            line starting with PREFIX ("Unpacking", "Get:");
+#                            N "auto": taken from apt's "N newly installed"
 # plus any "E: " error line. The real exit code is kept.
 render() {
     exec 3>>"$DN_INSTALL_LOG"
@@ -108,13 +109,21 @@ render() {
                 draw "$i" "$n" "$*" ;;
             "::count "*)
                 set -- ${line#::count }; cprefix=$1 cn=$2; shift 2
-                clabel=$* ci=0
+                clabel=$* ci=0 cauto=0
+                [ "$cn" = auto ] && { cauto=1; cn=0; }
                 [ "$cn" -gt 0 ] && draw 0 "$cn" "$clabel" ;;
             "E: "*)
                 endbar; printf '%s\n' "$line"; printf '%s\n' "$line" >&3 ;;
             *)
                 printf '%s\n' "$line" >&3
-                if [ -n "$cprefix" ]; then
+                if [ "${cauto:-0}" = 1 ]; then
+                    case "$line" in
+                        *" newly installed"*)
+                            cn=$(printf '%s\n' "$line" | sed -n 's/.* \([0-9][0-9]*\) newly installed.*/\1/p')
+                            cauto=0; [ "${cn:-0}" -gt 0 ] && draw 0 "$cn" "$clabel" ;;
+                    esac
+                fi
+                if [ -n "$cprefix" ] && [ "$cn" -gt 0 ]; then
                     case "$line" in
                         "$cprefix"*) [ "$ci" -lt "$cn" ] && { ci=$((ci + 1)); draw "$ci" "$cn" "$clabel"; } ;;
                     esac

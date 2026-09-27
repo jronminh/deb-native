@@ -11,3 +11,4 @@ tracer/loader/loader-m32
 tracer/loader/loader-info.c
 tracer/.check_*
 !tracer/.check_*.c
+native/.build/

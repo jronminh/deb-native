@@ -11,7 +11,13 @@
 #     first in every dynamic ELF's RUNPATH (shared libraries too: RUNPATH is
 #     not inherited, and Termux's ld.so searches only $PREFIX/glibc/lib by
 #     itself). Done here, not after install, so it is right before any
-#     maintainer script runs the binary.
+#     maintainer script runs the binary;
+#   - maintainer-script shebangs -> dn-shell (patch-scripts-tree.sh, the
+#     loop patch-deb.sh runs).
+#
+# One unpack and one repack per package, uncompressed (-Znone): the result
+# only lives in a temp or cache folder until dpkg installs it, and xz on a
+# phone was a large share of the bootstrap.
 #
 # Idempotent. Usage: dn-translate-deb.sh DEB_FILE PREFIX
 set -eu
@@ -50,5 +56,7 @@ find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print | while IFS= 
   patchelf --set-rpath "$LIBDIR${old:+:$old}" "$f"
 done
 
-dpkg-deb -b "$WORK/pkg" "$WORK/out.deb"
+"$HERE/patch-scripts-tree.sh" "$WORK/pkg" "$DN"
+
+dpkg-deb -Znone -b "$WORK/pkg" "$WORK/out.deb"
 mv -f "$WORK/out.deb" "$DEB"

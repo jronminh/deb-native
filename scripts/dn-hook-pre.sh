@@ -13,10 +13,10 @@
 #
 # Every .deb about to be unpacked is prepared in place, before dpkg sees it:
 #   1. dn-translate-deb.sh: Architecture all -> arm64, custom/ fixes, ELFs
-#      repointed at the libc6 stand-in;
+#      repointed at the libc6 stand-in, maintainer-script shebangs ->
+#      dn-shell -- one unpack/repack;
 #   2. collision check: refuse a file that exists in the prefix but no
-#      package owns -- deb-native's own runtime and launchers;
-#   3. patch-deb.sh: maintainer-script shebangs -> dn-shell.
+#      package owns -- deb-native's own runtime and launchers.
 # Any failure fails the hook, and apt then runs nothing.
 #
 # Usage: dn-hook-pre.sh PREFIX [DEB...]
@@ -68,6 +68,4 @@ while IFS= read -r deb; do
     exit 1
   fi
 
-  logged "$HERE/patch-deb.sh" "$deb" "$DN" \
-    || { echo "E: patching $pkg's maintainer scripts failed" >&2; exit 1; }
 done < "$DEBS"
