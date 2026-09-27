@@ -265,8 +265,13 @@ Tracked in [#1](https://github.com/jronminh/deb-native/issues/1).
             --trace-list` + `make-launchers.sh` tag `svc`/`syscall` importers
             with `dn-run --trace`, routing them to the tracer instead of the
             shim (`docs/syscall-boundary.md`, "Solved").
-      - [ ] replace `cli/` with the `dn-trace` binder, then drop the Termux
-            `proot` fallback in `dn-run.c`.
+      - [x] replace `cli/` with the `dn-trace` front end; build it at setup;
+            kernel exec instead of PRoot's loader
+            ([`docs/tracer-0.2.0.md`](docs/tracer-0.2.0.md)).
+      - [ ] unset `LD_PRELOAD` (termux-exec) on every tracer route.
+      - [ ] test `dn-run` → `dn-trace` from an installed prefix.
+      - [ ] drop (or keep, for installs without `make`/`libtalloc`) the
+            Termux `proot` fallback in `dn-run.c`.
 
 ## Open, still-unsafe
 

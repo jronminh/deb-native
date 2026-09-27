@@ -159,6 +159,7 @@ Without them those programs run untranslated.
 - [`docs/shim-coverage.md`](docs/shim-coverage.md) — measured shim coverage.
 - [`docs/syscall-boundary.md`](docs/syscall-boundary.md) — beyond libc.
 - [`docs/direct-usage.md`](docs/direct-usage.md) — tracer investigation + fork-lite plan.
+- [`docs/tracer-0.2.0.md`](docs/tracer-0.2.0.md) — the tracer (`dn-trace`) in 0.2.0: role, changes, tests, measurements.
 - [`docs/runtime-failures.md`](docs/runtime-failures.md) — what breaks when *running* a program.
 - [`docs/tailscale.md`](docs/tailscale.md) — the static-daemon goal (userspace networking).
 - [`docs/findings.md`](docs/findings.md) — engineering log.
