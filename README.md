@@ -110,6 +110,27 @@ packages that need root (system users, `setuid`, TUN, kernel modules;
 the common breakages. Next: `libc6` as Debian's exact identity
 (toolchains), then services, then `sudo`.
 
+### Survey: 0.2.0-prealpha
+
+100 Debian 13 "trixie" packages, picked at random (seeded) across the 43
+in-scope sections, each installed into a fresh prefix with its own apt and
+its programs run by name — sudo-less's method, on a phone
+([`docs/survey-0.2.0.md`](docs/survey-0.2.0.md), raw data in
+[`docs/survey-0.2.0/`](docs/survey-0.2.0/)).
+
+| | packages |
+|---|---|
+| installed (`ii`) | **99** |
+| programs run (of the 26 that ship any) | 18 all, 3 partly, 2 need a terminal, 3 fail |
+| failures that were deb-native's | 2, **both fixed** since (`/usr/lib` library path, `update-rc.d`) |
+
+Every program that ran, ran natively through `ld-dn`; none needed the
+tracer. The other failures are the survey's limits (a program wanting an
+input file, a touchscreen, a missing debhelper). The sample is
+**lightweight** (a package plus its new dependencies under 1.5 MB); an
+unfiltered first run hit heavier chains: `passwd` and `perl-base` (both
+fixed) and `libc6-dev` (toolchains, next on the roadmap).
+
 ### Experimental: true fusion (separate branch, not for general use)
 
 The [`naibed`](https://github.com/jronminh/deb-native/tree/naibed)
