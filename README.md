@@ -29,14 +29,14 @@ How that differs from proot-distro, chroot and the rest:
 
 ```sh
 # pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.2.2-prealpha/install.sh | DEB_NATIVE_REF=v0.2.2-prealpha sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.3.0-prealpha/install.sh | DEB_NATIVE_REF=v0.3.0-prealpha sh
 
 # then restart Termux (or: . ~/.bashrc)
 apt install figlet # the prefix's apt: Debian's packages
 figlet hi          # an installed program, run by name
 ```
 
-Or the rolling edge: replace both `v0.2.2-prealpha` occurrences with `main`.
+Or the rolling edge: replace both `v0.3.0-prealpha` occurrences with `main`.
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 
@@ -177,6 +177,21 @@ Two more commands:
   its interpreter becomes `ld-dn`. The file is changed in place; anything
   else (Termux's own programs, static ones, scripts) is left alone. Example:
   Claude Code's native Linux binary runs once adopted.
+
+### Root inside the prefix
+
+Since 0.3.0 a prefix program sees itself as **root**, as on a Debian where
+apt, dpkg and maintainer scripts run as root: `id` says `uid=0(root)`,
+your files show as owned by root, `chown` and `setuid` succeed, `USER` is
+`root`. Only the identity is faked — nothing gains a right it did not
+have, and Termux's own programs still see your real user.
+
+- **`DN_ID=user CMD`** runs a command with your real identity, for the
+  programs that refuse to run as root (`postgres`, Chromium's sandbox).
+- **Speed:** free for normal programs (the shim). Under the tracer
+  (static programs, raw syscalls) faking file owners stops every `stat`:
+  a stat-heavy `find` took 727 ms instead of 443 ms on the test phone.
+  `DN_ID=user` there gets the old speed back.
 
 ## Scope
 

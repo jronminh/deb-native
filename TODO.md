@@ -72,14 +72,36 @@ the pre-translated repo, and **true fusion rebuilt on the 0.2 core** (the
 `naibed` branch, frozen until alpha: `ld-dn`, `dn-trace`, the translator
 and the priv layer, with Termux's prefix as the root).
 
-## 0.3.0 roadmap: a Debian-busybox base
+## 0.3.0-prealpha: fake root (released)
+
+Inside the prefix a program sees itself as root, as on a Debian where apt,
+dpkg and maintainer scripts run as root. Only the identity is faked; no
+right is gained, nothing is recorded.
+
+- [x] shim (`native/path-redirect.c`): `get[e]uid`/`get[e]gid`/
+      `getres[ug]id`/`getgroups` -> 0; `stat` owner of the real uid/gid ->
+      root; `chown`, `set*id`, `setgroups`, `initgroups` refused for lack
+      of rights -> succeed; `USER`/`LOGNAME` = root (in the environ array:
+      bash reads it directly).
+- [x] `dn-trace` (static programs, raw syscalls, NSS): the same at syscall
+      exit; Android-trapped `set*id` succeed instead of `ENOSYS`.
+- [x] `DN_ID=user` turns it off for one command and its children
+      (`postgres`, Chromium's sandbox refuse root).
+- [ ] **Speed under the tracer:** faking file owners stops every `stat` at
+      exit -- `find` over ~1,200 files 443 ms -> 727 ms (fe2, interleaved
+      minimums). The shim's cost is negligible. If it matters: fake only
+      the uid/gid calls in the tracer (owners then mismatch in static
+      programs), or fake owners only for paths under the prefix / home.
+- [ ] Survey on the fake-root prefix (maintainer scripts now run "as root").
+
+## 0.4.0 roadmap: a lighter base (was 0.3.0; busybox and other options)
 
 Theme: a lighter bootstrap. Not a package swap -- a different kind of
 Debian base, as in Debian's own installer environment: Debian's `busybox`
 (dynamic, glibc: ld-dn + shim, no tracer; not `busybox-static`) in place
 of the GNU tool packages
 `mawk coreutils sed grep findutils debianutils diffutils gzip tar hostname`.
-Design doc first (`docs/design-0.3.0.md`), then build. Findings so far
+Design doc first (`docs/design-0.4.0.md`), then build. Findings so far
 (trixie index, 2026-09-27):
 
 - **The kept base depends on them:** `base-files` Depends `awk`, `dash`
@@ -161,10 +183,10 @@ bootstrap's downloaded/translated `.deb`s) and **56 MB `var/lib/apt`**
 (lists) -- the installed base itself is ~83 MB. Cleaning the cache after
 bootstrap is a cheap win, independent of busybox.
 
-**0.3.0 is done when**, against this baseline and the same seeded survey
+**0.4.0 is done when**, against this baseline and the same seeded survey
 sample (`docs/survey-0.2.0/`):
 
-| measure | 0.2.0 | 0.3.0 goal |
+| measure | 0.2.0 | 0.4.0 goal |
 |---|---|---|
 | fresh install (fe2, same conditions) | 1m37s | clearly less; translate + configure (64s) are the target |
 | base packages | 23 | fewer |
@@ -174,10 +196,10 @@ sample (`docs/survey-0.2.0/`):
 | per-package regressions | -- | none |
 | maintainer scripts | pass | still pass: `ca-certificates`, `passwd`, `fastfetch`, a shell package (`add-shell`), `update-alternatives` users |
 
-## 0.4.0 roadmap: our own glibc (Debian's source + Android patches)
+## 0.5.0 roadmap: our own glibc (Debian's source + Android patches)
 
 Theme: match mainstream Debian for real. The prefix's `libc6` stops being
-an imposter (Termux's glibc under Debian's name, 0.3.0) and becomes
+an imposter (Termux's glibc under Debian's name, 0.4.0) and becomes
 **Debian's own glibc source, at Debian's exact version, with the Android
 patches applied by our own patch pipeline**.
 
@@ -199,7 +221,7 @@ What it needs:
       producing `libc6`, `libc6-dev`, `libc-bin`, `locales` `.deb`s
       versioned like Debian's (e.g. `2.41-12+deb13u4+dn1`);
 - [ ] **publishing:** `deb-native-repo`, shared with the prebuilt base
-      (0.3.0 option) -- one pipeline for both;
+      (0.4.0 option) -- one pipeline for both;
 - [ ] **fixed prefix path** built in (`/data/data/com.termux/files/home/.dn`,
       the same on every Termux) -- settles the open "prefix location"
       question;
@@ -316,7 +338,7 @@ sources themselves are verified since 0.2.0: the bootstrap fetches
 `debian-archive-keyring` and checks it against pinned fingerprints),
 the device hooks stay as a fallback.
 
-**Next (0.3.0, temporary until 0.4.0's own glibc): `libc6` as Debian's
+**Next (0.4.0, temporary until 0.5.0's own glibc): `libc6` as Debian's
 exact identity.** The stand-in wraps
 Termux's patched glibc but is versioned like Termux's (`2.44-0dn1`), so
 `libc6-dev`, which needs `libc6 (= 2.41-12+deb13u4)`, cannot install: every
