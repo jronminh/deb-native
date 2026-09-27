@@ -7,6 +7,106 @@ random sample**, not feature count. See
 and [`docs/findings.md`](docs/findings.md)
 for what just landed.
 
+## 0.2.0-prealpha roadmap: a self-contained prefix
+
+Goal: the prefix is a small, complete Debian system of its own -- its own
+`apt`/`dpkg`, database, `libc6` and Debian base, preinstalled at bootstrap
+-- so installing into it is "just apt", as on Debian (the principle
+`sudo-less` uses and the [`naibed`](https://github.com/jronminh/deb-native/tree/naibed)
+branch proved on Termux: apt and dpkg own their root). Self-contained for
+installing; a guest of Termux for running (shim, `dn-shell`, launchers,
+`dn-run`). Termux is never touched. Build on `dev-0.2.0`; design notes in
+[`docs/design-0.2.0.md`](docs/design-0.2.0.md) (to be brought in line
+with the decisions below).
+
+**Decided**
+
+- **Prefix = a real Debian root, nested** (`$DN/usr/bin`, `$DN/etc`,
+  `$DN/var`, `$DN/home`, `$DN/root`, ...). No `usr -> .` flattening:
+  `naibed` paid for that one (inverted merged-/usr check, dropped
+  `bin -> usr/bin` links, `usr/usr` doubled paths, the `var/run` clash,
+  special cases in the shim, `dn-launch`, `dn-run`). In a root of its own,
+  `base-files` makes `bin -> usr/bin` itself, as on Debian.
+- **apt/dpkg: Termux's own, through launchers** -- no build toolchain, no
+  rebuilt packages, Termux updates carry through. Prefix commands set
+  `APT_CONFIG`, `--admindir`, `--instdir` explicitly, never `DPKG_ROOT`
+  alone. Stand-in packages `dpkg`/`apt` in the prefix's database, versioned
+  like Termux's.
+- **Reuse naibed's code base** (install pipeline and runtime pieces), minus
+  what only the flat layout or sharing Termux's database needed:
+  - reused: hook pipeline (per-`.deb` repack, collision check,
+    `patch-deb.sh`, per-package `custom/` fixes); ELFs repointed during
+    repack at the `libc6` stand-in (`$DN/usr/lib/ld-linux-aarch64.so.1`,
+    `RUNPATH` `$DN/usr/lib/aarch64-linux-gnu`); `arm64` as a foreign
+    architecture + `Architecture: all` -> `arm64` (index and control);
+    `libc6` stand-in -> Termux's glibc; `update-alternatives` wrapper
+    (`--log` via `DPKG_ROOT`) and `dpkg-divert` wrapper;
+    `dn-fix-alternatives.sh`; scoped launchers incl. alternatives links.
+  - dropped: `usr/` flattening, merged-/usr link dropping, `base-files`
+    customization, `DN_FUSE_USR` / `fusion-bin` / fusion paths in `dn-launch`
+    and `dn-run`, the floor guard, `dn-dash`/`dn-openssl`/`dn-ca-certificates`
+    (a separate database has no name clashes: Debian's own are used).
+- **Termux's home linked as the prefix's `/root`** (`$DN/root` -> Termux
+  home): `base-passwd`'s only user is `root` with home `/root`, maintainer
+  scripts assume root, and a later fake-root `sudo` resolves root's home.
+  `$DN/home` stays a normal empty directory. Needs the shim to rewrite
+  `/root` too (today: `/usr`, `/etc`, `/var`, `/opt` only). Check at
+  bootstrap that `base-files` does not drop a `.profile` into Termux's home.
+- **Retired from main:** `native-seed.sh` (stub entries), `--force-architecture`,
+  post-install `patch-elfs.sh`, `apt-install.sh`'s one-at-a-time loop.
+- **Kept from main:** runtime layer, "Termux wins" routing, `termux-dn-doctor`.
+
+**Open**
+
+- [ ] Prefix location: keep `~/.dn` (inside Termux's home, so
+      `$DN/root` -> `~` loops: `~/.dn/root/.dn/root/...`, harmless for
+      normal `find`/`du`, not for `-L`), or move it out of `$HOME`, e.g.
+      `/data/data/com.termux/files/dn`.
+- [ ] `dpkg-trigger` under `DPKG_ROOT`: check when a trigger-using package
+      comes through; wrap like `dpkg-divert` if it double-prefixes.
+- [ ] `dpkg --print-architecture` answers `aarch64` inside the prefix;
+      watch for maintainer scripts that expect `arm64`.
+
+**Build order**
+
+- [ ] 1. Prefix bootstrap: directories, `etc/apt` config (Debian sources,
+      `arm64` foreign, no Recommends, no pdiffs, hooks), prefix
+      `apt`/`dpkg` launchers, index `all` -> `arm64` rewrite.
+- [ ] 2. Stand-ins `libc6`, `dpkg`, `apt`; pins (-1) on Debian's `libc6`,
+      `libc-bin`, `libc6-dev`, `libc-dev-bin`, `libc-l10n`, `locales`,
+      `dpkg`, `apt`, `sudo`, `doas`.
+- [ ] 3. Hooks from naibed, adapted to the nested root (pre: control
+      rewrite, ELF repoint, `custom/`, collision check, `patch-deb`;
+      post: alternatives, symlinks, scoped launchers, stale launchers).
+- [ ] 4. Runtime: naibed's wrapper fixes in `setup-runtime.sh`; shim
+      rewrites `/root`; `$DN/root` -> Termux home.
+- [ ] 5. Debian base through the prefix's own apt (`mawk base-files
+      base-passwd dash debianutils debconf cdebconf openssl
+      ca-certificates`), then held.
+- [ ] 6. `install.sh` and routing on top; retire the main pieces above.
+- [ ] 7. Verify **on a vanilla Termux** (the test device's Termux is fused
+      by `naibed` and gets reinstalled): `figlet`, `lua5.4`, `tree`, `sl`,
+      `hello`, `ncdu` by name; `apt-get check`; delete the prefix and
+      confirm Termux is untouched.
+
+**Next release (not 0.2.0): the repo** -- the same translation at repo
+build time in [`deb-native-repo`](https://github.com/jronminh/deb-native-repo)
+(private): packages arrive translated and signed (ends `[trusted=yes]`),
+the device hooks stay as a fallback.
+
+**Prepared for later, not in 0.2.0: `sudo` in the prefix.** It never
+means Android root. Three kinds, stackable: pass-through (installers that
+just prefix `sudo`), fake root (`fakeroot`-style: uid 0 believed, ownership
+recorded), a real extra identity (Android's shell uid via
+`termux-adb-bridge`, or a bounded identity as in `dsb`). In 0.2.0 only:
+- [ ] pin Debian's `sudo`/`doas` to -1 (setuid-root binaries that cannot
+      work here, and the name is reserved for ours);
+- [ ] group the no-op `chown`/`chgrp`/`dpkg-statoverride` into one privilege
+      layer (e.g. `$DN/usr/lib/deb-native/priv/`) a later mode can replace;
+- [ ] keep `dn-run`/`dn-shell` preload handling general enough for a
+      second `LD_PRELOAD` (a fake-root library beside the shim);
+- [ ] keep `base-passwd`'s `root` user and `sudo` group as Debian has them.
+
 ## Done recently
 
 - [x] **Fixed fresh bootstrap being broken outright** (`setup-apt-prefix.sh`

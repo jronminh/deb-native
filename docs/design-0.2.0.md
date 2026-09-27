@@ -1,6 +1,6 @@
 # 0.2.0-prealpha design: a self-contained prefix
 
-Status: **design, being built** on the `dev-0.2.0` branch.
+Status: **design, being built** on the `dev-0.2.0` branch. **Partly superseded:** the decisions in `TODO.md` ("0.2.0-prealpha roadmap") are current -- `arm64` stays a foreign architecture (naibed's method) instead of the `aarch64` relabel below, and naibed's code base is reused directly.
 
 ## The idea
 
