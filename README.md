@@ -6,6 +6,17 @@
 no `chroot`, no kernel namespaces.** `apt install PKG` works, and the program
 runs by name.
 
+- **No second system:** a small Debian tree (`~/.dn`), not a distro image;
+  only glibc comes from Termux, every other package is Debian's own.
+- **Native speed:** no proot for normal programs; paths are rewritten
+  in-process, the tracer is only a fallback.
+- **Part of Termux:** Debian programs are ordinary Termux processes, run by
+  name, calling and called by Termux's own.
+- **Removable:** Termux is never modified; delete `~/.dn` and it is gone.
+
+How that differs from proot-distro, chroot and the rest:
+[Compared with other ways](#compared-with-other-ways).
+
 > [!WARNING]
 > **Pre-alpha, AI-assisted, not security-reviewed.** Tested: a fresh install
 > on vanilla Termux, and a 100-package survey of Debian 13 "trixie"
@@ -47,6 +58,52 @@ runs its programs as ordinary Termux processes:
   raw syscalls and NSS need the tracer.
 
 Not an emulator and not isolation: **install and run, not emulate**.
+
+## Compared with other ways
+
+deb-native is not a container: nothing is isolated or emulated. Programs
+are ordinary Termux processes that *see* a Debian layout.
+
+| method | how Debian's `/usr`, `/etc` appear | cost | package manager | root? |
+|---|---|---|---|---|
+| chroot (Linux Deploy) | a real `chroot` into a rootfs | none at runtime | Debian's own, in the rootfs | **yes** |
+| proot-distro, UserLAnd, Andronix | a full rootfs image; every syscall of every process goes through proot (ptrace) | slow starts and file I/O, for everything | Debian's own, inside | no |
+| Termux packages | not Debian: Termux's own ports (Bionic) | native | `pkg`, Termux's repo | no |
+| glibc-runner (termux-pacman) | Termux's patched glibc; glibc binaries run by hand | native | no Debian packages | no |
+| namespaces (Docker, Podman, sudo-less) | the kernel mounts the layout | native | Debian's own | needs user namespaces, which Android blocks |
+| **deb-native** | the prefix is a real Debian tree; programs find it through `ld-dn` and an in-process path shim | native; the tracer only for static programs, raw syscalls, NSS | the prefix's own sources, database and base (Termux's apt/dpkg binaries) | no |
+
+What that buys:
+
+1. **No second system.** No distro image: `~/.dn` holds what you install
+   plus a ~23-package base. Only glibc comes from Termux (the `libc6`
+   stand-in); everything else is Debian's own `.deb`.
+2. **No proot for normal programs.** proot-distro pays a ptrace round trip
+   on every file access of every program. Here the shim rewrites paths
+   inside the process, set up by `ld-dn` when the program starts; in the
+   0.2.0 survey every program that ran, ran this way.
+3. **Mixed with Termux.** A Debian program is a Termux process: it calls
+   Termux's programs and they call it, Termux's home is its `/root`, its
+   launchers are on your `PATH`. There is no "logging in" to another
+   system: you type `figlet`.
+4. **Translated once, not emulated.** Each `.deb` is fixed at install
+   (interpreter, library path, `#!` lines, maintainer scripts, hard links);
+   afterwards it runs directly.
+5. **Removable.** Termux is never modified: delete `~/.dn` and the
+   `# deb-native` lines in `~/.bashrc`, and Termux is as before. (The
+   `naibed` branch is the opposite: it converts Termux itself, one way.)
+
+What it costs:
+
+- **A boundary, not everything.** Packages that need root, services and
+  (for now) toolchains are out; a proot rootfs runs almost anything, slowly.
+- **Not faithful Debian.** No real root, no init system; paths that bypass
+  libc need care (the tracer, per-package fixes).
+- **Not isolation.** A Debian program can touch your Termux files like any
+  Termux program. (proot is no security boundary either.)
+
+In one line: proot-distro puts a Debian machine next to Termux;
+deb-native puts Debian's packages into it.
 
 ## How it works
 
