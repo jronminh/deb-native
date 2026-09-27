@@ -801,6 +801,7 @@ void translate_syscall_exit(Tracee *tracee)
 	}
 
 	case PR_fstat:
+	case PR_fstatat64:	/* arm64's newfstatat (sysnums-arm64.h) */
 	case PR_newfstatat: {
 		/* arm64 struct stat: st_uid at 24, st_gid at 28.  */
 		word_t buf;

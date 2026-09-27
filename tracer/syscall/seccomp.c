@@ -357,7 +357,7 @@ static FilteredSysnum proot_sysnums[] = {
 	{ PR_fchdir,		FILTER_SYSEXIT },
 	{ PR_fchmodat,		0 },
 	{ PR_fchownat,		FILTER_SYSEXIT },
-	{ PR_fstatat64,		0 },
+	{ PR_fstatat64,		FILTER_SYSEXIT },
 	{ PR_futimesat,		0 },
 	{ PR_getcwd,		FILTER_SYSEXIT },
 	{ PR_getpeername,	FILTER_SYSEXIT },
