@@ -402,6 +402,7 @@ int translate_path(Tracee *tracee, char result[PATH_MAX], int dir_fd,
 		const char *user_path, bool deref_final)
 {
 	char guest_path[PATH_MAX];
+	Comparison comparison;
 	int status;
 
 	/* Use "/" as the base if it is an absolute guest path. */
@@ -455,8 +456,13 @@ int translate_path(Tracee *tracee, char result[PATH_MAX], int dir_fd,
 	/* Bind-only fast path: rewrite the leading bound component and let
 	 * the kernel resolve the rest, instead of walking every component
 	 * with lstat(2).  Falls back to canonicalize() for ".." (which can
-	 * cross a bind boundary). */
-	if (bind_only_enabled()) {
+	 * cross a bind boundary) and for /proc, whose links PRoot must
+	 * emulate: under the loader, the kernel's /proc/self/exe is the
+	 * loader, so a static busybox re-executing itself for an applet
+	 * died with SIGBUS. */
+	comparison = compare_paths("/proc", guest_path);
+	if (bind_only_enabled()
+	    && comparison != PATHS_ARE_EQUAL && comparison != PATH1_IS_PREFIX) {
 		strcpy(result, guest_path);
 		if (normalize_guest_path(result) == 0) {
 			status = substitute_binding(tracee, GUEST, result);
