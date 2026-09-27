@@ -19,8 +19,8 @@
 # Alternatives links count as the program they resolve to (awk -> mawk).
 #
 # Where: NOT $INSTDIR/bin -- base-files makes that a symlink to usr/bin.
-# Regenerated from scratch each run; termux-apt, termux-dpkg and
-# termux-dn-doctor (make-apt-wrappers.sh) are left alone.
+# Regenerated from scratch each run; termux-apt, termux-dpkg,
+# termux-dn-doctor and dn-shell (make-apt-wrappers.sh) are left alone.
 #
 # Usage: make-launchers.sh INSTDIR
 set -eu
@@ -44,7 +44,7 @@ BIN_DIRS="$INSTDIR/usr/bin $INSTDIR/usr/sbin $INSTDIR/usr/games"
 # fallback wrappers), keep the termux-* commands.
 for e in "$LAUNCHDIR"/* ; do
   [ -e "$e" ] || [ -L "$e" ] || continue
-  case "${e##*/}" in termux-*) continue ;; esac
+  case "${e##*/}" in termux-*|dn-shell) continue ;; esac
   if [ -L "$e" ] || grep -q 'dn-run\|dn-shell\|dn-perl' "$e"; then rm -f "$e"; fi
 done
 
