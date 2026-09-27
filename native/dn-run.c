@@ -30,6 +30,7 @@
 #include <errno.h>
 
 static char instdir[4096];
+static int g_glibc;   /* the target is a glibc ELF (classify) */
 
 static const char *termux_prefix(void) {
   const char *p = getenv("DN_TERMUX_PREFIX");
@@ -184,7 +185,11 @@ static void launch_trace(char **args, int nss) {
   if (stat(tracer, &st) != 0) {
     snprintf(tracer, sizeof tracer, "%s/bin/proot", termux_prefix());
     if (stat(tracer, &st) != 0) {
-      fprintf(stderr, "dn-run: no tracer (dn-trace/proot); running unredirected\n");
+      /* No tracer: a glibc program still needs the shim route (clean
+       * preload, prefix PATH) -- run raw, it would inherit termux-exec's
+       * Bionic preload and fail to load. Only its NSS reads stay
+       * unredirected (Termux's glibc answers them for the app user). */
+      if (g_glibc) launch_glibc(args);
       execv(args[0], args);
       die("execv");
     }
@@ -257,6 +262,7 @@ int main(int argc, char **argv) {
   char **args = &argv[argi];
   int nss = 0;
   int cls = classify(args[0], &nss);
+  g_glibc = (cls == C_GLIBC);
 
   if (force_trace)
     launch_trace(args, nss);

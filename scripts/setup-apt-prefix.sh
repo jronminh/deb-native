@@ -113,12 +113,29 @@ $APT update
 "$HERE/dn-standins.sh" "$DN"
 
 # --- 5. Debian base, held -------------------------------------------------
-# What every Debian package assumes is there (the bootstrap-base.sh set).
-# One apt run: dpkg's own Pre-Depends ordering (base-files needs awk first).
-BASE="mawk base-files base-passwd dash debianutils debconf cdebconf openssl ca-certificates"
-$APT install -y $BASE
+# What every Debian package assumes is there: 0.1.x's bootstrap-base.sh set,
+# plus Debian's Essential tools maintainer scripts call by name. Without them
+# a script's `sed /etc/x` or `find /usr/...` falls through to Termux's Bionic
+# tools, which the shim never reaches, and reads Android's real /etc
+# (ca-certificates' postinst: "sed: can't read /etc/ca-certificates.conf",
+# 0 certificates). ncurses-base: terminfo for Debian's ncurses.
+# Three apt runs, because Essential packages are never declared as
+# dependencies: apt would happily configure ca-certificates before sed is
+# there. Within a run, dpkg's own Pre-Depends ordering applies (base-files
+# needs awk first).
+TOOLS="mawk coreutils sed grep findutils"
+SYSTEM="base-files base-passwd dash debianutils diffutils gzip tar hostname ncurses-base ncurses-bin"
+CONFIG="debconf cdebconf openssl ca-certificates"
+$APT install -y $TOOLS
+$APT install -y $SYSTEM
+$APT install -y $CONFIG
+BASE="$TOOLS $SYSTEM $CONFIG"
 env APT_CONFIG="$DN/etc/apt.conf" "$TP/bin/apt-mark" hold $BASE >/dev/null
-echo "==> base installed and held: $BASE"
+# The base is the prefix's own system, not programs for the user's shell:
+# make-launchers.sh gives it no launchers, so Termux's ls/sed/grep stay first.
+mkdir -p "$DN/var/lib/deb-native"
+echo $BASE | tr ' ' '\n' > "$DN/var/lib/deb-native/base-packages"
+echo "==> base installed and held: $(echo $BASE)"
 
 # --- 6. launchers, routing, PATH ------------------------------------------
 "$HERE/make-launchers.sh" "$DN"

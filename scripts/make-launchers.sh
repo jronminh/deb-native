@@ -47,6 +47,17 @@ if command -v python3 >/dev/null 2>&1; then
   done
 fi
 
+# The prefix's base system (setup-apt-prefix.sh) gets no launchers: its
+# coreutils, sed, grep are there for maintainer scripts, and must not shadow
+# Termux's own in the user's shell.
+BASE_FILES="$tmp.base"
+: > "$BASE_FILES"
+if [ -s "$INSTDIR/var/lib/deb-native/base-packages" ]; then
+  while IFS= read -r p; do
+    "$PREFIX_DIR/bin/dpkg-query" --admindir="$INSTDIR/var/lib/dpkg" -L "$p:arm64" 2>/dev/null
+  done < "$INSTDIR/var/lib/deb-native/base-packages" | sed "s|^|$INSTDIR|" > "$BASE_FILES"
+fi
+
 is_elf() {
   [ "$(head -c4 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "7f454c46" ]
 }
@@ -64,6 +75,11 @@ wrap() {
     # the same names (make-apt-wrappers.sh) must stay in charge on PATH.
     apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split|termux-dn-doctor) return 0 ;;
   esac
+  # dpkg lists /usr/bin/x, and /bin/x (base-files' usrmerge links) for some.
+  if grep -qxF -e "$real" -e "$INSTDIR/usr${real#$INSTDIR}" "$BASE_FILES" 2>/dev/null; then
+    rm -f "$LAUNCHDIR/$name"
+    return 0
+  fi
   if is_elf "$real"; then
     # dn-run classifies at launch: shim (glibc), tracer (static/NSS), or a
     # plain exec (Bionic). A binary with its own syscalls is tagged --trace so
@@ -125,5 +141,5 @@ for d in $BIN_DIRS; do
   done
 done
 
-rm -f "$tmp" "$DIRECT_LIST"
+rm -f "$tmp" "$DIRECT_LIST" "$BASE_FILES"
 echo "==> launchers in $LAUNCHDIR ($(ls -1 "$LAUNCHDIR" | wc -l) programs)"
