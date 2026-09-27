@@ -161,6 +161,43 @@ exec "$PREFIX_DIR/bin/dpkg-divert" --admindir "$INSTDIR/var/lib/dpkg" --instdir 
 EOF
 chmod 755 "$PRIV/dpkg-divert"
 
+# chroot -- TEMPORARY FIX (hotfix 0.2.1). dpkg sets DPKG_ROOT to the prefix
+# for maintainer scripts, and Debian's DPKG_ROOT support runs commands as
+# `chroot "$DPKG_ROOT" CMD` (dbus-system-bus-common's postinst). Android's
+# seccomp kills chroot(2) with SIGSYS (exit 159), failing the package and
+# every later apt run. A chroot into the prefix (or /) is what the shim
+# already provides, so the command runs directly, with an absolute program
+# path taken from the prefix; --userspec/--groups are ignored (one user).
+# Any other root is refused with a message. To be replaced by the planned
+# identity/services layer (TODO.md, "After alpha"), which also handles the
+# system users such scripts go on to create.
+cat > "$PRIV/chroot" <<EOF
+#!/system/bin/sh
+while [ \$# -gt 0 ]; do
+  case "\$1" in
+    --userspec=*|--groups=*|--skip-chdir) shift ;;
+    --userspec|--groups) shift 2 ;;
+    --) shift; break ;;
+    -*) echo "chroot (deb-native): option \$1 not supported" >&2; exit 125 ;;
+    *) break ;;
+  esac
+done
+root=\${1:?chroot (deb-native): missing NEWROOT}; shift
+real=\$(cd "\$root" 2>&1 && pwd -P) || { echo "chroot (deb-native): \$root: no such directory" >&2; exit 125; }
+dn=\$(cd "$INSTDIR" && pwd -P)
+if [ "\$real" != "\$dn" ] && [ "\$real" != / ]; then
+  echo "chroot (deb-native): chroot to \$root is not supported (Android forbids chroot; only the prefix itself)" >&2
+  exit 125
+fi
+cd "$INSTDIR" || exit 125
+[ \$# -gt 0 ] || exec "$INSTDIR/usr/bin/dn-shell" -i
+case "\$1" in
+  /*) [ -e "$INSTDIR\$1" ] && { p="$INSTDIR\$1"; shift; set -- "\$p" "\$@"; } ;;
+esac
+exec "\$@"
+EOF
+chmod 755 "$PRIV/chroot"
+
 # getent: a maintainer script's account checks (passwd's postinst:
 # `getent group shadow`, then groupadd if missing) reach Termux's glibc
 # getent, whose NSS reads $PREFIX_DIR/glibc/etc -- libc-internal, so the

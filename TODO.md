@@ -7,6 +7,17 @@ random sample**, not feature count. See
 and [`docs/findings.md`](docs/findings.md)
 for what just landed.
 
+## Hotfix v0.2.1-prealpha
+
+Bugs found in the 0.2.0 release, collected for a patch release.
+
+- [x] **`chroot` in maintainer scripts dies with SIGSYS** -- a package whose
+      postinst uses Debian's `chroot "$DPKG_ROOT"` pattern (`dbus`, and so
+      `ipp-usb`, `avahi-daemon`) failed to configure, and every later apt
+      run then ended in "Errors were encountered", even when the requested
+      package installed. **Temporary fix:** priv `chroot` runs the command
+      directly when the target is the prefix. Not yet verified on a device.
+
 ## Alpha goal (the next announcement)
 
 Pre-alpha means "works for the author"; alpha means "try it, it mostly
@@ -132,10 +143,13 @@ with the decisions below).
       2026-09-27: `rm -rf ~/.dn` + the `~/.bashrc` lines; Termux's
       `sources.list`, `apt.conf.d`, foreign architectures and dpkg database
       free of deb-native, `apt-get check` clean, `apt`/`dpkg` Termux's).
-- [ ] 9. priv `chroot`: `dbus-system-bus-common`'s postinst runs
-      `chroot "$DPKG_ROOT" ...`, which Android's seccomp kills (SIGSYS,
-      exit 159). When the target is the prefix, run the command directly
-      (the shim already makes the prefix `/`).
+- [x] 9. priv `chroot` (**temporary**, hotfix 0.2.1):
+      `dbus-system-bus-common`'s postinst runs `chroot "$DPKG_ROOT" ...`,
+      which Android's seccomp kills (SIGSYS, exit 159). A chroot into the
+      prefix now runs the command directly (the shim already makes the
+      prefix `/`); any other root is refused. To be replaced by the
+      identity/services layer ("After alpha"), which also creates the
+      system users those scripts go on to add.
 
 **Next release (not 0.2.0): the repo** -- the same translation at repo
 build time in [`deb-native-repo`](https://github.com/jronminh/deb-native-repo)
