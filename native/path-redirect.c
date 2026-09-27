@@ -128,11 +128,12 @@ static char **bionic_env(char *const *envp) {
   static char entry[8192];
   if (want) snprintf(entry, sizeof entry, "LD_PRELOAD=%s", b);
   static char *out[2048];
-  /* PATH, too: dn-shell puts Termux's glibc tools ahead of its Bionic ones
-   * for glibc scripts, but a Bionic child (Termux's dpkg-realpath, a
-   * #!/system/bin/sh wrapper) carries termux-exec's Bionic preload, and a
-   * glibc tool it runs by name dies loading it ("libc.so: invalid ELF
-   * header"). Hand it the same PATH with every .../glibc/bin moved last. */
+  /* PATH, too: dn-shell puts the prefix's and Termux's glibc tools ahead of
+   * Termux's Bionic ones for glibc scripts, but a Bionic child (Termux's
+   * dpkg-realpath, a #!/system/bin/sh wrapper) carries termux-exec's Bionic
+   * preload, and a glibc tool it runs by name (Debian's basename) dies
+   * loading it ("libc.so: invalid ELF header"). Hand it the same PATH with
+   * every prefix directory and every .../glibc/bin moved last. */
   static char path_entry[16384];
   int n = 0, saw = 0;
   for (char *const *e = envp; *e && n < 2045; e++) {
@@ -141,7 +142,7 @@ static char **bionic_env(char *const *envp) {
       if (want) out[n++] = entry;
       continue;
     }
-    if (!strncmp(*e, "PATH=", 5) && strstr(*e, "/glibc/bin")) {
+    if (!strncmp(*e, "PATH=", 5) && (strstr(*e, "/glibc/bin") || (g_root && strstr(*e, g_root)))) {
       char tail[16384] = "";
       size_t hl = 0, tl = 0;
       const char *p = *e + 5;
@@ -149,7 +150,9 @@ static char **bionic_env(char *const *envp) {
       while (*p) {
         const char *c = strchr(p, ':');
         size_t len = c ? (size_t)(c - p) : strlen(p);
-        int glibc = len >= 10 && !memcmp(p + len - 10, "/glibc/bin", 10);
+        int glibc = (len >= 10 && !memcmp(p + len - 10, "/glibc/bin", 10)) ||
+                    (g_root && len >= g_rootlen && !memcmp(p, g_root, g_rootlen) &&
+                     (len == g_rootlen || p[g_rootlen] == '/'));
         if (glibc) {
           if (tl + len + 2 < sizeof tail) { if (tl) tail[tl++] = ':'; memcpy(tail + tl, p, len); tl += len; tail[tl] = 0; }
         } else if (hl + len + 2 < sizeof path_entry) {
