@@ -24,7 +24,7 @@ LAUNCHDIR="$INSTDIR/usr/lib/deb-native/bin"
 TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 AC="$DNPREFIX/etc/apt.conf"
 
-[ -d "$LAUNCHDIR" ] || { echo "make-apt-wrappers: run make-launchers.sh first" >&2; exit 1; }
+[ -d "$LAUNCHDIR" ] || { echo "E: no launcher directory (run make-launchers.sh)" >&2; exit 1; }
 
 for n in apt apt-get apt-cache; do
 cat > "$LAUNCHDIR/$n" <<EOF
@@ -128,4 +128,4 @@ exec sh "$REPO/scripts/dn-doctor.sh" "$DNPREFIX" "\$@"
 EOF
 chmod 755 "$LAUNCHDIR/termux-dn-doctor"
 
-echo "==> arch-aware wrappers in $LAUNCHDIR (apt apt-get apt-cache dpkg termux-dn-doctor)"
+echo "Installed routing wrappers apt, apt-get, apt-cache, dpkg and termux-dn-doctor in $LAUNCHDIR."

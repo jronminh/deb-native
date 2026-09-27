@@ -52,9 +52,9 @@ Description: $4 (deb-native stand-in)
 EOF
 }
 install_pkg() {  # NAME VERSION
+  echo "Building stand-in $1:arm64 ($2) ..."
   dpkg-deb -b --root-owner-group "$WORK/$1" "$WORK/$1_$2_arm64.deb"
   $DPKG -i "$WORK/$1_$2_arm64.deb"
-  echo "standins: $1 $2 installed"
 }
 launcher() {  # PKGDIR NAME COMMAND...
   d=$1 n=$2; shift 2
@@ -65,10 +65,10 @@ launcher() {  # PKGDIR NAME COMMAND...
 
 # --- libc6 -------------------------------------------------------------
 V=$(ver glibc)
-if installed libc6 "$V"; then echo "standins: libc6 $V already installed"; else
+if installed libc6 "$V"; then echo "libc6:arm64 is already the newest version ($V)."; else
   # The bootstrap has no prefix apt config yet: it passes its temporary one.
   FN=$(APT_CONFIG="${DN_APT_CONFIG:-$DN/etc/apt.conf}" "$TP/bin/apt-cache" show libc6:arm64 | awk '/^Filename:/ {print $2; exit}')
-  [ -n "$FN" ] || { echo "standins: Debian's libc6 is not in the prefix's apt index; run apt update first" >&2; exit 1; }
+  [ -n "$FN" ] || { echo "E: Debian's libc6 is not in the prefix's apt index; run apt update first" >&2; exit 1; }
   curl -fsSL -o "$WORK/libc6-debian.deb" "$MIRROR/$FN"
   control libc6 "$V" same "Termux glibc presented as Debian's libc6"
   L="$WORK/libc6/usr/lib/aarch64-linux-gnu"
@@ -81,14 +81,14 @@ if installed libc6 "$V"; then echo "standins: libc6 $V already installed"; else
   [ -d "$GLIBC_LIB/gconv" ] && ln -s "$GLIBC_LIB/gconv" "$L/gconv"
   ln -s aarch64-linux-gnu/ld-linux-aarch64.so.1 "$WORK/libc6/usr/lib/ld-linux-aarch64.so.1"
   [ -L "$L/libc.so.6" ] && [ -L "$L/ld-linux-aarch64.so.1" ] \
-    || { echo "standins: Termux's glibc lacks libc.so.6 or its loader; is glibc installed?" >&2; exit 1; }
+    || { echo "E: Termux's glibc lacks libc.so.6 or its loader; is glibc installed?" >&2; exit 1; }
   install_pkg libc6 "$V"
-  [ -z "$missing" ] || echo "standins: sonames Debian's libc6 has but Termux's glibc lacks (not linked):$missing"
+  [ -z "$missing" ] || echo "W: Termux's glibc lacks these libc6 sonames (not linked):$missing"
 fi
 
 # --- dpkg --------------------------------------------------------------
 V=$(ver dpkg)
-if installed dpkg "$V"; then echo "standins: dpkg $V already installed"; else
+if installed dpkg "$V"; then echo "dpkg:arm64 is already the newest version ($V)."; else
   control dpkg "$V" foreign "Termux's dpkg, pointed at the prefix"
   A="--admindir=$DN/var/lib/dpkg"
   launcher dpkg dpkg "exec $TP/bin/dpkg $A --instdir=$DN --force-not-root --force-script-chrootless"
@@ -100,7 +100,7 @@ fi
 
 # --- apt ---------------------------------------------------------------
 V=$(ver apt)
-if installed apt "$V"; then echo "standins: apt $V already installed"; else
+if installed apt "$V"; then echo "apt:arm64 is already the newest version ($V)."; else
   control apt "$V" foreign "Termux's apt, pointed at the prefix"
   for n in apt apt-get apt-cache apt-mark apt-config; do
     launcher apt "$n" "APT_CONFIG=$DN/etc/apt.conf exec $TP/bin/$n"

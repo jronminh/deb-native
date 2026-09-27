@@ -25,10 +25,10 @@ GLIBC=${DN_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 OUT=${1:-$HERE/native/path-redirect.so}
 
+echo "Building ${OUT##*/} ..."
 clang --target=aarch64-linux-gnu --sysroot=/ -O2 -fPIC -shared \
       -nostartfiles -nodefaultlibs \
       -I"$GLIBC/include" -L"$GLIBC/lib" \
       -Wl,-dynamic-linker,"$GLIBC/lib/ld-linux-aarch64.so.1" \
       -o "$OUT" "$HERE/native/path-redirect.c" -lc -ldl
 
-echo "built: $OUT"

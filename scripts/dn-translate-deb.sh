@@ -28,12 +28,13 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 dpkg-deb -R "$DEB" "$WORK/pkg"
 PKG=$(sed -n 's/^Package: //p' "$WORK/pkg/DEBIAN/control")
+echo "Translating $PKG:arm64 ($(sed -n 's/^Version: //p' "$WORK/pkg/DEBIAN/control")) ..."
 
 sed -i 's/^Architecture: all$/Architecture: arm64/' "$WORK/pkg/DEBIAN/control"
 
 if [ -x "$HERE/../custom/$PKG.sh" ]; then
   "$HERE/../custom/$PKG.sh" "$WORK/pkg" "$DN"
-  echo "dn-translate-deb: applied custom/$PKG.sh"
+  echo "Applied custom/$PKG.sh to $PKG."
 fi
 
 find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print | while IFS= read -r f; do
@@ -51,4 +52,3 @@ done
 
 dpkg-deb -b "$WORK/pkg" "$WORK/out.deb"
 mv -f "$WORK/out.deb" "$DEB"
-echo "dn-translate-deb: translated $PKG"

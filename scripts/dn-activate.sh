@@ -13,7 +13,7 @@ LAUNCHDIR="$INSTDIR/usr/lib/deb-native/bin"
 RC=${DN_BASHRC:-$HOME/.bashrc}
 MARK="# deb-native launchers (managed)"
 
-[ -d "$LAUNCHDIR" ] || { echo "dn-activate: no launchers at $LAUNCHDIR (run make-launchers.sh)" >&2; exit 1; }
+[ -d "$LAUNCHDIR" ] || { echo "E: no launchers at $LAUNCHDIR (run make-launchers.sh)" >&2; exit 1; }
 
 # Only ONE prefix's wrappers can be on PATH at a time -- activating a second
 # one silently swaps which prefix every bare apt/apt-get/dpkg call (yours,
@@ -23,11 +23,8 @@ MARK="# deb-native launchers (managed)"
 if [ -f "$RC" ] && grep -qF "$MARK" "$RC"; then
   OLD=$(grep -oE '/[^"]*/usr/lib/deb-native/bin' "$RC" | head -1)
   if [ -n "$OLD" ] && [ "$OLD" != "$LAUNCHDIR" ]; then
-    echo "==> WARNING: replacing the active prefix on PATH" >&2
-    echo "      was: ${OLD%/usr/lib/deb-native/bin}" >&2
-    echo "      now: $INSTDIR" >&2
-    echo "    Only one prefix's apt/apt-get/dpkg wrappers can be active at a" >&2
-    echo "    time; the old prefix still exists but is no longer on PATH." >&2
+    echo "W: replacing the active prefix on PATH: ${OLD%/usr/lib/deb-native/bin} -> $INSTDIR" >&2
+    echo "W: only one prefix's apt/dpkg wrappers can be active; the old prefix stays, off PATH." >&2
   fi
   sed -i "\|$MARK|d; \|/usr/lib/deb-native/bin|d; \|APT_CONFIG=|d" "$RC"
 fi
@@ -36,4 +33,4 @@ fi
   echo "$MARK"
   echo "export PATH=\"$LAUNCHDIR:\$PATH\""
 } >> "$RC"
-echo "==> activated in $RC — run: . $RC"
+echo "Added $LAUNCHDIR to PATH in $RC (new shells; or run: . $RC)."

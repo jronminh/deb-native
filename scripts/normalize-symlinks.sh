@@ -62,4 +62,4 @@ while [ "$changed" -eq 1 ] && [ "$pass" -lt 5 ]; do
     done < "$tmp"
 done
 
-echo "normalize-symlinks: $ROOT (passes: $pass)"
+echo "Normalized symlinks in $ROOT ($pass pass(es))."

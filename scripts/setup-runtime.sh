@@ -35,7 +35,7 @@ LIBDIR="$INSTDIR/usr/lib/deb-native"
 # mode can replace this one directory.
 PRIV="$LIBDIR/priv"
 
-[ -x "$GLIBC/bin/bash" ] || { echo "setup-runtime: no glibc bash at $GLIBC/bin/bash" >&2; exit 1; }
+[ -x "$GLIBC/bin/bash" ] || { echo "E: no glibc bash at $GLIBC/bin/bash (pkg install bash-glibc)" >&2; exit 1; }
 
 mkdir -p "$BINDIR" "$LIBDIR" "$PRIV"
 
@@ -50,6 +50,7 @@ fi
 # (static, which the shim cannot reach). Built with Termux's own clang -- it
 # is a Bionic binary and must run before any glibc env is set up.
 if [ ! -x "$LIBDIR/dn-run" ] || [ "$SRC/dn-run.c" -nt "$LIBDIR/dn-run" ]; then
+  echo "Building dn-run ..."
   clang -O2 -o "$LIBDIR/dn-run" "$SRC/dn-run.c"
   chmod 755 "$LIBDIR/dn-run"
 fi
@@ -65,6 +66,7 @@ fi
 
 # Build the launcher. One binary, dispatched by its own argv[0] basename.
 if [ ! -x "$BINDIR/dn-shell" ] || [ "$SRC/dn-launch.c" -nt "$BINDIR/dn-shell" ]; then
+  echo "Building dn-shell ..."
   clang -O2 -o "$BINDIR/dn-shell" "$SRC/dn-launch.c"
   chmod 755 "$BINDIR/dn-shell"
   cp -f "$BINDIR/dn-shell" "$BINDIR/dn-perl"

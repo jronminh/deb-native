@@ -29,6 +29,14 @@ TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 LOG="$DN/var/log/deb-native-hook.log"
 mkdir -p "$DN/var/log"
 
+# Output goes to the terminal, amid apt's own lines, and to the log.
+logged() {
+  rcf=$(mktemp)
+  { "$@" 2>&1; echo $? > "$rcf"; } | tee -a "$LOG"
+  rc=$(cat "$rcf"); rm -f "$rcf"
+  return "$rc"
+}
+
 DEBS=$(mktemp)
 trap 'rm -f "$DEBS"' EXIT
 if [ $# -gt 0 ]; then
@@ -41,11 +49,11 @@ fi
 
 while IFS= read -r deb; do
   [ -n "$deb" ] || continue
-  [ -f "$deb" ] || { echo "dn-hook-pre: $deb not found" >&2; exit 1; }
+  [ -f "$deb" ] || { echo "E: $deb not found" >&2; exit 1; }
   pkg=$(dpkg-deb -f "$deb" Package)
   echo "== $(date '+%F %T') $deb" >>"$LOG"
-  "$HERE/dn-translate-deb.sh" "$deb" "$DN" >>"$LOG" 2>&1 \
-    || { echo "dn-hook-pre: translating $pkg failed (see $LOG)" >&2; exit 1; }
+  logged "$HERE/dn-translate-deb.sh" "$deb" "$DN" \
+    || { echo "E: translating $pkg failed" >&2; exit 1; }
 
   # Collision check against the prefix's own database.
   clash=$(dpkg-deb -c "$deb" | awk '{print $6}' | grep -v '/$' | sed 's|^\.||' |
@@ -56,10 +64,10 @@ while IFS= read -r deb; do
       printf ' %s' "$path"
     done) || true
   if [ -n "$clash" ]; then
-    echo "dn-hook-pre: $pkg would overwrite files no package owns (deb-native's own?):$clash" >&2
+    echo "E: $pkg would overwrite files no package owns (deb-native's own?):$clash" >&2
     exit 1
   fi
 
-  "$HERE/patch-deb.sh" "$deb" "$DN" >>"$LOG" 2>&1 \
-    || { echo "dn-hook-pre: patch-deb failed for $pkg (see $LOG)" >&2; exit 1; }
+  logged "$HERE/patch-deb.sh" "$deb" "$DN" \
+    || { echo "E: patching $pkg's maintainer scripts failed" >&2; exit 1; }
 done < "$DEBS"

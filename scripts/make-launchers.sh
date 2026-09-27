@@ -25,9 +25,9 @@ GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
 SHIM="$INSTDIR/usr/lib/deb-native/path-redirect.so"
 LAUNCHDIR="$INSTDIR/usr/lib/deb-native/bin"
 
-[ -f "$SHIM" ] || { echo "make-launchers: missing $SHIM" >&2; exit 1; }
-[ -x "$INSTDIR/usr/lib/deb-native/dn-run" ] || { echo "make-launchers: run setup-runtime.sh first (no dn-run)" >&2; exit 1; }
-[ -x "$INSTDIR/usr/bin/dn-shell" ] || { echo "make-launchers: run setup-runtime.sh first" >&2; exit 1; }
+[ -f "$SHIM" ] || { echo "E: missing $SHIM (run setup-runtime.sh)" >&2; exit 1; }
+[ -x "$INSTDIR/usr/lib/deb-native/dn-run" ] || { echo "E: no dn-run (run setup-runtime.sh)" >&2; exit 1; }
+[ -x "$INSTDIR/usr/bin/dn-shell" ] || { echo "E: no dn-shell (run setup-runtime.sh)" >&2; exit 1; }
 
 mkdir -p "$LAUNCHDIR"
 tmp="$LAUNCHDIR/.tmp.$$"
@@ -142,4 +142,4 @@ for d in $BIN_DIRS; do
 done
 
 rm -f "$tmp" "$DIRECT_LIST" "$BASE_FILES"
-echo "==> launchers in $LAUNCHDIR ($(ls -1 "$LAUNCHDIR" | wc -l) programs)"
+echo "Updated launchers in $LAUNCHDIR ($(ls -1 "$LAUNCHDIR" | wc -l) programs)."

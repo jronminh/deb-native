@@ -69,8 +69,7 @@ B8B80B5B623EAB6AD8775C45B7C5D7D6350947F8
 # one-way transformation, not this).
 case "$DN" in
   "$TP"|"$TP"/*)
-    echo "setup-apt-prefix: refusing NEWPREFIX=$DN" >&2
-    echo "  it is inside Termux's prefix ($TP); use a separate prefix, e.g. \$HOME/.dn." >&2
+    echo "E: $DN is inside Termux's prefix ($TP); use a separate prefix, e.g. \$HOME/.dn" >&2
     exit 1 ;;
 esac
 
@@ -94,7 +93,7 @@ write_pins() {  # FILE
 }
 
 # === Stage 0: bootstrap ===================================================
-echo "==> [0] bootstrapping the base into $DN"
+echo "Bootstrapping the Debian base into $DN ..."
 
 # 1. Directories, database, runtime, /root. Only the usr/ side is created:
 # base-files ships bin, lib, sbin as links to usr/*, and its preinst refuses
@@ -111,7 +110,7 @@ mkdir -p "$DN/var/lib/dpkg/updates" "$DN/var/lib/dpkg/info" "$DN/var/log" \
 if [ ! -e "$DN/root" ] && [ ! -L "$DN/root" ]; then
   ln -s "$HOME" "$DN/root"
 elif [ ! -L "$DN/root" ]; then
-  echo "setup-apt-prefix: $DN/root exists and is not a link; leaving it" >&2
+  echo "W: $DN/root exists and is not a link; leaving it" >&2
 fi
 
 # 2. Throwaway apt config: resolves and downloads, never installs. Its status
@@ -156,11 +155,11 @@ for rel in "$T"/lists/*InRelease; do
     case "$DEBIAN_KEYS" in *"$fpr"*) good=$fpr ;; esac
   done
   if [ -z "$good" ] || printf '%s\n' "$st" | grep -q 'BADSIG'; then
-    echo "setup-apt-prefix: ${rel##*/} is not signed by a known Debian archive key; refusing" >&2
+    echo "E: ${rel##*/} is not signed by a known Debian archive key" >&2
     printf '%s\n' "$st" >&2
     exit 1
   fi
-  echo "==> [0] ${rel##*/}: signed by Debian key $good"
+  echo "Verified ${rel##*/} (Debian key $good)"
 done
 cp "$T"/keyring/x/etc/apt/trusted.gpg.d/*.asc "$T/etc/trusted.gpg.d/"
 write_sources "$T/sources.list"
@@ -174,17 +173,12 @@ DN_APT_CONFIG="$T/apt.conf" "$HERE/dn-standins.sh" "$DN"
 
 # 3. Download the base and its dependencies.
 $TAPT install -y --download-only $BASE $KEYRING
-echo "==> [0] downloaded $(ls "$T"/debs/*.deb | wc -l) packages"
 
 # 4. Translate, in Termux's environment (no apt hooks involved).
-n=0; total=$(ls "$T"/debs/*.deb | wc -l)
 for deb in "$T"/debs/*.deb; do
-  n=$((n + 1))
-  echo "==> [0] translating $n/$total $(dpkg-deb -f "$deb" Package)"
   "$HERE/dn-translate-deb.sh" "$deb" "$DN"
   "$HERE/patch-deb.sh" "$deb" "$DN"
 done
-echo "==> [0] translated"
 
 # 5. Install with the prefix's dpkg. Unpack order: libraries, then the tools,
 # then everything else (preinsts run at unpack).
@@ -197,15 +191,15 @@ done
 $DPKG --force-depends --unpack $first $tools $rest
 $DPKG --configure -a
 for p in $BASE; do echo "$p:arm64 hold"; done | "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --set-selections
+for p in $BASE; do echo "$p set on hold."; done
 # The base is the prefix's own system, not programs for the user's shell:
 # make-launchers.sh gives it no launchers, so Termux's ls/sed/grep stay first.
 echo $BASE $KEYRING | tr ' ' '\n' > "$DN/var/lib/deb-native/base-packages"
 "$HERE/dn-fix-alternatives.sh" "$DN"
 "$HERE/normalize-symlinks.sh" "$DN"
-echo "==> [0] base installed and held: $BASE"
 
 # === Stage 1: package database and apt config ============================
-echo "==> [1] apt config"
+echo "Writing the prefix's apt configuration ..."
 mkdir -p "$DN/etc/apt/apt.conf.d" "$DN/etc/apt/sources.list.d" \
          "$DN/etc/apt/preferences.d" "$DN/etc/apt/trusted.gpg.d" \
          "$DN/var/cache/apt/archives/partial" "$DN/var/log/apt"
@@ -244,8 +238,8 @@ EOF
 env APT_CONFIG="$DN/etc/apt.conf" "$TP/bin/apt-get" update
 
 # === Stage 2: front end ===================================================
-echo "==> [2] launchers, routing, PATH"
+echo "Setting up launchers, routing and PATH ..."
 "$HERE/make-launchers.sh" "$DN"
 "$HERE/make-apt-wrappers.sh" "$DN"
 "$HERE/dn-activate.sh" "$DN"
-echo "==> ready: apt install <package>   (Debian-only names go to $DN)"
+echo "The prefix is ready: apt install <package> (Debian-only names go to $DN)."

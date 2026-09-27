@@ -16,10 +16,12 @@ DN=${1:?usage: dn-hook-post.sh PREFIX}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LOG="$DN/var/log/deb-native-hook.log"
 mkdir -p "$DN/var/log"
+# Output goes to the terminal, amid apt's own lines, and to the log (the
+# timestamp only to the log).
+echo "== $(date '+%F %T') post" >> "$LOG"
 {
-  echo "== $(date '+%F %T') post"
   "$HERE/dn-fix-alternatives.sh" "$DN"
   "$HERE/normalize-symlinks.sh" "$DN"
   "$HERE/make-launchers.sh" "$DN"
-} >>"$LOG" 2>&1
+} 2>&1 | tee -a "$LOG"
 exit 0
