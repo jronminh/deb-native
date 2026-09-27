@@ -58,7 +58,7 @@ fi
 put "$CACHE/path-redirect.so" "$LIBDIR/path-redirect.so"
 
 # Launch dispatcher: classifies a target's ELF PT_INTERP at launch and picks
-# the shim (glibc), plain exec (Bionic), or `proot -b` syscall rewrite
+# the shim (glibc), plain exec (Bionic), or the dn-trace syscall rewrite
 # (static, which the shim cannot reach). Built with Termux's own clang -- it
 # is a Bionic binary and must run before any glibc env is set up.
 if stale "$CACHE/dn-run" "$SRC/dn-run.c"; then
@@ -82,7 +82,7 @@ put "$CACHE/ld-dn" "$LIBDIR/ld-dn"
 # its syscall emulation), programs making their own syscalls, NSS. Built here
 # when its build needs are present (pkg install make libtalloc), once per
 # checkout like the rest; without them those programs run untranslated
-# (dn-run falls back to Termux's proot if installed).
+# (dn-run warns; there is no fallback to Termux's proot).
 TRACER="$HERE/../tracer"
 if [ -x "$(command -v make || true)" ] && [ -e "$PREFIX_DIR/lib/libtalloc.so" ]; then
   if [ ! -x "$TRACER/dn-trace" ] || [ -n "$(find "$TRACER" -name '*.[ch]' -newer "$TRACER/dn-trace" | head -n1)" ]; then

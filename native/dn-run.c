@@ -163,11 +163,13 @@ static void launch_glibc(char **args) {
   die("execv");
 }
 
-/* Route #2: syscall-level rewrite. A tracer (fork-lite `dn-trace`, else
- * Termux `proot`) maps the guest /usr,/etc,... onto the prefix for the whole
- * traced tree, which is why it reaches static binaries, raw syscalls, and the
- * libc-internal NSS reads the libc shim cannot. Only dirs that exist are bound
- * -- proot errors on a missing host path.
+/* Route #2: syscall-level rewrite. deb-native's tracer, `dn-trace` (tracer/:
+ * a ptrace tracer grown out of PRoot's core, cut down to what the prefix
+ * needs), maps the guest /usr,/etc,... onto the prefix for the whole traced
+ * tree, which is why it reaches static binaries, raw syscalls, and the
+ * libc-internal NSS reads the libc shim cannot. There is no fallback to
+ * Termux's proot: the loader (ld-dn), the shim and dn-trace cover the
+ * prefix. Only dirs that exist are bound.
  *
  * nss=1 adds one more bind: Termux's glibc reads its sysconfdir at
  * $PREFIX/glibc/etc (a host path outside the prefix), so NSS reads
@@ -183,16 +185,17 @@ static void launch_trace(char **args, int nss) {
   else
     snprintf(tracer, sizeof tracer, "%s/usr/lib/deb-native/dn-trace", instdir);
   if (stat(tracer, &st) != 0) {
-    snprintf(tracer, sizeof tracer, "%s/bin/proot", termux_prefix());
-    if (stat(tracer, &st) != 0) {
-      /* No tracer: a glibc program still needs the shim route (clean
-       * preload, prefix PATH) -- run raw, it would inherit termux-exec's
-       * Bionic preload and fail to load. Only its NSS reads stay
-       * unredirected (Termux's glibc answers them for the app user). */
-      if (g_glibc) launch_glibc(args);
-      execv(args[0], args);
-      die("execv");
-    }
+    /* No dn-trace (built at install when make and libtalloc are present).
+     * A glibc program still takes the shim route (clean preload, prefix
+     * PATH) -- raw, it would inherit termux-exec's Bionic preload and fail
+     * to load; only its NSS reads or raw syscalls stay unredirected. Any
+     * other program runs untranslated, and says so. */
+    if (g_glibc) launch_glibc(args);
+    fprintf(stderr, "dn-run: %s needs dn-trace, which is not built "
+            "(pkg install make libtalloc, then run deb-native's install.sh); "
+            "running it untranslated; it may fail\n", args[0]);
+    execv(args[0], args);
+    die("execv");
   }
 
   set_path();

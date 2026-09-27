@@ -146,7 +146,8 @@ program is started, from Termux's side too. Maintainer scripts run under
 `update-alternatives`, `dpkg-divert`, `getent`).
 
 **Beyond libc.** Static binaries, programs making their own syscalls and
-glibc's NSS bypass the shim; `dn-trace` (`tracer/`, a trimmed PRoot, built
+glibc's NSS bypass the shim; `dn-trace` (`tracer/`, deb-native's own ptrace
+tracer, grown out of PRoot's core and cut to what the prefix needs; built
 at install when `make` and `libtalloc` are present) rewrites their paths at
 the syscall level — see [`docs/tracer-0.2.0.md`](docs/tracer-0.2.0.md).
 
@@ -253,7 +254,7 @@ Without them those programs run untranslated.
 - [`docs/findings.md`](docs/findings.md) — engineering log.
 - [`docs/multiarch-mechanics.md`](docs/multiarch-mechanics.md) — dpkg multi-arch mechanics, shared with the true fusion branch (`naibed`).
 - [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) — method, side by side with `sudo-less`.
-- [`tracer/README.md`](tracer/README.md) — the reduced proot (`fork-lite`).
+- [`tracer/README.md`](tracer/README.md) — `dn-trace`, the ptrace tracer (from PRoot's core).
 - [`TODO.md`](TODO.md) — roadmap · [`AGENTS.md`](AGENTS.md) — conventions.
 
 ## Credit & license

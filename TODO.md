@@ -463,7 +463,7 @@ Tracked in [#1](https://github.com/jronminh/deb-native/issues/1).
 - [ ] **Fork-lite tracer** (`dn-trace`) for what libc interposition can't see
       (static binaries, inline `svc`, libc-internal NSS): a reduced,
       arm64-only subset of `termux/proot` (`ptrace` — seccomp user-notification
-      cannot rewrite syscall arguments), keeping `proot` as the fallback. Plan
+      cannot rewrite syscall arguments). Plan
       and phases in [`docs/direct-usage.md`](docs/direct-usage.md); the measured
       boundary is in [`docs/syscall-boundary.md`](docs/syscall-boundary.md).
       Phase 1: prune non-arm64 + extensions, build arm64-only on `fe2`.
@@ -480,8 +480,9 @@ Tracked in [#1](https://github.com/jronminh/deb-native/issues/1).
             ([`docs/tracer-0.2.0.md`](docs/tracer-0.2.0.md)).
       - [x] unset `LD_PRELOAD` (termux-exec) on every tracer route.
       - [ ] test `dn-run` → `dn-trace` from an installed prefix.
-      - [ ] drop (or keep, for installs without `make`/`libtalloc`) the
-            Termux `proot` fallback in `dn-run.c`.
+      - [x] Termux `proot` fallback dropped from `dn-run.c` (0.2.3): the
+            loader, the shim and `dn-trace` cover the prefix; without
+            `dn-trace`, `dn-run` warns and runs untranslated.
 
 ## Open, still-unsafe
 

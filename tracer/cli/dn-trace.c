@@ -9,7 +9,7 @@
  * The guest root is always the host "/", the working directory is the
  * current one, and a -b whose host path does not exist is skipped
  * (PRoot warned about it), so dn-run need not check each prefix dir.
- * The same arguments work with Termux's proot, dn-run's fallback.
+ * (A subset of proot's arguments; since 0.2.3 there is no proot fallback.)
  *
  * Derived from PRoot's cli/cli.c, Copyright (C) 2015 STMicroelectronics,
  * GPL-2.0-or-later like the rest of tracer/.

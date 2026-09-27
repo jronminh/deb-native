@@ -19,8 +19,8 @@ A Debian program in the prefix normally never meets the tracer:
 | **makes its own syscalls** (inline `svc`, `syscall()`) | the shim cannot see them (`scan-direct-syscalls.py`) | **yes** |
 | **glibc NSS lookups** (`getpwnam`, `getaddrinfo`, ...) | libc-internal, not interposable | **yes** |
 
-`native/dn-run.c` routes the last three to `usr/lib/deb-native/dn-trace`,
-with Termux's `proot` as the fallback. A static binary also *needs* the
+`native/dn-run.c` routes the last three to `usr/lib/deb-native/dn-trace`
+(no fallback to Termux's `proot` since 0.2.3). A static binary also *needs* the
 tracer to survive: Android's app seccomp filter kills calls such as
 `set_robust_list` with SIGSYS (untraced, Debian's static `busybox find` dies),
 and the tracer's SIGSYS emulation (`tracer/tracee/seccomp.c`) answers them.
@@ -35,7 +35,7 @@ prefix. Without them it prints
 
     W: tracer not built (needs: pkg install make libtalloc); static programs will run untranslated
 
-and `dn-run` falls back to Termux's `proot`, or runs untranslated. Both
+and `dn-run` warns and runs those programs untranslated. Both
 packages are optional requirements in the README.
 
 ### 2. `dn-trace` front end
@@ -48,7 +48,7 @@ extensions' options):
 
 - guest root is always the host `/`, cwd is the current directory;
 - a `-b` whose host path does not exist is skipped (PRoot warned);
-- the arguments are a subset of `proot`'s, so the fallback is unchanged.
+- the arguments are a subset of `proot`'s.
 
 ### 3. The kernel execs the program; PRoot's loader is gone
 
@@ -142,8 +142,9 @@ binaries in the same loop.
 
 ## Open
 
-- **Drop the `proot` fallback** in `dn-run.c` (TODO) once `dn-trace` is
-  always built — or keep it for installs without `make`/`libtalloc`.
+- [x] **`proot` fallback dropped** in `dn-run.c` (0.2.3): the loader, the
+  shim and `dn-trace` cover the prefix; without `dn-trace`, `dn-run` warns
+  and runs untranslated.
 - **Small leftovers:** `/proc/self/auxv` handling in `syscall/exit.c` (now
   inert), the loader fields in `execve/execve.h`, `ptrace/` bookkeeping for
   loader syscalls. `path/glue.c` (PRoot's placeholder dirs for bind targets

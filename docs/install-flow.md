@@ -13,8 +13,9 @@ mechanisms each step installs are documented in
    `patch-maintainer-scripts.sh:42`). It builds/installs:
    - the **shim** `path-redirect.so` (`setup-runtime.sh:37`, glibc layer);
    - **`dn-run`** (`:45`), the launch classifier, and **`dn-shell`/`dn-perl`**;
-   - the **tracer** as `dn-trace` (fork-lite) if `tracer/proot` is present,
-     else `dn-run` falls back to Termux `proot`.
+   - the **tracer** as `dn-trace` when `make` and `libtalloc` are present;
+     without it, `dn-run` warns and runs those programs untranslated (no
+     fallback to Termux's `proot`).
    Ordering is load-bearing: maintainer scripts run during dpkg's `--unpack`,
    so the interpreter and shim must already exist.
 
@@ -60,7 +61,7 @@ mechanisms each step installs are documented in
 - **"Native" ≠ custom libc.** It means reusing **Termux's glibc side-install**
   (glibc + `*-glibc` packages) via `native-seed.sh`, not shipping a second
   one. Nothing is prebuilt-and-shipped either: the shim and `dn-trace` are
-  built from source on-device; `proot` is only a fallback.
+  built from source on-device; Termux's `proot` is not used.
 
 One-liner: **runtime (shim + `dn-run` + tracer) → auto-patch each `.deb` →
 seed native glibc deps → bootstrap base in one transaction → wire
