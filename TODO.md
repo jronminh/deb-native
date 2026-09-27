@@ -7,6 +7,39 @@ random sample**, not feature count. See
 and [`docs/findings.md`](docs/findings.md)
 for what just landed.
 
+## Alpha goal (the next announcement)
+
+Pre-alpha means "works for the author"; alpha means "try it, it mostly
+works". Alpha is reached when all **must have** items are done, whatever
+the version number by then. Announce it with one number ("N of 100 random
+Debian packages install and run, no root, no proot"), the comparison with
+proot-distro (README), and a `gcc` demo.
+
+**Must have** -- what people try first, and what skeptics ask:
+- [ ] **Compilers.** `libc6` as Debian's exact identity (below, "Next");
+      `gcc`, `make` and a C hello-world build and run in the prefix; `ghc`
+      or `rustc` as a bonus.
+- [ ] **Popular languages.** `python3` with a C-extension package (e.g.
+      `python3-numpy`), `perl` with an XS module, `ruby`, `nodejs` -- incl.
+      the Perl version gap (`dn-perl` is Termux's 5.42, trixie builds for
+      5.40).
+- [ ] **Unfiltered survey.** The seeded 100 across the 43 sections without
+      the size filter: a number for heavy packages, no asterisk
+      ([`docs/survey-0.2.0.md`](docs/survey-0.2.0.md) is lightweight only).
+- [ ] **More than one device.** A second phone / Android version, and the
+      Google Play build of Termux.
+
+**Should have** -- makes it feel finished:
+- [ ] **Upgrade and remove.** `apt upgrade` across a Debian point release;
+      `install.sh --uninstall` (`~/.dn` + the `~/.bashrc` block); Termux
+      untouched afterwards (0.2.0 build order, step 8).
+- [ ] **Clear refusals.** An out-of-scope package says why ("needs a system
+      service", "needs root") instead of a raw dpkg error.
+- [ ] **Demo.** `apt install gcc`, compile, run -- all inside Termux.
+
+**After alpha:** services (runit translation), `sudo` modes, busybox base,
+the pre-translated repo.
+
 ## 0.2.0-prealpha roadmap: a self-contained prefix
 
 Goal: the prefix is a small, complete Debian system of its own -- its own
