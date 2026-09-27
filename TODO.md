@@ -103,6 +103,39 @@ Design doc first (`docs/design-0.3.0.md`), then build. Findings so far
 - **Maybe together:** `libc6` as Debian's exact identity also changes the
   base; doing both at once means one reinstall for users.
 
+**Baseline (0.2.0, fe2, 2026-09-27 20:02, fresh install, tracer prebuilt):**
+
+| stage | time |
+|---|---|
+| runtime (cached build) | 0s |
+| Debian index | 6s |
+| signatures | 5s |
+| stand-ins | 5s |
+| download base | 4s |
+| **translate** | **41s** |
+| unpack | 6s |
+| **configure** | **23s** |
+| launchers, PATH | 7s |
+| **total** | **1m37s** (the first install that day: 3m13s, tracer built and a slower network) |
+
+Prefix: **224 MB, 2,233 files**; of that **85 MB `var/cache/apt`** (the
+bootstrap's downloaded/translated `.deb`s) and **56 MB `var/lib/apt`**
+(lists) -- the installed base itself is ~83 MB. Cleaning the cache after
+bootstrap is a cheap win, independent of busybox.
+
+**0.3.0 is done when**, against this baseline and the same seeded survey
+sample (`docs/survey-0.2.0/`):
+
+| measure | 0.2.0 | 0.3.0 goal |
+|---|---|---|
+| fresh install (fe2, same conditions) | 1m37s | clearly less; translate + configure (64s) are the target |
+| base packages | 23 | fewer |
+| prefix size | 224 MB | smaller (cache cleaned + lighter base) |
+| survey: installed | 99 / 100 | >= 99 |
+| survey: programs working within limits | 98 / 100 | >= 98 |
+| per-package regressions | -- | none |
+| maintainer scripts | pass | still pass: `ca-certificates`, `passwd`, `fastfetch`, a shell package (`add-shell`), `update-alternatives` users |
+
 ## 0.2.0-prealpha roadmap: a self-contained prefix
 
 Goal: the prefix is a small, complete Debian system of its own -- its own
