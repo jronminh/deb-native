@@ -93,6 +93,10 @@ write_pins() {  # FILE
 }
 
 # === Stage 0: bootstrap ===================================================
+# Stage and progress markers for install.sh's terminal display (it shows
+# only these; everything else goes to its log). Nothing when run directly.
+mark() { [ -z "${DN_INSTALL_LOG:-}" ] || echo "::$*"; }
+
 echo "Bootstrapping the Debian base into $DN ..."
 
 # 1. Directories, database, runtime, /root. Only the usr/ side is created:
@@ -104,6 +108,7 @@ mkdir -p "$DN/var/lib/dpkg/updates" "$DN/var/lib/dpkg/info" "$DN/var/log" \
 [ -f "$DN/var/lib/dpkg/available" ] || : > "$DN/var/lib/dpkg/available"
 "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --print-foreign-architectures | grep -qx arm64 \
   || "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --add-architecture arm64
+mark stage "building the runtime (shim, dn-shell, dn-run)"
 "$HERE/setup-runtime.sh" "$DN"
 # base-passwd's only user is root, home /root, and maintainer scripts write
 # there: make it Termux's home (the shim rewrites /root into the prefix).
@@ -139,6 +144,7 @@ Acquire::PDiffs "false";
 Acquire::Languages "none";
 EOF
 TAPT="env APT_CONFIG=$T/apt.conf $TP/bin/apt-get"
+mark stage "fetching the Debian index"
 $TAPT update
 
 # Signatures. The index above came in unverified (Termux has no Debian keys):
@@ -146,6 +152,7 @@ $TAPT update
 # verifies with it (gpgv) under a key whose primary fingerprint is one of
 # DEBIAN_KEYS. Then switch the temp config to verified sources and update
 # again: from here on apt checks every signature and hash itself.
+mark stage "verifying Debian's signatures"
 $TAPT install -y --download-only -o Dir::Cache::archives="$T/keyring" "$KEYRING"
 dpkg-deb -x "$T"/keyring/${KEYRING}_*.deb "$T/keyring/x"
 # apt ignores (and does not keep) an InRelease it cannot verify, so the
@@ -176,13 +183,20 @@ $TAPT update
 mkdir -p "$DN/var/lib/apt/lists/partial"
 cp "$T"/lists/*_Packages "$T"/lists/*Release "$DN/var/lib/apt/lists/" || true
 "$HERE/dn-debian-index.sh" "$T/lists"
+mark stage "installing the stand-ins libc6, dpkg, apt"
 DN_APT_CONFIG="$T/apt.conf" "$HERE/dn-standins.sh" "$DN"
 
 # 3. Download the base and its dependencies.
+mark stage "downloading the base"
+mark count Get: "$($TAPT -s install $BASE $KEYRING | grep -c '^Inst')" packages
 $TAPT install -y --download-only $BASE $KEYRING
 
 # 4. Translate, in Termux's environment (no apt hooks involved).
+mark stage "translating packages for the prefix"
+n=0; total=$(ls "$T"/debs/*.deb | wc -l)
 for deb in "$T"/debs/*.deb; do
+  n=$((n + 1))
+  mark progress "$n" "$total" "$(dpkg-deb -f "$deb" Package)"
   "$HERE/dn-translate-deb.sh" "$deb" "$DN"
   "$HERE/patch-deb.sh" "$deb" "$DN"
 done
@@ -195,7 +209,11 @@ for deb in "$T"/debs/*.deb; do
   case " $TOOLS " in *" $p "*) tools="$tools $deb"; continue ;; esac
   case "$p" in lib*|zlib*) first="$first $deb" ;; *) rest="$rest $deb" ;; esac
 done
+mark stage "unpacking"
+mark count Unpacking "$total" packages
 $DPKG --force-depends --unpack $first $tools $rest
+mark stage "configuring"
+mark count Setting "$total" packages
 $DPKG --configure -a
 for p in $BASE; do echo "$p:arm64 hold"; done | "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --set-selections
 for p in $BASE; do echo "$p set on hold."; done
@@ -206,6 +224,7 @@ echo $BASE $KEYRING | tr ' ' '\n' > "$DN/var/lib/deb-native/base-packages"
 "$HERE/normalize-symlinks.sh" "$DN"
 
 # === Stage 1: package database and apt config ============================
+mark stage "writing the prefix's apt configuration"
 echo "Writing the prefix's apt configuration ..."
 mkdir -p "$DN/etc/apt/apt.conf.d" "$DN/etc/apt/sources.list.d" \
          "$DN/etc/apt/preferences.d" "$DN/etc/apt/trusted.gpg.d" \
@@ -245,6 +264,7 @@ EOF
 env APT_CONFIG="$DN/etc/apt.conf" "$TP/bin/apt-get" update
 
 # === Stage 2: front end ===================================================
+mark stage "launchers, routing and PATH"
 echo "Setting up launchers, routing and PATH ..."
 "$HERE/make-launchers.sh" "$DN"
 "$HERE/make-apt-wrappers.sh" "$DN"

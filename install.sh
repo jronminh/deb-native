@@ -18,20 +18,27 @@ DIR=${DEB_NATIVE_DIR:-$HOME/.deb-native}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd || echo .)
 
 # --- display ---------------------------------------------------------------
-if [ -t 1 ]; then
+# The terminal shows only the banner, the stages, progress and errors; the
+# full output goes to the log (see "log" below). Under that log, lines meant
+# for the terminal are marked "::show" for the outer pass to display.
+if [ -t 1 ] || [ "${DN_COLOR:-}" = 1 ]; then
     B=$(printf '\033[1m'); D=$(printf '\033[2m'); C=$(printf '\033[36m')
     G=$(printf '\033[32m'); Y=$(printf '\033[33m'); R=$(printf '\033[0m')
 else
     B= D= C= G= Y= R=
 fi
+out() {
+    if [ -n "${DN_INSTALL_LOG:-}" ]; then printf '::show %s\n' "$1"; else printf '%s\n' "$1"; fi
+}
 banner() {
-    printf '%s\n' "${B}deb-native${R} ${D}·${R} Debian arm64 .debs in Termux, unrooted"
+    out "${B}deb-native${R} ${D}·${R} Debian arm64 .debs in Termux, unrooted"
 }
 step() {
     STEP=$((STEP + 1))
-    printf '\n%s[%s/%s]%s %s%s%s\n' "$C" "$STEP" "$TOTAL" "$R" "$B" "$*" "$R"
+    out ""
+    out "$(printf '%s[%s/%s]%s %s%s%s' "$C" "$STEP" "$TOTAL" "$R" "$B" "$*" "$R")"
 }
-kv() { printf '   %s%-10s%s %s\n' "$D" "$1" "$R" "$2"; }
+kv() { out "$(printf '   %s%-10s%s %s' "$D" "$1" "$R" "$2")"; }
 fail() { printf '%s error:%s %s\n' "$Y" "$R" "$*" >&2; exit 1; }
 
 # Piped (curl | sh) or run outside a checkout: fetch the repo, then re-exec.
@@ -64,18 +71,71 @@ case "$DNPREFIX" in
 esac
 
 # --- log -------------------------------------------------------------------
-# Everything below goes to the screen and to a log file in the prefix, so a
-# run can be read back (and shared) afterwards. The first pass re-runs this
-# script with its output through tee and keeps the real exit code.
+# The first pass re-runs this script and reads its output line by line:
+# everything goes to a log file in the prefix (to read back or share); the
+# terminal gets only what the scripts mark for it:
+#   ::show TEXT              a line of installer UI (banner, steps, summary)
+#   ::stage TEXT             a stage, as "   - TEXT"
+#   ::progress I N LABEL     a progress bar, redrawn in place
+#   ::count PREFIX N LABEL   a progress bar advanced by each following output
+#                            line starting with PREFIX ("Unpacking", "Get:")
+# plus any "E: " error line. The real exit code is kept.
+render() {
+    exec 3>>"$DN_INSTALL_LOG"
+    tty=0; [ -t 1 ] && tty=1
+    bar=0 cprefix="" cn=0 ci=0 clabel=""
+    draw() {  # I N LABEL
+        [ "$tty" = 1 ] || { [ "$1" = "$2" ] && printf '     %s/%s %s\n' "$1" "$2" "$3"; return 0; }
+        w=20 f=$(( $1 * 20 / ($2 > 0 ? $2 : 1) )) k=0 b=""
+        while [ "$k" -lt "$f" ]; do b="$b#"; k=$((k + 1)); done
+        while [ "$k" -lt "$w" ]; do b="$b-"; k=$((k + 1)); done
+        printf '\r\033[K     [%s] %s/%s %.40s' "$b" "$1" "$2" "$3"
+        bar=1
+        [ "$1" = "$2" ] && { printf '\n'; bar=0; }
+        return 0
+    }
+    endbar() { [ "$bar" = 1 ] && { printf '\n'; bar=0; }; return 0; }
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "::show "*|"::show")
+                endbar; t=${line#::show}; t=${t# }
+                printf '%s\n' "$t"; printf '%s\n' "$t" >&3 ;;
+            "::stage "*)
+                endbar; cprefix=""; t=${line#::stage }
+                printf '   - %s\n' "$t"; printf '== %s %s\n' "$(date +%T)" "$t" >&3 ;;
+            "::progress "*)
+                set -- ${line#::progress }; i=$1 n=$2; shift 2
+                draw "$i" "$n" "$*" ;;
+            "::count "*)
+                set -- ${line#::count }; cprefix=$1 cn=$2; shift 2
+                clabel=$* ci=0
+                [ "$cn" -gt 0 ] && draw 0 "$cn" "$clabel" ;;
+            "E: "*)
+                endbar; printf '%s\n' "$line"; printf '%s\n' "$line" >&3 ;;
+            *)
+                printf '%s\n' "$line" >&3
+                if [ -n "$cprefix" ]; then
+                    case "$line" in
+                        "$cprefix"*) [ "$ci" -lt "$cn" ] && { ci=$((ci + 1)); draw "$ci" "$cn" "$clabel"; } ;;
+                    esac
+                fi ;;
+        esac
+    done
+    endbar
+}
 if [ -z "${DN_INSTALL_LOG:-}" ]; then
     mkdir -p "$DNPREFIX/var/log"
     DN_INSTALL_LOG="$DNPREFIX/var/log/deb-native-install-$(date +%Y%m%d-%H%M%S).log"
     export DN_INSTALL_LOG
-    printf 'log: %s\n' "$DN_INSTALL_LOG"
+    [ -t 1 ] && DN_COLOR=1 && export DN_COLOR
     rcf=$(mktemp)
-    { sh "$HERE/install.sh" "$DNPREFIX" "$@" 2>&1; echo $? > "$rcf"; } | tee "$DN_INSTALL_LOG"
+    { sh "$HERE/install.sh" "$DNPREFIX" "$@" 2>&1; echo $? > "$rcf"; } | render
     rc=$(cat "$rcf"); rm -f "$rcf"
-    printf 'log: %s (exit %s)\n' "$DN_INSTALL_LOG" "$rc"
+    if [ "$rc" != 0 ]; then
+        printf '\n%s install failed (exit %s); the end of the log:%s\n' "$Y" "$rc" "$R"
+        tail -n 15 "$DN_INSTALL_LOG" | sed 's/^/   /'
+    fi
+    printf '\n   %slog%s       %s\n' "$D" "$R" "$DN_INSTALL_LOG"
     exit "$rc"
 fi
 
@@ -115,7 +175,8 @@ secs=$((T1 - T0))
 [ "$secs" -lt 60 ] && took="${secs}s" || took="$((secs / 60))m$((secs % 60))s"
 installed=$([ -f "$DNPREFIX/var/lib/dpkg/status" ] && grep -c "install ok installed" "$DNPREFIX/var/lib/dpkg/status" || true)
 
-printf '\n%s done%s in %s\n' "$G" "$R" "$took"
+out ""
+out "$(printf '%s done%s in %s' "$G" "$R" "$took")"
 kv "prefix" "$DNPREFIX"
 kv "installed" "${installed:-0} packages"
 kv "run" "a program by name in a new shell (or: . ~/.bashrc)"
