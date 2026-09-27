@@ -2,6 +2,15 @@
 
 ![status: experimental](https://img.shields.io/badge/status-experimental-red)
 ![one-way](https://img.shields.io/badge/transformation-one--way-critical)
+![frozen until alpha](https://img.shields.io/badge/branch-frozen%20until%20alpha-lightgrey)
+
+> [!NOTE]
+> **Frozen until `main` reaches alpha** (since 2026-09-27). This branch
+> stays as it is -- a working proof that apt and dpkg can own a root on
+> Termux -- while `main` moves on (0.2.x: `ld-dn`, `dn-trace`, parallel
+> translation, the survey). It has none of that. After alpha, fusion is
+> to be rebuilt on `main`'s core ("the same core, with Termux's prefix as
+> the root"); until then, no new work lands here.
 
 **Transform Termux itself into a Debian `arm64` system — no root, no
 `chroot`, no proot.** Debian becomes apt's only source, Debian packages
