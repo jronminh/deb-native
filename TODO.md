@@ -48,6 +48,25 @@ proot-distro (README), and a `gcc` demo.
       service", "needs root") instead of a raw dpkg error.
 - [ ] **Demo.** `apt install gcc`, compile, run -- all inside Termux.
 
+**To consider: auto-adopt downloaded glibc programs.** `dn-adopt` (manual,
+done) makes a glibc program obtained outside apt run through the prefix:
+Claude Code's native binary (Bun, 240 MB) runs once adopted. Auto-adopt
+would do it when the program is started, so direct installers
+(`curl ... | bash`) land with no manual step. Acceptance test: Claude
+Code's installer finishing by itself.
+- **A. Inside the prefix** (`dn-shell`, programs started by prefix
+  programs): the shim's `execve` handling adopts a glibc program whose
+  loader does not exist, then starts it. Contained; reuses `dn-adopt.sh`.
+- **B. All of Termux**, opt-in (`install.sh --auto-adopt`): a small Bionic
+  preload beside `termux-exec` doing the same check -- covers plain
+  Termux shells, but every program start passes through it.
+- Adopt **in place** (keeps `/proc/self/exe`, needed by Bun/Node
+  single-file builds), not "run through the loader". Say so on stderr
+  (`deb-native: adopted FILE`); opt-out `DN_NO_AUTO_ADOPT=1`; unwritable
+  file -> run through the loader with a warning; first start of a big
+  binary takes seconds; self-verifying updaters see a changed file. State
+  plainly in the README that downloaded executables get modified.
+
 **After alpha:** services (runit translation), `sudo` modes, busybox base,
 the pre-translated repo.
 
