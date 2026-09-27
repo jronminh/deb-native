@@ -165,11 +165,10 @@ int main(int argc, char *const argv[])
 	if (status < 0)
 		goto error;
 
+	/* which() reports a missing PROGRAM itself.  */
 	status = initialize_exe(tracee, argv[i]);
-	if (status < 0) {
-		note(tracee, ERROR, USER, "can't find '%s'", argv[i]);
+	if (status < 0)
 		goto error;
-	}
 
 	status = launch_process(tracee, &argv[i]);
 	if (status < 0) {

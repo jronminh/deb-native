@@ -36,6 +36,10 @@ Safe mechanics for the three traps:
   targets under bound dirs to relative; run by `install.sh` after install.
 - **`..` across a bind** — detected in `normalize_guest_path()`, falls back to
   `canonicalize()`.
+- **`/proc` links** — paths under `/proc` also fall back to `canonicalize()`,
+  which emulates `/proc/<pid>/exe` and friends; under PRoot's loader the
+  kernel's `/proc/self/exe` is the loader (a static busybox re-executing
+  itself for an applet died with SIGBUS).
 - **output detranslation** — `detranslate_path` unchanged (getcwd, readlink,
   `/proc/self/cwd`).
 
@@ -62,8 +66,12 @@ gain is the fast path, not the extension prune); the walk is I/O-bound.
 
 ```
 cd tracer
-make CC=clang        # produces ./proot
+make CC=clang        # produces ./dn-trace
 ```
+
+`setup-runtime.sh` does this when `make` and `libtalloc` are installed
+(`pkg install make libtalloc`) and copies `dn-trace` into the prefix as
+`usr/lib/deb-native/dn-trace`.
 
 ## Prune plan (fork-lite)
 
@@ -79,20 +87,16 @@ Drop (done):
 
 - `extension/*/` — every concrete extension (`fake_id0`, `link2symlink`,
   `sysvipc`, `ashmem_memfd`, `kompat`, `hidden_files`, `mountinfo`,
-  `port_switch`, `fix_symlink_size`). Their init calls live in `cli/proot.c`
-  and `cli/cli.c` and are now no-ops.
+  `port_switch`, `fix_symlink_size`).
 - `loader/` m32 and the non-arm64 loaders (`HAS_LOADER_32BIT` removed from
   `arch.h`, `assembly-{arm,x86,x86_64}.h` deleted), and the other-arch
   `sysnums-*.h`.
 
-Write ourselves:
-
-- a small `main`/binder replacing `cli/`, which binds `$INSTDIR` over
-  `/usr /etc /var /opt`, handles guest paths that do not exist (proot errors
-  on them), and sets `DN_INSTDIR`/`PATH` — producing a `dn-trace` binary.
-
-Then `native/dn-run.c`'s direct-usage route points at `dn-trace`, keeping
-`proot` as the fallback.
+- `cli/cli.c`, `cli/proot.c` — PRoot's command line, replaced by
+  `cli/dn-trace.c`: `dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--] PROGRAM`,
+  guest root = host `/`, cwd = the current one, a `-b` with a missing host
+  path skipped. The same arguments work with Termux's `proot`, which
+  `native/dn-run.c` falls back to.
 
 ## Seccomp acceleration: kept on
 
@@ -108,58 +112,3 @@ Its SIGSYS emulation (`tracee/seccomp.c`) is separate: it is what lets a
 static binary survive Android's app seccomp filter (untraced,
 `busybox find` is killed with SIGSYS).
 
-## Build
-
-```
-cd tracer
-make CC=clang        # produces ./proot
-```
-
-## Prune plan (fork-lite)
-
-Keep:
-
-- `ptrace/`, `tracee/`
-- `syscall/{enter,exit,seccomp,chain,sysnum}.c` and `sysnums-arm64.h`
-- `path/`, `execve/`, `arch.h`, `compat.h`
-- `extension/{extension.c,extension.h}` — the framework only (core call sites
-  keep linking; with no extension initialized, its hooks are no-ops).
-
-Drop (done):
-
-- `extension/*/` — every concrete extension (`fake_id0`, `link2symlink`,
-  `sysvipc`, `ashmem_memfd`, `kompat`, `hidden_files`, `mountinfo`,
-  `port_switch`, `fix_symlink_size`). Their init calls live in `cli/proot.c`
-  and `cli/cli.c` and are now no-ops.
-- `loader/` m32 and the non-arm64 loaders (`HAS_LOADER_32BIT` removed from
-  `arch.h`, `assembly-{arm,x86,x86_64}.h` deleted), and the other-arch
-  `sysnums-*.h`.
-
-Write ourselves:
-
-- a small `main`/binder replacing `cli/`, which binds `$INSTDIR` over
-  `/usr /etc /var /opt`, handles guest paths that do not exist (proot errors
-  on them), and sets `DN_INSTDIR`/`PATH` — producing a `dn-trace` binary.
-
-Then `native/dn-run.c`'s direct-usage route points at `dn-trace`, keeping
-`proot` as the fallback.
-
-## Seccomp acceleration: opt-in
-
-PRoot installs a seccomp filter so only the syscalls it rewrites stop the
-tracee. Measured on the test device (Debian `busybox-static`, 2026-09-27):
-a traced start took ~410 ms with it and ~50 ms without (untraced: ~8 ms),
-while a syscall-heavy `busybox find` over the prefix went only from 17.3 s
-to 16.5 s. Most runs are short, so it is off unless `PROOT_SECCOMP=1` is set
-(`tracee/event.c`); `PROOT_NO_SECCOMP` still wins, and `dn-run` sets it so
-Termux's `proot` as the fallback behaves the same.
-
-Its SIGSYS emulation (`tracee/seccomp.c`) is separate and stays: it is what
-lets a static binary survive Android's app seccomp filter (untraced,
-`busybox find` is killed with SIGSYS).
-
-## Build
-
-`setup-runtime.sh` runs `make CC=clang` here when `make` and `libtalloc` are
-installed (`pkg install make libtalloc`) and copies `proot` into the prefix
-as `usr/lib/deb-native/dn-trace`.
