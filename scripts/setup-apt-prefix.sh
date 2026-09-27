@@ -148,7 +148,14 @@ $TAPT update
 # again: from here on apt checks every signature and hash itself.
 $TAPT install -y --download-only -o Dir::Cache::archives="$T/keyring" "$KEYRING"
 dpkg-deb -x "$T"/keyring/${KEYRING}_*.deb "$T/keyring/x"
-for rel in "$T"/lists/*InRelease; do
+# apt ignores (and does not keep) an InRelease it cannot verify, so the
+# check fetches the three itself.
+mkdir -p "$T/verify"
+for d in "deb.debian.org/debian/dists/$SUITE" "deb.debian.org/debian/dists/${SUITE}-updates" \
+         "security.debian.org/debian-security/dists/${SUITE}-security"; do
+  curl -fsSL -o "$T/verify/$(echo "$d" | tr / _)_InRelease" "https://$d/InRelease"
+done
+for rel in "$T"/verify/*_InRelease; do
   st=$(gpgv --status-fd 1 --keyring "$T/keyring/x/usr/share/keyrings/debian-archive-keyring.gpg" "$rel" 2>&1) || true
   good=""
   for fpr in $(printf '%s\n' "$st" | awk '/VALIDSIG/ {print $NF}'); do
