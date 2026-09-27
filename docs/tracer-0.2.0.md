@@ -84,7 +84,16 @@ Paths under `/proc` now go through `canonicalize()`, which emulates those
 links. (With the loader gone the kernel's answer would now be the host path
 of the program; the emulation keeps it the guest path.)
 
-### 5. Seccomp acceleration: kept on (a retracted change)
+### 5. No termux-exec inside the tracer
+
+`dn-run` used to keep `LD_PRELOAD` (Termux's `libtermux-exec`) on the static
+and `--trace` routes. A Bionic program under the tracer then had its
+`execve("/usr/...")` rewritten to `$PREFIX/...` *before* the tracer saw it
+(found while testing: the first exec failed until `LD_PRELOAD` was unset).
+Every tracer route now unsets `LD_PRELOAD` and `DN_BIONIC_PRELOAD`; tested
+through `dn-run` with a Bionic `sh` child exec'ing `/usr/bin/busybox`.
+
+### 6. Seccomp acceleration: kept on (a retracted change)
 
 PRoot's own seccomp filter (stop only on syscalls it rewrites) first looked
 like it cost ~360 ms per start, and was briefly made opt-in. Interleaved
@@ -133,12 +142,6 @@ binaries in the same loop.
 
 ## Open
 
-- **termux-exec inside the tracer.** `dn-run` keeps `LD_PRELOAD` (Termux's
-  `libtermux-exec`) on the static and `--trace` routes. A Bionic program
-  under the tracer then has its `execve("/usr/...")` rewritten to
-  `$PREFIX/...` *before* the tracer sees it (found while testing: the first
-  exec failed until `LD_PRELOAD` was unset). Candidate fix: unset
-  `LD_PRELOAD` on every tracer route, as the NSS route already does.
 - **Drop the `proot` fallback** in `dn-run.c` (TODO) once `dn-trace` is
   always built — or keep it for installs without `make`/`libtalloc`.
 - **Small leftovers:** `/proc/self/auxv` handling in `syscall/exit.c` (now

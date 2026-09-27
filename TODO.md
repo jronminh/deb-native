@@ -103,6 +103,17 @@ sources themselves are verified since 0.2.0: the bootstrap fetches
 `debian-archive-keyring` and checks it against pinned fingerprints),
 the device hooks stay as a fallback.
 
+**Idea for later, not in 0.2.0: busybox as the maintainer-script toolbox.**
+Debian's dynamic `busybox` (glibc, so ld-dn + shim, no tracer) with its
+applet links in `priv/` could replace the base's script tools (`coreutils`,
+`sed`, `grep`, `findutils`, `diffutils`, `gzip`, `tar`, `mawk`,
+`debianutils`, `hostname`); a package depending on one of them then pulls
+the real one, keeping the dpkg db honest (no fake stand-ins). Before
+deciding: time the bootstrap per stage to see what those packages cost,
+then install packages with real maintainer scripts on a busybox-only base
+(GNU-only options such as `sed -z`, `grep -P` are the risk).
+`busybox-static` would need the tracer on every call -- not that one.
+
 **Prepared for later, not in 0.2.0: `sudo` in the prefix.** It never
 means Android root. Three kinds, stackable: pass-through (installers that
 just prefix `sudo`), fake root (`fakeroot`-style: uid 0 believed, ownership
@@ -268,7 +279,7 @@ Tracked in [#1](https://github.com/jronminh/deb-native/issues/1).
       - [x] replace `cli/` with the `dn-trace` front end; build it at setup;
             kernel exec instead of PRoot's loader
             ([`docs/tracer-0.2.0.md`](docs/tracer-0.2.0.md)).
-      - [ ] unset `LD_PRELOAD` (termux-exec) on every tracer route.
+      - [x] unset `LD_PRELOAD` (termux-exec) on every tracer route.
       - [ ] test `dn-run` → `dn-trace` from an installed prefix.
       - [ ] drop (or keep, for installs without `make`/`libtalloc`) the
             Termux `proot` fallback in `dn-run.c`.

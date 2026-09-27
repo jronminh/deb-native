@@ -197,10 +197,12 @@ static void launch_trace(char **args, int nss) {
 
   set_path();
   setenv("DN_INSTDIR", instdir, 1);
-  /* A glibc tracee must not inherit termux-exec/our shim: the tracer rewrites
-   * at the syscall layer; a Bionic preload would be the wrong libc. */
-  if (nss)
-    unsetenv("LD_PRELOAD");
+  /* No tracee inherits termux-exec or our shim: the tracer rewrites at the
+   * syscall layer. termux-exec would rewrite a Bionic child's
+   * execve("/usr/...") to $PREFIX/... before the tracer sees it, and for a
+   * glibc tracee a Bionic preload is the wrong libc. */
+  unsetenv("LD_PRELOAD");
+  unsetenv("DN_BIONIC_PRELOAD");
 
   static char *pargv[4096];
   static char binds[10][8192];
