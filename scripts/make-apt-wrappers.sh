@@ -66,4 +66,4 @@ exec sh "$REPO/scripts/dn-adopt.sh" "$INSTDIR" "\$@"
 EOF
 chmod 755 "$LAUNCHDIR/dn-adopt"
 
-echo "Installed termux-apt, termux-dpkg and termux-dn-doctor in $LAUNCHDIR."
+echo "Installed termux-apt, termux-dpkg, termux-dn-doctor, dn-shell and dn-adopt in $LAUNCHDIR."
