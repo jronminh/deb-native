@@ -344,6 +344,24 @@ a service needs something to run it and the rights it expects.
       counterpart of sudo-less's `systemd --user` translation. Until then
       they are no-ops: a package that ships a service installs, the service
       does not run.
+      **Design: systemd's face, runit's body.** Real systemd is out (PID 1,
+      or `--user` with cgroups and a session bus: Android gives an app
+      none); mimicking all of systemd is a trap. So: packages keep shipping
+      units and calling `deb-systemd-helper`/`systemctl`; deb-native
+      translates each unit at install (`ExecStart` foreground as the app
+      user, `Environment`/`EnvironmentFile`, `WorkingDirectory`,
+      `RuntimeDirectory`/`StateDirectory` -> `$DN/run/NAME`,
+      `$DN/var/lib/NAME`; `User=` and sandbox options dropped; low ports,
+      capabilities, devices -> refused with the reason); a small `systemctl`
+      front maps `start/stop/restart/status/enable/disable` to `sv` and the
+      service links, anything else says "not supported" (prior art:
+      `docker-systemctl-replacement`). Rule: translate what maps to a
+      supervised process, refuse the rest -- no growing systemd features.
+      Needs first: `/run` in the shim, system users in the prefix's
+      database (overlaps with sudo modes). Test ladder: `cron` -> `redis`
+      (a system user, a data dir) -> `dbus` (a socket in `/run`). Android
+      may kill background services (phantom-process killer, battery
+      optimisation): document the wake lock / battery settings.
 - [ ] 2. **sudo modes** (below): fake root + `base-passwd`'s users so
       `adduser`/`chown service-user` in maintainer scripts succeed.
 - [ ] 3. Both together: packages that need a system user *and* run a
