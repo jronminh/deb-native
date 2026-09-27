@@ -56,7 +56,12 @@ with the decisions below).
   `usr etc var opt`, `bin lib sbin` and `root`).
 - **Retired from main:** `native-seed.sh` (stub entries), `--force-architecture`,
   post-install `patch-elfs.sh`, `apt-install.sh`'s one-at-a-time loop.
-- **Kept from main:** runtime layer, "Termux wins" routing, `termux-dn-doctor`.
+- **Kept from main:** runtime layer, `termux-dn-doctor`.
+- **`apt`/`dpkg` are the prefix's** in the user's interactive shell (aliases in
+  the managed `~/.bashrc` block); Termux's are `pkg` (as Termux recommends),
+  `termux-apt`, `termux-dpkg`. Aliases never reach scripts, so `pkg` keeps
+  calling Termux's real apt/dpkg. Replaces 0.1.x's "Termux wins" routing
+  wrappers. Removal: `sed -i '/# deb-native/d' ~/.bashrc`.
 
 **Open**
 

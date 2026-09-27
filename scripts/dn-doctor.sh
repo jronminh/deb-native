@@ -2,10 +2,11 @@
 # deb-native doctor. Check (and with --fix, repair) the Termux <-> prefix
 # seams that go wrong in practice:
 #
-#   - a leaked `export APT_CONFIG=...` in the shell rc, which makes the apt
-#     wrapper's Termux call hit Debian too, so `apt update` shows only Debian;
+#   - a leaked `export APT_CONFIG=...` in the shell rc, which points
+#     Termux's own apt (pkg, termux-apt) at the prefix;
 #   - a Termux `sources.list` clobbered by installing into $PREFIX;
-#   - stale or missing apt wrappers / activation.
+#   - missing termux-apt/termux-dpkg, 0.1.x routing wrappers left on PATH,
+#     or missing activation.
 #
 # Usage: dn-doctor.sh [PREFIX] [--fix]
 #   PREFIX defaults to the deb-native launcher dir found on PATH, else ~/.dn.
@@ -87,19 +88,20 @@ fi
   && ok "glibc.list present" \
   || warn "glibc.list missing (glibc side-install repo)"
 
-# 4. The generated apt wrapper must drop APT_CONFIG and set it inline.
-if [ -x "$LAUNCHDIR/apt-get" ]; then
-  if grep -q "unset APT_CONFIG" "$LAUNCHDIR/apt-get"; then
-    ok "apt wrapper drops APT_CONFIG"
-  else
-    warn "apt wrapper predates the APT_CONFIG fix"
-    if [ "$FIX" = 1 ]; then
-      sh "$REPO/scripts/make-apt-wrappers.sh" "$ROOT" && ok "regenerated wrappers"
-    fi
-  fi
+# 4. termux-apt/termux-dpkg exist, and no 0.1.x routing wrapper is left on
+#    PATH (it would shadow Termux's apt for pkg).
+stale=""
+for n in apt apt-get apt-cache dpkg; do
+  [ -f "$LAUNCHDIR/$n" ] && grep -q "deb-native arch-aware" "$LAUNCHDIR/$n" && stale="$stale $n"
+done
+if [ -x "$LAUNCHDIR/termux-apt" ] && [ -x "$LAUNCHDIR/termux-dpkg" ] && [ -z "$stale" ]; then
+  ok "termux-apt/termux-dpkg present, no old routing wrappers"
 else
-  bad "no apt wrapper at $LAUNCHDIR (run make-apt-wrappers.sh)"
-  [ "$FIX" = 1 ] && [ -d "$ROOT" ] && sh "$REPO/scripts/make-apt-wrappers.sh" "$ROOT" && ok "generated wrappers"
+  [ -n "$stale" ] && warn "0.1.x routing wrappers still on PATH:$stale"
+  [ -x "$LAUNCHDIR/termux-apt" ] || warn "no termux-apt/termux-dpkg (run make-apt-wrappers.sh)"
+  if [ "$FIX" = 1 ] && [ -d "$ROOT" ]; then
+    sh "$REPO/scripts/make-apt-wrappers.sh" "$ROOT" && ok "regenerated wrappers"
+  fi
 fi
 
 # 5. Prefix state.

@@ -113,10 +113,9 @@ only as a fallback for packages not in the repo.
 
 - The runtime layer: shim, `dn-shell`/`dn-perl`, `dn-run`, launchers,
   `termux-dn-doctor`.
-- Routing ("Termux wins"): `apt install X` from Termux reaches the
-  prefix's apt for Debian-only packages. (A `dpkg -i` of a relabelled
-  `.deb` no longer routes by architecture; route by where the file came
-  from, or use the prefix's `dpkg` directly.)
+- ~~Routing ("Termux wins")~~ -- superseded: in the user's interactive
+  shell `apt`/`dpkg` are the prefix's (aliases), Termux's are `pkg`,
+  `termux-apt`, `termux-dpkg`; see `TODO.md`.
 
 ## Build order
 
