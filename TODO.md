@@ -67,7 +67,7 @@ Code's installer finishing by itself.
   binary takes seconds; self-verifying updaters see a changed file. State
   plainly in the README that downloaded executables get modified.
 
-**After alpha:** services (runit translation), `sudo` modes, busybox base,
+**After alpha:** services (runit translation), `sudo` modes,
 the pre-translated repo.
 
 ## 0.3.0 roadmap: a Debian-busybox base
