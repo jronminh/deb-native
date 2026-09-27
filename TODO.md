@@ -128,7 +128,14 @@ with the decisions below).
       100-package survey ([`docs/survey-0.2.0.md`](docs/survey-0.2.0.md):
       99 install, 98 run within the survey's limits, the other 2 fixed);
       `apt-get check` clean.
-- [ ] 8. Delete the prefix and confirm Termux is untouched.
+- [x] 8. Delete the prefix and confirm Termux is untouched (fe2,
+      2026-09-27: `rm -rf ~/.dn` + the `~/.bashrc` lines; Termux's
+      `sources.list`, `apt.conf.d`, foreign architectures and dpkg database
+      free of deb-native, `apt-get check` clean, `apt`/`dpkg` Termux's).
+- [ ] 9. priv `chroot`: `dbus-system-bus-common`'s postinst runs
+      `chroot "$DPKG_ROOT" ...`, which Android's seccomp kills (SIGSYS,
+      exit 159). When the target is the prefix, run the command directly
+      (the shim already makes the prefix `/`).
 
 **Next release (not 0.2.0): the repo** -- the same translation at repo
 build time in [`deb-native-repo`](https://github.com/jronminh/deb-native-repo)
