@@ -60,6 +60,22 @@ case "$DNPREFIX" in
     exit 1 ;;
 esac
 
+# --- log -------------------------------------------------------------------
+# Everything below goes to the screen and to a log file in the prefix, so a
+# run can be read back (and shared) afterwards. The first pass re-runs this
+# script with its output through tee and keeps the real exit code.
+if [ -z "${DN_INSTALL_LOG:-}" ]; then
+    mkdir -p "$DNPREFIX/var/log"
+    DN_INSTALL_LOG="$DNPREFIX/var/log/deb-native-install-$(date +%Y%m%d-%H%M%S).log"
+    export DN_INSTALL_LOG
+    printf 'log: %s\n' "$DN_INSTALL_LOG"
+    rcf=$(mktemp)
+    { sh "$HERE/install.sh" "$DNPREFIX" "$@" 2>&1; echo $? > "$rcf"; } | tee "$DN_INSTALL_LOG"
+    rc=$(cat "$rcf"); rm -f "$rcf"
+    printf 'log: %s (exit %s)\n' "$DN_INSTALL_LOG" "$rc"
+    exit "$rc"
+fi
+
 # --- run -------------------------------------------------------------------
 STEP=0
 TOTAL=2
