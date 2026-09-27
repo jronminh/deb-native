@@ -11,7 +11,7 @@ for what just landed.
 
 Bugs found in the 0.2.0 release, collected for a patch release.
 
-- [x] **`chroot` in maintainer scripts dies with SIGSYS** -- a package whose
+- [x] **`chroot` in maintainer scripts dies with SIGSYS** (released in v0.2.1-prealpha) -- a package whose
       postinst uses Debian's `chroot "$DPKG_ROOT"` pattern (`dbus`, and so
       `ipp-usb`, `avahi-daemon`) failed to configure, and every later apt
       run then ended in "Errors were encountered", even when the requested
