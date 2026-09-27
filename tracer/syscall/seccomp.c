@@ -356,8 +356,8 @@ static FilteredSysnum proot_sysnums[] = {
 	{ PR_faccessat2,	FILTER_SYSEXIT },
 	{ PR_fchdir,		FILTER_SYSEXIT },
 	{ PR_fchmodat,		0 },
-	{ PR_fchownat,		FILTER_SYSEXIT },
-	{ PR_fstatat64,		FILTER_SYSEXIT },
+	{ PR_fchownat,		0 },
+	{ PR_fstatat64,		0 },
 	{ PR_futimesat,		0 },
 	{ PR_getcwd,		FILTER_SYSEXIT },
 	{ PR_getpeername,	FILTER_SYSEXIT },
@@ -387,7 +387,7 @@ static FilteredSysnum proot_sysnums[] = {
 	{ PR_mknodat,		0 },
 	{ PR_mount,		FILTER_SYSEXIT },
 	{ PR_name_to_handle_at,	0 },
-	{ PR_newfstatat,	FILTER_SYSEXIT },
+	{ PR_newfstatat,	0 },
 	{ PR_oldlstat,		0 },
 	{ PR_oldstat,		0 },
 	{ PR_open,		0 },
@@ -431,7 +431,13 @@ static FilteredSysnum proot_sysnums[] = {
 	{ PR_utimes,		0 },
 	{ PR_wait4,		FILTER_SYSEXIT },
 	{ PR_waitpid,		FILTER_SYSEXIT },
-	/* deb-native fake root (syscall/exit.c): results rewritten at exit. */
+	FILTERED_SYSNUM_END,
+};
+
+/* deb-native fake root (syscall/exit.c): these stop at exit so their
+ * results can be rewritten. Filtered only while fake root is on
+ * (DN_ID=user turns it off), since stopping every stat() costs time.  */
+static FilteredSysnum fakeroot_sysnums[] = {
 	{ PR_getuid,		FILTER_SYSEXIT },
 	{ PR_geteuid,		FILTER_SYSEXIT },
 	{ PR_getgid,		FILTER_SYSEXIT },
@@ -450,6 +456,9 @@ static FilteredSysnum proot_sysnums[] = {
 	{ PR_setgroups,		FILTER_SYSEXIT },
 	{ PR_setfsuid,		FILTER_SYSEXIT },
 	{ PR_setfsgid,		FILTER_SYSEXIT },
+	{ PR_fchownat,		FILTER_SYSEXIT },
+	{ PR_newfstatat,	FILTER_SYSEXIT },
+	{ PR_fstatat64,		FILTER_SYSEXIT },
 	FILTERED_SYSNUM_END,
 };
 
@@ -520,6 +529,12 @@ int enable_syscall_filtering(const Tracee *tracee)
 	if (status < 0)
 		return status;
 
+	if (dn_fake_root()) {
+		status = merge_filtered_sysnums(tracee->ctx, &filtered_sysnums, fakeroot_sysnums);
+		if (status < 0)
+			return status;
+	}
+
 	/* Merge the sysnums required by the extensions to the list
 	 * of filtered sysnums.  */
 	if (tracee->extensions != NULL) {
@@ -555,6 +570,11 @@ int filtered_sysnum_flags(const Tracee *tracee, Sysnum sysnum)
 	for (i = 0; proot_sysnums[i].value != PR_void; i++) {
 		if (proot_sysnums[i].value == sysnum)
 			flags |= proot_sysnums[i].flags;
+	}
+
+	for (i = 0; dn_fake_root() && fakeroot_sysnums[i].value != PR_void; i++) {
+		if (fakeroot_sysnums[i].value == sysnum)
+			flags |= fakeroot_sysnums[i].flags;
 	}
 
 	if (tracee->extensions == NULL)
