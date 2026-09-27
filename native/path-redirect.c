@@ -87,6 +87,17 @@ static int g_fakeroot;
 static uid_t g_ruid;
 static gid_t g_rgid;
 
+/* Set NAME=VALUE in the environ array itself: a program's main() often
+ * reads its envp (bash does), which setenv() would leave behind when it
+ * copies the array. */
+extern char **environ;
+static void fake_env(const char *name, char *entry) {
+  size_t n = strlen(name);
+  for (char **e = environ; e && *e; e++)
+    if (strncmp(*e, name, n) == 0 && (*e)[n] == '=') { *e = entry; return; }
+  setenv(name, entry + n + 1, 1);
+}
+
 static void dn_init(void) {
   g_root = getenv("DN_INSTDIR");
   g_rootlen = g_root ? strlen(g_root) : 0;
@@ -97,8 +108,8 @@ static void dn_init(void) {
   g_ruid = (uid_t)syscall(SYS_getuid);
   g_rgid = (gid_t)syscall(SYS_getgid);
   if (g_fakeroot) {
-    setenv("USER", "root", 1);
-    setenv("LOGNAME", "root", 1);
+    fake_env("USER", "USER=root");
+    fake_env("LOGNAME", "LOGNAME=root");
   }
   g_init = 1;
 }
