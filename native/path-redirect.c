@@ -108,8 +108,10 @@ static void dn_init(void) {
   g_ruid = (uid_t)syscall(SYS_getuid);
   g_rgid = (gid_t)syscall(SYS_getgid);
   if (g_fakeroot) {
-    fake_env("USER", "USER=root");
-    fake_env("LOGNAME", "LOGNAME=root");
+    /* Writable: bash edits environment entries in place. */
+    static char user[] = "USER=root", logname[] = "LOGNAME=root";
+    fake_env("USER", user);
+    fake_env("LOGNAME", logname);
   }
   g_init = 1;
 }
