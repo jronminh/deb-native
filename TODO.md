@@ -174,6 +174,41 @@ sample (`docs/survey-0.2.0/`):
 | per-package regressions | -- | none |
 | maintainer scripts | pass | still pass: `ca-certificates`, `passwd`, `fastfetch`, a shell package (`add-shell`), `update-alternatives` users |
 
+## 0.4.0 roadmap: our own glibc (Debian's source + Android patches)
+
+Theme: match mainstream Debian for real. The prefix's `libc6` stops being
+an imposter (Termux's glibc under Debian's name, 0.3.0) and becomes
+**Debian's own glibc source, at Debian's exact version, with the Android
+patches applied by our own patch pipeline**.
+
+What it buys:
+- `libc6`, `libc6-dev`, `libc-bin`, `locales` at Debian's exact version,
+  headers matching the runtime -- no faked identity;
+- follows Debian: point releases and security fixes by rebuilding;
+- workarounds go, since we choose the build configuration: NSS reads the
+  prefix's `/etc` (no priv `getent`, no tracer for lookups); the loader's
+  default search path is the prefix's (no per-ELF RUNPATH patching);
+  `ld.so.conf.d` and `ldconfig` work;
+- Debian's own `perl`/`python3` safe to rely on (no Termux 5.42 vs
+  Debian 5.40 gap).
+
+What it needs:
+- [ ] **patch series:** termux-pacman's `glibc-packages` Android patches,
+      kept as our own series, updated per glibc version;
+- [ ] **build pipeline:** cross-build in CI (too slow on a phone),
+      producing `libc6`, `libc6-dev`, `libc-bin`, `locales` `.deb`s
+      versioned like Debian's (e.g. `2.41-12+deb13u4+dn1`);
+- [ ] **publishing:** `deb-native-repo`, shared with the prebuilt base
+      (0.3.0 option) -- one pipeline for both;
+- [ ] **fixed prefix path** built in (`/data/data/com.termux/files/home/.dn`,
+      the same on every Termux) -- settles the open "prefix location"
+      question;
+- [ ] **proof:** survey before/after, `gcc` hello-world, NSS without the
+      tracer.
+
+`ld-dn` stays: Android's root has no `/lib/ld-linux-aarch64.so.1`, so
+programs still need their interpreter pointed into the prefix.
+
 ## 0.2.0-prealpha roadmap: a self-contained prefix
 
 Goal: the prefix is a small, complete Debian system of its own -- its own
@@ -281,7 +316,8 @@ sources themselves are verified since 0.2.0: the bootstrap fetches
 `debian-archive-keyring` and checks it against pinned fingerprints),
 the device hooks stay as a fallback.
 
-**Next (0.2.x): `libc6` as Debian's exact identity.** The stand-in wraps
+**Next (0.3.0, temporary until 0.4.0's own glibc): `libc6` as Debian's
+exact identity.** The stand-in wraps
 Termux's patched glibc but is versioned like Termux's (`2.44-0dn1`), so
 `libc6-dev`, which needs `libc6 (= 2.41-12+deb13u4)`, cannot install: every
 toolchain is blocked (survey run 1, via `ghc`). Plan:
