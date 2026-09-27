@@ -105,6 +105,22 @@ What it costs:
 In one line: proot-distro puts a Debian machine next to Termux;
 deb-native puts Debian's packages into it.
 
+**The same idea as [sudo-less](https://github.com/jronminh/sudo-less), for
+a platform that is not Debian.** sudo-less installs Debian packages without
+root *on Debian*: the host already is the Debian base, and the kernel's
+namespaces lay the user's prefix over it. Termux is not Debian, only
+Debian-compatible once glibc is there, and Android forbids those namespaces.
+So deb-native needs what sudo-less does not:
+
+- **a bootstrap stage** -- the Debian base the host would have provided
+  (`base-files`, `base-passwd`, `dash`, `coreutils`, `debconf`, ...) is
+  built into `~/.dn` first, around a `libc6` stand-in for Termux's glibc;
+- **translation instead of a kernel view** -- packages are fixed at install
+  and programs find the prefix through `ld-dn` and the shim.
+
+Same goal, same scope (Debian sections, the same "admin" signals), same
+proof (a random survey, installed to `ii` and run by name).
+
 ## How it works
 
 **The prefix.** `install.sh` builds `~/.dn` debootstrap-style: Debian's
