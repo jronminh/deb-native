@@ -38,7 +38,20 @@ LIBDIR="$DN/usr/lib/aarch64-linux-gnu"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
-dpkg-deb -R "$DEB" "$WORK/pkg"
+mkdir -p "$WORK/pkg"
+dpkg-deb -e "$DEB" "$WORK/pkg/DEBIAN"
+# Android refuses link(2) in app data (EACCES), so a hard link in the
+# package (perl-base: perl5.40.1 -> perl) breaks the unpack here and would
+# break dpkg's. Hard links become copies: extracted without them, then
+# copied from their target; the repacked package has plain files.
+dpkg-deb --fsys-tarfile "$DEB" | tar -tvf - |
+  sed -n 's/^h.* \(\.\/[^ ]*\) link to \(\.\/.*\)$/\1\t\2/p' > "$WORK/hardlinks"
+cut -f1 "$WORK/hardlinks" > "$WORK/hardlinks.exclude"
+dpkg-deb --fsys-tarfile "$DEB" |
+  tar -xpf - -C "$WORK/pkg" --no-wildcards --exclude-from="$WORK/hardlinks.exclude"
+while IFS="$(printf '\t')" read -r link target; do
+  cp -p "$WORK/pkg/$target" "$WORK/pkg/$link"
+done < "$WORK/hardlinks"
 PKG=$(sed -n 's/^Package: //p' "$WORK/pkg/DEBIAN/control")
 echo "Translating $PKG:arm64 ($(sed -n 's/^Version: //p' "$WORK/pkg/DEBIAN/control")) ..."
 
