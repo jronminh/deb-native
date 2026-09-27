@@ -148,6 +148,10 @@ Termux with `git`, `clang`, and the glibc side-install
 `bash-glibc`, `perl`, the loader and libraries). Everything else the project
 needs (`apt`, `dpkg`, `dpkg-deb`) ships with Termux.
 
+Optional: `make` and `libtalloc` (`pkg install make libtalloc`) to build the
+syscall tracer, needed by static programs and ones making their own syscalls.
+Without them those programs run untranslated.
+
 ## Documentation
 
 - [`docs/design.md`](docs/design.md) — the design end to end.

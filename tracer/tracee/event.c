@@ -133,9 +133,14 @@ int launch_process(Tracee *tracee, char *const argv[])
 		 * does the same thing. */
 		kill(getpid(), SIGSTOP);
 
-		/* Improve performance by using seccomp mode 2, unless
-		 * this support is explicitly disabled.  */
-		if (getenv("PROOT_NO_SECCOMP") == NULL)
+		/* deb-native: seccomp mode 2 ("stop only on path syscalls")
+		 * is opt-in (PROOT_SECCOMP=1), not the default. Measured on
+		 * the test device (busybox-static): it adds ~360 ms to every
+		 * start (~410 ms vs ~50 ms) and saves only ~5% on a
+		 * syscall-heavy job (find over 24k files: 16.5 s vs 17.3 s).
+		 * Android's own seccomp SIGSYS emulation (tracee/seccomp.c)
+		 * is separate and stays on. PROOT_NO_SECCOMP still wins.  */
+		if (getenv("PROOT_SECCOMP") != NULL && getenv("PROOT_NO_SECCOMP") == NULL)
 			(void) enable_syscall_filtering(tracee);
 
 		/* Now process is ptraced, so the current rootfs is already the

@@ -77,12 +77,23 @@ if stale "$CACHE/ld-dn" "$SRC/ld-dn.c"; then
 fi
 put "$CACHE/ld-dn" "$LIBDIR/ld-dn"
 
-# The syscall tracer (fork-lite) used for static binaries and glibc NSS. Built
-# from tracer/ (`make CC=clang`, needs libtalloc); install a prebuilt one if
-# present, otherwise dn-run falls back to Termux's proot.
-TRACER_SRC="$HERE/../tracer/proot"
-if [ -x "$TRACER_SRC" ]; then
-  put "$TRACER_SRC" "$LIBDIR/dn-trace"
+# The syscall tracer (fork-lite, tracer/) for what ld-dn and the shim cannot
+# reach: static binaries (which Android's seccomp filter also kills without
+# its syscall emulation), programs making their own syscalls, NSS. Built here
+# when its build needs are present (pkg install make libtalloc), once per
+# checkout like the rest; without them those programs run untranslated
+# (dn-run falls back to Termux's proot if installed).
+TRACER="$HERE/../tracer"
+if [ -x "$(command -v make || true)" ] && [ -e "$PREFIX_DIR/lib/libtalloc.so" ]; then
+  if [ ! -x "$TRACER/proot" ] || [ -n "$(find "$TRACER" -name '*.[ch]' -newer "$TRACER/proot" | head -n1)" ]; then
+    echo "Building the tracer (dn-trace) ..."
+    make -C "$TRACER" CC=clang
+  fi
+else
+  echo "W: tracer not built (needs: pkg install make libtalloc); static programs will run untranslated"
+fi
+if [ -x "$TRACER/proot" ]; then
+  put "$TRACER/proot" "$LIBDIR/dn-trace"
 fi
 
 # The maintainer-script launcher. One binary, dispatched by its own argv[0]

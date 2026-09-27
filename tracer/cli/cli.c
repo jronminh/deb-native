@@ -135,7 +135,7 @@ static void print_execve_help(const Tracee *tracee, const char *argv0, int statu
 	}
 
 	/* Ubuntu kernel bug?  */
-	if (status == -EPERM && getenv("PROOT_NO_SECCOMP") == NULL) {
+	if (status == -EPERM && getenv("PROOT_SECCOMP") != NULL && getenv("PROOT_NO_SECCOMP") == NULL) {
 		note(tracee, INFO, USER,
 "It seems your kernel contains this bug: https://bugs.launchpad.net/ubuntu/+source/linux/+bug/1202161\n"
 "To workaround it, set the env. variable PROOT_NO_SECCOMP to 1.");

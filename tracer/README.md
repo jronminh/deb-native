@@ -93,3 +93,23 @@ Write ourselves:
 
 Then `native/dn-run.c`'s direct-usage route points at `dn-trace`, keeping
 `proot` as the fallback.
+
+## Seccomp acceleration: opt-in
+
+PRoot installs a seccomp filter so only the syscalls it rewrites stop the
+tracee. Measured on the test device (Debian `busybox-static`, 2026-09-27):
+a traced start took ~410 ms with it and ~50 ms without (untraced: ~8 ms),
+while a syscall-heavy `busybox find` over the prefix went only from 17.3 s
+to 16.5 s. Most runs are short, so it is off unless `PROOT_SECCOMP=1` is set
+(`tracee/event.c`); `PROOT_NO_SECCOMP` still wins, and `dn-run` sets it so
+Termux's `proot` as the fallback behaves the same.
+
+Its SIGSYS emulation (`tracee/seccomp.c`) is separate and stays: it is what
+lets a static binary survive Android's app seccomp filter (untraced,
+`busybox find` is killed with SIGSYS).
+
+## Build
+
+`setup-runtime.sh` runs `make CC=clang` here when `make` and `libtalloc` are
+installed (`pkg install make libtalloc`) and copies `proot` into the prefix
+as `usr/lib/deb-native/dn-trace`.
