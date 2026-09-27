@@ -66,7 +66,8 @@ launcher() {  # PKGDIR NAME COMMAND...
 # --- libc6 -------------------------------------------------------------
 V=$(ver glibc)
 if installed libc6 "$V"; then echo "standins: libc6 $V already installed"; else
-  FN=$(APT_CONFIG="$DN/etc/apt.conf" "$TP/bin/apt-cache" show libc6:arm64 2>/dev/null | awk '/^Filename:/ {print $2; exit}')
+  # The bootstrap has no prefix apt config yet: it passes its temporary one.
+  FN=$(APT_CONFIG="${DN_APT_CONFIG:-$DN/etc/apt.conf}" "$TP/bin/apt-cache" show libc6:arm64 2>/dev/null | awk '/^Filename:/ {print $2; exit}')
   [ -n "$FN" ] || { echo "standins: Debian's libc6 is not in the prefix's apt index; run apt update first" >&2; exit 1; }
   curl -fsSL -o "$WORK/libc6-debian.deb" "$MIRROR/$FN"
   control libc6 "$V" same "Termux glibc presented as Debian's libc6"
