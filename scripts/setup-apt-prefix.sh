@@ -26,8 +26,11 @@
 #
 # Usage: setup-apt-prefix.sh NEWPREFIX [debian-suite (default: stable)]
 #
-# KNOWN INSECURE SHORTCUT: sources use [trusted=yes] -- Termux ships no Debian
-# archive keyring. A signed deb-native repo is the next release's fix.
+# Signatures: Termux ships no Debian keys, so the very first index download
+# is unverified; the bootstrap then fetches debian-archive-keyring, accepts it
+# only if it verifies that index with a key whose fingerprint is written
+# below (DEBIAN_KEYS), and from then on apt verifies everything. The keyring
+# is installed into the prefix, so the prefix's own apt verifies too.
 set -eu
 umask 022
 NEWPREFIX=${1:?usage: setup-apt-prefix.sh NEWPREFIX [suite]}
@@ -47,6 +50,20 @@ TOOLS="mawk coreutils sed grep findutils"
 SYSTEM="base-files base-passwd dash debianutils diffutils gzip tar hostname ncurses-base ncurses-bin"
 CONFIG="debconf cdebconf openssl ca-certificates"
 BASE="$TOOLS $SYSTEM $CONFIG"
+# Not held: new Debian releases bring new keys through it.
+KEYRING="debian-archive-keyring"
+
+# Trust anchor: the primary fingerprints of Debian's archive keys for the
+# current and previous stable release, as shipped in Debian's own
+# debian-archive-keyring (usr/share/keyrings/debian-archive-keyring.gpg).
+# A new Debian release signs with new keys: add them here.
+DEBIAN_KEYS="
+04B54C3CDCA79751B16BC6B5225629DF75B188BD
+5E04A1E3223A19A20706E20F9904613D4CCE68C6
+41587F7DB8C774BCCF131416762F67A0B2C39DE4
+B8B80B5B623EAB6AD8775C45B7C5D7D6350947F8
+05AB90340C0C5E797F44A8C8254CF3B5AEC0A8F0
+4D64FEC119C2029067D6E791F8D2585B8783D481"
 
 # Safety: never inside Termux's own prefix (that is the naibed branch's
 # one-way transformation, not this).
@@ -57,11 +74,12 @@ case "$DN" in
     exit 1 ;;
 esac
 
-write_sources() {  # FILE
+write_sources() {  # FILE [OPTIONS]  (OPTIONS: "trusted=yes" for the one unverified fetch)
+  o="arch=arm64${2:+ $2}"
   cat > "$1" <<EOF
-deb [trusted=yes arch=arm64] https://deb.debian.org/debian $SUITE main contrib non-free-firmware
-deb [trusted=yes arch=arm64] https://deb.debian.org/debian ${SUITE}-updates main contrib non-free-firmware
-deb [trusted=yes arch=arm64] https://security.debian.org/debian-security ${SUITE}-security main contrib non-free-firmware
+deb [$o] https://deb.debian.org/debian $SUITE main contrib non-free-firmware
+deb [$o] https://deb.debian.org/debian ${SUITE}-updates main contrib non-free-firmware
+deb [$o] https://security.debian.org/debian-security ${SUITE}-security main contrib non-free-firmware
 EOF
 }
 # Debian's own copies of the stand-ins must never install: its libc6 dies
@@ -100,8 +118,9 @@ fi
 # file is the prefix's, so the stand-ins count as installed.
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/lists/partial" "$T/cache" "$T/debs/partial" "$T/etc/apt.conf.d" "$T/log"
-write_sources "$T/sources.list"
+mkdir -p "$T/lists/partial" "$T/cache" "$T/debs/partial" "$T/keyring/partial" \
+         "$T/etc/apt.conf.d" "$T/etc/trusted.gpg.d" "$T/log"
+write_sources "$T/sources.list" trusted=yes
 write_pins "$T/prefs"
 cat > "$T/apt.conf" <<EOF
 Dir::State "$T";
@@ -122,6 +141,30 @@ Acquire::Languages "none";
 EOF
 TAPT="env APT_CONFIG=$T/apt.conf $TP/bin/apt-get"
 $TAPT update
+
+# Signatures. The index above came in unverified (Termux has no Debian keys):
+# fetch Debian's keyring package, and accept it only if every InRelease
+# verifies with it (gpgv) under a key whose primary fingerprint is one of
+# DEBIAN_KEYS. Then switch the temp config to verified sources and update
+# again: from here on apt checks every signature and hash itself.
+$TAPT install -y --download-only -o Dir::Cache::archives="$T/keyring" "$KEYRING"
+dpkg-deb -x "$T"/keyring/${KEYRING}_*.deb "$T/keyring/x"
+for rel in "$T"/lists/*InRelease; do
+  st=$(gpgv --status-fd 1 --keyring "$T/keyring/x/usr/share/keyrings/debian-archive-keyring.gpg" "$rel" 2>&1) || true
+  good=""
+  for fpr in $(printf '%s\n' "$st" | awk '/VALIDSIG/ {print $NF}'); do
+    case "$DEBIAN_KEYS" in *"$fpr"*) good=$fpr ;; esac
+  done
+  if [ -z "$good" ] || printf '%s\n' "$st" | grep -q 'BADSIG'; then
+    echo "setup-apt-prefix: ${rel##*/} is not signed by a known Debian archive key; refusing" >&2
+    printf '%s\n' "$st" >&2
+    exit 1
+  fi
+  echo "==> [0] ${rel##*/}: signed by Debian key $good"
+done
+cp "$T"/keyring/x/etc/apt/trusted.gpg.d/*.asc "$T/etc/trusted.gpg.d/"
+write_sources "$T/sources.list"
+$TAPT update
 # Keep the raw lists for stage 1's apt update (unchanged files are not
 # fetched again), then rewrite Architecture: all -> arm64 in the temp copy.
 mkdir -p "$DN/var/lib/apt/lists/partial"
@@ -130,7 +173,7 @@ cp "$T"/lists/*_Packages "$T"/lists/*Release "$DN/var/lib/apt/lists/" || true
 DN_APT_CONFIG="$T/apt.conf" "$HERE/dn-standins.sh" "$DN"
 
 # 3. Download the base and its dependencies.
-$TAPT install -y --download-only $BASE
+$TAPT install -y --download-only $BASE $KEYRING
 echo "==> [0] downloaded $(ls "$T"/debs/*.deb | wc -l) packages"
 
 # 4. Translate, in Termux's environment (no apt hooks involved).
@@ -156,7 +199,7 @@ $DPKG --configure -a
 for p in $BASE; do echo "$p:arm64 hold"; done | "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --set-selections
 # The base is the prefix's own system, not programs for the user's shell:
 # make-launchers.sh gives it no launchers, so Termux's ls/sed/grep stay first.
-echo $BASE | tr ' ' '\n' > "$DN/var/lib/deb-native/base-packages"
+echo $BASE $KEYRING | tr ' ' '\n' > "$DN/var/lib/deb-native/base-packages"
 "$HERE/dn-fix-alternatives.sh" "$DN"
 "$HERE/normalize-symlinks.sh" "$DN"
 echo "==> [0] base installed and held: $BASE"

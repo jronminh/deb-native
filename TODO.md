@@ -91,7 +91,9 @@ with the decisions below).
 
 **Next release (not 0.2.0): the repo** -- the same translation at repo
 build time in [`deb-native-repo`](https://github.com/jronminh/deb-native-repo)
-(private): packages arrive translated and signed (ends `[trusted=yes]`),
+(private): packages arrive translated and signed by deb-native (the Debian
+sources themselves are verified since 0.2.0: the bootstrap fetches
+`debian-archive-keyring` and checks it against pinned fingerprints),
 the device hooks stay as a fallback.
 
 **Prepared for later, not in 0.2.0: `sudo` in the prefix.** It never
