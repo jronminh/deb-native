@@ -93,7 +93,7 @@ if installed libc6 "$V"; then echo "libc6:arm64 is already the newest version ($
 fi
 
 # --- dpkg --------------------------------------------------------------
-V=$(ver dpkg 2)
+V=$(ver dpkg 3)
 if installed dpkg "$V"; then echo "dpkg:arm64 is already the newest version ($V)."; else
   control dpkg "$V" foreign "Termux's dpkg, pointed at the prefix"
   A="--admindir=$DN/var/lib/dpkg"
@@ -107,7 +107,10 @@ if installed dpkg "$V"; then echo "dpkg:arm64 is already the newest version ($V)
   # a shell script, DPKG_ROOT-aware, calling dpkg/dpkg-query by name --
   # which in a maintainer script are the prefix's launchers above.
   debian_deb dpkg "$WORK/dpkg-debian.deb"
-  dpkg-deb --fsys-tarfile "$WORK/dpkg-debian.deb" | tar -x -C "$WORK/dpkg" ./usr/bin/dpkg-maintscript-helper
+  # It loads one library file of its own, /usr/share/dpkg/sh/dpkg-error.sh
+  # (which the shim maps into the prefix): ship both.
+  dpkg-deb --fsys-tarfile "$WORK/dpkg-debian.deb" | tar -x -C "$WORK/dpkg" \
+    ./usr/bin/dpkg-maintscript-helper ./usr/share/dpkg/sh/dpkg-error.sh
   install_pkg dpkg "$V"
 fi
 
