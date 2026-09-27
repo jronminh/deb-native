@@ -68,7 +68,9 @@ Code's installer finishing by itself.
   plainly in the README that downloaded executables get modified.
 
 **After alpha:** services (runit translation), `sudo` modes,
-the pre-translated repo.
+the pre-translated repo, and **true fusion rebuilt on the 0.2 core** (the
+`naibed` branch, frozen until alpha: `ld-dn`, `dn-trace`, the translator
+and the priv layer, with Termux's prefix as the root).
 
 ## 0.3.0 roadmap: a Debian-busybox base
 

@@ -227,6 +227,9 @@ and dpkg database, Termux reduced to the packages it runs on. It is
 itself, not just a Debian program, and there is no switch back. See its
 [`docs/true-fusion.md`](https://github.com/jronminh/deb-native/blob/naibed/docs/true-fusion.md)
 before touching it. `main`'s separate prefix stays the recommended path.
+**Frozen until `main` reaches alpha**: it predates 0.2.x (`ld-dn`,
+`dn-trace`, the survey) and gets no new work until it is rebuilt on
+`main`'s core.
 
 ## Requirements
 
