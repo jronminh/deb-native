@@ -70,6 +70,39 @@ Code's installer finishing by itself.
 **After alpha:** services (runit translation), `sudo` modes, busybox base,
 the pre-translated repo.
 
+## 0.3.0 roadmap: a Debian-busybox base
+
+Theme: a lighter bootstrap. Not a package swap -- a different kind of
+Debian base, as in Debian's own installer environment: Debian's `busybox`
+(dynamic, glibc: ld-dn + shim, no tracer; not `busybox-static`) in place
+of the GNU tool packages
+`mawk coreutils sed grep findutils debianutils diffutils gzip tar hostname`.
+Design doc first (`docs/design-0.3.0.md`), then build. Findings so far
+(trixie index, 2026-09-27):
+
+- **The kept base depends on them:** `base-files` Depends `awk`, `dash`
+  Pre-Depends `debianutils (>= 5.6-0.1)`. Without a stand-in providing
+  them, dpkg's database is broken and apt pulls them straight back; with
+  one, the real packages may never install. Decide the stand-in rules
+  (`Provides:` only? versioned? replaceable by the real package?).
+- **9 of the 10 are Essential:** Debian packages do not declare
+  dependencies on them and assume GNU behaviour. Measure the breakage
+  (GNU-only options: `sed -z`, `grep -P`, GNU `find`), e.g. a survey run
+  on the busybox base against the same sample.
+- **`debianutils` has no busybox equivalent** for `add-shell`,
+  `remove-shell` (every shell package's postinst), `savelog`,
+  `update-shells`: keep it, or priv versions.
+- **coreutils:** Termux's `coreutils-glibc` is already on maintainer
+  scripts' `PATH`; maybe no replacement is needed.
+- **Gain:** ~5 MB less to download (`coreutils` 2.9 MB, `tar` 0.8,
+  `findutils` 0.7, the rest ~1.5; `busybox` +0.45). The real gain is
+  probably translation time (`coreutils` alone ~100 ELFs): **measure the
+  bootstrap per stage first.**
+- **Migration:** existing 0.2.x prefixes keep the GNU base or get
+  converted; say which in the release notes.
+- **Maybe together:** `libc6` as Debian's exact identity also changes the
+  base; doing both at once means one reinstall for users.
+
 ## 0.2.0-prealpha roadmap: a self-contained prefix
 
 Goal: the prefix is a small, complete Debian system of its own -- its own
@@ -208,17 +241,6 @@ a service needs something to run it and the rights it expects.
       `adduser`/`chown service-user` in maintainer scripts succeed.
 - [ ] 3. Both together: packages that need a system user *and* run a
       daemon -- sudo-less's service support, matched.
-
-**Idea for later, not in 0.2.0: busybox as the maintainer-script toolbox.**
-Debian's dynamic `busybox` (glibc, so ld-dn + shim, no tracer) with its
-applet links in `priv/` could replace the base's script tools (`coreutils`,
-`sed`, `grep`, `findutils`, `diffutils`, `gzip`, `tar`, `mawk`,
-`debianutils`, `hostname`); a package depending on one of them then pulls
-the real one, keeping the dpkg db honest (no fake stand-ins). Before
-deciding: time the bootstrap per stage to see what those packages cost,
-then install packages with real maintainer scripts on a busybox-only base
-(GNU-only options such as `sed -z`, `grep -P` are the risk).
-`busybox-static` would need the tracer on every call -- not that one.
 
 **Prepared for later, not in 0.2.0: `sudo` in the prefix.** It never
 means Android root. Three kinds, stackable: pass-through (installers that
