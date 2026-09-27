@@ -155,3 +155,39 @@ cat > "$PRIV/dpkg-divert" <<EOF
 exec "$PREFIX_DIR/bin/dpkg-divert" --admindir "$INSTDIR/var/lib/dpkg" --instdir "$INSTDIR" "\$@"
 EOF
 chmod 755 "$PRIV/dpkg-divert"
+
+# getent: a maintainer script's account checks (passwd's postinst:
+# `getent group shadow`, then groupadd if missing) reach Termux's glibc
+# getent, whose NSS reads $PREFIX_DIR/glibc/etc -- libc-internal, so the
+# shim cannot redirect it (survey 2026-09-27: passwd failed to configure,
+# groupadd aborting on the audit interface). The account databases are
+# answered from the prefix's own files; everything else (hosts, services,
+# ...) goes to the real getent.
+cat > "$PRIV/getent" <<EOF
+#!/system/bin/sh
+case "\$1" in
+  passwd|group|shadow|gshadow) ;;
+  *) exec "$GLIBC/bin/getent" "\$@" ;;
+esac
+db=\$1; shift
+f="$INSTDIR/etc/\$db"
+[ -r "\$f" ] || exit 2
+if [ \$# -eq 0 ]; then
+  while IFS= read -r line; do case "\$line" in ''|'#'*) ;; *) echo "\$line" ;; esac; done < "\$f"
+  exit 0
+fi
+rc=0
+for key in "\$@"; do
+  hit=
+  while IFS= read -r line; do
+    name=\${line%%:*}; rest=\${line#*:}; rest=\${rest#*:}; id=\${rest%%:*}
+    case "\$db" in passwd|group) ;; *) id= ;; esac
+    if [ "\$key" = "\$name" ] || { [ -n "\$id" ] && [ "\$key" = "\$id" ]; }; then
+      echo "\$line"; hit=1; break
+    fi
+  done < "\$f"
+  [ -n "\$hit" ] || rc=2
+done
+exit \$rc
+EOF
+chmod 755 "$PRIV/getent"
