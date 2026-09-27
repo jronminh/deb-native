@@ -5,6 +5,7 @@
 #                             prefix's apt/dpkg can never shadow
 #   termux-dn-doctor          the deb-native checks (dn-doctor.sh)
 #   dn-shell                  an interactive shell inside the prefix
+#   dn-adopt FILE...          run a downloaded glibc program through the prefix
 #
 # Since 0.2.0 the plain names `apt`, `apt-get`, `apt-cache`, `apt-mark`,
 # `dpkg`, `dpkg-query` typed in an interactive shell are the prefix's own
@@ -55,5 +56,14 @@ chmod 755 "$LAUNCHDIR/termux-dn-doctor"
 # first on PATH), so a script run from it sees Debian's /usr, /etc, /opt.
 # For trying direct installers (`curl ... | bash`); `exit` returns to Termux.
 ln -sfn "$INSTDIR/usr/bin/dn-shell" "$LAUNCHDIR/dn-shell"
+
+# dn-adopt: make a glibc program obtained outside apt run through the
+# prefix (dn-adopt.sh).
+cat > "$LAUNCHDIR/dn-adopt" <<EOF
+#!/system/bin/sh
+# deb-native dn-adopt (generated; do not edit).
+exec sh "$REPO/scripts/dn-adopt.sh" "$INSTDIR" "\$@"
+EOF
+chmod 755 "$LAUNCHDIR/dn-adopt"
 
 echo "Installed termux-apt, termux-dpkg and termux-dn-doctor in $LAUNCHDIR."
