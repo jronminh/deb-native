@@ -103,6 +103,40 @@ Design doc first (`docs/design-0.3.0.md`), then build. Findings so far
 - **Maybe together:** `libc6` as Debian's exact identity also changes the
   base; doing both at once means one reinstall for users.
 
+**Options to weigh in the design doc** (busybox is one of them; they
+combine):
+
+*Replace the GNU tools with something smaller:*
+- **busybox** (above): covers almost all 10; the Essential/stand-in issues.
+- **toybox** (Android's own multi-call set, also packaged in Debian):
+  smaller, less complete (awk, some options), less proven for Debian's
+  maintainer scripts.
+- **uutils coreutils** (Rust, one binary; Debian `rust-coreutils`):
+  `coreutils` only, aims at GNU compatibility (Ubuntu is adopting it);
+  `sed`/`grep`/`find` stay GNU.
+- **Termux's glibc tools:** a `coreutils` stand-in pointing at Termux's
+  `coreutils-glibc` (installed already, on maintainer scripts' `PATH`),
+  like the `libc6` stand-in: nothing to download or translate, GNU
+  behaviour kept.
+
+*Keep the GNU Debian base, install it faster:*
+- **Prebuilt base:** build and translate the base once (CI /
+  `deb-native-repo`), ship it as a tarball; the bootstrap downloads and
+  unpacks it -- skips most of translate (41s) + configure (23s), and the
+  base stays fully Debian. Translated files embed the prefix path, so it
+  fits the default `~/.dn` (the same on every Termux); other paths fall
+  back to today's local bootstrap. Likely the largest win; close to how
+  Termux itself installs (a bootstrap zip).
+- **Parallel translation:** several packages at once (phones have many
+  cores).
+- **Slimmer configure:** find what the 23s is (probably
+  `ca-certificates`' rebuild, `debconf`) before cutting.
+- **Clean the apt cache after bootstrap** (-85 MB): trivial, could go
+  into 0.2.x.
+
+Leaning: prebuilt base + cache cleaning (+ parallel translation) first;
+a busybox base only if size still matters after that.
+
 **Baseline (0.2.0, fe2, 2026-09-27 20:02, fresh install, tracer prebuilt):**
 
 | stage | time |
