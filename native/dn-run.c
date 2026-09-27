@@ -230,10 +230,6 @@ static void launch_trace(char **args, int nss) {
   while (args[ac]) ac++;
   for (int i = 0; i < ac && n < 4090; i++) pargv[n++] = args[i];
   pargv[n] = NULL;
-  /* PRoot's seccomp acceleration costs ~360 ms per start on the test
-   * device and saves ~5% on syscall-heavy work (tracer/tracee/event.c):
-   * off, also for Termux's proot as the fallback. */
-  setenv("PROOT_NO_SECCOMP", "1", 0);
   execv(tracer, pargv);
   die("execv tracer");
 }

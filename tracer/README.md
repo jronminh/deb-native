@@ -94,6 +94,56 @@ Write ourselves:
 Then `native/dn-run.c`'s direct-usage route points at `dn-trace`, keeping
 `proot` as the fallback.
 
+## Seccomp acceleration: kept on
+
+PRoot installs a seccomp filter so only the syscalls it rewrites stop the
+tracee (`PROOT_NO_SECCOMP=1` turns it off). A first measurement on the test
+device suggested it cost ~360 ms per start; interleaved re-runs
+(2026-09-27, Debian `busybox-static`, minimum of 30 each) showed no
+difference: ~81 ms either way. Single timings on that device swing from
+~50 ms to ~900 ms, so compare interleaved minimums, not one run. Upstream's
+default stays.
+
+Its SIGSYS emulation (`tracee/seccomp.c`) is separate: it is what lets a
+static binary survive Android's app seccomp filter (untraced,
+`busybox find` is killed with SIGSYS).
+
+## Build
+
+```
+cd tracer
+make CC=clang        # produces ./proot
+```
+
+## Prune plan (fork-lite)
+
+Keep:
+
+- `ptrace/`, `tracee/`
+- `syscall/{enter,exit,seccomp,chain,sysnum}.c` and `sysnums-arm64.h`
+- `path/`, `execve/`, `arch.h`, `compat.h`
+- `extension/{extension.c,extension.h}` — the framework only (core call sites
+  keep linking; with no extension initialized, its hooks are no-ops).
+
+Drop (done):
+
+- `extension/*/` — every concrete extension (`fake_id0`, `link2symlink`,
+  `sysvipc`, `ashmem_memfd`, `kompat`, `hidden_files`, `mountinfo`,
+  `port_switch`, `fix_symlink_size`). Their init calls live in `cli/proot.c`
+  and `cli/cli.c` and are now no-ops.
+- `loader/` m32 and the non-arm64 loaders (`HAS_LOADER_32BIT` removed from
+  `arch.h`, `assembly-{arm,x86,x86_64}.h` deleted), and the other-arch
+  `sysnums-*.h`.
+
+Write ourselves:
+
+- a small `main`/binder replacing `cli/`, which binds `$INSTDIR` over
+  `/usr /etc /var /opt`, handles guest paths that do not exist (proot errors
+  on them), and sets `DN_INSTDIR`/`PATH` — producing a `dn-trace` binary.
+
+Then `native/dn-run.c`'s direct-usage route points at `dn-trace`, keeping
+`proot` as the fallback.
+
 ## Seccomp acceleration: opt-in
 
 PRoot installs a seccomp filter so only the syscalls it rewrites stop the
