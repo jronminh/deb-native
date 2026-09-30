@@ -1543,6 +1543,33 @@ int posix_spawn(pid_t *pid, const char *path,
     real = (posix_spawn_t)dlsym(RTLD_NEXT, "posix_spawn");
   char buf[4096];
   const char *rp = rewrite(path, buf, sizeof buf);
+  /* Same three-way branch as do_exec() (execve's dispatcher) -- found
+   * missing here during the 2026-09-30 runtime-component audit: this
+   * used to only classify glibc-vs-Bionic and skip the script/shebang
+   * branch entirely, so a script spawned via posix_spawn (glibc's own
+   * system()/popen() can use it internally) never got its shebang
+   * interpreter remapped to ld-dn/dn-shell the way execve's targets do,
+   * and -- since a plain-text script fails target_is_glibc()'s ELF-magic
+   * check -- was always treated as a Bionic target regardless of what it
+   * actually needed. */
+  char interp[256], sarg[256];
+  if (target_is_script(rp, interp, sizeof interp, sarg, sizeof sarg)) {
+    char ibuf[4096];
+    const char *iw = map_shebang_interp(interp, ibuf, sizeof ibuf);
+    if (iw && access(iw, X_OK) == 0) {
+      static char *na[1024];
+      int ac = 0;
+      while (argv && argv[ac]) ac++;
+      int idx = 0;
+      na[idx++] = (char *)iw;
+      if (sarg[0]) na[idx++] = sarg;
+      na[idx++] = (char *)rp;
+      for (int i = 1; i < ac && idx < 1022; i++) na[idx++] = argv[i];
+      na[idx] = NULL;
+      return real(pid, iw, fa, attr, na, bionic_env(envp));
+    }
+    return real(pid, rp, fa, attr, argv, bionic_env(envp));
+  }
   if (target_is_glibc(rp))
     return real(pid, rp, fa, attr, argv, envp);
   return real(pid, rp, fa, attr, argv, bionic_env(envp));
