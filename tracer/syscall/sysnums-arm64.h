@@ -278,6 +278,17 @@ static const Sysnum sysnums_arm64[] = {
 	[ 289 ] = PR_pkey_alloc,
 	[ 290 ] = PR_pkey_free,
 	[ 291 ] = PR_statx,
+	/* glibc >= 2.35 registers a thread's rseq area unconditionally at
+	 * startup (every thread, including the main one) -- and Android's
+	 * app seccomp filter blocks it, so this fires on essentially every
+	 * traced glibc program's first moment (found 2026-10-01 while
+	 * instrumenting the tracer's default SIGSYS handler for a
+	 * refusal-message feature, TODO.md "Shim & tracer hardening").
+	 * Already handled correctly before this (falls to seccomp.c's
+	 * `default:` -> clean ENOSYS, and glibc's own rseq registration
+	 * already tolerates ENOSYS) -- this entry only gives it a real name
+	 * instead of "void" in a trace/log. */
+	[ 293 ] = PR_rseq,
 	[ 435 ] = PR_clone3,
 	[ 437 ] = PR_openat2,
 	[ 439 ] = PR_faccessat2,
