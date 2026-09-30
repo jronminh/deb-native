@@ -594,16 +594,86 @@ alongside `io_uring`, not a reason to invest in it.
 
 All four pieces from `gpkg/glibc/` planned for this reading pass are now
 read: `set-dirs.patch`, `android_passwd_group.c`, `fakesyscall.json`,
-`shmem-android.c`. Remaining unread in the same directory (`getXXbyYY.c.
-patch`, `getXXbyYY_r.c.patch`, `getgrnam.c.patch`, `getgrgid.c.patch`,
-`getpwuid.c.patch`, `mprotect.c`, `syscall.c`, `syslog.c`,
-`disable-clone3.patch`, `disable-termios2.patch`, `dl-execstack.c.patch`,
-`faccessat.c.patch`, `fchmodat.c.patch`, `fstatat64.c.patch`,
-`kernel-features.h.patch`, `sem_open.c.patch`, `unistd.h.patch`, misc
-`*-Makefile.patch`/`*-Versions.patch` build-glue files) -- likely smaller,
-same-shape variations on patterns already seen (path templating, `getXXbyYY`
-Android-fallback wiring, fakesyscall wiring); not read, no evidence yet
-either way, lowest priority unless 0.5.0 work actually starts.
+`shmem-android.c`.
+
+## Full per-file fork verdict, all 54 files in `gpkg/glibc/` (2026-09-30)
+
+Read the rest to a decision (`readelf`-style: every file, not just the
+big ones). **Project owner's standing rule for this pass**: don't fake a
+feature that genuinely doesn't exist here -- report it honestly (an error,
+or just not present) -- except an *important* feature, which is worth
+deliberate consideration rather than a reflex fork. Fake-root (below) is
+explicitly parked under that "important, needs a decision" bucket, not
+decided in this pass.
+
+**`fakesyscall.json` itself turned out to have three buckets, not two, and
+they map directly onto that rule:**
+
+1. **Real substitute, not a fake at all** (19 entries, the file's first
+   block) -- the target syscall is missing, so call a *different, real*
+   function that gets the same actual effect: `statx` -> `statx_generic`
+   (glibc's own real fstatat-based emulation); `accept4`/`recv`/`send` ->
+   `accept`/`recvfrom`/`sendto`; `shmat`/`shmctl`/`shmdt`/`shmget` ->
+   `shmem-android.c`'s real `/dev/ashmem`-backed implementation (**not a
+   fake** -- corrects this doc's own earlier "defer, not risk-graded"
+   framing of `shmem-android.c`, which undersold it); `epoll_pwait2` ->
+   `fake_epoll_pwait2.c` (a real polyfill on older `epoll_wait`, despite
+   the name); `close_range`/`fchownat`/`ftruncate`/`clock_gettime`/
+   `getpgrp`/`unlinkat`/`symlink`/`link`/`faccessat`/`fchmodat` -> older
+   syscall variants that do the same thing. **Fork candidate, no
+   reservations** -- the rule above doesn't even apply, since nothing here
+   is faked.
+2. **Honest `ENOSYS`** (the file's last block, 9 entries + families) --
+   `msgctl`/`msgget`/`msgrcv`/`msgsnd` (message queues), `semget`/
+   `semctl`/`semop`/`semtimedop*` (semaphores -- note: *not* `shmget`
+   and friends, which are real per bucket 1 above), `io_uring_setup`/
+   `_enter`/`_register`, `set_robust_list`/`get_robust_list`, `clone3`,
+   `mq_open`, `open_by_handle_at`, `rseq`, `pidfd_send_signal`/
+   `pidfd_getfd`, `mbind`/`get_mempolicy`/`set_mempolicy`, `kcmp`,
+   `landlock_create_ruleset`. A clean "not implemented," exactly the rule
+   above. **Fork candidate, no reservations.**
+3. **Actual fake** (the `"0"` bucket) -- `setuid`/`setgid`/`setreuid`/
+   `setregid`/`setresuid`/`setresgid`/`setfsuid`/`setfsgid` (+ syscall
+   `1008`) unconditionally return success. This is the "important feature"
+   case the rule calls out for deliberate consideration, not a reflex
+   fork: plenty of ordinary programs call `setuid(getuid())`/`seteuid()`
+   as a harmless drop-privilege idiom even when already unprivileged, so
+   an honest `EPERM` would break things that work today -- but Termux's
+   version fakes success *unconditionally*, with no way to tell "harmless
+   no-op" from "a real privilege change was wanted." This project already
+   has a similarly-shaped mechanism at a different layer
+   (`native/path-redirect.c`'s `chown`/`set*id`/`setgroups`/`initgroups`
+   refused-for-lack-of-rights -> succeed), scoped to fake-root's own
+   decisions. Forking Termux's version as-is would reinstate that
+   behavior unconditionally at the glibc layer, independent of whatever
+   this project decides fake-root's future is. **Parked, not forked,
+   until fake-root is decided** -- see "Not forked yet" below for exactly
+   which files/hunks that touches.
+
+**Per-file verdict, everything in `gpkg/glibc/`:**
+
+| verdict | files |
+|---|---|
+| **Fork -- already decided/verified working** | `set-dirs.patch` |
+| **Fork -- real substitute (bucket 1) or its companion source** | `fake_epoll_pwait2.c`, `shmat.c`, `shmctl.c`, `shmdt.c`, `shmget.c`, `shmem-android.c`, `shmem-android.h` |
+| **Fork -- honest `ENOSYS` (bucket 2) or its wiring** | most of `set-fakesyscalls.patch` (the SysV-IPC/`statx`/`mq_open`/`open_by_handle_at`/`epoll_pwait2`/`close_range` hunks), `sysvipc-Makefile.patch` |
+| **Fork -- `fakesyscall.json`'s dispatch mechanism itself** | `fakesyscall.json` (buckets 1+2 only, see "Not forked yet"), `fakesyscall.h`, `fakesyscall-base.h`, `syscall.c`, `syscall.S.patch`, `unistd.h.patch` (declares the renamed `syscallS`), `set-sigrestore.patch` (small `#include` glue for the same mechanism) |
+| **Fork -- real, independently-confirmed Android kernel/ABI fixes, not fakesyscall-related** | `disable-clone3.patch` (also independently in bucket 2's `clone3` -- either route works), `disable-termios2.patch` (terminal I/O -- every CLI program, `isatty`/`tcgetattr`/`tcsetattr`), `dl-execstack.c.patch` (Android's real W^X enforcement on stack pages), `kernel-features.h.patch` (no separate `accept`/`recv`/`send` syscalls -- needed for sockets to work at all), `clock_gettime.c.patch`, `faccessat.c.patch`, `fchmodat.c.patch`, `fstatat64.c.patch` (all: prefer an older syscall variant Android actually has), `sem_open.c.patch` (`link()` -> `symlink()` -- **independently confirmed by this project's own finding**: `dn-translate-deb.sh`'s own comment already documents "Android refuses `link(2)` in app data (EACCES)"), `set-nptl-syscalls.patch` (drops `set_robust_list` calls from pthread create/fork/TLS-init entirely -- same Gate-A problem the tracer already SIGSYS-emulates, fixed further upstream), `set-static-stubs.patch` (static-linking unwind glue, low risk either way) |
+| **Fork -- real Android-specific fix, found outside `fakesyscall.json`** | `mprotect.c` (Android's W^X blocks `mprotect(..., PROT_EXEC)` on an *existing* mapping -- real Termux issue #49, real fix via remap; matters for any JIT -- Node, a JIT-enabled Python -- directly touching the Alpha goal's "popular languages" item) |
+| **Fork -- NSS identity fallback, already risk-graded in this doc** | `android_passwd_group.c`, `android_passwd_group.h`, `android_system_user_ids.h`, `gen-android-ids.sh`, `getXXbyYY.c.patch`, `getXXbyYY_r.c.patch`, `getgrgid.c.patch`, `getgrnam.c.patch`, `getpwnam.c.patch`, `getpwuid.c.patch` |
+| **Fork -- build glue for whatever the above pulls in** | `misc-Makefile.patch`, `misc-Versions.patch`, `nss-Makefile.patch`, `posix-Makefile.patch` |
+| **Needs its own careful evaluation -- not a simple fork/skip** | `set-ld-variables.patch`: adds a parallel `GLIBC_LD_*` env-var namespace (`GLIBC_LD_LIBRARY_PATH`, `GLIBC_LD_PRELOAD`, ...), checked *before* the plain `LD_*` name, to keep Android's own Bionic linker from reacting to the same env vars a glibc child inherits. This lands squarely on top of `native/ld-dn.c`'s own env-building job (it now sets plain `LD_PRELOAD`/`LD_LIBRARY_PATH`/`DN_INSTDIR`/`COMPILER_PATH` per launch, `docs/findings.md` 2026-09-30) -- forking this patch would mean `ld-dn.c` needs to set the `GLIBC_LD_*` names too (or instead). Read the *reason* this exists (what actually breaks without it, in this project's own process tree, not Termux's) before deciding, not just the diff. |
+| **Not forked yet -- parked on the fake-root decision (bucket 3 above)** | the `"0"`-bucket entries inside `fakesyscall.json` (`setuid`/`setgid`/`setreuid`/`setregid`/`setresuid`/`setresgid`/`setfsuid`/`setfsgid`), `setfsuid.c`, `setfsgid.c`, and the `set-fakesyscalls.patch` hunks touching `setegid.c`/`seteuid.c`/`setgid.c`/`setregid.c`/`setresgid.c`/`setresuid.c`/`setreuid.c`/`setuid.c`/`local-setxid.h` (the file otherwise forks now, per bucket 2 above -- only these specific hunks wait) |
+| **Defer -- real feature, just not urgent for the Alpha goal** | `locale-gen`, `locale.gen.txt` (locale generation -- i18n, not blocking compilers/languages), `syslog.c` (routes `syslog()` to Android's real `logd` via `/dev/socket/logdw` -- a genuine integration, just not urgent) |
+| **Not applicable -- wrong architecture** | `i386-syscalls.list.patch`, `glibc32.subpackage.sh` (i386/32-bit; this project is arm64-only) |
+| **Generic build plumbing, not an Android patch** | `sdt-config.h`, `sdt.h` (SystemTap probe-point support, vendored/pre-generated rather than Android-specific) |
+| **Not a patch -- the build driver itself** | `build.sh` (reference when building this project's own pipeline, not "fork or don't") |
+
+Remaining unread in the same directory: none -- this completes the
+reading pass. Next, when 0.5.0 work resumes: fork everything marked
+"fork" above except the `set-ld-variables.patch` question and the
+fake-root-parked bucket-3 pieces, onto this project's own retargeted
+glibc source tree (`~/dn-glibc-build`).
 
 ## 0.5.0 first build attempt: partial fork tested, confirmed insufficient (2026-09-30)
 
