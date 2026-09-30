@@ -390,8 +390,19 @@ What it needs:
          tracer just as the goal is to keep its scope down to the two
          permanent cases. Revisit only after #1 ships and only if `dn-trace`
          is still small; not a 0.5.0 blocker.
-- [ ] **proof:** survey before/after, `gcc` hello-world, NSS without the
-      tracer.
+- [x] **proof (2026-09-30): `gcc` hello-world + NSS without the tracer,
+      both demonstrated on-device.** First full `configure`/`make`/`make
+      install` succeeded (zero real errors) against the forked patch tree;
+      `hello` runs (`exit 0`) through the freshly-built `ld.so`/`libc.so.6`;
+      a `getpwuid(0)` test program resolves the prefix's real `/etc/passwd`
+      natively, no tracer route needed. See `docs/android-seccomp-audit.md`,
+      "First full on-device build" / "`make install`, and NSS confirmed
+      functionally working". One non-blocking bug found: `ldconfig -r`
+      (`ld.so.cache` rebuild) `SIGSYS`s when run untraced, succeeds under
+      `dn-trace` -- open, not investigated further (`ld.so.cache` isn't
+      required for the loader to work). Survey before/after still open --
+      the earlier "gh 3 vs `.deb` before/after" version is superseded, redo
+      once a package installs against this glibc.
 
 **Status (2026-09-30, `fe2`): patch fork started, bootstrap-via-real-gcc
 blocked by a new bug, unrelated to own-glibc.** Motivation sharpened first:

@@ -900,8 +900,48 @@ exit=0
   otherwise.
 
 This is the first time this project's own-glibc has actually **run** a
-program, not just built. `make install DESTDIR=...` (proper headers +
-`.so`s for real functional testing — NSS `getpwuid` against the prefix's
-real `/etc/passwd`, not just a strings grep) is the immediate next step,
-same as `build-glibc.yml`'s own install stage.
+program, not just built.
+
+## `make install`, and NSS confirmed functionally working, not just built-in (2026-09-30)
+
+`make -k install DESTDIR=destdir` completed; every core artifact landed
+(`usr/lib/libc.so.6`, `usr/lib/ld-linux-aarch64.so.1`, `usr/include/pwd.h`,
+...). `-k` mattered here too: the manual (missing texinfo sources, same
+gap `build-glibc.yml`'s own comment already documents) fails install for
+its own subdir but nothing else is affected.
+
+**One real, reproducible bug found along the way, not blocking**: `elf/ldconfig -r`
+(rebuilding `ld.so.cache`) dies with **signal 31 (`SIGSYS`)** when run directly,
+every time (3/3) -- but **succeeds cleanly (exit 0) every time under `dn-trace`**
+(`dn-trace -v 4 -- ldconfig -r ...`, full syscall log, no error). Ptrace attachment
+changing whether a syscall reaches Gate-A's kill action is a real, known
+seccomp/ptrace interaction (not investigated further here -- which exact syscall,
+and why the tracer avoids it, is open). Not blocking: `ld.so.cache` is a lookup
+optimization, not required for the loader to function (confirmed next). Practical
+options if this needs a real fix later: route `ldconfig` through `dn-trace` the
+way static binaries already are, or find and add the specific syscall to
+`fakesyscall.json`.
+
+**NSS confirmed functionally correct, not just the right strings baked in.**
+Compiled a small test program (`getpwuid(0)`) against the newly-installed
+headers, linked manually against the destdir's own `libc.so.6`/`libc_nonshared.a`/
+crt objects, ran it through the newly-built `ld.so --library-path destdir/lib`:
+
+```
+uid 0 -> root (home=/root shell=/bin/bash)
+```
+
+Matches the prefix's real `/etc/passwd` (`root:*:0:0:root:/root:/bin/bash`)
+exactly -- NSS is genuinely resolving against this project's own `/etc`, at
+runtime, not just carrying the right path as a dead string. This closes the
+loop `set-dirs.patch` was forked for in the first place: the tracer's NSS
+route (`docs/shim-coverage.md`, "Resolved 2026-09-26") is no longer the only
+way to get this -- own-glibc now does it natively, no tracer needed, for any
+program linked against it.
+
+**Net effect of this session's work**: on-device `configure` succeeds (`cc1`
+fix), a full `make`/`make install` succeeds with zero real errors (`PATH`/
+`clone3.S` fixes), the result runs (`hello`), and its defining feature works
+end to end (NSS). 0.5.0's "what it needs" `proof:` checklist item (`gcc`
+hello-world, NSS without the tracer) is now demonstrated, not just planned.
 
