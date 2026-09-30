@@ -94,12 +94,14 @@ jobs:
           #   in the shell) silently produced a much SHORTER list than
           #   intended -- the installed tree came out missing ld.so, NSS
           #   modules, locale data, most headers, just a handful of files.
-          # 'manual' is processed last in subdirs' dependency order, so by
-          # the time it fails, everything else is already installed
-          # (confirmed in every prior run's log). Simplest correct fix:
-          # don't touch subdirs at all, let install fail there, verify the
-          # files that actually matter landed regardless of exit code.
-          make install DESTDIR="$GITHUB_WORKSPACE/destdir" || true
+          # Without -k, Make aborts the WHOLE recursive install the moment
+          # 'manual' fails -- any subdir that would have run after it in
+          # the sequence never runs at all (wrongly assumed otherwise in
+          # an earlier version of this comment; the truncated log only
+          # LOOKED like 'manual' was last because that's where make stops
+          # printing). -k (keep-going) makes it attempt every subdir
+          # regardless, so only 'manual' itself is missing from the result.
+          make -k install DESTDIR="$GITHUB_WORKSPACE/destdir" || true
           test -f "$GITHUB_WORKSPACE/destdir${DN_PREFIX}/usr/lib/libc.so.6"
           test -e "$GITHUB_WORKSPACE/destdir${DN_PREFIX}/usr/lib/ld-linux-aarch64.so.1"
 
