@@ -411,6 +411,16 @@ confirmed patchable in place (`FITS`, tested earlier) -- this remains the
 one cost-effective NSS fix left standing, distinct from and much cheaper
 than full source-rebuild 0.5.0.
 
+**Cross-checked, not contaminated by a later finding:** a separate bug
+found the same day (`docs/findings.md`, "patchelf corrupting an `ET_EXEC`
+binary's program headers") showed `dn-translate-deb.sh`'s old
+`--set-rpath` step could corrupt an `ET_EXEC` binary into an identically-
+shaped crash (segfault, no syscall in flight, inside loader startup).
+Re-ran this section's own test material (`libc.so.6`,
+`ld-linux-aarch64.so.1`, the `hello` binary -- all `ET_DYN`) through the
+pipeline as it stood at the time: no corruption, clean program headers.
+The bug is `ET_EXEC`-only; this section's conclusion stands.
+
 ## Termux's actual Android patch series (found 2026-09-30, `termux-pacman/glibc-packages`)
 
 Since stock Debian glibc can't even start (above), it's worth knowing

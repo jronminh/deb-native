@@ -104,7 +104,7 @@ static char *cat2(char *dst, u64 cap, const char *a, const char *b) {
   return dst;
 }
 
-static char g_dn[4096], g_ld[4096], g_env_pre[4200], g_env_inst[4200], g_env_bio[8300], g_env_lib[8300];
+static char g_dn[4096], g_ld[4096], g_env_pre[4200], g_env_inst[4200], g_env_bio[8300], g_env_lib[8300], g_env_cpath[4200];
 static Phdr g_ph[32];
 
 struct ret { u64 sp, entry; };
@@ -156,10 +156,20 @@ struct ret ld_dn_main(u64 *sp) {
   cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", "/usr/lib/aarch64-linux-gnu:");
   cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", g_dn);
   cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", "/usr/lib");
+  /* gcc's own subprogram search (cc1, as, ld) does not fall back to a plain
+   * PATH search the way a shell would -- it only tries its own compiled-in,
+   * target-triplet-shaped directories plus COMPILER_PATH. None of the
+   * former land on the prefix's plain usr/bin, so without this gcc finds
+   * Termux's own `ld` (a Bionic binary, not this prefix's binutils) instead
+   * of the prefix's -- harmless for every non-gcc program, so set
+   * unconditionally rather than special-casing gcc packages in
+   * dn-translate-deb.sh. Found 2026-09-30 building cc1's own test case. */
+  cat2(g_env_cpath, sizeof g_env_cpath, "COMPILER_PATH=", g_dn);
+  cat2(g_env_cpath + slen(g_env_cpath), sizeof g_env_cpath - slen(g_env_cpath), "", "/usr/bin");
 
-  /* The new stack: argc, argv, envp (+4 of ours), auxv -- in the space
+  /* The new stack: argc, argv, envp (+5 of ours), auxv -- in the space
    * _start reserved just below the original stack. */
-  u64 words = 1 + (u64)argc + 1 + (u64)nenv + 4 + 1 + 2 * ((u64)naux + 1);
+  u64 words = 1 + (u64)argc + 1 + (u64)nenv + 5 + 1 + 2 * ((u64)naux + 1);
   if (words * 8 + 64 > RESERVE) die("environment too large", 0);
   u64 *ns = (u64 *)(((u64)sp - words * 8) & ~(u64)15);
   u64 k = 0;
@@ -167,13 +177,14 @@ struct ret ld_dn_main(u64 *sp) {
   for (long i = 0; i < argc; i++) ns[k++] = (u64)argv[i];
   ns[k++] = 0;
   for (long i = 0; i < nenv; i++) {
-    if (starts(envp[i], "LD_PRELOAD=") || starts(envp[i], "DN_INSTDIR=") || starts(envp[i], "LD_LIBRARY_PATH=")) continue;
+    if (starts(envp[i], "LD_PRELOAD=") || starts(envp[i], "DN_INSTDIR=") || starts(envp[i], "LD_LIBRARY_PATH=") || starts(envp[i], "COMPILER_PATH=")) continue;
     if (new_bio && starts(envp[i], "DN_BIONIC_PRELOAD=")) continue;
     ns[k++] = (u64)envp[i];
   }
   ns[k++] = (u64)g_env_pre;
   ns[k++] = (u64)g_env_inst;
   ns[k++] = (u64)g_env_lib;
+  ns[k++] = (u64)g_env_cpath;
   if (new_bio) ns[k++] = (u64)g_env_bio;
   ns[k++] = 0;
   u64 *nauxv = ns + k;

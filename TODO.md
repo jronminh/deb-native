@@ -404,31 +404,41 @@ already changed `_PATH_VARDB`, `nscd`'s db path, etc. from what
 `termux-pacman`'s patch assumed) -- done, verified by inspection, not yet
 by a build.
 
-**Blocked at the build step, not by own-glibc's design.** Vanilla `clang`
-cannot build glibc from source: `configure`'s unconditional "redirection of
-built-in functions" check requires a GCC-specific behavior
-(`__asm`-labeled `extern` declarations redirecting `__builtin_*` calls)
-that clang has never implemented, regardless of version --
-`-fgnuc-version=` gets past the *compiler-version* check but not this one.
-No real GCC cross-toolchain exists in this Termux install
-(`gcc`/`aarch64-linux-android-gcc` here are both clang aliases). Tried
-installing Debian's own real `gcc-14`/`binutils` (arm64) through
-deb-native's *own* `apt-get` -- installs and runs fine for `--version`, but
-**`cc1` (an `ET_EXEC`, non-PIE binary) segfaults (signal 11) immediately
-after glibc's loader starts**, through the *current* `ld-dn`+shim+adopted-
-Termux-glibc pipeline. Confirmed by `dn-trace`: not Android's seccomp
-(that would be signal 31/SIGSYS with a named syscall, matching
-`android-seccomp-audit.md`'s Gate A/B/C) -- this crashes with no syscall in
-flight, inside glibc's own loader startup, right after it re-resolves
-`cc1`'s own path. Root cause not yet found; likely specific to `ET_EXEC`
-(fixed-address, non-PIE) binaries, a class not exercised by anything in
-`docs/survey-0.2.0.md`'s sample (apparently all PIE) -- worth its own
-investigation, independent of 0.5.0, since any Debian toolchain binary
-built `-no-pie` would hit the same wall. Next: either root-cause and fix
-`ld-dn`/the loader path for `ET_EXEC`, or find a different way to get a
-working native compiler to actually build the forked glibc (a prebuilt
-`.so` from elsewhere, a GitHub Actions runner, etc.) -- both open, not
-decided.
+**Build-step blocker resolved 2026-09-30 (was: "blocked, not by own-glibc's
+design").** Vanilla `clang` still cannot build glibc from source
+(`configure`'s "redirection of built-in functions" check needs GCC-specific
+`__asm`-labeled `extern` behavior clang has never implemented), so a real
+GCC is still required -- Debian's own `gcc-14`/`binutils` (arm64), installed
+through deb-native's own `apt-get`, is the plan. That install hit a second,
+unrelated bug: **`cc1` (an `ET_EXEC`, non-PIE binary) segfaulted
+immediately after glibc's loader started.** Root-caused (not `ld-dn`'s
+runtime logic, the original suspicion): `dn-translate-deb.sh`'s
+`patchelf --set-rpath` corrupted `cc1`'s program header table -- inserting
+a RUNPATH from scratch on a tightly-packed `ET_EXEC` binary with no layout
+slack produced two overlapping `PT_LOAD` segments (one `RW`, one `R E`),
+and the kernel's own `execve()`-time mapping of the second clobbered
+`cc1`'s `PT_DYNAMIC`, which glibc's loader then read garbage from. Fixed
+by moving RUNPATH out of the static per-`.deb` patch step entirely: `ld-dn`
+now sets `LD_LIBRARY_PATH` (covers the whole load graph transitively, which
+per-file RUNPATH patching never did) and `COMPILER_PATH` (a second,
+separately-found gap -- gcc's own subprogram search doesn't fall back to a
+plain `$PATH` walk, so without it gcc silently ran Termux's own `ld.lld`
+instead of the prefix's binutils) in the environment it already builds per
+launch. `dn-translate-deb.sh`/`dn-adopt.sh`'s ELF patching drops to
+`--set-interpreter` only -- the one thing confirmed unable to move to the
+loader (kernel reads `PT_INTERP` at `execve()`; no `binfmt_misc` escape
+hatch on this device, checked). Full diagnostic writeup:
+[`docs/findings.md`](docs/findings.md), "patchelf corrupting an `ET_EXEC`
+binary's program headers". Verified: `cc1 -v` runs, `gcc-14 -S` produces
+correct assembly, `gcc-14 -nostdlib -static` links against the prefix's own
+`ld` with no manual env needed.
+
+**Next**, now unblocked: actually attempt building the forked glibc
+on-device with this now-working `gcc-14`, as an alternative to the slower
+CI round-trip -- separately, the CI-built artifact (commit `538555d`) still
+hits `SIGSYS` on its own startup (`android-seccomp-audit.md`, "0.5.0 first
+build attempt"), needing `fakesyscall.json` forked in too; that gap is
+unrelated to this bug and still open.
 
 `ld-dn` stays: Android's root has no `/lib/ld-linux-aarch64.so.1`, so
 programs still need their interpreter pointed into the prefix.
