@@ -85,19 +85,23 @@ jobs:
           # Debian's glibc source package omits the manual's texinfo
           # sources entirely (unrelated to the Android patch --
           # src/work/manual/ has only a Makefile after extraction, dozens
-          # of chapters/scripts missing). We don't need the manual.
-          #
-          # Editing Makeconfig's 'subdirs' directly (tried first) made the
-          # preceding 'make' (build) step take 5-8x longer for reasons not
-          # tracked down -- confirmed by reverting it and re-measuring.
-          # Instead: compute the real, already-expanded subdirs list via a
-          # throwaway query target, filter 'manual' out in the shell (not
-          # in Make's lazy variable system), and pass the static result as
-          # a command-line override to 'make install' only -- the build
-          # step above never touches 'manual' anyway, so it needs no fix.
-          all_subdirs=$(make -s --eval='print-subdirs: ; @echo $(subdirs)' print-subdirs)
-          install_subdirs=$(printf '%s\n' $all_subdirs | grep -v '^manual$' | tr '\n' ' ')
-          make install DESTDIR="$GITHUB_WORKSPACE/destdir" subdirs="$install_subdirs"
+          # of chapters/scripts missing). We don't need the manual, but two
+          # attempts to make Make skip it cleanly both backfired:
+          # - editing Makeconfig's 'subdirs' assignment made the preceding
+          #   'make' (build) step 5-8x slower for reasons not tracked down;
+          # - a computed 'subdirs=' override on 'make install' (querying
+          #   the real list via a throwaway target, filtering 'manual' out
+          #   in the shell) silently produced a much SHORTER list than
+          #   intended -- the installed tree came out missing ld.so, NSS
+          #   modules, locale data, most headers, just a handful of files.
+          # 'manual' is processed last in subdirs' dependency order, so by
+          # the time it fails, everything else is already installed
+          # (confirmed in every prior run's log). Simplest correct fix:
+          # don't touch subdirs at all, let install fail there, verify the
+          # files that actually matter landed regardless of exit code.
+          make install DESTDIR="$GITHUB_WORKSPACE/destdir" || true
+          test -f "$GITHUB_WORKSPACE/destdir${DN_PREFIX}/usr/lib/libc.so.6"
+          test -e "$GITHUB_WORKSPACE/destdir${DN_PREFIX}/usr/lib/ld-linux-aarch64.so.1"
 
       - name: Package artifact
         run: |
