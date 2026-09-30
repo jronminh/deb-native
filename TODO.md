@@ -337,17 +337,73 @@ Termux's own `termux-exec` preload rewriting that bare path instead of
 **Open**:
 - **The nested-exec segfault above** — root cause narrowed (Bionic
   `test`/`coreutils` getting a leaked glibc `LD_PRELOAD` via a bare,
-  unprefixed exec path), but not yet fixed. Next step: find why the
-  failing `execve` sees an effectively-empty `PATH`/ends up calling the
-  real (un-interposed) `execvp` fallback instead of this project's
-  `path_search_exec`, and check whether `termux-exec`'s own preload is
-  involved.
+  unprefixed exec path), but not yet fixed. `termux-exec` ruled out
+  2026-09-30 (read its actual source, `ExecIntercept.c`): it never does
+  its own `$PATH` search/bare-command resolution, only acts on an
+  already-resolved path, so it cannot be what turns `/usr/bin/test` into
+  Termux's own -- this project's own `path-redirect.c` is the remaining
+  suspect (see "Runtime component audit", below, where this is the first
+  concrete case to resolve).
 - Bake the shim into installed ELFs (`docs/design.md`, "Delivering the
   shim") so it survives an empty environment — `patchelf --add-needed`/
   `--add-rpath` or a `DT_AUDIT` module; the explicit loader
   (`ld.so --preload`) is the simpler variant.
 - Test `dn-run` -> `dn-trace` from an installed prefix (not just the dev
   checkout).
+
+## Runtime component audit (debt from rapid early development)
+
+**Goal**: the runtime support components (`native/path-redirect.c` the
+shim, `native/ld-dn.c` the loader stub, `native/dn-launch.c`/`dn-run.c`,
+the translate-time scripts that wire them together) were built fast,
+iteratively, patch-by-patch as each new failure surfaced (findings.md is
+the record of that) -- not from a single coherent design pass. That's a
+reasonable way to get here, but it means logic in these files hasn't had
+a systematic re-read since; bugs can hide in interactions between pieces
+that were each individually reasoned-through in isolation, at different
+times, under different assumptions. Go back through each one deliberately,
+not just reactively when something crashes.
+
+**Status**: not started as a deliberate pass. One concrete motivating
+case already in hand, found incidentally while fixing something else
+(Shim & tracer hardening, above): a reproducible segfault
+(`find -exec test`, `env test`) where a bare command name resolves to
+Termux's own Bionic binary with a leaked glibc `LD_PRELOAD`, crashing
+Android's linker. Traced as far as: the actual `execve` attempted uses an
+unprefixed path (`/usr/bin/test`) that *should* be caught and corrected
+by the shim's own `rewrite()` (matches its `/usr` case) -- but isn't,
+and `termux-exec` is confirmed not the cause (read its source directly,
+2026-09-30: it never does its own `$PATH`/bare-command resolution). That
+gap -- between "the code, read carefully, should handle this" and "it
+empirically doesn't" -- is exactly the kind of thing this audit exists to
+find more of, not just this one instance.
+
+**Open**:
+- **Resolve the `find -exec test`/`env test` segfault as the first case**
+  (Shim & tracer hardening, above, has the full evidence trail). Next
+  concrete step: temporary debug prints in `path-redirect.c`'s
+  `path_search_exec()`/`rewrite()`/`do_exec()`, rebuilt and run against
+  the failing case, to see directly which code path actually executes --
+  stop reasoning from reading the source alone once reading it has
+  produced a confident prediction that then doesn't match reality.
+- **`native/path-redirect.c`'s `execve` dispatch family**
+  (`do_exec`/`bionic_env`/`path_search_exec`/`posix_spawnp`'s PATH walk):
+  re-read end to end for consistency -- these reimplement PATH search and
+  environment filtering in several places (execvp, posix_spawnp, the
+  script-shebang branch in `do_exec`); check they agree with each other
+  and with `rewrite()`.
+- **`native/ld-dn.c`'s stack-rebuild math** (`RESERVE`, the `words`
+  count, where `ns` lands relative to the reserved scratch region): looks
+  correct on inspection (Open item above aside) but hasn't been
+  independently checked by anyone other than whoever wrote it.
+- **`native/dn-launch.c`'s reduced scope**: now only the bootstrap
+  fallback for sh/bash (translate: direct shebang, above) -- confirm
+  nothing else still depends on its old, broader behavior (the hardcoded
+  PATH ending in Termux's own `bin`) before considering it fully legacy.
+- **`native/dn-run.c`'s `classify()`**: already flagged elsewhere (0.3.0
+  section) as overly broad (routes a whole process to the tracer for
+  merely *importing* an NSS symbol) -- fold that into this pass rather
+  than fixing it in isolation.
 
 ## Quick wins
 
