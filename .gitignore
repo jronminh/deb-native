@@ -12,3 +12,4 @@ tracer/loader/loader-info.c
 tracer/.check_*
 !tracer/.check_*.c
 native/.build/
+core
