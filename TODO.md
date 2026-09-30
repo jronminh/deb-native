@@ -336,10 +336,12 @@ entries.
   (`ld.so --preload`) is the simpler variant.
 - Test `dn-run` -> `dn-trace` from an installed prefix (not just the dev
   checkout).
-- `setup-runtime.sh`'s later build steps (compiling `dn-shell`/`dn-run`)
-  segfaulted/bus-errored transiently twice during today's testing,
-  always succeeding cleanly on immediate retry — not investigated,
-  possibly the same class of bug as above, possibly unrelated flakiness.
+- ~~`setup-runtime.sh`'s later build steps segfaulted/bus-errored
+  transiently twice~~ — likely resolved as a side effect of the fixes
+  above: 10/10 clean runs afterward (forcing a full native rebuild each
+  time), zero `logcat` crashes. Not proven (never caught a crash under
+  the pre-fix shim specifically to confirm the mechanism), so watch for
+  recurrence rather than close outright.
 
 ## Runtime component audit (debt from rapid early development)
 
