@@ -641,8 +641,24 @@ static int handle_seccomp_event_common(Tracee *tracee)
 	}
 
 	case PR_set_robust_list:
+		set_result_after_seccomp(tracee, -ENOSYS);
+		break;
+
 	default:
-		/* Set errno to -ENOSYS */
+		/* Reached for every syscall this device's seccomp policy
+		 * blocks that isn't specifically emulated above -- including
+		 * ones with no entry in sysnums-arm64.h at all (get_sysnum()
+		 * maps those to PR_void, stringify_sysnum() names it "void").
+		 * Visible without -v (note(), not VERBOSE()) so a post-install
+		 * analysis pass can capture which syscall a "well-behaved"
+		 * binary hit internally without needing to know in advance
+		 * that it would (TODO.md, "Shim & tracer hardening": the
+		 * `ldconfig -r` case -- no NSS import, no raw syscall of its
+		 * own, dies from a public libc call's internal probe-and-
+		 * fallback syscall choice, invisible to any static scan). */
+		note(tracee, WARNING, USER,
+		     "blocked syscall %s (#%ld) denied by seccomp; returning ENOSYS\n",
+		     stringify_sysnum(sysnum), (long)peek_reg(tracee, CURRENT, SYSARG_NUM));
 		set_result_after_seccomp(tracee, -ENOSYS);
 	}
 

@@ -164,6 +164,42 @@ See `syscall-boundary.md`, "Solved: NSS", and `tests/tracer-nss/run.sh`.
 **Out of scope, deliberately:** `mount` (0/1), `umount2` (0/1), `chroot`
 (1/1) are admin operations; redirecting them is neither possible nor wanted.
 
+### Implementation notes (from closing the gaps, 2026-09-26)
+
+Two of the added symbols needed more than a rewrite-and-call:
+
+- **`mkstemp`/`mkostemp`/`mkdtemp`/`mkstemps`/`mkostemps` modify the
+  caller's template in place**, and that buffer is only
+  `strlen(template)+1` long — rewriting it to `$INSTDIR/etc/...` cannot be
+  copied back as-is. The shim calls the real function on the rewritten
+  buffer, then copies back only the part after `$INSTDIR` (the random
+  suffix included), after a length check against the caller's original
+  template. Verified: the caller sees `/etc/zz_mkstemp9wnoFI` while the
+  file is created under `$INSTDIR/etc/`.
+- **`posix_spawn` bypasses the interposed `execve`** (glibc uses
+  `clone`+`exec` internally), so it gets its own wrapper: rewrite the path,
+  keep the environment for a glibc target and swap in `bionic_env()`
+  otherwise. `posix_spawnp` walks `$PATH` itself (glibc's internal walk is
+  invisible here) and delegates to `posix_spawn`. This matters because
+  modern glibc and coreutils spawn helpers through `posix_spawn`, not
+  `fork`+`execve`.
+- `sendmsg` rewrites the AF_UNIX address in a copied `msghdr` the same way
+  `sendto` does.
+
+On-device verification (`tests/shim-libc/run.sh`): builds a standalone
+glibc test binary, sets up a fake `$DN_INSTDIR` root, runs it under the
+shim with `DN_REDIRECT_DEBUG=1`, and asserts every intercepted symbol
+rewrote its path (46 assertions) with nothing leaking into the real
+`/etc`. Two on-device facts made the test binary buildable at all: the
+glibc side-install does ship `Scrt1.o`/`crti.o`/`crtn.o` (an earlier note
+assumed a standalone glibc executable could not be linked, but that was
+only because it looked for `crtbeginS.o`/`crtendS.o`/`libgcc.a`; linking
+with `-nostartfiles -nodefaultlibs` and naming those three objects
+explicitly works with the same clang that builds the shim); and the
+`posix_spawn` test copies a glibc binary under `$INSTDIR/usr/bin/` and
+spawns it there, proving the redirect reached the real spawn, not just the
+test process's own libc calls.
+
 ### The real boundary
 
 **Raw `syscall()`: 12 in-scope ELFs import it, 0 in the base set.** These
@@ -178,6 +214,32 @@ is tracked in [#1](https://github.com/jronminh/deb-native/issues/1) and
 libc layer can be.** The wider boundary — inline `svc #0`, static executables,
 explicit `syscall()`, and the `PT_INTERP` routing gap in `dn-run.c` — is mapped
 and measured in [`syscall-boundary.md`](syscall-boundary.md).
+
+## Open question (2026-09-30): the five-prefix view may be too narrow
+
+`native/path-redirect.c`'s `rewrite()` only dispatches on 5 top-level
+prefixes: `/usr`, `/etc`, `/var`, `/opt`, `/root` (dispatched by the path's
+second byte, `path-redirect.c:139-155`). Anything else passes through
+unrewritten to the real Android root. Two concrete gaps found by inspection,
+not yet measured against the corpus:
+
+- **`/bin`, `/sbin`, `/lib`, `/lib64`** — on real Debian (usrmerge) these are
+  symlinks into `/usr/...`, so a program that spells the path as `/usr/bin/x`
+  is already covered. But a program that hardcodes the literal `/bin/x` or
+  `/lib/x.so` (common — plenty of software predates or ignores usrmerge) is
+  not: it doesn't match any of the 5 cases. The shim already special-cases
+  `/bin/sh`, `/bin/dash`, `/bin/bash`, `/bin/perl` for **execve only**
+  (`path-redirect.c:307-313`) — that is a narrow, execve-specific carve-out,
+  not general `open()`/`stat()` coverage of the `/bin` etc. prefixes.
+- **`/run`** — modern packages (systemd-era sockets, PID files) commonly use
+  `/run/...` directly rather than `/var/run/...`. Not covered either.
+
+Before adding these as new cases: measure real occurrence against the
+existing 258-package corpus the same way `shim-coverage.md`'s "Results"
+section already did for the current 5, rather than adding cases blind. The
+dispatch trick (switch on path's second byte) stays cheap as long as new
+prefixes don't collide in their second letter with an existing case; check
+before adding.
 
 ## Next steps
 

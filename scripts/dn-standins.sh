@@ -67,7 +67,19 @@ install_pkg() {  # NAME VERSION
 launcher() {  # PKGDIR NAME COMMAND...
   d=$1 n=$2; shift 2
   mkdir -p "$WORK/$d/usr/bin"
-  printf '#!/system/bin/sh\n%s "$@"\n' "$*" > "$WORK/$d/usr/bin/$n"
+  # $DN/usr/bin ahead of PATH: dpkg/apt (Termux's own, per the docstring
+  # above) spawn maintainer scripts that inherit this PATH. Without it,
+  # a plain `sed`/`find`/`grep` in a postinst resolves to Termux's Bionic
+  # build (on the interactive shell's PATH, per dn-activate.sh) instead of
+  # the prefix's own Debian glibc ones -- Bionic binaries aren't behind the
+  # shim's LD_PRELOAD interposition, so they can't see the prefix's rewritten
+  # paths (e.g. ca-certificates' postinst: "sed: can't read
+  # /etc/ca-certificates.conf", TODO.md "Quick wins"). $DN/usr/bin is
+  # deliberately off the *interactive* PATH (make-launchers.sh) so it must
+  # not shadow Termux's own tools there; scoping it to just these wrappers'
+  # child processes keeps that intact.
+  printf '#!/system/bin/sh\nPATH="%s/usr/bin:%s/usr/sbin:$PATH"\n%s "$@"\n' \
+    "$DN" "$DN" "$*" > "$WORK/$d/usr/bin/$n"
   chmod 755 "$WORK/$d/usr/bin/$n"
 }
 

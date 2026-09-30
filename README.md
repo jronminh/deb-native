@@ -29,14 +29,14 @@ How that differs from proot-distro, chroot and the rest:
 
 ```sh
 # pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.3.0-prealpha/install.sh | DEB_NATIVE_REF=v0.3.0-prealpha sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.5.0-prealpha/install.sh | DEB_NATIVE_REF=v0.5.0-prealpha sh
 
 # then restart Termux (or: . ~/.bashrc)
 apt install figlet # the prefix's apt: Debian's packages
 figlet hi          # an installed program, run by name
 ```
 
-Or the rolling edge: replace both `v0.3.0-prealpha` occurrences with `main`.
+Or the rolling edge: replace both `v0.5.0-prealpha` occurrences with `main`.
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 
@@ -200,15 +200,30 @@ by Debian section ([`docs/standard.md`](docs/standard.md)): install (reach
 `ii`) and run by name, unprivileged. Not yet: **services** (a package that
 ships one installs, the service does not run; `runit` is the plan), and
 packages that need root (system users, `setuid`, TUN, kernel modules;
-`sudo` modes are planned). Toolchains wait for `libc6`'s Debian identity
-([`TODO.md`](TODO.md)).
+`sudo` modes are planned). Toolchains wait for `libc6-dev`
+([`TODO.md`](TODO.md)) — `libc6` itself is Debian's own glibc source now
+(below), but the headers/static libs that make it a build target aren't
+packaged yet.
 
 ## Status
 
-**Pre-alpha, 0.2.0.** Install and run are measured, not just hand-checked
+**Pre-alpha, 0.5.0.** Install and run are measured, not just hand-checked
 ([`docs/survey-0.2.0.md`](docs/survey-0.2.0.md)). `termux-dn-doctor` checks
-the common breakages. Next: `libc6` as Debian's exact identity
-(toolchains), then services, then `sudo`.
+the common breakages.
+
+**New this release: a real Debian `libc6`, not a Termux stand-in** —
+Debian's own glibc source plus this project's own Android compatibility
+patches
+([`third_party/glibc-android-patches/`](third_party/glibc-android-patches/)),
+built on-device and packaged as a real `.deb`
+([`scripts/dn-package-glibc.sh`](scripts/dn-package-glibc.sh)). Validated
+(NSS resolves the prefix's own `/etc`, a 100+-package regression stays
+clean) and installable today. **Not yet the default**: `install.sh`'s
+bootstrap still uses the old stand-in described above ("Only glibc comes
+from Termux") until the packaged `.deb` is hosted somewhere a fresh
+install can fetch it — tracked in [`TODO.md`](TODO.md). Next: `libc6-dev`
+(unlocks toolchains), then wiring the real `libc6` into `install.sh`,
+then services, then `sudo`.
 
 ### Survey: 0.2.0-prealpha
 
@@ -264,7 +279,10 @@ Without them those programs run untranslated.
 - [`docs/shim-coverage.md`](docs/shim-coverage.md) — measured shim coverage.
 - [`docs/syscall-boundary.md`](docs/syscall-boundary.md) — beyond libc.
 - [`docs/direct-usage.md`](docs/direct-usage.md) — tracer investigation + fork-lite plan.
+- [`docs/bind-only.md`](docs/bind-only.md) — what fork-lite strips down to a bind-only tracer.
 - [`docs/tracer-0.2.0.md`](docs/tracer-0.2.0.md) — the tracer (`dn-trace`) in 0.2.0: role, changes, tests, measurements.
+- [`docs/android-seccomp-audit.md`](docs/android-seccomp-audit.md) — which Android failures are seccomp/kernel-config (own-glibc can't fix) vs. glibc-internal (own-glibc can).
+- [`docs/install-flow.md`](docs/install-flow.md) — the bootstrap/install order, end to end.
 - [`docs/survey-0.2.0.md`](docs/survey-0.2.0.md) — 100 Debian packages installed and run in the 0.2.0 prefix.
 - [`docs/design-0.2.0.md`](docs/design-0.2.0.md) — the 0.2.0 self-contained prefix (partly superseded by `TODO.md`'s decisions).
 - [`docs/runtime-failures.md`](docs/runtime-failures.md) — what breaks when *running* a program.

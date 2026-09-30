@@ -117,6 +117,15 @@ if [ ! -e "$DN/root" ] && [ ! -L "$DN/root" ]; then
 elif [ ! -L "$DN/root" ]; then
   echo "W: $DN/root exists and is not a link; leaving it" >&2
 fi
+# Real glibc programs' NSS (libnss_dns) reads /etc/resolv.conf for
+# nameservers -- Termux's own Bionic resolver doesn't need it, so nothing
+# populated it until this project's first real glibc network client hit
+# "Temporary failure resolving" with an empty prefix /etc (found 2026-10-01
+# trying real apt/dpkg, TODO.md). Symlink to Termux's own so it tracks
+# whatever DNS Android/Termux is actually using, no separate upkeep.
+mkdir -p "$DN/etc"
+[ -e "$DN/etc/resolv.conf" ] || [ -L "$DN/etc/resolv.conf" ] || \
+  ln -s "$TP/etc/resolv.conf" "$DN/etc/resolv.conf"
 
 # 2. Throwaway apt config: resolves and downloads, never installs. Its status
 # file is the prefix's, so the stand-ins count as installed.

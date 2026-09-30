@@ -202,6 +202,17 @@ static char **bionic_env(char *const *envp) {
       if (want) out[n++] = entry;
       continue;
     }
+    /* Same reasoning as LD_PRELOAD above, found 2026-09-30 root-causing a
+     * real crash: ld-dn sets LD_LIBRARY_PATH (and COMPILER_PATH) pointing
+     * at this project's own glibc library/bin dirs for the glibc target it
+     * launches (native/ld-dn.c) -- a Bionic child inheriting that had no
+     * business seeing it, but bionic_env() only ever stripped LD_PRELOAD.
+     * Confirmed directly: Termux's own dpkg-deb (Bionic) fails to link
+     * ("cannot find verneed/verdef ... at .../glibc/lib/libc.so.6") when
+     * launched with the prefix's LD_LIBRARY_PATH still set -- Bionic's
+     * linker partially honors it too, and finds glibc's libc.so.6 where
+     * it expects its own. Drop both unconditionally for a Bionic child. */
+    if (!strncmp(*e, "LD_LIBRARY_PATH=", 16) || !strncmp(*e, "COMPILER_PATH=", 14)) continue;
     if (!strncmp(*e, "PATH=", 5) && (strstr(*e, "/glibc/bin") || (g_root && strstr(*e, g_root)))) {
       char tail[16384] = "";
       size_t hl = 0, tl = 0;
@@ -230,6 +241,12 @@ static char **bionic_env(char *const *envp) {
   }
   if (want && !saw && n < 2045) out[n++] = entry;
   out[n] = NULL;
+  if (g_debug) {
+    fprintf(stderr, "[path-redirect] bionic_env: %d entries out:\n", n);
+    for (int i = 0; i < n; i++)
+      if (!strncmp(out[i], "LD_", 3) || !strncmp(out[i], "PATH=", 5) || !strncmp(out[i], "COMPILER_PATH", 13))
+        fprintf(stderr, "[path-redirect]   %s\n", out[i]);
+  }
   return out;
 }
 
@@ -248,6 +265,17 @@ static int elf_glibc_interp(int fd, const unsigned char *hdr, ssize_t n) {
     ssize_t r = pread(fd, interp, ph.p_filesz, ph.p_offset);
     if (r <= 0) return 0;
     interp[(r < (ssize_t)sizeof interp) ? r : (ssize_t)sizeof interp - 1] = '\0';
+    /* Every program this project has translated has its PT_INTERP set to
+     * ld-dn (dn-translate-deb.sh/dn-adopt.sh, patchelf --set-interpreter),
+     * not Termux's original ld-linux-aarch64.so.1 -- so "ld-linux"/"glibc"
+     * alone stopped matching this project's own binaries the moment that
+     * rewrite shipped, misclassifying nearly every translated glibc
+     * program as Bionic. Found 2026-09-30 root-causing a segfault this
+     * caused (find -exec test / env test): a glibc target misclassified
+     * this way gets bionic_env()'s PATH-reordering (meant for a genuinely
+     * Bionic child) applied to it, which can point its own PATH lookups
+     * at Termux's own binaries instead of the prefix's. */
+    if (strstr(interp, "/deb-native/ld-dn") != NULL) return 1;
     return strstr(interp, "ld-linux") != NULL && strstr(interp, "glibc") != NULL
                ? 1
                : (strstr(interp, "/glibc/") != NULL || strstr(interp, "ld-linux") != NULL);
@@ -304,9 +332,28 @@ static const char *map_shebang_interp(const char *in, char *buf, size_t sz) {
   if (!g_init) dn_init();
   const char *root = g_root;
   if (root) {
+    /* Same preference as dn-translate-deb.sh/patch-scripts-tree.sh
+     * (translate: direct shebang, 2026-09-30): point at the prefix's own
+     * dash/bash directly when installed -- real apt packages with ld-dn
+     * as their own ELF interpreter, so the kernel following the rewritten
+     * shebang already gets the shim/environment set up, no extra
+     * indirection needed. dn-shell is only the bootstrap-time fallback,
+     * kept here too for the same chicken-and-egg reason (a script the
+     * shim encounters live, e.g. via system()/posix_spawn, before
+     * dash/bash are installed). Runtime component audit item 4,
+     * 2026-09-30 -- this was the one remaining place still hardcoded to
+     * dn-shell unconditionally after the translate-time scripts were
+     * fixed. */
     if (!strcmp(in, "/bin/sh") || !strcmp(in, "/bin/dash") ||
-        !strcmp(in, "/bin/bash") || !strcmp(in, "/usr/bin/sh") ||
-        !strcmp(in, "/usr/bin/dash") || !strcmp(in, "/usr/bin/bash")) {
+        !strcmp(in, "/usr/bin/sh") || !strcmp(in, "/usr/bin/dash")) {
+      snprintf(buf, sz, "%s/usr/bin/dash", root);
+      if (access(buf, X_OK) == 0) return buf;
+      snprintf(buf, sz, "%s/usr/bin/dn-shell", root);
+      return buf;
+    }
+    if (!strcmp(in, "/bin/bash") || !strcmp(in, "/usr/bin/bash")) {
+      snprintf(buf, sz, "%s/usr/bin/bash", root);
+      if (access(buf, X_OK) == 0) return buf;
       snprintf(buf, sz, "%s/usr/bin/dn-shell", root);
       return buf;
     }
@@ -845,7 +892,9 @@ static int do_exec(execve_t real, const char *rp, char *const argv[],
                    char *const envp[]) {
   char interp[256], sarg[256];
   char ibuf[4096];
+  if (g_debug) fprintf(stderr, "[path-redirect] do_exec: rp=%s\n", rp ? rp : "(null)");
   if (target_is_script(rp, interp, sizeof interp, sarg, sizeof sarg)) {
+    if (g_debug) fprintf(stderr, "[path-redirect] do_exec: script branch, interp=%s\n", interp);
     const char *iw = map_shebang_interp(interp, ibuf, sizeof ibuf);
     if (iw && access(iw, X_OK) == 0) {
       static char *na[1024];
@@ -865,7 +914,11 @@ static int do_exec(execve_t real, const char *rp, char *const argv[],
     }
     return real(rp, argv, bionic_env(envp));
   }
-  if (target_is_glibc(rp)) return real(rp, argv, envp);
+  if (target_is_glibc(rp)) {
+    if (g_debug) fprintf(stderr, "[path-redirect] do_exec: glibc branch (LD_PRELOAD kept), rp=%s\n", rp);
+    return real(rp, argv, envp);
+  }
+  if (g_debug) fprintf(stderr, "[path-redirect] do_exec: bionic branch (LD_PRELOAD stripped), rp=%s\n", rp);
   return real(rp, argv, bionic_env(envp));
 }
 
@@ -873,6 +926,7 @@ int execve(const char *pathname, char *const argv[], char *const envp[]) {
   static execve_t real;
   if (!real) real = (execve_t)dlsym(RTLD_NEXT, "execve");
   char buf[4096];
+  if (g_debug) fprintf(stderr, "[path-redirect] execve() called: pathname=%s\n", pathname ? pathname : "(null)");
   return do_exec(real, rewrite(pathname, buf, sizeof buf), argv, envp);
 }
 
@@ -893,6 +947,7 @@ int execv(const char *pathname, char *const argv[]) {
 static int path_search_exec(const char *file, char *const argv[], char *const envp[]) {
   if (strchr(file, '/')) return execve(file, argv, envp);
   const char *path = getenv("PATH");
+  if (g_debug) fprintf(stderr, "[path-redirect] path_search_exec: file=%s PATH=%s\n", file, path ? path : "(null)");
   if (!path || !*path) path = "/bin:/usr/bin";
   char buf[4096];
   const char *p = path;
@@ -905,18 +960,23 @@ static int path_search_exec(const char *file, char *const argv[], char *const en
       size_t fl = strlen(file);
       if (len + 1 + fl < sizeof buf) {
         memcpy(buf + len + 1, file, fl + 1);
-        if (access(buf, X_OK) == 0) return execve(buf, argv, envp);
+        if (access(buf, X_OK) == 0) {
+          if (g_debug) fprintf(stderr, "[path-redirect] path_search_exec: found %s\n", buf);
+          return execve(buf, argv, envp);
+        }
       }
     }
     if (!end) break;
     p = end + 1;
   }
   if (access(file, X_OK) == 0) return execve(file, argv, envp);
+  if (g_debug) fprintf(stderr, "[path-redirect] path_search_exec: ENOENT for %s\n", file);
   errno = ENOENT;
   return -1;
 }
 
 int execvp(const char *file, char *const argv[]) {
+  if (g_debug) fprintf(stderr, "[path-redirect] execvp() called: file=%s\n", file ? file : "(null)");
   return path_search_exec(file, argv, environ);
 }
 
@@ -1508,6 +1568,33 @@ int posix_spawn(pid_t *pid, const char *path,
     real = (posix_spawn_t)dlsym(RTLD_NEXT, "posix_spawn");
   char buf[4096];
   const char *rp = rewrite(path, buf, sizeof buf);
+  /* Same three-way branch as do_exec() (execve's dispatcher) -- found
+   * missing here during the 2026-09-30 runtime-component audit: this
+   * used to only classify glibc-vs-Bionic and skip the script/shebang
+   * branch entirely, so a script spawned via posix_spawn (glibc's own
+   * system()/popen() can use it internally) never got its shebang
+   * interpreter remapped to ld-dn/dn-shell the way execve's targets do,
+   * and -- since a plain-text script fails target_is_glibc()'s ELF-magic
+   * check -- was always treated as a Bionic target regardless of what it
+   * actually needed. */
+  char interp[256], sarg[256];
+  if (target_is_script(rp, interp, sizeof interp, sarg, sizeof sarg)) {
+    char ibuf[4096];
+    const char *iw = map_shebang_interp(interp, ibuf, sizeof ibuf);
+    if (iw && access(iw, X_OK) == 0) {
+      static char *na[1024];
+      int ac = 0;
+      while (argv && argv[ac]) ac++;
+      int idx = 0;
+      na[idx++] = (char *)iw;
+      if (sarg[0]) na[idx++] = sarg;
+      na[idx++] = (char *)rp;
+      for (int i = 1; i < ac && idx < 1022; i++) na[idx++] = argv[i];
+      na[idx] = NULL;
+      return real(pid, iw, fa, attr, na, bionic_env(envp));
+    }
+    return real(pid, rp, fa, attr, argv, bionic_env(envp));
+  }
   if (target_is_glibc(rp))
     return real(pid, rp, fa, attr, argv, envp);
   return real(pid, rp, fa, attr, argv, bionic_env(envp));

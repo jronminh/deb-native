@@ -18,8 +18,18 @@
  *     $INSTDIR/lib/deb-native/), DN_INSTDIR, PATH (prefix first, then
  *     Termux's glibc coreutils, then Termux's own Bionic bin) and
  *     DEBIAN_FRONTEND,
- *   - execs Termux's already-present glibc bash (or perl, when invoked as
- *     `dn-perl`) with the original argv, so the maintainer script runs.
+ *   - execs the prefix's own `bash` (Debian's real package, apt-installed
+ *     like any other -- the same translation/ld-dn pipeline as everything
+ *     else the prefix runs, not a binary borrowed from outside it) with the
+ *     original argv, so the maintainer script runs. Falls back to Termux's
+ *     glibc bash only if the prefix's own is not yet installed (true during
+ *     early bootstrap, before `bash` reaches the base package set) -- once
+ *     it is, dn-shell is standing on the prefix's own foundation, not an
+ *     external one, matching how every other glibc program here works.
+ *     `dn-perl` still execs Termux's own perl deliberately (not a fallback
+ *     gap): Termux's Perl is 5.42, trixie's `perl` package builds modules
+ *     for 5.40 (TODO.md, 0.4.0 section) -- an open, separately-tracked
+ *     version question, not an oversight like bash's was.
  *
  * Bionic is used for this launcher on purpose: it must start *without*
  * LD_PRELOAD (the kernel applies none when following a shebang anyway), so
@@ -94,7 +104,9 @@ int main(int argc, char **argv) {
   }
 
   char bash[4096];
-  snprintf(bash, sizeof bash, "%s/glibc/bin/bash", pfx);
+  snprintf(bash, sizeof bash, "%s/usr/bin/bash", inst);
+  if (access(bash, X_OK) != 0)
+    snprintf(bash, sizeof bash, "%s/glibc/bin/bash", pfx);
   execv(bash, argv);
   perror("dn-shell: execv");
   return 127;

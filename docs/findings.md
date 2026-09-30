@@ -1016,107 +1016,115 @@ this project ships — and (2) a syscall-level tracer via `ptrace` /
 FUSE are off the table by kernel and SELinux policy, exactly as the design
 assumed.
 
-## Findings: finishing the libc-level shim (2026-09-26)
+## Findings: finishing the libc-level shim, and closing the measured gaps (2026-09-26)
 
 The code review in
 [#1](https://github.com/jronminh/deb-native/issues/1) listed what the
 libc-level shim could not yet see. `521cc73` closed the review items
 (`unlink()` bug; `lstat`; the missing `*64` names; fortified `__open_2`/
 `__openat_2`/`__open64_2`; `statfs`/`statvfs`; `dlopen`/`dlmopen`; AF_UNIX
-`bind`/`connect`). This round finishes the layer, so the remaining gap is
-only the one libc interposition inherently cannot cover (raw syscalls,
-static binaries, libc-internal opens) — the syscall tracer's job.
+`bind`/`connect`). A second pass, once the corpus was measured against a
+decided scope, closed the remaining genuinely-imported-but-uncovered
+symbols and tested the NSS question to a conclusion.
 
-### What was added
+**Full details moved into [`shim-coverage.md`](shim-coverage.md)** — the
+corpus results, the complete symbol list, the NSS proof (not redirectable
+at the libc layer — upstream glibc design, not a Termux packaging bug), and
+the implementation notes for `mkstemp`'s in-place template and
+`posix_spawn`'s own wrapper — since that doc is the canonical, kept-current
+record of shim coverage. What's left all belongs to the tracer (raw
+`syscall()`, static binaries, libc-internal NSS opens) — see
+[`syscall-boundary.md`](syscall-boundary.md).
 
-The rest of the path-taking libc surface: `creat`/`creat64`/`freopen`;
-`chown`/`lchown`/`fchownat`; `utime`; the xattr family (`setxattr`/
-`lsetxattr`/`getxattr`/`lgetxattr`/`listxattr`/`llistxattr`/`removexattr`/
-`lremovexattr`, which is how dpkg and capability-aware tools touch files);
-`mkfifo`/`mkfifoat`/`mknod`/`mknodat`; `statfs64`/`statvfs64`; `realpath`/
-`canonicalize_file_name`; `inotify_add_watch`; AF_UNIX `sendto` (reusing the
-existing `rewrite_sockaddr`); the temp-file templates `mkstemp`/`mkostemp`/
-`mkdtemp`; and `posix_spawn`/`posix_spawnp`.
+## Findings: patchelf corrupting an `ET_EXEC` binary's program headers, and moving RUNPATH to the loader (2026-09-30)
 
-Two of these needed care beyond the usual rewrite-and-call:
+**Symptom:** `cc1` (gcc-14's compiler proper, installed through this
+project's own `apt-get` while chasing the 0.5.0 own-glibc build blocker,
+`TODO.md`'s "0.5.0 roadmap") segfaulted with no syscall in flight,
+inside glibc's own loader startup, right after it re-resolved `cc1`'s own
+path. Original suspicion (recorded in `TODO.md` at the time) was that this
+was specific to `ET_EXEC` (non-PIE) binaries at the runtime-loader level —
+a `ld-dn`/`native/ld-dn.c` bug. It was not.
 
-- **`mkstemp`/`mkostemp`/`mkdtemp` modify the caller's template in place**,
-  and that buffer is only `strlen(template)+1` long. Rewriting it to
-  `$INSTDIR/etc/...` cannot be copied back. The shim calls the real function
-  on the rewritten buffer, then copies back only the part after `$INSTDIR`
-  (the random suffix included), after a length check against the caller's
-  original template. Verified: the caller sees `/etc/zz_mkstemp9wnoFI` while
-  the file is created under `$INSTDIR/etc/`.
-- **`posix_spawn` bypasses the interposed `execve`** (glibc uses
-  clone+exec internally), so it gets its own wrapper: rewrite the path, keep
-  the environment for a glibc target and swap in `bionic_env()` otherwise.
-  `posix_spawnp` walks `$PATH` itself (glibc's internal walk is invisible
-  here) and delegates to `posix_spawn`. This matters because modern glibc
-  and coreutils spawn helpers through `posix_spawn`, not `fork`+`execve`.
+**Method: clean-room comparison, not just reading the failing binary.**
+The project's own apt cache directory is not a safe "before" sample —
+`dn-translate-deb.sh` translates each `.deb` **in place**
+(`mv -f "$WORK/out.deb" "$DEB"`, overwriting the cached file itself), so a
+copy pulled from `var/cache/apt/archives/` is already post-translation.
+Downloaded the identical version straight from `deb.debian.org`
+(`cpp-14-aarch64-linux-gnu_14.2.0-19_arm64.deb`) for a genuinely pristine
+`cc1`, then replayed the translation pipeline's two `patchelf` calls
+**one at a time**, `readelf -l`-ing after each, instead of only inspecting
+the final (already-broken) result:
 
-### How it was verified, on-device
+| step | program headers | header-`LOAD` `MemSiz` | overlap with the code `LOAD`? |
+|---|---|---|---|
+| pristine (upstream Debian) | 11 | — (headers/code share one `R E` segment) | — |
+| `patchelf --set-interpreter` only | 13 | `0x380` (sane) | no |
+| `--set-interpreter` **+** `--set-rpath` | 13 | `0x292d88` (~2.7 MB — a "headers" segment should be a few KB) | **yes** |
 
-`tests/shim-libc/run.sh` builds a standalone glibc test binary, sets up a
-fake `$DN_INSTDIR` root, runs the test under the shim with
-`DN_REDIRECT_DEBUG=1`, and asserts that every intercepted symbol rewrote its
-path to the root and that nothing leaked into the real `/etc`.
+Isolated to `--set-rpath`: `cc1` ships with **no RPATH at all**
+(`patchelf --print-rpath` on the pristine binary returns empty), so
+`dn-translate-deb.sh`'s rewrite has to insert a `DT_RPATH`/`DT_RUNPATH`
+entry from scratch — on an `ET_EXEC` binary with no layout slack (unlike
+PIE, which always has ASLR-driven headroom), patchelf 0.19.1 miscomputed
+the new segment boundary and left two `PT_LOAD`s overlapping: one `RW`
+(the header segment, now wrongly sized) and one `R E` (the code). The
+kernel maps both at `execve()` time, before any of this project's own code
+runs; the second (`R E`) mapping, `MAP_FIXED`, clobbers whatever the first
+held in the overlap — in `cc1`'s case, its own `PT_DYNAMIC`, which glibc's
+loader then reads while building `cc1`'s `link_map` and dies on.
 
-Two on-device facts made this possible and are worth recording:
+**Cross-checked this doesn't contaminate a separate, earlier conclusion**
+that used the same pipeline: `docs/android-seccomp-audit.md`'s "stock
+Debian `libc6` doesn't even reach a syscall question" test (2026-09-30)
+also ran `dn-translate-deb.sh` and also hit a same-shaped
+crash-with-no-syscall-in-flight. Re-translated a pristine
+`libc6_2.41-12+deb13u4_arm64.deb` (`deb.debian.org`) through the real,
+unmodified-at-the-time pipeline: `libc.so.6`, `ld-linux-aarch64.so.1`
+(both `ET_DYN`) and the `hello` test binary (also `ET_DYN`/PIE) all came
+out with clean, non-overlapping segments. The bug is `ET_EXEC`-only; the
+seccomp-audit conclusion (own-glibc's Android patch series is
+load-bearing at loader-startup level) stands independent of it.
 
-- **The glibc side-install does ship `Scrt1.o`/`crti.o`/`crtn.o`** (an
-  earlier note said a standalone glibc executable could not be linked, but
-  only because it was looking for `crtbeginS.o`/`crtendS.o`/`libgcc.a`).
-  Linking with `-nostartfiles -nodefaultlibs` and naming those three objects
-  explicitly produces a runnable glibc executable with the same clang that
-  builds the shim.
-- Tests that need a real child (`posix_spawn`) copy a glibc binary under
-  `$INSTDIR/usr/bin/` and spawn the `/usr/bin/...` path; the child runs and
-  exits 0, proving the redirect reached the real spawn, not just this
-  process's own libc calls.
+**Fix: move RUNPATH out of the static patch step entirely, into `ld-dn`'s
+per-launch environment.** `dn-translate-deb.sh`'s own comment already
+named the reason a per-file `RUNPATH` rewrite was needed in the first
+place — `RUNPATH` is not inherited transitively (a library's own
+`RUNPATH` does not help *its* dependencies' search), so every `.so` in a
+package needed the same rewrite, not just the top-level executable.
+`LD_LIBRARY_PATH`, set once by `ld-dn` (`native/ld-dn.c`, which already
+builds a custom environment for every program it launches — `LD_PRELOAD`,
+`DN_INSTDIR`) is consulted for every library load in the whole process,
+transitively, for free. Checked for a kernel-native shortcut first
+(`binfmt_misc`, which would let the kernel pick an interpreter without any
+per-file `PT_INTERP` patch at all): not mounted in the app sandbox
+(`/proc/sys/fs/binfmt_misc/register`: "No such file or directory"),
+consistent with the namespace/mount limits already probed in this doc's
+"Platform sandbox limits" section — no shortcut exists, `--set-interpreter`
+stays a required static patch (and is not itself buggy: tested alone
+above, clean on `ET_EXEC`).
 
-Result: 33 rewrites asserted, all new symbols covered, `mkstemp`/`mkdtemp`
-templates handed back un-prefixed, and the redirected `posix_spawn` child
-exits 0. Real `/etc` is untouched. The build is warning-free.
+Landed: `native/ld-dn.c` now also sets `LD_LIBRARY_PATH` (prefix lib dirs)
+and `COMPILER_PATH` (found separately, same session: gcc's own subprogram
+search — `cc1`, `as`, `ld` — does not fall back to a plain `$PATH` walk
+the way a shell does, only its own compiled-in target-triplet directories
+plus `COMPILER_PATH`; without it gcc silently ran Termux's own `ld.lld`
+instead of the prefix's binutils). `dn-translate-deb.sh`'s ELF loop drops
+to `--set-interpreter` only; `dn-adopt.sh` drops its missing-library
+detection and `--set-rpath` call for the same reason. Verified: `cc1 -v`
+runs (was segfaulting), `gcc-14 -S` on a headers-free test file produces
+correct AArch64 assembly, and `gcc-14 -nostdlib -static` now links against
+the *prefix's* `ld` without `COMPILER_PATH` set by hand.
 
-## Findings: closing the measured shim gaps (2026-09-26)
-
-With a scope decided ([`standard.md`](standard.md)) and the imported-symbol
-corpus measured ([`shim-coverage.md`](shim-coverage.md)), the eight symbols
-that were genuinely imported but not intercepted are now covered in
-`native/path-redirect.c`: the legacy `__xstat`/`__lxstat` entry points (and
-their `*64` forms — `__fxstat` is fd-based and needs no redirect);
-`sendmsg`, rewriting the AF_UNIX address in a copied `msghdr` the same way
-`sendto` does; `lutimes`; `mkstemps`/`mkostemps`, with the same
-template copy-back as `mkstemp`; and `eaccess`/`euidaccess`, `setmntent`.
-`scandir`/`scandir64` were also promoted from "covered indirectly" to
-explicit redirects: glibc walks the directory with an internal `opendir`
-that does not pass through the interposed symbol, so relying on the
-one-level-down redirect was an assumption, not a fact.
-
-`tests/shim-libc/run.sh` grew to 46 asserted rewrites and passes on-device;
-`docs/coverage/path-symbols.tsv` now marks every imported path-taking symbol
-`shim` except the NSS lookups (untested), `glob`/`glob64` (indirect),
-`mount`/`umount2`/`chroot` (admin), and the raw-`syscall()` boundary.
-
-The NSS question was then tested and answered: **not redirected, and not
-fixable at the libc layer.** With a fake `$INSTDIR/etc/passwd` holding
-`dnshim:54321`, `getpwnam("dnshim")` and `getpwuid(54321)` returned
-`NOTFOUND`, and `getgrgid(54321)` returned the real Android group
-`all_a4321`, and `DN_REDIRECT_DEBUG=1` produced no rewrite line for
-`nsswitch.conf`/`passwd`/`group`/`hosts`/`resolv.conf` at all — every open
-is internal. `libc.so.6` defines `_nss_files_*`/`_nss_dns_*` itself; the
-bundled `libnss_files.so.2`/`libnss_dns.so.2` are empty ABI stubs that
-glibc never `dlopen`s. Stock Debian glibc is identical (its `libc.so.6`
-defines `_nss_files_getpwnam`; its `libnss_files.so.2` is a stub), so this
-is upstream glibc design, not Termux. The opens use the private
-`__open_nocancel`/`__open64_nocancel` (`GLIBC_PRIVATE`), and even the
-`nsswitch.conf` dispatch is internal, so a custom NSS module cannot be
-selected either.
-
-It is not unfixable, just not here: the syscall tracer catches the `openat`
-before any of this and covers NSS, raw `syscall()` and static binaries
-uniformly. The only libc-layer alternative — interposing the public
-`getpwnam`/`getpwuid_r`/… and reimplementing the `files` lookup — is a
-partial reimplementation and not worth it against the tracer. So the shim is
-complete at its layer; the remaining gaps all belong to the tracer.
+**General lesson for this codebase:** when a static per-`.deb` ELF patch
+step (`dn-translate-deb.sh`, `dn-adopt.sh`) and `ld-dn`'s per-launch
+environment could both solve the same problem, prefer the loader — it
+already runs once per program with full env control, one code path
+instead of N patched files, and no risk of a third-party tool (`patchelf`)
+miscomputing a static binary's layout. `--set-interpreter` is the one
+thing that cannot move (the kernel reads `PT_INTERP` at `execve()`,
+confirmed no `binfmt_misc` escape hatch on this device) — everything else
+patched today is worth re-checking against this question before assuming
+it has to stay static.
 

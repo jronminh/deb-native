@@ -9,18 +9,25 @@
 #   - glibc programs' interpreter set to ld-dn ($DN/usr/lib/deb-native/ld-dn,
 #     native/ld-dn.c): the kernel runs it first however the program is
 #     started, and it sets up the shim and hands over to glibc's real
-#     loader, the libc6 stand-in's; $DN/usr/lib/aarch64-linux-gnu and
-#     $DN/usr/lib first in every dynamic ELF's RUNPATH, and its absolute
-#     entries moved into $DN (shared libraries too: RUNPATH is not
-#     inherited, and Termux's ld.so searches only $PREFIX/glibc/lib by
-#     itself). Done here, not after install, so it is right before any
-#     maintainer script runs the binary;
-#   - program scripts' "#!" line pointed into the prefix (sh/bash/dash ->
-#     dn-shell, perl -> dn-perl, any other /usr, /bin, /sbin interpreter ->
-#     the same path under $DN), so a script started directly -- from
-#     Termux's side too -- runs with the prefix's interpreter;
-#   - maintainer-script shebangs -> dn-shell (patch-scripts-tree.sh, the
-#     loop patch-deb.sh runs).
+#     loader, the libc6 stand-in's, with LD_LIBRARY_PATH pointing at
+#     $DN/usr/lib/aarch64-linux-gnu and $DN/usr/lib (ld-dn.c, not a
+#     per-file RUNPATH rewrite here -- RUNPATH is not inherited
+#     transitively, and rewriting it on a tightly-packed ET_EXEC binary can
+#     corrupt its program headers, see docs/findings.md). Done here, not
+#     after install, so it is right before any maintainer script runs the
+#     binary;
+#   - program scripts' "#!" line pointed into the prefix: sh/dash ->
+#     $DN/usr/bin/dash, bash -> $DN/usr/bin/bash (both real, apt-installed
+#     packages with ld-dn as their own interpreter -- the kernel following
+#     the shebang already gets the shim/env set up, same as any other
+#     prefix binary, no extra indirection), perl -> dn-perl (Termux's own,
+#     no Debian-perl replacement yet), any other /usr, /bin, /sbin
+#     interpreter -> the same path under $DN. dn-shell is only the
+#     fallback for sh/bash/dash when the prefix's own isn't installed yet
+#     (true during early bootstrap, before bash/dash reach the base
+#     package set) -- bootstrap scaffolding, not the steady-state path;
+#   - maintainer-script shebangs: the same dash/bash-first, dn-shell-
+#     fallback logic (patch-scripts-tree.sh, the loop patch-deb.sh runs).
 #
 # One unpack and one repack per package, uncompressed (-Znone): the result
 # only lives in a temp or cache folder until dpkg installs it, and xz on a
@@ -35,7 +42,6 @@ case "$DEB" in /*) ;; *) DEB="$PWD/$DEB" ;; esac
 case "$DN" in /*) ;; *) DN="$PWD/$DN" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LD="$DN/usr/lib/deb-native/ld-dn"
-LIBPATH="$DN/usr/lib/aarch64-linux-gnu:$DN/usr/lib"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -71,17 +77,16 @@ find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print | while IFS= 
   case "$interp" in
     */ld-linux-aarch64.so.1|*/ld-dn) [ "$interp" = "$LD" ] || patchelf --set-interpreter "$LD" "$f" ;;
   esac
-  old=$(patchelf --print-rpath "$f" 2>&1) || continue   # not dynamic
-  # The prefix's copies of Debian's default library dirs first (Termux's
-  # ld.so knows only its own: librnd lives in /usr/lib, survey
-  # 2026-09-27), then the ELF's own entries, absolute ones moved into the
-  # prefix ($ORIGIN ones stay).
-  new=$LIBPATH
-  for e in $(printf '%s' "$old" | tr ':' ' '); do
-    case "$e" in "$DN"/*|'$ORIGIN'*) ;; /*) e=$DN$e ;; esac
-    case ":$new:" in *":$e:"*) ;; *) new=$new:$e ;; esac
-  done
-  [ "$new" = "$old" ] || patchelf --set-rpath "$new" "$f"
+  # Library search (Termux's own default library dirs plus the ELF's own
+  # RUNPATH entries) is ld-dn's job now, via LD_LIBRARY_PATH set once per
+  # process (native/ld-dn.c) -- not a per-file RUNPATH rewrite here.
+  # RUNPATH is not inherited transitively anyway (a library's own RUNPATH
+  # does not help its own dependencies), so the per-file rewrite this used
+  # to do was needed for every .so in a package, not just the executable;
+  # LD_LIBRARY_PATH covers the whole load graph in one place. Also avoids
+  # patchelf corrupting the program header table of a tightly-packed
+  # ET_EXEC binary with no room to grow (found on gcc's cc1, 2026-09-30,
+  # docs/findings.md).
 done
 
 "$HERE/patch-scripts-tree.sh" "$WORK/pkg" "$DN"
@@ -94,7 +99,10 @@ for d in usr/bin usr/sbin usr/games usr/libexec bin sbin; do
     line=$(head -n1 "$f")
     interp=$(printf '%s' "$line" | sed -E 's/^#![[:space:]]*([^[:space:]]+).*/\1/')
     case "$interp" in
-      /bin/sh|/bin/bash|/bin/dash|/usr/bin/sh|/usr/bin/bash|/usr/bin/dash) new="$DN/usr/bin/dn-shell" ;;
+      /bin/sh|/usr/bin/sh|/bin/dash|/usr/bin/dash)
+        new="$DN/usr/bin/dash"; [ -x "$new" ] || new="$DN/usr/bin/dn-shell" ;;
+      /bin/bash|/usr/bin/bash)
+        new="$DN/usr/bin/bash"; [ -x "$new" ] || new="$DN/usr/bin/dn-shell" ;;
       /usr/bin/perl|/bin/perl) new="$DN/usr/bin/dn-perl" ;;
       /usr/*|/bin/*|/sbin/*) new="$DN$interp" ;;
       *) continue ;;

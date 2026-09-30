@@ -31,7 +31,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential quilt bison gawk gettext python3 \
-            xz-utils file rdfind symlinks netbase gperf
+            xz-utils file rdfind symlinks netbase gperf texinfo
 
       - name: Fetch Debian's real glibc source
         run: |
@@ -82,7 +82,28 @@ jobs:
         run: |
           cd objdir
           mkdir -p "$GITHUB_WORKSPACE/destdir"
-          make install DESTDIR="$GITHUB_WORKSPACE/destdir"
+          # Debian's glibc source package omits the manual's texinfo
+          # sources entirely (unrelated to the Android patch --
+          # src/work/manual/ has only a Makefile after extraction, dozens
+          # of chapters/scripts missing). We don't need the manual, but two
+          # attempts to make Make skip it cleanly both backfired:
+          # - editing Makeconfig's 'subdirs' assignment made the preceding
+          #   'make' (build) step 5-8x slower for reasons not tracked down;
+          # - a computed 'subdirs=' override on 'make install' (querying
+          #   the real list via a throwaway target, filtering 'manual' out
+          #   in the shell) silently produced a much SHORTER list than
+          #   intended -- the installed tree came out missing ld.so, NSS
+          #   modules, locale data, most headers, just a handful of files.
+          # Without -k, Make aborts the WHOLE recursive install the moment
+          # 'manual' fails -- any subdir that would have run after it in
+          # the sequence never runs at all (wrongly assumed otherwise in
+          # an earlier version of this comment; the truncated log only
+          # LOOKED like 'manual' was last because that's where make stops
+          # printing). -k (keep-going) makes it attempt every subdir
+          # regardless, so only 'manual' itself is missing from the result.
+          make -k install DESTDIR="$GITHUB_WORKSPACE/destdir" || true
+          test -f "$GITHUB_WORKSPACE/destdir${DN_PREFIX}/usr/lib/libc.so.6"
+          test -e "$GITHUB_WORKSPACE/destdir${DN_PREFIX}/usr/lib/ld-linux-aarch64.so.1"
 
       - name: Package artifact
         run: |
