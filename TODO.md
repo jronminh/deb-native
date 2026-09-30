@@ -308,48 +308,33 @@ entirely (0.2.3) — without `dn-trace`, `dn-run` warns and runs
 untranslated. Tracked in
 [GitHub issue #1](https://github.com/jronminh/deb-native/issues/1).
 
-**Real bug found, partially root-caused (2026-09-30)**: any `execve` two
-or more process-levels below the top shell segfaults reproducibly —
-confirmed with `find -exec test`, `env test`, and apt's own
-`xargs`-wrapped `DPkg::Pre-Install-Pkgs` hook pipeline (a *direct* child
-never crashes). Independent of `dn-shell`/which `bash` is used (still
-reproduces with maintainer scripts now bypassing `dn-shell` entirely,
-above). Android's crash log (`logcat -b crash`) pins it precisely: the
-crashing process is **`/data/data/com.termux/files/usr/bin/coreutils`**
-(Termux's own Bionic multi-call binary providing `test`) — signal 11,
-null-pointer deref inside **Android's own `linker64`**, mid-relocation,
-while trying to process **`/data/data/com.termux/files/usr/glibc/lib/libc.so.6`**
-(glibc's libc, not Bionic-ABI-compatible — Bionic's linker cannot
-relocate it and crashes). This is exactly the failure mode
-`native/path-redirect.c`'s `bionic_env()` exists to prevent (stripping a
-glibc `LD_PRELOAD` before it reaches a Bionic child) — it is not being
-applied here. `dn-trace -v 4` on the same command shows the `execve`
-actually attempted is the **bare, unprefixed `/usr/bin/test`** (not the
-full `$DN/usr/bin/test` the explicitly-set `PATH` should have produced),
-which then resolves to Termux's own `/usr/bin/test` — consistent with
-`env`'s internal exec call using a `PATH`-unset/empty fallback (POSIX
-default `/bin:/usr/bin`) rather than the real environment, and/or
-Termux's own `termux-exec` preload rewriting that bare path instead of
-(or in addition to) this project's shim. Not yet pinned down further:
-*why* `env`'s (or `find`'s) call doesn't see the real `PATH`, and whether
-`termux-exec`'s own preload is genuinely re-entering the picture here.
+**Fixed 2026-09-30 (runtime component audit, below, has the full
+writeup)**: a real, root cause bug — `path-redirect.c`'s
+`target_is_glibc()` checked a target's `PT_INTERP` for `"ld-linux"`/
+`"/glibc/"`, which never matches this project's own translated binaries
+(rewritten to `ld-dn` by `dn-translate-deb.sh`) — misclassifying nearly
+every prefix binary as Bionic, which could reorder its `PATH` and leak
+it into the wrong process, segfaulting Android's linker (`find -exec
+test`, `env test`, apt's own install pipeline all hit this). Fixed by
+recognizing `ld-dn` too; a second, related gap (`bionic_env()` stripped
+`LD_PRELOAD` for a Bionic child but not `LD_LIBRARY_PATH`/
+`COMPILER_PATH`, confirmed crashing Termux's own `dpkg-deb`) fixed the
+same way. Verified: `find -exec test`, a full `apt-get install` of
+several previously-uninstalled packages, and the `ca-certificates`
+postinst all complete with zero segfaults and zero `logcat` crash
+entries.
 
 **Open**:
-- **The nested-exec segfault above** — root cause narrowed (Bionic
-  `test`/`coreutils` getting a leaked glibc `LD_PRELOAD` via a bare,
-  unprefixed exec path), but not yet fixed. `termux-exec` ruled out
-  2026-09-30 (read its actual source, `ExecIntercept.c`): it never does
-  its own `$PATH` search/bare-command resolution, only acts on an
-  already-resolved path, so it cannot be what turns `/usr/bin/test` into
-  Termux's own -- this project's own `path-redirect.c` is the remaining
-  suspect (see "Runtime component audit", below, where this is the first
-  concrete case to resolve).
 - Bake the shim into installed ELFs (`docs/design.md`, "Delivering the
   shim") so it survives an empty environment — `patchelf --add-needed`/
   `--add-rpath` or a `DT_AUDIT` module; the explicit loader
   (`ld.so --preload`) is the simpler variant.
 - Test `dn-run` -> `dn-trace` from an installed prefix (not just the dev
   checkout).
+- `setup-runtime.sh`'s later build steps (compiling `dn-shell`/`dn-run`)
+  segfaulted/bus-errored transiently twice during today's testing,
+  always succeeding cleanly on immediate retry — not investigated,
+  possibly the same class of bug as above, possibly unrelated flakiness.
 
 ## Runtime component audit (debt from rapid early development)
 
@@ -364,46 +349,61 @@ that were each individually reasoned-through in isolation, at different
 times, under different assumptions. Go back through each one deliberately,
 not just reactively when something crashes.
 
-**Status**: not started as a deliberate pass. One concrete motivating
-case already in hand, found incidentally while fixing something else
-(Shim & tracer hardening, above): a reproducible segfault
-(`find -exec test`, `env test`) where a bare command name resolves to
-Termux's own Bionic binary with a leaked glibc `LD_PRELOAD`, crashing
-Android's linker. Traced as far as: the actual `execve` attempted uses an
-unprefixed path (`/usr/bin/test`) that *should* be caught and corrected
-by the shim's own `rewrite()` (matches its `/usr` case) -- but isn't,
-and `termux-exec` is confirmed not the cause (read its source directly,
-2026-09-30: it never does its own `$PATH`/bare-command resolution). That
-gap -- between "the code, read carefully, should handle this" and "it
-empirically doesn't" -- is exactly the kind of thing this audit exists to
-find more of, not just this one instance.
+**Status**: first full pass done, 2026-09-30, all five items closed out.
+Diagnostic-first approach worked where reading-the-source-alone hadn't:
+temporary debug instrumentation in `path-redirect.c` (kept, gated on the
+existing `DN_REDIRECT_DEBUG` env var, zero cost when unset) found the
+actual mechanism behind the `find -exec test`/`env test` segfault in one
+run, after source-reading alone had produced a confident, wrong
+prediction. Three real bugs found and fixed, all one root pattern:
 
-**Open**:
-- **Resolve the `find -exec test`/`env test` segfault as the first case**
-  (Shim & tracer hardening, above, has the full evidence trail). Next
-  concrete step: temporary debug prints in `path-redirect.c`'s
-  `path_search_exec()`/`rewrite()`/`do_exec()`, rebuilt and run against
-  the failing case, to see directly which code path actually executes --
-  stop reasoning from reading the source alone once reading it has
-  produced a confident prediction that then doesn't match reality.
-- **`native/path-redirect.c`'s `execve` dispatch family**
-  (`do_exec`/`bionic_env`/`path_search_exec`/`posix_spawnp`'s PATH walk):
-  re-read end to end for consistency -- these reimplement PATH search and
-  environment filtering in several places (execvp, posix_spawnp, the
-  script-shebang branch in `do_exec`); check they agree with each other
-  and with `rewrite()`.
-- **`native/ld-dn.c`'s stack-rebuild math** (`RESERVE`, the `words`
-  count, where `ns` lands relative to the reserved scratch region): looks
-  correct on inspection (Open item above aside) but hasn't been
-  independently checked by anyone other than whoever wrote it.
-- **`native/dn-launch.c`'s reduced scope**: now only the bootstrap
-  fallback for sh/bash (translate: direct shebang, above) -- confirm
-  nothing else still depends on its old, broader behavior (the hardcoded
-  PATH ending in Termux's own `bin`) before considering it fully legacy.
-- **`native/dn-run.c`'s `classify()`**: already flagged elsewhere (0.3.0
-  section) as overly broad (routes a whole process to the tracer for
-  merely *importing* an NSS symbol) -- fold that into this pass rather
-  than fixing it in isolation.
+- **`path-redirect.c`'s `target_is_glibc()`** checked `PT_INTERP` for
+  `"ld-linux"`/`"/glibc/"` — never matches this project's own translated
+  binaries (`ld-dn`), so it misclassified nearly every prefix glibc
+  program as Bionic. Consequence: `bionic_env()`'s `PATH`-reordering
+  (meant for a genuine Bionic child) got applied to glibc programs too,
+  pointing their own command lookups at Termux's binaries instead of the
+  prefix's — which then carried a leaked glibc `LD_PRELOAD`, segfaulting
+  Android's linker.
+- **`bionic_env()`** stripped `LD_PRELOAD` for a Bionic child but never
+  `LD_LIBRARY_PATH`/`COMPILER_PATH` (both set by `ld-dn` for its glibc
+  target) — confirmed reproducing Termux's own `dpkg-deb` failing to
+  link when launched with the prefix's `LD_LIBRARY_PATH` still set.
+- **`dn-run.c`'s `classify()`** had the exact same `"ld-linux"`-only bug
+  independently (found by checking for the same pattern after fixing it
+  in the shim, not independently) — every prefix glibc binary fell
+  through to `C_DYNOTHER`'s bare `execv()`, silently skipping the NSS
+  tracer-routing `dn-run` exists for. More serious than the "too broad"
+  concern the 0.3.0 section flagged — it was the opposite, not routing
+  *at all* for this project's own binaries. `id` (imports
+  `getpwuid`/`getgrgid`) now correctly routes to the tracer and resolves
+  the fake-root identity.
+
+Two items reviewed and found sound, no code change: `posix_spawn()` was
+missing the script/shebang branch `do_exec()` (execve's dispatcher) has
+— fixed for consistency, script targets now get the same treatment
+everywhere. `map_shebang_interp()` (the shim's own runtime shebang
+mapping) still hardcoded `dn-shell` unconditionally after the
+translate-time scripts were fixed to prefer the prefix's own dash/bash —
+fixed to match. `ld-dn.c`'s stack-rebuild math checked against a
+realistic large-argv/envp case (a multi-package `dpkg` invocation) —
+`words`'s bound is ~8000 words of headroom against realistic usage in
+the low hundreds, comfortably safe. `dn-launch.c`'s remaining call sites
+(`grep -rn dn-shell`) are either the confirmed bootstrap fallback or
+legacy/retired scripts (`patch-maintainer-scripts.sh`, only reachable via
+the inactive `bootstrap-base.sh`/`prototype-install.sh`/`survey.sh`
+pipeline) — left alone, out of scope.
+
+Verified end to end after each fix: `find -exec test`, `env test`, a
+full `apt-get install` of several previously-uninstalled packages
+(`tree`, `cowsay` pulling in `perl`, `figlet`, `sl`), and the
+`ca-certificates` postinst all complete with zero segfaults and zero
+`logcat -b crash` entries.
+
+**Open**: none from this pass. New, smaller item found along the way:
+`setup-runtime.sh`'s build steps segfaulted/bus-errored transiently
+twice (always clean on retry) — noted under "Shim & tracer hardening",
+not chased down.
 
 ## Quick wins
 
