@@ -1,0 +1,1167 @@
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/bits/syslog-path.h work/bits/syslog-path.h
+--- pristine/p/bits/syslog-path.h	2025-01-29 00:31:33.000000000 +0700
++++ work/bits/syslog-path.h	2026-09-30 10:31:29.716506952 +0700
+@@ -23,6 +23,6 @@
+ #ifndef _BITS_SYSLOG_PATH_H
+ #define _BITS_SYSLOG_PATH_H 1
+ 
+-#define	_PATH_LOG	"/dev/log"
++#define	_PATH_LOG	"/dev/socket/logdw"
+ 
+ #endif /* bits/syslog-path.h */
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/dirent/bug-readdir1.c work/dirent/bug-readdir1.c
+--- pristine/p/dirent/bug-readdir1.c	2025-01-29 00:31:33.000000000 +0700
++++ work/dirent/bug-readdir1.c	2026-09-30 10:31:52.964506943 +0700
+@@ -14,7 +14,7 @@
+   struct dirent* ent;
+ 
+   /* open a dir stream */
+-  dirp = opendir ("/tmp");
++  dirp = opendir ("/data/data/com.termux/files/home/.dn/tmp");
+   if (dirp == NULL)
+     {
+       if (errno == ENOENT)
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/ldconfig.c work/elf/ldconfig.c
+--- pristine/p/elf/ldconfig.c	2026-09-30 10:54:41.488190836 +0700
++++ work/elf/ldconfig.c	2026-09-30 10:31:29.716506952 +0700
+@@ -48,7 +48,7 @@
+ #include <dl-procinfo.h>
+ 
+ #ifndef LD_SO_CONF
+-# define LD_SO_CONF SYSCONFDIR "/ld.so.conf"
++# define LD_SO_CONF SYSCONFDIR "/" LD_SO ".conf"
+ #endif
+ 
+ /* Get libc version number.  */
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld.c
+--- pristine/p/elf/rtld.c	2026-09-30 10:54:35.704190839 +0700
++++ work/elf/rtld.c	2026-09-30 10:31:53.024506943 +0700
+@@ -1849,7 +1849,7 @@
+      open().  So we do this first.  If it succeeds we do almost twice
+      the work but this does not matter, since it is not for production
+      use.  */
+-  static const char preload_file[] = "/etc/ld.so.preload";
++  static const char preload_file[] = "/data/data/com.termux/files/home/.dn/etc/ld.so.preload";
+   if (__glibc_unlikely (__access (preload_file, R_OK) == 0))
+     {
+       /* Read the contents of the file.  */
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/sprof.c work/elf/sprof.c
+--- pristine/p/elf/sprof.c	2026-09-30 10:54:35.704190839 +0700
++++ work/elf/sprof.c	2026-09-30 10:31:52.992506943 +0700
+@@ -646,7 +646,7 @@
+       *++cp = '\0';
+ 
+       /* First add the debuginfo file name only.  */
+-      static const char usrlibdebug[]= "/usr/lib/debug/";
++      static const char usrlibdebug[]= "/data/data/com.termux/files/home/.dn/lib/debug/";
+       char *workbuf = (char *) alloca (sizeof (usrlibdebug)
+ 				       + (cp - realname)
+ 				       + strlen (debuginfo_fname));
+@@ -807,8 +807,8 @@
+       /* A file with the given name does not exist in the current
+ 	 directory, try it in the default location where the profiling
+ 	 files are created.  */
+-      ext_name = (char *) alloca (strlen (name) + sizeof "/var/tmp/");
+-      stpcpy (stpcpy (ext_name, "/var/tmp/"), name);
++      ext_name = (char *) alloca (strlen (name) + sizeof "/data/data/com.termux/files/home/.dn/var/tmp/");
++      stpcpy (stpcpy (ext_name, "/data/data/com.termux/files/home/.dn/var/tmp/"), name);
+       name = ext_name;
+ 
+       fd = open (ext_name, O_RDONLY);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/hesiod/hesiod.c work/hesiod/hesiod.c
+--- pristine/p/hesiod/hesiod.c	2025-01-29 00:31:33.000000000 +0700
++++ work/hesiod/hesiod.c	2026-09-30 10:31:53.008506943 +0700
+@@ -60,7 +60,7 @@
+ #include "hesiod.h"
+ #include "hesiod_p.h"
+ 
+-#define _PATH_HESIOD_CONF "/etc/hesiod.conf"
++#define _PATH_HESIOD_CONF "/data/data/com.termux/files/home/.dn/etc/hesiod.conf"
+ 
+ /* Forward */
+ 
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/include/shm-directory.h work/include/shm-directory.h
+--- pristine/p/include/shm-directory.h	2025-01-29 00:31:33.000000000 +0700
++++ work/include/shm-directory.h	2026-09-30 10:31:53.164506943 +0700
+@@ -23,7 +23,7 @@
+ #include <stdbool.h>
+ 
+ /* The directory that contains shared POSIX objects.  */
+-#define SHMDIR _PATH_DEV "shm/"
++#define SHMDIR "/data/data/com.termux/files/home/.dn/tmp/"
+ 
+ struct shmdir_name
+ {
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/io/bug-ftw3.c work/io/bug-ftw3.c
+--- pristine/p/io/bug-ftw3.c	2025-01-29 00:31:33.000000000 +0700
++++ work/io/bug-ftw3.c	2026-09-30 10:31:53.104506943 +0700
+@@ -18,8 +18,8 @@
+ int
+ main (void)
+ {
+-  char tmp[] = "/tmp/ftwXXXXXX";
+-  char tmp2[] = "/tmp/ftwXXXXXX/ftwXXXXXX";
++  char tmp[] = "/data/data/com.termux/files/home/.dn/tmp/ftwXXXXXX";
++  char tmp2[] = "/data/data/com.termux/files/home/.dn/tmp/ftwXXXXXX/ftwXXXXXX";
+   char *dname;
+   char *dname2;
+   int r;
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/io/bug-ftw4.c work/io/bug-ftw4.c
+--- pristine/p/io/bug-ftw4.c	2025-01-29 00:31:33.000000000 +0700
++++ work/io/bug-ftw4.c	2026-09-30 10:31:53.112506943 +0700
+@@ -35,7 +35,7 @@
+ int
+ main (void)
+ {
+-  char name[32] = "/tmp/ftwXXXXXX", *p;
++  char name[32] = "/data/data/com.termux/files/home/.dn/tmp/ftwXXXXXX", *p;
+   int ret, i, result = 0, fd, fd1, fd2;
+ 
+   if (mkdtemp (name) == NULL)
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/libio/oldiopopen.c work/libio/oldiopopen.c
+--- pristine/p/libio/oldiopopen.c	2025-01-29 00:31:33.000000000 +0700
++++ work/libio/oldiopopen.c	2026-09-30 10:31:53.128506943 +0700
+@@ -106,7 +106,7 @@
+       for (p = old_proc_file_chain; p; p = p->next)
+ 	__close (_IO_fileno ((FILE *) p));
+ 
+-      execl ("/bin/sh", "sh", "-c", command, (char *) 0);
++      execl ("/data/data/com.termux/files/home/.dn/bin/sh", "sh", "-c", command, (char *) 0);
+       _exit (127);
+     }
+   __close (child_end);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/libio/stdio.h work/libio/stdio.h
+--- pristine/p/libio/stdio.h	2025-01-29 00:31:33.000000000 +0700
++++ work/libio/stdio.h	2026-09-30 10:31:53.048506943 +0700
+@@ -118,7 +118,7 @@
+ 
+ #if defined __USE_MISC || defined __USE_XOPEN
+ /* Default path prefix for `tempnam' and `tmpnam'.  */
+-# define P_tmpdir	"/tmp"
++# define P_tmpdir	"/data/data/com.termux/files/home/.dn/tmp"
+ #endif
+ 
+ #define L_tmpnam 20
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/fstab.h work/misc/fstab.h
+--- pristine/p/misc/fstab.h	2025-01-29 00:31:33.000000000 +0700
++++ work/misc/fstab.h	2026-09-30 10:31:53.436506943 +0700
+@@ -45,8 +45,8 @@
+  * if type is "rq", then use concatenation of fs_file and "quotas" to locate
+  * quota file.
+  */
+-#define	_PATH_FSTAB	"/etc/fstab"
+-#define	FSTAB		"/etc/fstab"	/* deprecated */
++#define	_PATH_FSTAB	"/data/data/com.termux/files/home/.dn/etc/fstab"
++#define	FSTAB		"/data/data/com.termux/files/home/.dn/etc/fstab"	/* deprecated */
+ 
+ #define	FSTAB_RW	"rw"		/* read/write device */
+ #define	FSTAB_RQ	"rq"		/* read/write with quotas */
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/ttyent.h work/misc/ttyent.h
+--- pristine/p/misc/ttyent.h	2025-01-29 00:31:33.000000000 +0700
++++ work/misc/ttyent.h	2026-09-30 10:31:53.420506943 +0700
+@@ -34,7 +34,7 @@
+ 
+ #include <features.h>
+ 
+-#define	_PATH_TTYS	"/etc/ttys"
++#define	_PATH_TTYS	"/data/data/com.termux/files/home/.dn/etc/ttys"
+ 
+ #define	_TTYS_OFF	"off"
+ #define	_TTYS_ON	"on"
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/nis_call.c work/nis/nis_call.c
+--- pristine/p/nis/nis_call.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nis/nis_call.c	2026-09-30 10:31:53.372506943 +0700
+@@ -592,7 +592,7 @@
+   struct stat64 st;
+ 
+   int saved_errno = errno;
+-  if (stat64 ("/var/nis/NIS_COLD_START", &st) < 0)
++  if (stat64 ("/data/data/com.termux/files/home/.dn/var/nis/NIS_COLD_START", &st) < 0)
+     st.st_mtime = nis_cold_start_mtime + 1;
+   __set_errno (saved_errno);
+ 
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/nis_file.c work/nis/nis_file.c
+--- pristine/p/nis/nis_file.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nis/nis_file.c	2026-09-30 10:31:53.428506943 +0700
+@@ -72,7 +72,7 @@
+ }
+ 
+ 
+-static const char cold_start_file[] = "/var/nis/NIS_COLD_START";
++static const char cold_start_file[] = "/data/data/com.termux/files/home/.dn/var/nis/NIS_COLD_START";
+ 
+ directory_obj *
+ readColdStartFile (void)
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/ypclnt.c work/nis/ypclnt.c
+--- pristine/p/nis/ypclnt.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nis/ypclnt.c	2026-09-30 10:31:53.136506943 +0700
+@@ -33,7 +33,7 @@
+ 
+ /* This should only be defined on systems with a BSD compatible ypbind */
+ #ifndef BINDINGDIR
+-# define BINDINGDIR "/var/yp/binding"
++# define BINDINGDIR "/data/data/com.termux/files/home/.dn/var/yp/binding"
+ #endif
+ 
+ struct dom_binding
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/nscd-client.h work/nscd/nscd-client.h
+--- pristine/p/nscd/nscd-client.h	2025-01-29 00:31:33.000000000 +0700
++++ work/nscd/nscd-client.h	2026-09-30 10:31:53.244506943 +0700
+@@ -35,13 +35,13 @@
+ #define NSCD_VERSION 2
+ 
+ /* Path of the file where the PID of the running system is stored.  */
+-#define _PATH_NSCDPID	 "/var/run/nscd/nscd.pid"
++#define _PATH_NSCDPID	 "/data/data/com.termux/files/home/.dn/var/run/nscd/nscd.pid"
+ 
+ /* Path for the Unix domain socket.  */
+-#define _PATH_NSCDSOCKET "/var/run/nscd/socket"
++#define _PATH_NSCDSOCKET "/data/data/com.termux/files/home/.dn/var/run/nscd/socket"
+ 
+ /* Path for the configuration file.  */
+-#define _PATH_NSCDCONF	 "/etc/nscd.conf"
++#define _PATH_NSCDCONF	 "/data/data/com.termux/files/home/.dn/etc/nscd.conf"
+ 
+ /* Maximum allowed length for the key.  */
+ #define MAXKEYLEN 1024
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/nscd.h work/nscd/nscd.h
+--- pristine/p/nscd/nscd.h	2026-09-30 10:54:40.620190837 +0700
++++ work/nscd/nscd.h	2026-09-30 10:31:53.448506943 +0700
+@@ -160,14 +160,14 @@
+ 
+ 
+ /* Paths of the file for the persistent storage.  */
+-#define _PATH_NSCD_PASSWD_DB	"/var/cache/nscd/passwd"
+-#define _PATH_NSCD_GROUP_DB	"/var/cache/nscd/group"
+-#define _PATH_NSCD_HOSTS_DB	"/var/cache/nscd/hosts"
+-#define _PATH_NSCD_SERVICES_DB	"/var/cache/nscd/services"
+-#define _PATH_NSCD_NETGROUP_DB	"/var/cache/nscd/netgroup"
++#define _PATH_NSCD_PASSWD_DB	"/data/data/com.termux/files/home/.dn/var/cache/nscd/passwd"
++#define _PATH_NSCD_GROUP_DB	"/data/data/com.termux/files/home/.dn/var/cache/nscd/group"
++#define _PATH_NSCD_HOSTS_DB	"/data/data/com.termux/files/home/.dn/var/cache/nscd/hosts"
++#define _PATH_NSCD_SERVICES_DB	"/data/data/com.termux/files/home/.dn/var/cache/nscd/services"
++#define _PATH_NSCD_NETGROUP_DB	"/data/data/com.termux/files/home/.dn/var/cache/nscd/netgroup"
+ 
+ /* Path used when not using persistent storage.  */
+-#define _PATH_NSCD_XYZ_DB_TMP	"/var/run/nscd/dbXXXXXX"
++#define _PATH_NSCD_XYZ_DB_TMP	"/data/data/com.termux/files/home/.dn/var/run/nscd/dbXXXXXX"
+ 
+ /* Maximum alignment requirement we will encounter.  */
+ #define BLOCK_ALIGN_LOG 3
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/bug-erange.c work/nss/bug-erange.c
+--- pristine/p/nss/bug-erange.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/bug-erange.c	2026-09-30 10:31:53.148506943 +0700
+@@ -37,7 +37,7 @@
+     {
+       printf ("gethostbyname_r failed: %s (errno: %m)\n", strerror (res));
+ 
+-      if (access ("/etc/resolv.conf", R_OK))
++      if (access ("/data/data/com.termux/files/home/.dn/etc/resolv.conf", R_OK))
+ 	{
+ 	  puts ("DNS probably not set up");
+ 	  return 0;
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss/db-Makefile
+--- pristine/p/nss/db-Makefile	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/db-Makefile	2026-09-30 10:31:53.380506943 +0700
+@@ -17,11 +17,11 @@
+ # License along with the GNU C Library; if not, see
+ # <https://www.gnu.org/licenses/>.
+ 
+-DATABASES = $(wildcard /etc/passwd /etc/group /etc/ethers /etc/protocols \
+-		       /etc/rpc /etc/services /etc/shadow /etc/gshadow \
+-		       /etc/netgroup)
++DATABASES = $(wildcard /data/data/com.termux/files/home/.dn/etc/passwd /data/data/com.termux/files/home/.dn/etc/group /data/data/com.termux/files/home/.dn/etc/ethers /data/data/com.termux/files/home/.dn/etc/protocols \
++		       /data/data/com.termux/files/home/.dn/etc/rpc /data/data/com.termux/files/home/.dn/etc/services /data/data/com.termux/files/home/.dn/etc/shadow /data/data/com.termux/files/home/.dn/etc/gshadow \
++		       /data/data/com.termux/files/home/.dn/etc/netgroup)
+ 
+-VAR_DB = /var/db
++VAR_DB = /data/data/com.termux/files/home/.dn/var/db
+ 
+ AWK = awk
+ MAKEDB = makedb --quiet
+@@ -29,7 +29,7 @@
+ all: $(patsubst %,$(VAR_DB)/%.db,$(notdir $(DATABASES)))
+ 
+ 
+-$(VAR_DB)/passwd.db: /etc/passwd
++$(VAR_DB)/passwd.db: /data/data/com.termux/files/home/.dn/etc/passwd
+ 	@printf %s "$(patsubst %.db,%,$(@F))... "
+ 	@$(AWK) 'BEGIN { FS=":"; OFS=":" } \
+ 		 /^[ \t]*$$/ { next } \
+@@ -39,7 +39,7 @@
+ 	$(MAKEDB) -o $@ -
+ 	@echo "done."
+ 
+-$(VAR_DB)/group.db: /etc/group
++$(VAR_DB)/group.db: /data/data/com.termux/files/home/.dn/etc/group
+ 	@printf %s "$(patsubst %.db,%,$(@F))... "
+ 	@$(AWK) 'BEGIN { FS=":"; OFS=":" } \
+ 		 /^[ \t]*$$/ { next } \
+@@ -61,7 +61,7 @@
+ 	$(MAKEDB) -o $@ -
+ 	@echo "done."
+ 
+-$(VAR_DB)/ethers.db: /etc/ethers
++$(VAR_DB)/ethers.db: /data/data/com.termux/files/home/.dn/etc/ethers
+ 	@printf %s "$(patsubst %.db,%,$(@F))... "
+ 	@$(AWK) '/^[ \t]*$$/ { next } \
+ 		 /^[ \t]*#/ { next } \
+@@ -70,7 +70,7 @@
+ 	$(MAKEDB) -o $@ -
+ 	@echo "done."
+ 
+-$(VAR_DB)/protocols.db: /etc/protocols
++$(VAR_DB)/protocols.db: /data/data/com.termux/files/home/.dn/etc/protocols
+ 	@printf %s "$(patsubst %.db,%,$(@F))... "
+ 	@$(AWK) '/^[ \t]*$$/ { next } \
+ 		 /^[ \t]*#/ { next } \
+@@ -81,7 +81,7 @@
+ 	$(MAKEDB) -o $@ -
+ 	@echo "done."
+ 
+-$(VAR_DB)/rpc.db: /etc/rpc
++$(VAR_DB)/rpc.db: /data/data/com.termux/files/home/.dn/etc/rpc
+ 	@printf %s "$(patsubst %.db,%,$(@F))... "
+ 	@$(AWK) '/^[ \t]*$$/ { next } \
+ 		 /^[ \t]*#/ { next } \
+@@ -92,7 +92,7 @@
+ 	$(MAKEDB) -o $@ -
+ 	@echo "done."
+ 
+-$(VAR_DB)/services.db: /etc/services
++$(VAR_DB)/services.db: /data/data/com.termux/files/home/.dn/etc/services
+ 	@printf %s "$(patsubst %.db,%,$(@F))... "
+ 	@$(AWK) 'BEGIN { FS="[ \t/]+" } \
+ 		 /^[ \t]*$$/ { next } \
+@@ -108,7 +108,7 @@
+ 	$(MAKEDB) -o $@ -
+ 	@echo "done."
+ 
+-$(VAR_DB)/shadow.db: /etc/shadow
++$(VAR_DB)/shadow.db: /data/data/com.termux/files/home/.dn/etc/shadow
+ 	@printf %s "$(patsubst %.db,%,$(@F))... "
+ 	@$(AWK) 'BEGIN { FS=":"; OFS=":" } \
+ 		 /^[ \t]*$$/ { next } \
+@@ -128,7 +128,7 @@
+ 	  echo; \
+ 	fi
+ 
+-$(VAR_DB)/gshadow.db: /etc/gshadow
++$(VAR_DB)/gshadow.db: /data/data/com.termux/files/home/.dn/etc/gshadow
+ 	@printf %s "$(patsubst %.db,%,$(@F))... "
+ 	@$(AWK) 'BEGIN { FS=":"; OFS=":" } \
+ 		 /^[ \t]*$$/ { next } \
+@@ -148,7 +148,7 @@
+ 	  echo; \
+ 	fi
+ 
+-$(VAR_DB)/netgroup.db: /etc/netgroup
++$(VAR_DB)/netgroup.db: /data/data/com.termux/files/home/.dn/etc/netgroup
+ 	@printf %s "$(patsubst %.db,%,$(@F))... "
+ 	@$(AWK) 'BEGIN { ini=1 } \
+ 		 /^[ \t]*$$/ { next } \
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getaddrinfo.c work/nss/getaddrinfo.c
+--- pristine/p/nss/getaddrinfo.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/getaddrinfo.c	2026-09-30 10:31:53.256506943 +0700
+@@ -1726,7 +1726,7 @@
+ 
+ 
+ /* Name of the config file for RFC 3484 sorting (for now).  */
+-#define GAICONF_FNAME "/etc/gai.conf"
++#define GAICONF_FNAME "/data/data/com.termux/files/home/.dn/etc/gai.conf"
+ 
+ 
+ /* Non-zero if we are supposed to reload the config file automatically
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/lckpwdf.c work/nss/lckpwdf.c
+--- pristine/p/nss/lckpwdf.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/lckpwdf.c	2026-09-30 10:31:53.156506943 +0700
+@@ -29,7 +29,7 @@
+ 
+ 
+ /* Name of the lock file.  */
+-#define PWD_LOCKFILE "/etc/.pwd.lock"
++#define PWD_LOCKFILE "/data/data/com.termux/files/home/.dn/etc/.pwd.lock"
+ 
+ /* How long to wait for getting the lock before returning with an
+    error.  */
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-grp.c work/nss/nss_compat/compat-grp.c
+--- pristine/p/nss/nss_compat/compat-grp.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/nss_compat/compat-grp.c	2026-09-30 10:31:53.464506943 +0700
+@@ -108,7 +108,7 @@
+ 
+   if (ent->stream == NULL)
+     {
+-      ent->stream = __nss_files_fopen ("/etc/group");
++      ent->stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/group");
+ 
+       if (ent->stream == NULL)
+ 	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-initgroups.c work/nss/nss_compat/compat-initgroups.c
+--- pristine/p/nss/nss_compat/compat-initgroups.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/nss_compat/compat-initgroups.c	2026-09-30 10:31:53.180506943 +0700
+@@ -122,7 +122,7 @@
+   else
+     ent->blacklist.current = 0;
+ 
+-  ent->stream = __nss_files_fopen ("/etc/group");
++  ent->stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/group");
+ 
+   if (ent->stream == NULL)
+     status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-pwd.c work/nss/nss_compat/compat-pwd.c
+--- pristine/p/nss/nss_compat/compat-pwd.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/nss_compat/compat-pwd.c	2026-09-30 10:31:53.188506943 +0700
+@@ -223,7 +223,7 @@
+ 
+   if (ent->stream == NULL)
+     {
+-      ent->stream = __nss_files_fopen ("/etc/passwd");
++      ent->stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/passwd");
+ 
+       if (ent->stream == NULL)
+ 	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-spwd.c work/nss/nss_compat/compat-spwd.c
+--- pristine/p/nss/nss_compat/compat-spwd.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/nss_compat/compat-spwd.c	2026-09-30 10:31:53.396506943 +0700
+@@ -178,7 +178,7 @@
+ 
+   if (ent->stream == NULL)
+     {
+-      ent->stream = __nss_files_fopen ("/etc/shadow");
++      ent->stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/shadow");
+ 
+       if (ent->stream == NULL)
+ 	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-XXX.c work/nss/nss_files/files-XXX.c
+--- pristine/p/nss/nss_files/files-XXX.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/nss_files/files-XXX.c	2026-09-30 10:31:53.472506943 +0700
+@@ -39,7 +39,7 @@
+ 
+ #define ENTNAME_r	CONCAT(ENTNAME,_r)
+ 
+-#define DATAFILE	"/etc/" DATABASE
++#define DATAFILE	"/data/data/com.termux/files/home/.dn/etc/" DATABASE
+ 
+ #ifdef NEED_H_ERRNO
+ # include <netdb.h>
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-alias.c work/nss/nss_files/files-alias.c
+--- pristine/p/nss/nss_files/files-alias.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/nss_files/files-alias.c	2026-09-30 10:31:53.196506943 +0700
+@@ -42,7 +42,7 @@
+ 
+   if (*stream == NULL)
+     {
+-      *stream = __nss_files_fopen ("/etc/aliases");
++      *stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/aliases");
+ 
+       if (*stream == NULL)
+ 	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
+@@ -58,7 +58,7 @@
+ enum nss_status
+ _nss_files_setaliasent (void)
+ {
+-  return __nss_files_data_setent (nss_file_aliasent, "/etc/aliases");
++  return __nss_files_data_setent (nss_file_aliasent, "/data/data/com.termux/files/home/.dn/etc/aliases");
+ }
+ libc_hidden_def (_nss_files_setaliasent)
+ 
+@@ -338,7 +338,7 @@
+ 
+   struct nss_files_per_file_data *data;
+   enum nss_status status = __nss_files_data_open (&data, nss_file_aliasent,
+-						  "/etc/aliases", errnop, NULL);
++						  "/data/data/com.termux/files/home/.dn/etc/aliases", errnop, NULL);
+   if (status != NSS_STATUS_SUCCESS)
+     return status;
+ 
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-init.c work/nss/nss_files/files-init.c
+--- pristine/p/nss/nss_files/files-init.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/nss_files/files-init.c	2026-09-30 10:31:53.456506943 +0700
+@@ -41,12 +41,12 @@
+ void
+ _nss_files_init (void (*cb) (size_t, struct traced_file *))
+ {
+-  register_file (cb, pwddb, "/etc/passwd", 0);
+-  register_file (cb, grpdb, "/etc/group", 0);
+-  register_file (cb, hstdb, "/etc/hosts", 0);
+-  register_file (cb, hstdb, "/etc/resolv.conf", 1);
+-  register_file (cb, servdb, "/etc/services", 0);
+-  register_file (cb, netgrdb, "/etc/netgroup", 0);
++  register_file (cb, pwddb, "/data/data/com.termux/files/home/.dn/etc/passwd", 0);
++  register_file (cb, grpdb, "/data/data/com.termux/files/home/.dn/etc/group", 0);
++  register_file (cb, hstdb, "/system/etc/hosts", 0);
++  register_file (cb, hstdb, "/data/data/com.termux/files/home/.dn/etc/resolv.conf", 1);
++  register_file (cb, servdb, "/data/data/com.termux/files/home/.dn/etc/services", 0);
++  register_file (cb, netgrdb, "/data/data/com.termux/files/home/.dn/etc/netgroup", 0);
+ }
+ libc_hidden_def (_nss_files_init)
+ 
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-initgroups.c work/nss/nss_files/files-initgroups.c
+--- pristine/p/nss/nss_files/files-initgroups.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/nss_files/files-initgroups.c	2026-09-30 10:31:53.496506943 +0700
+@@ -33,7 +33,7 @@
+ 			   long int *size, gid_t **groupsp, long int limit,
+ 			   int *errnop)
+ {
+-  FILE *stream = __nss_files_fopen ("/etc/group");
++  FILE *stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/group");
+   if (stream == NULL)
+     {
+       *errnop = errno;
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-netgrp.c work/nss/nss_files/files-netgrp.c
+--- pristine/p/nss/nss_files/files-netgrp.c	2025-01-29 00:31:33.000000000 +0700
++++ work/nss/nss_files/files-netgrp.c	2026-09-30 10:31:53.208506943 +0700
+@@ -27,7 +27,7 @@
+ #include "netgroup.h"
+ #include <nss_files.h>
+ 
+-#define DATAFILE	"/etc/netgroup"
++#define DATAFILE	"/data/data/com.termux/files/home/.dn/etc/netgroup"
+ 
+ libc_hidden_proto (_nss_files_endnetgrent)
+ 
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/annexc.c work/posix/annexc.c
+--- pristine/p/posix/annexc.c	2025-01-29 00:31:33.000000000 +0700
++++ work/posix/annexc.c	2026-09-30 10:31:53.312506943 +0700
+@@ -26,7 +26,7 @@
+ 
+ #define HEADER_MAX          256
+ 
+-static char macrofile[] = "/tmp/annexc.XXXXXX";
++static char macrofile[] = "/data/data/com.termux/files/home/.dn/tmp/annexc.XXXXXX";
+ 
+ /* <aio.h>.  */
+ static const char *const aio_syms[] =
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt1.c work/posix/bug-getopt1.c
+--- pristine/p/posix/bug-getopt1.c	2025-01-29 00:31:33.000000000 +0700
++++ work/posix/bug-getopt1.c	2026-09-30 10:31:53.324506943 +0700
+@@ -40,7 +40,7 @@
+ static int
+ do_test (void)
+ {
+-  char fname[] = "/tmp/bug-getopt1.XXXXXX";
++  char fname[] = "/data/data/com.termux/files/home/.dn/tmp/bug-getopt1.XXXXXX";
+   int fd = mkstemp (fname);
+   if (fd == -1)
+     {
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt2.c work/posix/bug-getopt2.c
+--- pristine/p/posix/bug-getopt2.c	2025-01-29 00:31:33.000000000 +0700
++++ work/posix/bug-getopt2.c	2026-09-30 10:31:53.400506943 +0700
+@@ -38,7 +38,7 @@
+ static int
+ do_test (void)
+ {
+-  char fname[] = "/tmp/bug-getopt2.XXXXXX";
++  char fname[] = "/data/data/com.termux/files/home/.dn/tmp/bug-getopt2.XXXXXX";
+   int fd = mkstemp (fname);
+   if (fd == -1)
+     {
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt3.c work/posix/bug-getopt3.c
+--- pristine/p/posix/bug-getopt3.c	2025-01-29 00:31:33.000000000 +0700
++++ work/posix/bug-getopt3.c	2026-09-30 10:31:53.488506943 +0700
+@@ -49,7 +49,7 @@
+ static int
+ do_test (void)
+ {
+-  char fname[] = "/tmp/bug-getopt3.XXXXXX";
++  char fname[] = "/data/data/com.termux/files/home/.dn/tmp/bug-getopt3.XXXXXX";
+   int fd = mkstemp (fname);
+   if (fd == -1)
+     {
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt4.c work/posix/bug-getopt4.c
+--- pristine/p/posix/bug-getopt4.c	2025-01-29 00:31:33.000000000 +0700
++++ work/posix/bug-getopt4.c	2026-09-30 10:31:53.216506943 +0700
+@@ -53,7 +53,7 @@
+ static int
+ do_test (void)
+ {
+-  char fname[] = "/tmp/bug-getopt4.XXXXXX";
++  char fname[] = "/data/data/com.termux/files/home/.dn/tmp/bug-getopt4.XXXXXX";
+   int fd = mkstemp (fname);
+   if (fd == -1)
+     {
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt5.c work/posix/bug-getopt5.c
+--- pristine/p/posix/bug-getopt5.c	2025-01-29 00:31:33.000000000 +0700
++++ work/posix/bug-getopt5.c	2026-09-30 10:31:53.332506943 +0700
+@@ -48,7 +48,7 @@
+ static int
+ do_test (void)
+ {
+-  char fname[] = "/tmp/bug-getopt5.XXXXXX";
++  char fname[] = "/data/data/com.termux/files/home/.dn/tmp/bug-getopt5.XXXXXX";
+   int fd = mkstemp (fname);
+   if (fd == -1)
+     {
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-regex9.c work/posix/bug-regex9.c
+--- pristine/p/posix/bug-regex9.c	2025-01-29 00:31:33.000000000 +0700
++++ work/posix/bug-regex9.c	2026-09-30 10:31:53.504506943 +0700
+@@ -23,7 +23,7 @@
+ #include <stdlib.h>
+ 
+ 
+-static const char text[] = "#! /bin/sh";
++static const char text[] = "#! /data/data/com.termux/files/home/.dn/bin/sh";
+ 
+ int
+ main (void)
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/netdb.h work/resolv/netdb.h
+--- pristine/p/resolv/netdb.h	2025-01-29 00:31:33.000000000 +0700
++++ work/resolv/netdb.h	2026-09-30 10:31:53.232506943 +0700
+@@ -40,12 +40,12 @@
+ #include <bits/netdb.h>
+ 
+ /* Absolute file name for network data base files.  */
+-#define	_PATH_HEQUIV		"/etc/hosts.equiv"
+-#define	_PATH_HOSTS		"/etc/hosts"
+-#define	_PATH_NETWORKS		"/etc/networks"
+-#define	_PATH_NSSWITCH_CONF	"/etc/nsswitch.conf"
+-#define	_PATH_PROTOCOLS		"/etc/protocols"
+-#define	_PATH_SERVICES		"/etc/services"
++#define	_PATH_HEQUIV		"/data/data/com.termux/files/home/.dn/etc/hosts.equiv"
++#define	_PATH_HOSTS		"/data/data/com.termux/files/home/.dn/etc/hosts"
++#define	_PATH_NETWORKS		"/data/data/com.termux/files/home/.dn/etc/networks"
++#define	_PATH_NSSWITCH_CONF	"/data/data/com.termux/files/home/.dn/etc/nsswitch.conf"
++#define	_PATH_PROTOCOLS		"/data/data/com.termux/files/home/.dn/etc/protocols"
++#define	_PATH_SERVICES		"/data/data/com.termux/files/home/.dn/etc/services"
+ 
+ 
+ __BEGIN_DECLS
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/res_hconf.c work/resolv/res_hconf.c
+--- pristine/p/resolv/res_hconf.c	2025-01-29 00:31:33.000000000 +0700
++++ work/resolv/res_hconf.c	2026-09-30 10:31:53.408506943 +0700
+@@ -48,7 +48,7 @@
+ # define fgets_unlocked __fgets_unlocked
+ #endif
+ 
+-#define _PATH_HOSTCONF	"/etc/host.conf"
++#define _PATH_HOSTCONF	"/data/data/com.termux/files/home/.dn/etc/host.conf"
+ 
+ /* Environment vars that all user to override default behavior:  */
+ #define ENV_HOSTCONF	"RESOLV_HOST_CONF"
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/resolv.h work/resolv/resolv.h
+--- pristine/p/resolv/resolv.h	2025-01-29 00:31:33.000000000 +0700
++++ work/resolv/resolv.h	2026-09-30 10:31:53.416506943 +0700
+@@ -91,7 +91,7 @@
+  */
+ 
+ #ifndef _PATH_RESCONF
+-#define _PATH_RESCONF        "/etc/resolv.conf"
++#define _PATH_RESCONF        "/data/data/com.termux/files/home/.dn/etc/resolv.conf"
+ #endif
+ 
+ struct res_sym {
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/bug7.c work/stdio-common/bug7.c
+--- pristine/p/stdio-common/bug7.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdio-common/bug7.c	2026-09-30 10:31:53.172506943 +0700
+@@ -8,7 +8,7 @@
+ main (int argc, char *argv[])
+ {
+   int lose = 0;
+-  char filename[] = "/tmp/bug7.XXXXXX";
++  char filename[] = "/data/data/com.termux/files/home/.dn/tmp/bug7.XXXXXX";
+   FILE *fp;
+ 
+   int fd = mkstemp (filename);
+@@ -36,8 +36,8 @@
+   {
+     FILE *file1;
+     FILE *file2;
+-    char filename1[] = "/tmp/bug7.XXXXXX";
+-    char filename2[] = "/tmp/bug7.XXXXXX";
++    char filename1[] = "/data/data/com.termux/files/home/.dn/tmp/bug7.XXXXXX";
++    char filename2[] = "/data/data/com.termux/files/home/.dn/tmp/bug7.XXXXXX";
+     int ch;
+ 
+     int fd1 = mkstemp (filename1);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf14.c work/stdio-common/scanf14.c
+--- pristine/p/stdio-common/scanf14.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdio-common/scanf14.c	2026-09-30 10:31:53.480506943 +0700
+@@ -82,7 +82,7 @@
+ 
+   const char *tmpdir = getenv ("TMPDIR");
+   if (tmpdir == NULL || tmpdir[0] == '\0')
+-    tmpdir = "/tmp";
++    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
+ 
+   char fname[strlen (tmpdir) + sizeof "/tst-scanf14.XXXXXX"];
+   sprintf (fname, "%s/tst-scanf14.XXXXXX", tmpdir);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf15.c work/stdio-common/scanf15.c
+--- pristine/p/stdio-common/scanf15.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdio-common/scanf15.c	2026-09-30 10:31:53.516506943 +0700
+@@ -65,7 +65,7 @@
+ 
+   const char *tmpdir = getenv ("TMPDIR");
+   if (tmpdir == NULL || tmpdir[0] == '\0')
+-    tmpdir = "/tmp";
++    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
+ 
+   char fname[strlen (tmpdir) + sizeof "/tst-scanf15.XXXXXX"];
+   sprintf (fname, "%s/tst-scanf15.XXXXXX", tmpdir);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf16.c work/stdio-common/scanf16.c
+--- pristine/p/stdio-common/scanf16.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdio-common/scanf16.c	2026-09-30 10:31:53.536506943 +0700
+@@ -113,7 +113,7 @@
+ 
+   const char *tmpdir = getenv ("TMPDIR");
+   if (tmpdir == NULL || tmpdir[0] == '\0')
+-    tmpdir = "/tmp";
++    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
+ 
+   char fname[strlen (tmpdir) + sizeof "/tst-scanf16.XXXXXX"];
+   sprintf (fname, "%s/tst-scanf16.XXXXXX", tmpdir);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf17.c work/stdio-common/scanf17.c
+--- pristine/p/stdio-common/scanf17.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdio-common/scanf17.c	2026-09-30 10:31:53.508506943 +0700
+@@ -96,7 +96,7 @@
+ 
+   const char *tmpdir = getenv ("TMPDIR");
+   if (tmpdir == NULL || tmpdir[0] == '\0')
+-    tmpdir = "/tmp";
++    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
+ 
+   char fname[strlen (tmpdir) + sizeof "/tst-scanf17.XXXXXX"];
+   sprintf (fname, "%s/tst-scanf17.XXXXXX", tmpdir);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf18.c work/stdio-common/scanf18.c
+--- pristine/p/stdio-common/scanf18.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdio-common/scanf18.c	2026-09-30 10:31:53.272506943 +0700
+@@ -88,7 +88,7 @@
+ 
+   const char *tmpdir = getenv ("TMPDIR");
+   if (tmpdir == NULL || tmpdir[0] == '\0')
+-    tmpdir = "/tmp";
++    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
+ 
+   char fname[strlen (tmpdir) + sizeof "/tst-scanf14.XXXXXX"];
+   sprintf (fname, "%s/tst-scanf14.XXXXXX", tmpdir);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf19.c work/stdio-common/scanf19.c
+--- pristine/p/stdio-common/scanf19.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdio-common/scanf19.c	2026-09-30 10:31:53.340506943 +0700
+@@ -118,7 +118,7 @@
+ 
+   const char *tmpdir = getenv ("TMPDIR");
+   if (tmpdir == NULL || tmpdir[0] == '\0')
+-    tmpdir = "/tmp";
++    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
+ 
+   char fname[strlen (tmpdir) + sizeof "/tst-scanf16.XXXXXX"];
+   sprintf (fname, "%s/tst-scanf16.XXXXXX", tmpdir);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/tmpdir.c work/stdio-common/tmpdir.c
+--- pristine/p/stdio-common/tmpdir.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdio-common/tmpdir.c	2026-09-30 10:31:53.284506943 +0700
+@@ -34,7 +34,7 @@
+ # ifdef _P_tmpdir /* native Windows */
+ #  define P_tmpdir _P_tmpdir
+ # else
+-#  define P_tmpdir "/tmp"
++#  define P_tmpdir "/data/data/com.termux/files/home/.dn/tmp"
+ # endif
+ #endif
+ 
+@@ -133,8 +133,8 @@
+ #endif
+       if (direxists (P_tmpdir))
+         dir = P_tmpdir;
+-      else if (strcmp (P_tmpdir, "/tmp") != 0 && direxists ("/tmp"))
+-        dir = "/tmp";
++      else if (strcmp (P_tmpdir, "/data/data/com.termux/files/home/.dn/tmp") != 0 && direxists ("/data/data/com.termux/files/home/.dn/tmp"))
++        dir = "/data/data/com.termux/files/home/.dn/tmp";
+       else
+         {
+           __set_errno (ENOENT);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/tstscanf.c work/stdio-common/tstscanf.c
+--- pristine/p/stdio-common/tstscanf.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdio-common/tstscanf.c	2026-09-30 10:31:53.224506943 +0700
+@@ -62,7 +62,7 @@
+ 
+   if (argc == 2 && !strcmp (argv[1], "-opipe"))
+     {
+-      out = popen ("/bin/cat", "w");
++      out = popen ("/data/data/com.termux/files/home/.dn/bin/cat", "w");
+       if (out == NULL)
+ 	{
+ 	  perror ("popen: /bin/cat");
+@@ -71,7 +71,7 @@
+     }
+   else if (argc == 3 && !strcmp (argv[1], "-ipipe"))
+     {
+-      sprintf (buf, "/bin/cat %s", argv[2]);
++      sprintf (buf, "/data/data/com.termux/files/home/.dn/bin/cat %s", argv[2]);
+       in = popen (buf, "r");
+       if (in == NULL)
+ 	{
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/xbug.c work/stdio-common/xbug.c
+--- pristine/p/stdio-common/xbug.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdio-common/xbug.c	2026-09-30 10:31:53.524506943 +0700
+@@ -60,7 +60,7 @@
+ 
+   unsetenv ("LD_LIBRARY_PATH");
+ 
+-  if (!(input = popen("/bin/cat", "r")))
++  if (!(input = popen("/data/data/com.termux/files/home/.dn/bin/cat", "r")))
+     fprintf(stderr, "cannot run \n");
+ 
+   ReadFile(&buffer, input);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdlib/isomac.c work/stdlib/isomac.c
+--- pristine/p/stdlib/isomac.c	2025-01-29 00:31:33.000000000 +0700
++++ work/stdlib/isomac.c	2026-09-30 10:31:53.528506943 +0700
+@@ -74,7 +74,7 @@
+ 
+ #define HEADER_MAX          256
+ 
+-static char macrofile[] = "/tmp/isomac.XXXXXX";
++static char macrofile[] = "/data/data/com.termux/files/home/.dn/tmp/isomac.XXXXXX";
+ 
+ /* ISO C header names including Amendment 1 (without ".h" suffix).  */
+ static char *header[] =
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sunrpc/key_call.c work/sunrpc/key_call.c
+--- pristine/p/sunrpc/key_call.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sunrpc/key_call.c	2026-09-30 10:31:53.544506943 +0700
+@@ -318,7 +318,7 @@
+   int success;
+   uid_t ruid;
+   uid_t euid;
+-  static const char MESSENGER[] = "/usr/etc/keyenvoy";
++  static const char MESSENGER[] = "/data/data/com.termux/files/home/.dn/etc/keyenvoy";
+ 
+   success = 1;
+   sigemptyset (&mask);
+@@ -458,7 +458,7 @@
+ 
+   if ((kcp->client == (CLIENT *) NULL))
+     /* Use the AF_UNIX transport */
+-    kcp->client = clnt_create ("/var/run/keyservsock", KEY_PROG, vers, "unix");
++    kcp->client = clnt_create ("/data/data/com.termux/files/home/.dn/var/run/keyservsock", KEY_PROG, vers, "unix");
+ 
+   if (kcp->client == (CLIENT *) NULL)
+     return (CLIENT *) NULL;
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_capture_subprocess.c work/support/support_capture_subprocess.c
+--- pristine/p/support/support_capture_subprocess.c	2026-09-30 10:54:35.732190839 +0700
++++ work/support/support_capture_subprocess.c	2026-09-30 10:31:53.552506943 +0700
+@@ -161,7 +161,7 @@
+ {
+   /* Do not use getgrname_r because it does not work in statically
+      linked binaries if the system libc is different.  */
+-  FILE *fp = fopen ("/etc/group", "rce");
++  FILE *fp = fopen ("/data/data/com.termux/files/home/.dn/etc/group", "rce");
+   if (fp == NULL)
+     return false;
+   __fsetlocking (fp, FSETLOCKING_BYCALLER);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_fuse.c work/support/support_fuse.c
+--- pristine/p/support/support_fuse.c	2025-01-29 00:31:33.000000000 +0700
++++ work/support/support_fuse.c	2026-09-30 10:31:53.348506943 +0700
+@@ -671,7 +671,7 @@
+   /* The test_dir test driver variable is not yet set at this point.  */
+   const char *tmpdir = getenv ("TMPDIR");
+   if (tmpdir == NULL || tmpdir[0] == '\0')
+-    tmpdir = "/tmp";
++    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
+ 
+   char *prefix = xasprintf ("%s/glibc-tst-fuse.", tmpdir);
+   support_fuse_mountpoints = support_fuse_mkdir (prefix);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_test_main.c work/support/support_test_main.c
+--- pristine/p/support/support_test_main.c	2025-01-29 00:31:33.000000000 +0700
++++ work/support/support_test_main.c	2026-09-30 10:31:53.556506943 +0700
+@@ -351,7 +351,7 @@
+     {
+       test_dir = getenv ("TMPDIR");
+       if (test_dir == NULL || test_dir[0] == '\0')
+-        test_dir = "/tmp";
++        test_dir = "/data/data/com.termux/files/home/.dn/tmp";
+     }
+   if (support_set_test_dir != NULL)
+     support_set_test_dir (test_dir);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dl-cache.h work/sysdeps/generic/dl-cache.h
+--- pristine/p/sysdeps/generic/dl-cache.h	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/generic/dl-cache.h	2026-09-30 10:31:29.736506952 +0700
+@@ -34,8 +34,14 @@
+   ((flags) == 1 || (flags) == _DL_CACHE_DEFAULT_ID)
+ #endif
+ 
++#ifdef MULTILIB_GLIBC
++# define LD_SO "ld32.so"
++#else
++# define LD_SO "ld.so"
++#endif
++
+ #ifndef LD_SO_CACHE
+-# define LD_SO_CACHE SYSCONFDIR "/ld.so.cache"
++# define LD_SO_CACHE SYSCONFDIR "/" LD_SO ".cache"
+ #endif
+ 
+ #ifndef add_system_dir
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/ldconfig.h work/sysdeps/generic/ldconfig.h
+--- pristine/p/sysdeps/generic/ldconfig.h	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/generic/ldconfig.h	2026-09-30 10:31:53.300506943 +0700
+@@ -48,7 +48,12 @@
+ #define FLAG_LARCH_FLOAT_ABI_DOUBLE	0x1200
+ 
+ /* Name of auxiliary cache.  */
+-#define _PATH_LDCONFIG_AUX_CACHE "/var/cache/ldconfig/aux-cache"
++#ifdef MULTILIB_GLIBC
++# define _LDCONFIG_NAME "ldconfig32"
++#else
++# define _LDCONFIG_NAME "ldconfig"
++#endif
++#define _PATH_LDCONFIG_AUX_CACHE "/data/data/com.termux/files/home/.dn/var/cache/" _LDCONFIG_NAME "/aux-cache"
+ 
+ /* Declared in cache.c.  */
+ extern void print_cache (const char *cache_name);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/paths.h work/sysdeps/generic/paths.h
+--- pristine/p/sysdeps/generic/paths.h	2026-09-30 10:54:40.560190837 +0700
++++ work/sysdeps/generic/paths.h	2026-09-30 10:31:53.564506943 +0700
+@@ -33,43 +33,43 @@
+ #define	_PATHS_H_
+ 
+ /* Default search path. */
+-#define	_PATH_DEFPATH	"/usr/bin:/bin"
++#define	_PATH_DEFPATH	"/data/data/com.termux/files/home/.dn/bin:/data/data/com.termux/files/home/.dn/bin:/system/bin"
+ /* All standard utilities path. */
+ #define	_PATH_STDPATH \
+-	"/usr/bin:/bin:/usr/sbin:/sbin"
++	"/data/data/com.termux/files/home/.dn/bin:/data/data/com.termux/files/home/.dn/bin:/system/bin"
+ 
+-#define	_PATH_BSHELL	"/bin/sh"
++#define	_PATH_BSHELL	"/data/data/com.termux/files/home/.dn/bin/sh"
+ #define	_PATH_CONSOLE	"/dev/console"
+-#define	_PATH_CSHELL	"/bin/csh"
+-#define	_PATH_DEVDB	"/var/run/dev.db"
++#define	_PATH_CSHELL	"/data/data/com.termux/files/home/.dn/bin/csh"
++#define	_PATH_DEVDB	"/data/data/com.termux/files/home/.dn/var/run/dev.db"
+ #define	_PATH_DEVNULL	"/dev/null"
+ #define	_PATH_DRUM	"/dev/drum"
+-#define	_PATH_GSHADOW	"/etc/gshadow"
++#define	_PATH_GSHADOW	"/data/data/com.termux/files/home/.dn/etc/gshadow"
+ #define	_PATH_KMEM	"/dev/kmem"
+-#define	_PATH_LASTLOG	"/var/log/lastlog"
+-#define	_PATH_MAILDIR	"/var/mail"
+-#define	_PATH_MAN	"/usr/share/man"
++#define	_PATH_LASTLOG	"/data/data/com.termux/files/home/.dn/var/log/lastlog"
++#define	_PATH_MAILDIR	"/data/data/com.termux/files/home/.dn/var/mail"
++#define	_PATH_MAN	"/data/data/com.termux/files/home/.dn/share/man"
+ #define	_PATH_MEM	"/dev/mem"
+-#define	_PATH_MNTTAB	"/etc/fstab"
+-#define	_PATH_MOUNTED	"/etc/mtab"
+-#define	_PATH_NOLOGIN	"/etc/nologin"
+-#define	_PATH_PRESERVE	"/var/lib"
+-#define	_PATH_RWHODIR	"/var/spool/rwho"
+-#define	_PATH_SENDMAIL	"/usr/sbin/sendmail"
+-#define	_PATH_SHADOW	"/etc/shadow"
+-#define	_PATH_SHELLS	"/etc/shells"
++#define	_PATH_MNTTAB	"/data/data/com.termux/files/home/.dn/etc/fstab"
++#define	_PATH_MOUNTED	"/data/data/com.termux/files/home/.dn/etc/mtab"
++#define	_PATH_NOLOGIN	"/data/data/com.termux/files/home/.dn/etc/nologin"
++#define	_PATH_PRESERVE	"/data/data/com.termux/files/home/.dn/var/lib"
++#define	_PATH_RWHODIR	"/data/data/com.termux/files/home/.dn/var/spool/rwho"
++#define	_PATH_SENDMAIL	"/data/data/com.termux/files/home/.dn/bin/sendmail"
++#define	_PATH_SHADOW	"/data/data/com.termux/files/home/.dn/etc/shadow"
++#define	_PATH_SHELLS	"/data/data/com.termux/files/home/.dn/etc/shells"
+ #define	_PATH_TTY	"/dev/tty"
+ #define	_PATH_UNIX	"/vmunix"
+-#define	_PATH_UTMP	"/var/run/utmp"
+-#define	_PATH_UTMP_DB	"/var/run/utmp.db"
+-#define	_PATH_VI	"/usr/bin/vi"
+-#define	_PATH_WTMP	"/var/log/wtmp"
++#define	_PATH_UTMP	"/data/data/com.termux/files/home/.dn/var/run/utmp"
++#define	_PATH_UTMP_DB	"/data/data/com.termux/files/home/.dn/var/run/utmp.db"
++#define	_PATH_VI	"/data/data/com.termux/files/home/.dn/bin/vi"
++#define	_PATH_WTMP	"/data/data/com.termux/files/home/.dn/var/log/wtmp"
+ 
+ /* Provide trailing slash, since mostly used for building pathnames. */
+ #define	_PATH_DEV	"/dev/"
+-#define	_PATH_TMP	"/tmp/"
+-#define	_PATH_VARDB	"/var/lib/misc/"
+-#define	_PATH_VARRUN	"/var/run/"
+-#define	_PATH_VARTMP	"/var/tmp/"
++#define	_PATH_TMP	"/data/data/com.termux/files/home/.dn/tmp/"
++#define	_PATH_VARDB	"/data/data/com.termux/files/home/.dn/var/lib/misc/"
++#define	_PATH_VARRUN	"/data/data/com.termux/files/home/.dn/var/run/"
++#define	_PATH_VARTMP	"/data/data/com.termux/files/home/.dn/var/tmp/"
+ 
+ #endif /* !_PATHS_H_ */
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/posix/system.c work/sysdeps/posix/system.c
+--- pristine/p/sysdeps/posix/system.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/posix/system.c	2026-09-30 10:31:53.356506943 +0700
+@@ -31,7 +31,7 @@
+ #include <not-cancel.h>
+ #include <internal-signals.h>
+ 
+-#define	SHELL_PATH	"/bin/sh"	/* Path of the shell.  */
++#define	SHELL_PATH	"/data/data/com.termux/files/home/.dn/bin/sh"	/* Path of the shell.  */
+ #define	SHELL_NAME	"sh"		/* Name to give it.  */
+ 
+ 
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/confstr.h work/sysdeps/unix/confstr.h
+--- pristine/p/sysdeps/unix/confstr.h	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/confstr.h	2026-09-30 10:31:53.364506943 +0700
+@@ -1 +1 @@
+-#define	CS_PATH	"/bin:/usr/bin"
++#define	CS_PATH	"/data/data/com.termux/files/home/.dn/bin:/data/data/com.termux/files/home/.dn/bin:/system/bin"
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/clone-internal.c work/sysdeps/unix/sysv/linux/clone-internal.c
+--- pristine/p/sysdeps/unix/sysv/linux/clone-internal.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/clone-internal.c	2026-09-30 10:26:20.634171562 +0700
+@@ -72,21 +72,6 @@
+ __clone3_internal (struct clone_args *cl_args, int (*func) (void *args),
+ 		   void *arg)
+ {
+-#ifdef HAVE_CLONE3_WRAPPER
+-# if __ASSUME_CLONE3
+-  return __clone3 (cl_args, sizeof (*cl_args), func, arg);
+-# else
+-  static int clone3_supported = 1;
+-  if (atomic_load_relaxed (&clone3_supported) == 1)
+-    {
+-      int ret = __clone3 (cl_args, sizeof (*cl_args), func, arg);
+-      if (ret != -1 || errno != ENOSYS)
+-	return ret;
+-
+-      atomic_store_relaxed (&clone3_supported, 0);
+-    }
+-# endif
+-#endif
+   __set_errno (ENOSYS);
+   return -1;
+ }
+@@ -95,17 +80,6 @@
+ __clone_internal (struct clone_args *cl_args,
+ 		  int (*func) (void *arg), void *arg)
+ {
+-#ifdef HAVE_CLONE3_WRAPPER
+-  int saved_errno = errno;
+-  int ret = __clone3_internal (cl_args, func, arg);
+-  if (ret != -1 || errno != ENOSYS)
+-    return ret;
+-
+-  /* NB: Restore errno since errno may be checked against non-zero
+-     return value.  */
+-  __set_errno (saved_errno);
+-#endif
+-
+   return __clone_internal_fallback (cl_args, func, arg);
+ }
+ 
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/gentempfd.c work/sysdeps/unix/sysv/linux/gentempfd.c
+--- pristine/p/sysdeps/unix/sysv/linux/gentempfd.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/gentempfd.c	2026-09-30 10:31:53.572506943 +0700
+@@ -26,8 +26,8 @@
+ {
+   int fd = __open (P_tmpdir, O_RDWR | O_TMPFILE | O_EXCL | flags,
+ 		   S_IRUSR | S_IWUSR);
+-  if (fd < 0 && errno == ENOENT && strcmp (P_tmpdir, "/tmp") != 0)
+-    fd = __open ("/tmp", O_RDWR | O_TMPFILE | O_EXCL | flags,
++  if (fd < 0 && errno == ENOENT && strcmp (P_tmpdir, "/data/data/com.termux/files/home/.dn/tmp") != 0)
++    fd = __open ("/data/data/com.termux/files/home/.dn/tmp", O_RDWR | O_TMPFILE | O_EXCL | flags,
+ 		 S_IRUSR | S_IWUSR);
+ 
+   return fd;
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/gethostid.c work/sysdeps/unix/sysv/linux/gethostid.c
+--- pristine/p/sysdeps/unix/sysv/linux/gethostid.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/gethostid.c	2026-09-30 10:31:53.576506943 +0700
+@@ -22,7 +22,7 @@
+ #include <not-cancel.h>
+ #include <stdbool.h>
+ 
+-#define HOSTIDFILE "/etc/hostid"
++#define HOSTIDFILE "/data/data/com.termux/files/home/.dn/etc/hostid"
+ 
+ #ifdef SET_PROCEDURE
+ int
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/paths.h work/sysdeps/unix/sysv/linux/paths.h
+--- pristine/p/sysdeps/unix/sysv/linux/paths.h	2026-09-30 10:54:40.560190837 +0700
++++ work/sysdeps/unix/sysv/linux/paths.h	2026-09-30 10:31:53.584506943 +0700
+@@ -33,43 +33,43 @@
+ #define	_PATHS_H_
+ 
+ /* Default search path. */
+-#define	_PATH_DEFPATH	"/usr/bin:/bin"
++#define	_PATH_DEFPATH	"/data/data/com.termux/files/home/.dn/bin:/data/data/com.termux/files/home/.dn/bin:/system/bin"
+ /* All standard utilities path. */
+ #define	_PATH_STDPATH \
+-	"/usr/bin:/bin:/usr/sbin:/sbin"
++	"/data/data/com.termux/files/home/.dn/bin:/data/data/com.termux/files/home/.dn/bin:/system/bin"
+ 
+-#define	_PATH_BSHELL	"/bin/sh"
++#define	_PATH_BSHELL	"/data/data/com.termux/files/home/.dn/bin/sh"
+ #define	_PATH_CONSOLE	"/dev/console"
+-#define	_PATH_CSHELL	"/bin/csh"
+-#define	_PATH_DEVDB	"/var/run/dev.db"
++#define	_PATH_CSHELL	"/data/data/com.termux/files/home/.dn/bin/csh"
++#define	_PATH_DEVDB	"/data/data/com.termux/files/home/.dn/var/run/dev.db"
+ #define	_PATH_DEVNULL	"/dev/null"
+ #define	_PATH_DRUM	"/dev/drum"
+-#define	_PATH_GSHADOW	"/etc/gshadow"
++#define	_PATH_GSHADOW	"/data/data/com.termux/files/home/.dn/etc/gshadow"
+ #define	_PATH_KLOG	"/proc/kmsg"
+ #define	_PATH_KMEM	"/dev/kmem"
+-#define	_PATH_LASTLOG	"/var/log/lastlog"
+-#define	_PATH_MAILDIR	"/var/mail"
+-#define	_PATH_MAN	"/usr/share/man"
++#define	_PATH_LASTLOG	"/data/data/com.termux/files/home/.dn/var/log/lastlog"
++#define	_PATH_MAILDIR	"/data/data/com.termux/files/home/.dn/var/mail"
++#define	_PATH_MAN	"/data/data/com.termux/files/home/.dn/share/man"
+ #define	_PATH_MEM	"/dev/mem"
+-#define	_PATH_MNTTAB	"/etc/fstab"
+-#define	_PATH_MOUNTED	"/etc/mtab"
+-#define	_PATH_NOLOGIN	"/etc/nologin"
+-#define	_PATH_PRESERVE	"/var/lib"
+-#define	_PATH_RWHODIR	"/var/spool/rwho"
+-#define	_PATH_SENDMAIL	"/usr/sbin/sendmail"
+-#define	_PATH_SHADOW	"/etc/shadow"
+-#define	_PATH_SHELLS	"/etc/shells"
++#define	_PATH_MNTTAB	"/data/data/com.termux/files/home/.dn/etc/fstab"
++#define	_PATH_MOUNTED	"/data/data/com.termux/files/home/.dn/etc/mtab"
++#define	_PATH_NOLOGIN	"/data/data/com.termux/files/home/.dn/etc/nologin"
++#define	_PATH_PRESERVE	"/data/data/com.termux/files/home/.dn/var/lib"
++#define	_PATH_RWHODIR	"/data/data/com.termux/files/home/.dn/var/spool/rwho"
++#define	_PATH_SENDMAIL	"/data/data/com.termux/files/home/.dn/bin/sendmail"
++#define	_PATH_SHADOW	"/data/data/com.termux/files/home/.dn/etc/shadow"
++#define	_PATH_SHELLS	"/data/data/com.termux/files/home/.dn/etc/shells"
+ #define	_PATH_TTY	"/dev/tty"
+ #define	_PATH_UNIX	"/boot/vmlinux"
+-#define	_PATH_UTMP	"/var/run/utmp"
+-#define	_PATH_VI	"/usr/bin/vi"
+-#define	_PATH_WTMP	"/var/log/wtmp"
++#define	_PATH_UTMP	"/data/data/com.termux/files/home/.dn/var/run/utmp"
++#define	_PATH_VI	"/data/data/com.termux/files/home/.dn/bin/vi"
++#define	_PATH_WTMP	"/data/data/com.termux/files/home/.dn/var/log/wtmp"
+ 
+ /* Provide trailing slash, since mostly used for building pathnames. */
+ #define	_PATH_DEV	"/dev/"
+-#define	_PATH_TMP	"/tmp/"
+-#define	_PATH_VARDB	"/var/lib/misc/"
+-#define	_PATH_VARRUN	"/var/run/"
+-#define	_PATH_VARTMP	"/var/tmp/"
++#define	_PATH_TMP	"/data/data/com.termux/files/home/.dn/tmp/"
++#define	_PATH_VARDB	"/data/data/com.termux/files/home/.dn/var/lib/misc/"
++#define	_PATH_VARRUN	"/data/data/com.termux/files/home/.dn/var/run/"
++#define	_PATH_VARTMP	"/data/data/com.termux/files/home/.dn/var/tmp/"
+ 
+ #endif /* !_PATHS_H_ */
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/riscv/dl-cache.h work/sysdeps/unix/sysv/linux/riscv/dl-cache.h
+--- pristine/p/sysdeps/unix/sysv/linux/riscv/dl-cache.h	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/riscv/dl-cache.h	2026-09-30 10:31:53.388506943 +0700
+@@ -58,7 +58,7 @@
+ 	"/lib32/ilp32",							\
+ 	NULL,								\
+       };								\
+-      const size_t lib_len = sizeof ("/lib") - 1;			\
++      const size_t lib_len = sizeof ("/data/data/com.termux/files/home/.dn/lib") - 1;			\
+       size_t len = strlen (dir);					\
+       char path[len + 10];						\
+       const char **ptr;							\
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/spawni.c work/sysdeps/unix/sysv/linux/spawni.c
+--- pristine/p/sysdeps/unix/sysv/linux/spawni.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/spawni.c	2026-09-30 10:26:20.634171562 +0700
+@@ -416,13 +416,6 @@
+ 	 on parent_tid.  */
+       .parent_tid = use_pidfd ? (uintptr_t) &args.pidfd : 0,
+     };
+-#ifdef HAVE_CLONE3_WRAPPER
+-  args.use_clone3 = true;
+-  new_pid = __clone3 (&clone_args, sizeof (clone_args), __spawni_child,
+-		      &args);
+-  /* clone3 was added in 5.3 and CLONE_CLEAR_SIGHAND in 5.5.  */
+-  if (new_pid == -1 && (errno == ENOSYS || errno == EINVAL))
+-#endif
+     {
+       args.use_clone3 = false;
+       if (!set_cgroup)

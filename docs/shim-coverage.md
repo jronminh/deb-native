@@ -179,6 +179,32 @@ libc layer can be.** The wider boundary — inline `svc #0`, static executables,
 explicit `syscall()`, and the `PT_INTERP` routing gap in `dn-run.c` — is mapped
 and measured in [`syscall-boundary.md`](syscall-boundary.md).
 
+## Open question (2026-09-30): the five-prefix view may be too narrow
+
+`native/path-redirect.c`'s `rewrite()` only dispatches on 5 top-level
+prefixes: `/usr`, `/etc`, `/var`, `/opt`, `/root` (dispatched by the path's
+second byte, `path-redirect.c:139-155`). Anything else passes through
+unrewritten to the real Android root. Two concrete gaps found by inspection,
+not yet measured against the corpus:
+
+- **`/bin`, `/sbin`, `/lib`, `/lib64`** — on real Debian (usrmerge) these are
+  symlinks into `/usr/...`, so a program that spells the path as `/usr/bin/x`
+  is already covered. But a program that hardcodes the literal `/bin/x` or
+  `/lib/x.so` (common — plenty of software predates or ignores usrmerge) is
+  not: it doesn't match any of the 5 cases. The shim already special-cases
+  `/bin/sh`, `/bin/dash`, `/bin/bash`, `/bin/perl` for **execve only**
+  (`path-redirect.c:307-313`) — that is a narrow, execve-specific carve-out,
+  not general `open()`/`stat()` coverage of the `/bin` etc. prefixes.
+- **`/run`** — modern packages (systemd-era sockets, PID files) commonly use
+  `/run/...` directly rather than `/var/run/...`. Not covered either.
+
+Before adding these as new cases: measure real occurrence against the
+existing 258-package corpus the same way `shim-coverage.md`'s "Results"
+section already did for the current 5, rather than adding cases blind. The
+dispatch trick (switch on path's second byte) stays cheap as long as new
+prefixes don't collide in their second letter with an existing case; check
+before adding.
+
 ## Next steps
 
 - [x] Add the cheap gaps above (`__xstat`/`__lxstat` + `*64`, `sendmsg`,

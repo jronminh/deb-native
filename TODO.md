@@ -94,6 +94,62 @@ right is gained, nothing is recorded.
       programs), or fake owners only for paths under the prefix / home.
 - [ ] Survey on the fake-root prefix (maintainer scripts now run "as root").
 
+**Discussion, not yet written up (2026-09-30, unrecorded verbal session --
+reconstructed after the fact, confirm details before acting on them):**
+two angles on tracer cost, expected to combine rather than replace each
+other:
+
+1. **`SECCOMP_RET_USER_NOTIF` instead of `ptrace`** for `dn-trace` --
+   already flagged as "the endgame" in `docs/direct-usage.md` (:16, :102),
+   `docs/syscall-boundary.md` (:131) and `docs/shim-coverage.md` (:175),
+   but never attempted. `ptrace` stops the tracee twice per syscall
+   (entry + exit); a seccomp-bpf filter with `SECCOMP_RET_USER_NOTIF`
+   notifies only on the syscalls it lists and answers over one fd via
+   `ioctl`, no double stop. Open question carried over from those docs:
+   it can allow/deny/inject an fd/return a value, but **cannot rewrite a
+   syscall's arguments in place** the way `ptrace` can -- path rewriting
+   (the tracer's main job) would need `process_vm_writev` on the tracee's
+   existing argument buffer (same uid, so accessible) before
+   `SECCOMP_USER_NOTIF_FLAG_CONTINUE`, in-place and no longer than the
+   original string. Needs a small prototype against `dn-trace`'s actual
+   rewrite paths (`path/path.c`) before committing -- not yet started.
+2. **Narrow what still falls through to the tracer at all**, rather than
+   speeding the tracer up. First correction: widening the *shim*
+   (`native/path-redirect.c`, `LD_PRELOAD` interposition) to catch NSS was
+   already tried and closed with a negative result, 2026-09-26 --
+   `docs/shim-coverage.md` ("NSS lookups -- confirmed out of the shim's
+   reach") and `docs/syscall-boundary.md` ("Solved: NSS, case 2"). glibc's
+   `_nss_files_*`/`_nss_dns_*` are defined inside `libc.so.6` itself and
+   open through the private `__open_nocancel` (`GLIBC_PRIVATE`), bound at
+   link time -- no `LD_PRELOAD` interposer reaches it, and even
+   `nsswitch.conf` dispatch is read internally, so a custom NSS module
+   cannot be selected either. Do not re-attempt this at the shim layer.
+   - **Real fix, already scoped as 0.5.0** ("our own glibc", below):
+     building glibc ourselves from Debian's source + our own Android patch
+     series means *we* choose the sysconfdir/build config, so NSS reads
+     the prefix's `/etc` directly -- no bind trick, no tracer route for
+     NSS at all. This closes tracer-only case #2 outright (static binaries
+     and raw `syscall()`, cases stay tracer-only regardless -- no libc
+     call to interpose on, whoever built the libc). **Reprioritized ahead
+     of 0.4.0 per the 2026-09-30 discussion** -- see 0.5.0 section for
+     scope/cost (own build pipeline, patch series maintenance).
+   - **Cheaper interim, not yet started:** `native/dn-run.c`'s
+     `classify()`/`has_nss_import()` (`:67-122`) routes a whole process to
+     the tracer for its **entire lifetime** just because it *imports* an
+     NSS symbol (`getpwnam`, `getgrgid`, ...) -- common in `ls -l`, `ps`,
+     `git log --author`, `bash`'s `~user` expansion -- regardless of
+     whether that binary actually calls it this run. Narrowing that check
+     (fewer symbols, or distinguishing "just wants the current uid/gid"
+     from "needs the prefix's real passwd/group") would cut tracer load
+     without touching the shim or waiting on 0.5.0. Not started; measure
+     the false-positive rate on `docs/survey-0.2.0`'s sample first.
+
+Angle 1 (`SECCOMP_RET_USER_NOTIF`) and 0.5.0's own-glibc are independent
+and expected to combine (one attacks tracer overhead, the other removes a
+whole case from needing the tracer). This entry exists so the discussion
+isn't lost a second time; each still needs its own write-up once picked
+up.
+
 ## 0.4.0 roadmap: a lighter base (was 0.3.0; busybox and other options)
 
 Theme: a lighter bootstrap. Not a package swap -- a different kind of
@@ -198,6 +254,43 @@ sample (`docs/survey-0.2.0/`):
 
 ## 0.5.0 roadmap: our own glibc (Debian's source + Android patches)
 
+**Reprioritized 2026-09-30**, ahead of 0.4.0: the tracer/loader discussion
+above (fake-root section, "Speed under the tracer") landed on this as the
+real fix for tracer-only case #2 (NSS), not a stop-gap -- Android's kernel
+and SELinux only enforce at the syscall boundary, so a glibc we build and
+patch ourselves is free to make NSS read the prefix's `/etc` directly, the
+same way Termux already ships a working patched glibc on Android. Still
+the highest-cost item on this file (own build pipeline, patch series
+maintained per glibc version), so sequence it against 0.4.0/alpha by
+actual bandwidth, not just this note.
+
+**Scope check, closed 2026-09-30:** own-glibc is not a general fix for
+everything Android breaks -- see
+[`docs/android-seccomp-audit.md`](docs/android-seccomp-audit.md). Three
+gates exist below glibc entirely, and own-glibc has no leverage on any of
+them (a syscall failing there fails the same way no matter which library
+issued it): **A) the app seccomp allowlist** (`bionic/libc/SECCOMP_
+ALLOWLIST_APP.TXT`/`_COMMON.TXT`, confirmed against upstream AOSP source
+-- `io_uring*` is absent from it entirely); **B) capability/kernel-config**
+(`CAP_SYS_ADMIN`, `CONFIG_USER_NS` compiled out); **C) SELinux**, found
+while testing this discussion -- a plain `AF_NETLINK` `bind()` passes
+seccomp and needs no capability, yet still fails `EPERM` under
+`untrusted_app_27`'s policy. Own-glibc's actual, confirmed leverage stays
+the NSS/loader-internal-path class only (NSS, `gconv`, locale,
+`ld.so.cache`, `RUNPATH` -- one mechanism, several symptoms) plus
+whatever syscall stock Debian `libc6` trips at startup (still unnamed,
+low-cost to check later).
+
+The audit's relevance triage also found most of what looked like scope
+isn't: namespaces/mount/overlayfs, `swapon`, `mknod`, SysV IPC, and ports
+<1024 don't matter to this project's actual goal (a dev-tool/CLI
+userland, not containers or a network appliance) and were dropped without
+needing a single on-device test. The one real candidate (`ping`/`ip`) was
+tested directly: `ping` already works (Android's sandbox allows
+unprivileged ICMP); `ip`-class netlink is Gate C and out of scope, same
+as the rest. `io_uring` (Gate A, confirmed real) is deliberately deferred
+-- an HPC/high-throughput concern, not this project's.
+
 Theme: match mainstream Debian for real. The prefix's `libc6` stops being
 an imposter (Termux's glibc under Debian's name, 0.4.0) and becomes
 **Debian's own glibc source, at Debian's exact version, with the Android
@@ -216,7 +309,35 @@ What it buys:
 
 What it needs:
 - [ ] **patch series:** termux-pacman's `glibc-packages` Android patches,
-      kept as our own series, updated per glibc version;
+      kept as our own series, updated per glibc version. **Investigated
+      2026-09-30, see `docs/android-seccomp-audit.md`'s "Termux's actual
+      Android patch series" section for the full breakdown** -- fetched
+      the real source (`termux-pacman/glibc-packages`, `gpkg/glibc/`).
+      Confirmed via direct test: stock Debian `libc6` segfaults inside its
+      own dynamic linker before even reaching a syscall question (real
+      `.deb` downloaded, run through this project's own
+      `dn-translate-deb.sh`, tested with the `hello` package's binary) --
+      the patch series is load-bearing at the loader-startup level, not a
+      convenience, so it cannot be skipped or lightened. Good news: the
+      NSS/path fix specifically (`set-dirs.patch`) turned out to be one
+      plain, ~30-file unified diff templating a `@TERMUX_PREFIX@`
+      placeholder over hardcoded `/etc`/`/tmp`/`/var` paths -- forkable
+      and re-targetable to this project's own prefix path, not a novel
+      invention, which lowers this item's cost estimate versus what was
+      assumed when 0.5.0 was first reprioritized. Still unread in full:
+      `android_passwd_group.c` (custom NSS-adjacent Android-uid
+      synthesis), `fakesyscall.json` (declarative "answer instead of
+      crash" mechanism at the libc level -- same idea as this file's
+      tracer Phase-5 item, done differently), `shmem-android.c` (SysV
+      shm reimplemented in userspace). **Open, not decided:** fork
+      `termux-pacman/glibc-packages`'s patches as-is (retargeted) vs.
+      write this project's own independent series -- the former is
+      proven working and far less redundant effort, the latter avoids
+      inheriting Termux's own identity-model assumptions
+      (`android_passwd_group.c` may not fit this project's fake-root,
+      0.3.0) and any provenance/licensing question of carrying another
+      project's patch series long-term. Decide after reading
+      `getpwnam.c.patch`/`android_passwd_group.c` in full;
 - [ ] **build pipeline:** cross-build in CI (too slow on a phone),
       producing `libc6`, `libc6-dev`, `libc-bin`, `locales` `.deb`s
       versioned like Debian's (e.g. `2.41-12+deb13u4+dn1`);
@@ -225,8 +346,89 @@ What it needs:
 - [ ] **fixed prefix path** built in (`/data/data/com.termux/files/home/.dn`,
       the same on every Termux) -- settles the open "prefix location"
       question;
+- [ ] **`dn-trace` upgrade** (bundled into 0.5.0 on purpose, decided
+      2026-09-30 -- not a separate release). After own-glibc removes
+      tracer-only case #2 (NSS), the tracer's permanent job stays exactly
+      static binaries and raw `syscall()` (#3/#4 -- no libc call to
+      interpose on regardless of whose glibc it is, own-glibc has no
+      leverage here). Two independent upgrades on top of that unchanged
+      core job, **prioritized 2026-09-30**:
+      1. **First: clean death instead of a kill** (see
+         `docs/android-seccomp-audit.md`, "Phase 5 idea" -- Gate A only).
+         A syscall absent from Android's seccomp allowlist doesn't return
+         an errno, it `SIGSYS`-kills the whole process; `tracer/tracee/
+         seccomp.c` already catches this for `set_robust_list` (currently
+         answers with a fake success, harmless because that call is
+         best-effort). Extend the same catch to answer with **`ENOSYS`**
+         for other Gate-A syscalls (starting with `io_uring_setup`/
+         `_enter`/`_register`, absent from both allowlist TXT files) --
+         honest "not available here," not a fake success, matching what a
+         kernel without that syscall already returns. No library patch,
+         no own-glibc dependency -- purely this file. Needs `dn-run.c`'s
+         `classify()` extended too (an `io_uring`-linked *dynamic* glibc
+         binary runs shim-only today, no `ptrace` attached at all, so
+         nothing to catch until it's routed through the tracer the same
+         way NSS-importers already are).
+      2. **Speed (`SECCOMP_RET_USER_NOTIF` instead of `ptrace`), reconsidered
+         2026-09-30 -- not committed for this version.** Still flagged as
+         "the endgame" in `docs/direct-usage.md` (:16, :102),
+         `docs/syscall-boundary.md` (:131), `docs/shim-coverage.md` (:175),
+         but explicitly deferred for now: it cannot rewrite a syscall's
+         arguments in place the way `ptrace` can (path rewriting, the
+         tracer's main job, would need `process_vm_writev` on the tracee's
+         existing argument buffer before `SECCOMP_USER_NOTIF_FLAG_CONTINUE`),
+         so it adds real implementation weight to `dn-trace` for a
+         performance gain, not a correctness one -- risks growing the
+         tracer just as the goal is to keep its scope down to the two
+         permanent cases. Revisit only after #1 ships and only if `dn-trace`
+         is still small; not a 0.5.0 blocker.
 - [ ] **proof:** survey before/after, `gcc` hello-world, NSS without the
       tracer.
+
+**Status (2026-09-30, `fe2`): patch fork started, bootstrap-via-real-gcc
+blocked by a new bug, unrelated to own-glibc.** Motivation sharpened first:
+`dn-adopt.sh` today symlinks the prefix's `libc6` to *whatever glibc Termux
+has installed live* -- deb-native does not pin its own version, it drifts
+with Termux's updates. Vendoring is a version-pinning fix, not only the NSS
+fix above.
+
+Fetched Debian's real `glibc` source package (`2.41-12+deb13u4`, same
+version already used for the stock-segfault test), applied Debian's own
+~80-patch quilt series with `quilt push -a` (all applied cleanly), then
+forked and applied `set-dirs.patch` + `disable-clone3.patch` from
+`termux-pacman/glibc-packages` on top, retargeted to this project's fixed
+prefix (`/data/data/com.termux/files/home/.dn`) instead of
+`@TERMUX_PREFIX@`/`@TERMUX_PREFIX_CLASSICAL@`. 4 of `set-dirs.patch`'s ~66
+touched files needed hand-fixing (context drift: Debian's own patches
+already changed `_PATH_VARDB`, `nscd`'s db path, etc. from what
+`termux-pacman`'s patch assumed) -- done, verified by inspection, not yet
+by a build.
+
+**Blocked at the build step, not by own-glibc's design.** Vanilla `clang`
+cannot build glibc from source: `configure`'s unconditional "redirection of
+built-in functions" check requires a GCC-specific behavior
+(`__asm`-labeled `extern` declarations redirecting `__builtin_*` calls)
+that clang has never implemented, regardless of version --
+`-fgnuc-version=` gets past the *compiler-version* check but not this one.
+No real GCC cross-toolchain exists in this Termux install
+(`gcc`/`aarch64-linux-android-gcc` here are both clang aliases). Tried
+installing Debian's own real `gcc-14`/`binutils` (arm64) through
+deb-native's *own* `apt-get` -- installs and runs fine for `--version`, but
+**`cc1` (an `ET_EXEC`, non-PIE binary) segfaults (signal 11) immediately
+after glibc's loader starts**, through the *current* `ld-dn`+shim+adopted-
+Termux-glibc pipeline. Confirmed by `dn-trace`: not Android's seccomp
+(that would be signal 31/SIGSYS with a named syscall, matching
+`android-seccomp-audit.md`'s Gate A/B/C) -- this crashes with no syscall in
+flight, inside glibc's own loader startup, right after it re-resolves
+`cc1`'s own path. Root cause not yet found; likely specific to `ET_EXEC`
+(fixed-address, non-PIE) binaries, a class not exercised by anything in
+`docs/survey-0.2.0.md`'s sample (apparently all PIE) -- worth its own
+investigation, independent of 0.5.0, since any Debian toolchain binary
+built `-no-pie` would hit the same wall. Next: either root-cause and fix
+`ld-dn`/the loader path for `ET_EXEC`, or find a different way to get a
+working native compiler to actually build the forked glibc (a prebuilt
+`.so` from elsewhere, a GitHub Actions runner, etc.) -- both open, not
+decided.
 
 `ld-dn` stays: Android's root has no `/lib/ld-linux-aarch64.so.1`, so
 programs still need their interpreter pointed into the prefix.
