@@ -68,9 +68,14 @@ Code's installer finishing by itself.
   plainly in the README that downloaded executables get modified.
 
 **After alpha:** services (runit translation), `sudo` modes,
-the pre-translated repo, and **true fusion rebuilt on the 0.2 core** (the
-`naibed` branch, frozen until alpha: `ld-dn`, `dn-trace`, the translator
-and the priv layer, with Termux's prefix as the root).
+the pre-translated repo, **0.4.0's lighter base** (busybox swap, deferred
+2026-09-30 -- not in the Must/Should-have list above, and swapping
+`coreutils sed grep findutils debianutils diffutils gzip tar hostname`
+for `busybox` touches nearly everything else depends on; too large/risky
+a change to sequence ahead of the alpha push), and **true fusion rebuilt
+on the 0.2 core** (the `naibed` branch, frozen until alpha: `ld-dn`,
+`dn-trace`, the translator and the priv layer, with Termux's prefix as
+the root).
 
 ## 0.3.0-prealpha: fake root (released)
 
@@ -151,6 +156,11 @@ isn't lost a second time; each still needs its own write-up once picked
 up.
 
 ## 0.4.0 roadmap: a lighter base (was 0.3.0; busybox and other options)
+
+**Deferred to after alpha (2026-09-30)** -- not required by the Alpha
+goal's Must/Should-have list above, and a large, high-risk change
+(swaps out tools nearly everything else in the prefix depends on).
+Kept here for the design record; don't pick this up before alpha ships.
 
 Theme: a lighter bootstrap. Not a package swap -- a different kind of
 Debian base, as in Debian's own installer environment: Debian's `busybox`

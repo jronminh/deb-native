@@ -860,8 +860,48 @@ its very first step (`termux_step_pre_configure`) -- a step this
 project's fork only partially carried over (the loose-file
 `disable-clone3.patch`, not build.sh's own `rm`). Fixed the same way
 upstream does: deleted `sysdeps/unix/sysv/linux/aarch64/clone3.S` from
-the work tree (aarch64 only, this project's one target). Needs folding
-back into `dn-glibc-android.patch` (as a deleted-file diff hunk) once
-the full build is confirmed green, so the fork stays reproducible from
-the patch alone.
+the work tree (aarch64 only, this project's one target). A stale `.d`
+dependency file from an earlier partial run (generated before the fork
+was complete) still hardcoded the now-deleted path and caused one more
+false "No rule to make target" failure after the fix was already
+applied — deleting `objdir/misc/clone3.o{,s}{,.d}` let `make` regenerate
+it and fall back correctly to the portable `sysdeps/unix/sysv/linux/clone3.c`.
+Needs folding back into `dn-glibc-android.patch` (as a deleted-file diff
+hunk), done below.
+
+## First full on-device build: green, and it runs (2026-09-30)
+
+**`make` completed with zero errors** (`objdir/libc.so.6` -> `libc.so`,
+`objdir/elf/ld.so` built, 1.2 MB) after two false starts, both from this
+build's own setup rather than the patch content: the `-k`/dependency-order
+issue above, and the earlier `PATH`-shadowing `mkdir` instability
+(`findings.md`). A straight (non-`-k`) `make -O -j1` run, once those two
+were fixed, went start to finish without a single real error.
+
+**Ran the `hello` control test this doc has used throughout** (the same
+one that segfaulted instantly against stock Debian glibc, and `SIGSYS`'d
+against the earlier partial-fork CI artifact): `elf/ld.so --library-path
+objdir pristine/usr/bin/hello` →
+
+```
+Hello, world!
+exit=0
+```
+
+**Confirmed both fixes landed, not just one:**
+- NSS/path retarget: `strings objdir/libc.so` shows
+  `/data/data/com.termux/files/home/.dn/etc/{mtab,fstab,hostid,ttys,shells,...}`
+  — the project's real fixed prefix, not `@TERMUX_PREFIX@` or Termux's own path.
+- Startup no longer trips a Gate-A `SIGSYS`: the `fakesyscall.json`
+  ENOSYS/real-substitute buckets forked this session (`clone3`,
+  `set_robust_list`, etc. now answered cleanly instead of reaching the
+  kernel) evidently cover whatever stock `libc6`'s startup path was
+  hitting — `hello` would have died the same way the CI artifact did
+  otherwise.
+
+This is the first time this project's own-glibc has actually **run** a
+program, not just built. `make install DESTDIR=...` (proper headers +
+`.so`s for real functional testing — NSS `getpwuid` against the prefix's
+real `/etc/passwd`, not just a strings grep) is the immediate next step,
+same as `build-glibc.yml`'s own install stage.
 
