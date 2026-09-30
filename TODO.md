@@ -339,13 +339,16 @@ What it needs:
       the fake bucket is parked (below); everything else -- including
       `android_passwd_group.c` and `shmem-android.c`, both read in full and
       confirmed low-risk/real -- is forked now. One patch
-      (`disable-termios2.patch`) targets glibc internals that no longer
-      exist in this shape in 2.41 and needs a real port, not a mechanical
-      reapply -- not forked yet, terminal I/O may still misbehave on
-      Android without it. **Not yet built or tested on-device** -- next
-      step, either via CI (`build-glibc.yml`) or on-device now that `cc1`'s
-      `ET_EXEC` segfault (`findings.md`, 2026-09-30) no longer blocks a
-      native build attempt;
+      (`disable-termios2.patch`) targeted glibc internals that no longer
+      exist in this shape in 2.41 -- **resolved 2026-09-30, empirically:
+      not needed at all**, not just hard to port. `termios2` doesn't exist
+      anywhere in 2.41's source; `tcgetattr`/`tcsetattr`/`isatty` already
+      use plain `TCGETS`/`TCSETS` unconditionally, confirmed live via
+      `dn-trace` against the clean-room build (real pty, baud-rate
+      round-trip correct, every ioctl `TCGETS`/`TCSETS`, never
+      `TCGETS2`/`TCSETS2`). See `docs/android-seccomp-audit.md`'s "Full
+      per-file fork verdict" table. (Patch itself has since been built and
+      tested on-device multiple times -- see the `[x] proof` item below.)
 - [ ] **build pipeline:** cross-build in CI (too slow on a phone),
       producing `libc6`, `libc6-dev`, `libc-bin`, `locales` `.deb`s
       versioned like Debian's (e.g. `2.41-12+deb13u4+dn1`);

@@ -658,10 +658,11 @@ they map directly onto that rule:**
 | **Fork -- real substitute (bucket 1) or its companion source** | `fake_epoll_pwait2.c`, `shmat.c`, `shmctl.c`, `shmdt.c`, `shmget.c`, `shmem-android.c`, `shmem-android.h` |
 | **Fork -- honest `ENOSYS` (bucket 2) or its wiring** | most of `set-fakesyscalls.patch` (the SysV-IPC/`statx`/`mq_open`/`open_by_handle_at`/`epoll_pwait2`/`close_range` hunks), `sysvipc-Makefile.patch` |
 | **Fork -- `fakesyscall.json`'s dispatch mechanism itself** | `fakesyscall.json` (buckets 1+2 only, see "Not forked yet"), `fakesyscall.h`, `fakesyscall-base.h`, `syscall.c`, `syscall.S.patch`, `unistd.h.patch` (declares the renamed `syscallS`), `set-sigrestore.patch` (small `#include` glue for the same mechanism) |
-| **Fork -- real, independently-confirmed Android kernel/ABI fixes, not fakesyscall-related** | `disable-clone3.patch` (also independently in bucket 2's `clone3` -- either route works), `disable-termios2.patch` (terminal I/O -- every CLI program, `isatty`/`tcgetattr`/`tcsetattr`), `dl-execstack.c.patch` (Android's real W^X enforcement on stack pages), `kernel-features.h.patch` (no separate `accept`/`recv`/`send` syscalls -- needed for sockets to work at all), `clock_gettime.c.patch`, `faccessat.c.patch`, `fchmodat.c.patch`, `fstatat64.c.patch` (all: prefer an older syscall variant Android actually has), `sem_open.c.patch` (`link()` -> `symlink()` -- **independently confirmed by this project's own finding**: `dn-translate-deb.sh`'s own comment already documents "Android refuses `link(2)` in app data (EACCES)"), `set-nptl-syscalls.patch` (drops `set_robust_list` calls from pthread create/fork/TLS-init entirely -- same Gate-A problem the tracer already SIGSYS-emulates, fixed further upstream), `set-static-stubs.patch` (static-linking unwind glue, low risk either way) |
+| **Fork -- real, independently-confirmed Android kernel/ABI fixes, not fakesyscall-related** | `disable-clone3.patch` (also independently in bucket 2's `clone3` -- either route works), `dl-execstack.c.patch` (Android's real W^X enforcement on stack pages), `kernel-features.h.patch` (no separate `accept`/`recv`/`send` syscalls -- needed for sockets to work at all), `clock_gettime.c.patch`, `faccessat.c.patch`, `fchmodat.c.patch`, `fstatat64.c.patch` (all: prefer an older syscall variant Android actually has), `sem_open.c.patch` (`link()` -> `symlink()` -- **independently confirmed by this project's own finding**: `dn-translate-deb.sh`'s own comment already documents "Android refuses `link(2)` in app data (EACCES)"), `set-nptl-syscalls.patch` (drops `set_robust_list` calls from pthread create/fork/TLS-init entirely -- same Gate-A problem the tracer already SIGSYS-emulates, fixed further upstream), `set-static-stubs.patch` (static-linking unwind glue, low risk either way) |
 | **Fork -- real Android-specific fix, found outside `fakesyscall.json`** | `mprotect.c` (Android's W^X blocks `mprotect(..., PROT_EXEC)` on an *existing* mapping -- real Termux issue #49, real fix via remap; matters for any JIT -- Node, a JIT-enabled Python -- directly touching the Alpha goal's "popular languages" item) |
 | **Fork -- NSS identity fallback, already risk-graded in this doc** | `android_passwd_group.c`, `android_passwd_group.h`, `android_system_user_ids.h`, `gen-android-ids.sh`, `getXXbyYY.c.patch`, `getXXbyYY_r.c.patch`, `getgrgid.c.patch`, `getgrnam.c.patch`, `getpwnam.c.patch`, `getpwuid.c.patch` |
 | **Fork -- build glue for whatever the above pulls in** | `misc-Makefile.patch`, `misc-Versions.patch`, `nss-Makefile.patch`, `posix-Makefile.patch` |
+| **Not applicable, empirically confirmed -- not just hard to port** | `disable-termios2.patch`: targets a `termios2`-based `isatty`/`tcgetattr`/`tcsetattr` implementation that no longer exists anywhere in 2.41's source (`grep -rl 'TCGETS2\|struct termios2\|__ASSUME_TERMIOS2' sysdeps/` returns nothing); 2.41 already uses plain `TCGETS`/`TCSETS` unconditionally, confirmed live via `dn-trace` against the clean-room build (real pty, `isatty`/`tcgetattr`/`cfsetispeed`+`tcsetattr`(`B9600`)/re-`tcgetattr`, every `ioctl` is `0x5401`/`0x5402`, baud round-trips correctly). Not forked, not needed. |
 | **Needs its own careful evaluation -- not a simple fork/skip** | `set-ld-variables.patch`: adds a parallel `GLIBC_LD_*` env-var namespace (`GLIBC_LD_LIBRARY_PATH`, `GLIBC_LD_PRELOAD`, ...), checked *before* the plain `LD_*` name, to keep Android's own Bionic linker from reacting to the same env vars a glibc child inherits. This lands squarely on top of `native/ld-dn.c`'s own env-building job (it now sets plain `LD_PRELOAD`/`LD_LIBRARY_PATH`/`DN_INSTDIR`/`COMPILER_PATH` per launch, `docs/findings.md` 2026-09-30) -- forking this patch would mean `ld-dn.c` needs to set the `GLIBC_LD_*` names too (or instead). Read the *reason* this exists (what actually breaks without it, in this project's own process tree, not Termux's) before deciding, not just the diff. |
 | **Not forked yet -- parked on the fake-root decision (bucket 3 above)** | the `"0"`-bucket entries inside `fakesyscall.json` (`setuid`/`setgid`/`setreuid`/`setregid`/`setresuid`/`setresgid`/`setfsuid`/`setfsgid`), `setfsuid.c`, `setfsgid.c`, and the `set-fakesyscalls.patch` hunks touching `setegid.c`/`seteuid.c`/`setgid.c`/`setregid.c`/`setresgid.c`/`setresuid.c`/`setreuid.c`/`setuid.c`/`local-setxid.h` (the file otherwise forks now, per bucket 2 above -- only these specific hunks wait) |
 | **Defer -- real feature, just not urgent for the Alpha goal** | `locale-gen`, `locale.gen.txt` (locale generation -- i18n, not blocking compilers/languages), `syslog.c` (routes `syslog()` to Android's real `logd` via `/dev/socket/logdw` -- a genuine integration, just not urgent) |
@@ -744,10 +745,25 @@ longer exist in this shape in 2.41 -- `isatty.c`/`isatty_nostatus.c`/
 `termios_internals.h` aren't even at those paths anymore, and
 `__ASSUME_TERMIOS2` is gone from `kernel-features.h` entirely; glibc
 restructured termios handling since whatever version this patch was
-written against. **Not forked, needs a real port to 2.41's current
-structure, not a mechanical reapply** -- terminal I/O (`isatty`,
-`tcgetattr`/`tcsetattr`) may still misbehave on Android without it; flagged
-for later, not blocking this pass.
+written against.
+
+**Resolved 2026-09-30, empirically: not needed at all, not just hard to
+port.** `grep -rl 'TCGETS2\|struct termios2\|__ASSUME_TERMIOS2'
+sysdeps/` across the whole clean-room `work-clean` tree returns nothing --
+`termios2` doesn't exist anywhere in 2.41's source, not just at the paths
+this patch expected. `tcgetattr.c`/`tcsetattr.c`/`isatty.c` already use
+plain `TCGETS`/`TCSETS` against `struct __kernel_termios` unconditionally,
+exactly the behavior `disable-termios2.patch` was trying to force onto an
+older glibc. Confirmed live, not just by reading source: a test program
+(`posix_openpt`/`grantpt`/`unlockpt` to get a real pty, then
+`isatty`/`tcgetattr`/`cfsetispeed`+`cfsetospeed`(`B9600`)/`tcsetattr`/
+re-`tcgetattr` to verify the round-trip) run through `dn-trace -v 4`
+against the clean-room `libc.so.6`/`ld.so` shows every terminal `ioctl`
+using `0x5401`/`0x5402` (`TCGETS`/`TCSETS`) -- never `TCGETS2`/`TCSETS2`
+(`0x802c542a`/`0x402c542b` on aarch64) -- and the baud-rate round-trip
+comes back correct. Terminal I/O works without this patch, full stop; the
+"needs a real port" item above is closed as not applicable to 2.41, not
+left open.
 
 One patch (`set-static-stubs.patch`) had one hunk fail on context drift
 (2 leftover `link ()` call sites the same patch's own earlier hunk had
