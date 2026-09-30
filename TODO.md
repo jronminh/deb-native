@@ -136,19 +136,13 @@ at all. Two approaches tried, both hit a real, hard blocker:
   like `dpkg-divert` if it double-prefixes.
 - `dpkg --print-architecture` answers `aarch64` inside the prefix — watch
   for a maintainer script expecting `arm64`.
-- `$DN/etc/resolv.conf` doesn't exist -- harmless today (nothing in the
-  base uses real glibc DNS resolution yet), but the first real glibc
-  network client will hit this exact gap again. Symlinking it to Termux's
-  own (`/data/data/com.termux/files/usr/etc/resolv.conf`) worked in
-  testing; worth adding to `setup-runtime.sh` alongside the `/root` link
-  before something else needs it.
 
 **Next release (not 0.2.0): the repo.** The same translation at repo
 build time in [`deb-native-repo`](https://github.com/jronminh/deb-native-repo)
 (private) — packages arrive pre-translated and signed; device hooks stay
 as a fallback.
 
-## 0.3.0: fake root (released)
+## 0.3.0: fake root (released, no further investment planned)
 
 **Goal**: inside the prefix a program sees itself as root, as on a Debian
 where apt/dpkg/maintainer scripts run as root. Only the identity is
@@ -161,14 +155,26 @@ the environ array; `dn-trace` does the same at syscall exit for static
 programs/raw syscalls/NSS; `DN_ID=user` opts a command and its children
 out (`postgres`, Chromium's sandbox).
 
-**Open**:
-- Speed under the tracer: faking file owners stops every `stat` at exit
-  (`find` over ~1,200 files: 443ms -> 727ms, fe2). If it matters: fake
-  only uid/gid in the tracer, or only for paths under the prefix/home.
-- Survey on the fake-root prefix (maintainer scripts now run "as root").
+**Reconsidered 2026-10-01: no further investment in fake-root itself.**
+It stays exactly as released — still needed today, maintainer scripts and
+plenty of packages assume root — but this is a stand-in, not a
+destination: the real fix is the "Services, then sudo" layer below (a
+real extra identity via `termux-adb-bridge`/`dsb`, not a faked one). Given
+that, sinking more effort into fake-root's own mechanism (tracer-cost
+optimization, the SECCOMP_RET_USER_NOTIF prototype) isn't worth it —
+better spent once on the real identity layer than twice. The parked
+`set-fakesyscalls-parked.patch` (0.5.0, `setuid`/`setgid`/...) stays
+unapplied for the same reason: nothing about fake-root is being
+extended, so there is no new decision forcing it in. The tracer-cost
+discussion below is kept for the record, not as planned work.
 
-**Tracer-cost discussion (2026-09-30, two independent angles, expected to
-combine rather than replace each other)**:
+**Open**:
+- Survey on the fake-root prefix (maintainer scripts now run "as root") —
+  the one item still worth doing, since it's measuring the *existing*
+  mechanism, not building on it.
+
+**Tracer-cost discussion (2026-09-30, record only — not planned work per
+the note above)**:
 1. `SECCOMP_RET_USER_NOTIF` instead of `ptrace` for `dn-trace` — flagged
    as "the endgame" in `docs/direct-usage.md`/`docs/syscall-boundary.md`/
    `docs/shim-coverage.md`, never attempted. Can allow/deny/inject an
@@ -272,8 +278,11 @@ exist anywhere in glibc 2.41's source). Full history:
 fake-root-entangled `"0"`-bucket of `fakesyscall.json`
 (`setuid`/`setgid`/...) is split out as
 [`set-fakesyscalls-parked.patch`](third_party/glibc-android-patches/set-fakesyscalls-parked.patch),
-unapplied — apply it once fake-root's future (0.2.0/0.3.0 section) is
-decided. One known non-blocking bug: `ldconfig -r` `SIGSYS`s when run
+unapplied — stays that way: fake-root's future is decided (0.3.0,
+reconsidered 2026-10-01: no further investment, superseded eventually by
+the real identity layer), and the decision is *not* to extend fake-root,
+so nothing calls for applying this patch. One known non-blocking bug:
+`ldconfig -r` `SIGSYS`s when run
 untraced, succeeds under `dn-trace` (`ld.so.cache` isn't required for the
 loader to work, not investigated further).
 
