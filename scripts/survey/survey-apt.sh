@@ -2,7 +2,7 @@
 # Same idea and classification as survey.sh, but installing through real
 # apt (setup-apt-prefix.sh + apt-install.sh) instead of bare dpkg on a
 # single .deb — the before/after comparison for
-# docs/findings.md's #1 finding (no dependency
+# docs/log/findings.md's #1 finding (no dependency
 # installer was the dominant failure cause, not native-seed coverage).
 #
 # Usage: OUT=~/survey-apt scripts/survey/survey-apt.sh LIST.tsv

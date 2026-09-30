@@ -51,7 +51,7 @@ done
 
 # Programs whose own code issues syscalls (inline `svc #0`) or imports
 # `syscall()`; the shim cannot see those, so force the tracer. See
-# docs/syscall-boundary.md, "Remaining: the direct-syscall attribute".
+# docs/spec/syscall-boundary.md, "Remaining: the direct-syscall attribute".
 DIRECT_LIST="$tmp.direct"
 : > "$DIRECT_LIST"
 if [ -n "$(command -v python3 || true)" ]; then

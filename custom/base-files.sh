@@ -1,5 +1,5 @@
 #!/bin/sh
-# Prefix-specific changes to Debian's base-files (docs/design-0.2.0.md),
+# Prefix-specific changes to Debian's base-files (docs/spec/design-0.2.0.md),
 # run by dn-translate-deb.sh on the extracted package before dpkg sees it.
 #
 # The prefix keeps only what it uses: usr/, etc/, var/, opt/ (the paths the

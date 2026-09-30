@@ -1027,14 +1027,14 @@ libc-level shim could not yet see. `521cc73` closed the review items
 decided scope, closed the remaining genuinely-imported-but-uncovered
 symbols and tested the NSS question to a conclusion.
 
-**Full details moved into [`shim-coverage.md`](shim-coverage.md)** — the
+**Full details moved into [`shim-coverage.md`](../spec/shim-coverage.md)** — the
 corpus results, the complete symbol list, the NSS proof (not redirectable
 at the libc layer — upstream glibc design, not a Termux packaging bug), and
 the implementation notes for `mkstemp`'s in-place template and
 `posix_spawn`'s own wrapper — since that doc is the canonical, kept-current
 record of shim coverage. What's left all belongs to the tracer (raw
 `syscall()`, static binaries, libc-internal NSS opens) — see
-[`syscall-boundary.md`](syscall-boundary.md).
+[`syscall-boundary.md`](../spec/syscall-boundary.md).
 
 ## Findings: patchelf corrupting an `ET_EXEC` binary's program headers, and moving RUNPATH to the loader (2026-09-30)
 

@@ -18,7 +18,7 @@ Three path mechanisms:
   (`scripts/install/patch-maintainer-scripts.sh`).
 - **Dynamic glibc binaries** — `native/path-redirect.c`, an `LD_PRELOAD` shim
   interposing path-taking libc functions (`/usr /etc /var /opt` →
-  `$INSTDIR`). **This layer is complete** — see `docs/shim-coverage.md`.
+  `$INSTDIR`). **This layer is complete** — see `docs/spec/shim-coverage.md`.
 - **Syscall level** — for what the shim cannot see (static binaries, inline
   `svc #0`, explicit `syscall()`, libc-internal NSS reads). Today this is
   `proot` (fallback, wired in `native/dn-run.c`); it is being replaced by
@@ -30,21 +30,21 @@ replace the view's path-resolution job.
 
 ## Docs map (read these before changing direction)
 
-- `docs/standard.md` — package scope (Debian-section based).
-- `docs/shim-coverage.md` + `docs/coverage/` — measured libc-shim coverage
+- `docs/spec/standard.md` — package scope (Debian-section based).
+- `docs/spec/shim-coverage.md` + `docs/spec/coverage/` — measured libc-shim coverage
   against a 258-package corpus; what is left.
-- `docs/syscall-boundary.md` — the cases libc interposition cannot reach.
-- `docs/direct-usage.md` — the living investigation + **fork-lite plan**.
-- `docs/runtime-failures.md` — what breaks when *running* a program (wide).
-- `docs/tailscale.md` — the static-daemon goal (userspace networking).
-- `docs/bind-only.md` — what to strip to make fork-lite a bind-only tracer
+- `docs/spec/syscall-boundary.md` — the cases libc interposition cannot reach.
+- `docs/spec/direct-usage.md` — the living investigation + **fork-lite plan**.
+- `docs/spec/runtime-failures.md` — what breaks when *running* a program (wide).
+- `docs/guides/tailscale.md` — the static-daemon goal (userspace networking).
+- `docs/spec/bind-only.md` — what to strip to make fork-lite a bind-only tracer
   (`canonicalize` → prefix rewrite): safe/keep/replace + whitelist + risks.
-- `docs/install-flow.md` — the bootstrap/install order (runtime → auto-patch
+- `docs/spec/install-flow.md` — the bootstrap/install order (runtime → auto-patch
   `.deb` → native seed → base transaction → launchers) and the E2E recipe.
-- `docs/android-seccomp-audit.md` — which Android failures are seccomp/
+- `docs/log/android-seccomp-audit.md` — which Android failures are seccomp/
   kernel-config (own-glibc can't fix these) vs. glibc-internal (own-glibc
   can) — read before scoping 0.5.0 work.
-- `docs/design.md`, `docs/findings.md`, `docs/vs-sudo-less.md`.
+- `docs/spec/design.md`, `docs/log/findings.md`, `docs/spec/vs-sudo-less.md`.
 - `tracer/README.md` — fork-lite provenance, build, prune status.
 - `TODO.md` — roadmap.
 
@@ -60,7 +60,7 @@ replace the view's path-resolution job.
 - **fork-lite** (`tracer/`): proot base imported and pruned — extensions
   removed (framework kept) and made AArch64-only. It **builds on `fe2`**
   (`make CC=clang`, needs `libtalloc`) and a static binary reads through a
-  `-b` bind. **Bind-only fast path landed** (`docs/bind-only.md`,
+  `-b` bind. **Bind-only fast path landed** (`docs/spec/bind-only.md`,
   `scripts/install/normalize-symlinks.sh`, ~1.6x stat-dense; `PROOT_NO_BIND_ONLY=1`
   reverts). **Next: replace `cli/` with our `dn-trace` binder** (bind
   `$INSTDIR` over `/usr /etc /var /opt`, handle missing paths), then point

@@ -4,7 +4,7 @@ The first survey of the 0.2.0 prefix: real Debian packages installed with the
 prefix's own apt and their programs run by name, the method of sudo-less's
 [`survey.md`](https://github.com/jronminh/sudo-less/blob/main/docs/survey.md)
 (same install and run classes). "Supported" is
-[`standard.md`](standard.md)'s: in scope, installed to `ii`, and its
+[`standard.md`](../spec/standard.md)'s: in scope, installed to `ii`, and its
 programs run from the prefix by name.
 
 Raw data in [`survey-0.2.0/`](survey-0.2.0/): `list.tsv` + `results.tsv`
@@ -75,7 +75,7 @@ avoids, because they live in large dependency chains:
 |---|---|---|
 | `passwd`'s postinst: `getent group shadow` reaches Termux's glibc getent, whose NSS reads `$PREFIX/glibc/etc`, not the prefix's `/etc`; `groupadd` then aborts | `ipp-usb`, `ceph-immutable-object-cache-dbg` | **fixed** (priv `getent`) |
 | `perl-base` ships a hard link (`perl5.40.1`); Android refuses `link(2)` in app data | `dibbler-client-dbg` | **fixed** (hard links become copies) |
-| `libc6-dev` needs `libc6 (= 2.41-12+deb13u4)`; the stand-in is `2.44-0dn1` | `libghc-asn1-parse-doc` (via `ghc`): **every toolchain** | **open**: the stand-in should carry Debian's exact `libc6` identity ([`TODO.md`](../TODO.md)) |
+| `libc6-dev` needs `libc6 (= 2.41-12+deb13u4)`; the stand-in is `2.44-0dn1` | `libghc-asn1-parse-doc` (via `ghc`): **every toolchain** | **open**: the stand-in should carry Debian's exact `libc6` identity ([`TODO.md`](../../TODO.md)) |
 
 Also seen: `81voltd` runs natively, then needs the system D-Bus (a
 service); `poxml`'s `swappo` prints nothing on `--version`/`--help`.
