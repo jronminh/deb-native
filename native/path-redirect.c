@@ -326,9 +326,28 @@ static const char *map_shebang_interp(const char *in, char *buf, size_t sz) {
   if (!g_init) dn_init();
   const char *root = g_root;
   if (root) {
+    /* Same preference as dn-translate-deb.sh/patch-scripts-tree.sh
+     * (translate: direct shebang, 2026-09-30): point at the prefix's own
+     * dash/bash directly when installed -- real apt packages with ld-dn
+     * as their own ELF interpreter, so the kernel following the rewritten
+     * shebang already gets the shim/environment set up, no extra
+     * indirection needed. dn-shell is only the bootstrap-time fallback,
+     * kept here too for the same chicken-and-egg reason (a script the
+     * shim encounters live, e.g. via system()/posix_spawn, before
+     * dash/bash are installed). Runtime component audit item 4,
+     * 2026-09-30 -- this was the one remaining place still hardcoded to
+     * dn-shell unconditionally after the translate-time scripts were
+     * fixed. */
     if (!strcmp(in, "/bin/sh") || !strcmp(in, "/bin/dash") ||
-        !strcmp(in, "/bin/bash") || !strcmp(in, "/usr/bin/sh") ||
-        !strcmp(in, "/usr/bin/dash") || !strcmp(in, "/usr/bin/bash")) {
+        !strcmp(in, "/usr/bin/sh") || !strcmp(in, "/usr/bin/dash")) {
+      snprintf(buf, sz, "%s/usr/bin/dash", root);
+      if (access(buf, X_OK) == 0) return buf;
+      snprintf(buf, sz, "%s/usr/bin/dn-shell", root);
+      return buf;
+    }
+    if (!strcmp(in, "/bin/bash") || !strcmp(in, "/usr/bin/bash")) {
+      snprintf(buf, sz, "%s/usr/bin/bash", root);
+      if (access(buf, X_OK) == 0) return buf;
       snprintf(buf, sz, "%s/usr/bin/dn-shell", root);
       return buf;
     }
