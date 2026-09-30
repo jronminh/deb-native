@@ -17,7 +17,7 @@ SHIM=$REPO/native/path-redirect.so
 TEST=$HERE/test
 
 [ -x "$G/bin/true" ] || { echo "no glibc side-install at $G (set DN_GLIBC_ROOT)"; exit 2; }
-[ -f "$SHIM" ] || sh "$REPO/scripts/build-path-redirect.sh"
+[ -f "$SHIM" ] || sh "$REPO/scripts/bootstrap/build-path-redirect.sh"
 
 rm -rf "$ROOT"
 mkdir -p "$ROOT/etc" "$ROOT/usr/bin" "$ROOT/var" "$ROOT/opt"

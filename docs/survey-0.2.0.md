@@ -9,19 +9,19 @@ programs run from the prefix by name.
 
 Raw data in [`survey-0.2.0/`](survey-0.2.0/): `list.tsv` + `results.tsv`
 (the main run), `list-run1.tsv` + `results-run1.tsv` (the first, unfiltered
-run, stopped after 10). Columns: `scripts/survey-prefix.sh`'s header.
+run, stopped after 10). Columns: `scripts/survey/survey-prefix.sh`'s header.
 
 ## Method
 
 - **Device:** `fe2`, vanilla Termux + `make`, `libtalloc`; fresh
   `install.sh` of `dev-0.2.0` (3m13s, 23 packages), 2026-09-27.
 - **Archive:** Debian 13.7 "trixie", arm64, `main`.
-- **Sample** (`scripts/survey-sample.py`): 100 packages, seeded random,
+- **Sample** (`scripts/survey/survey-sample.py`): 100 packages, seeded random,
   spread evenly over the 43 in-scope sections, without the admin signals
   (Priority required/important/standard, Essential, a dependency on
   `adduser` or `init-system-helpers`). The main run is **lightweight**: a
   package plus the dependencies apt would add must stay under 1.5 MB.
-- **Per package** (`scripts/survey-prefix.sh`): the prefix restored from a
+- **Per package** (`scripts/survey/survey-prefix.sh`): the prefix restored from a
   snapshot, `apt-get install -y --no-install-recommends`, then up to 6
   programs from its bin dirs run by name with `--version`, else `--help`,
   no display. How each is reached is recorded: `native` (a symlink: ld-dn

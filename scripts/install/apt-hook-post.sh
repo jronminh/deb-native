@@ -16,4 +16,4 @@ mkdir -p "$NEWPREFIX/var/log"
 
 "$HERE/patch-elfs.sh" "$ROOT" >>"$LOG" 2>&1 || true
 "$HERE/normalize-symlinks.sh" "$ROOT" >>"$LOG" 2>&1 || true
-"$HERE/make-launchers.sh" "$ROOT" >>"$LOG" 2>&1 || true
+"$HERE/../runtime/make-launchers.sh" "$ROOT" >>"$LOG" 2>&1 || true

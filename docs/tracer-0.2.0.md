@@ -29,7 +29,7 @@ and the tracer's SIGSYS emulation (`tracer/tracee/seccomp.c`) answers them.
 
 ### 1. Built at setup
 
-`scripts/setup-runtime.sh` builds `tracer/` (`make CC=clang`, from clean) when
+`scripts/install/setup-runtime.sh` builds `tracer/` (`make CC=clang`, from clean) when
 `make` and `libtalloc` are installed and copies `tracer/dn-trace` into the
 prefix. Without them it prints
 

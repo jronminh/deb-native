@@ -43,11 +43,11 @@ under `/etc`; and the admin operations (`mount`, `chroot`, …).
 
 ## Method
 
-1. **Scope the corpus** — `scripts/scope-sample.py` reads a Debian
+1. **Scope the corpus** — `scripts/survey/scope-sample.py` reads a Debian
    `binary-arm64/Packages` index and selects the packages whose `Section` is
    in `standard.md`'s user scope. This is the whole point of choosing a scope:
    it drops the archive from ~64 000 binary packages to the sample below.
-2. **Collect imported symbols** — `scripts/scan-libc-symbols.sh` walks every
+2. **Collect imported symbols** — `scripts/bench/scan-libc-symbols.sh` walks every
    ELF in the corpus, reads the undefined entries of `.dynsym`
    (`readelf --dyn-syms`), and counts them; it marks an ELF with no dynamic
    section as `STATIC_ELF`.
@@ -59,9 +59,9 @@ Reproduce (one command at a time, on the phone):
 ```
 mkdir -p ~/debcorpus/debs && cd ~/debcorpus
 curl -s -o Packages.gz https://deb.debian.org/debian/dists/stable/main/binary-arm64/Packages.gz
-python3 ~/deb-native/scripts/scope-sample.py Packages.gz > sel.tsv 2> scope.txt
+python3 ~/deb-native/scripts/survey/scope-sample.py Packages.gz > sel.tsv 2> scope.txt
 cut -f2 sel.tsv | while read u; do curl -s -o debs/$(basename "$u") "$u"; done
-sh ~/deb-native/scripts/scan-libc-symbols.sh --debs debs > scan-apps.txt
+sh ~/deb-native/scripts/bench/scan-libc-symbols.sh --debs debs > scan-apps.txt
 ```
 
 ### Corpus measured

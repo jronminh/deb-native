@@ -289,7 +289,7 @@ loader to work, not investigated further).
 **`libc6` packaged and installed, 2026-10-01**: the validated patch is
 now the prefix's actual, running `libc6` — `dpkg -l libc6` shows `ii
 2.41-12+deb13u4+dn1`, replacing `dn-standins.sh`'s Termux-glibc stand-in.
-[`scripts/dn-package-glibc.sh`](scripts/dn-package-glibc.sh) builds it:
+[`scripts/bootstrap/dn-package-glibc.sh`](scripts/bootstrap/dn-package-glibc.sh) builds it:
 real Debian `libc6.deb` as a template (its maintainer
 scripts/triggers/symbols/doc are still accurate, reused as-is), payload
 replaced with this project's own build, relocated from the build's flat
@@ -373,7 +373,7 @@ runit), anything else says "not supported". Rule: translate what maps to
 a supervised process, refuse the rest. Test ladder: `cron` -> `redis`
 (system user + data dir) -> `dbus` (a socket in `/run`). Android may kill
 background services (phantom-process killer, battery optimization) —
-document the wake-lock/battery settings needed (see `scripts/perf-run.sh`
+document the wake-lock/battery settings needed (see `scripts/bench/perf-run.sh`
 for the mechanism).
 
 **`sudo`, three stackable kinds, never Android root**: pass-through
@@ -583,7 +583,7 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
 - **Sync on `apt update`** — keep the prefix's view of Termux's
   `*-glibc` packages fresh so a Termux upgrade doesn't leave stale seeds.
 - **Soname-based dependency matching** — replace
-  `scripts/native-seed.sh`'s hand-written name table with matching a
+  `scripts/install/native-seed.sh`'s hand-written name table with matching a
   `.deb`'s `Depends:` against installed `*-glibc` packages' SONAMEs
   (`docs/design.md`, "Open work"). Small, direct install-success win.
 - **Launcher/icon/desktop-DB integration** — mostly N/A on Android; do

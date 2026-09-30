@@ -31,7 +31,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 mkdir -p "$INSTDIR" "$ADMINDIR"
 
 echo "==> seeding natively-satisfied dependencies into $ADMINDIR"
-"$HERE/native-seed.sh" "$ADMINDIR"
+"$HERE/../install/native-seed.sh" "$ADMINDIR"
 
 pkg_name=$(dpkg-deb -f "$DEB" Package)
 
@@ -44,7 +44,7 @@ dpkg --instdir="$INSTDIR" --admindir="$ADMINDIR" \
      --unpack "$DEB"
 
 echo "==> patching maintainer scripts' hardcoded absolute paths"
-"$HERE/patch-maintainer-scripts.sh" "$ADMINDIR" "$INSTDIR"
+"$HERE/../install/patch-maintainer-scripts.sh" "$ADMINDIR" "$INSTDIR"
 
 echo "==> configuring $pkg_name"
 # No --force-depends: a real, still-missing dependency should still fail

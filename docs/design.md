@@ -32,7 +32,7 @@ in `TODO.md` / issue #1.
 
 
 Status: **prototyped and verified working**, against a real gap (not a
-toy). `native/path-redirect.c` + `scripts/build-path-redirect.sh`.
+toy). `native/path-redirect.c` + `scripts/bootstrap/build-path-redirect.sh`.
 
 ### Overlay/view: confirmed dead on this device, with data
 
@@ -214,7 +214,7 @@ this project's own writable prefix.
 
 #### What actually worked: rewrite the script text, not the runtime
 
-`scripts/patch-maintainer-scripts.sh`, run between dpkg's `--unpack` and
+`scripts/install/patch-maintainer-scripts.sh`, run between dpkg's `--unpack` and
 `--configure` (already two separate steps in this project's pipeline —
 see `design.md`): plain `sed`, rewriting any `/etc/`,
 `/usr/`, `/var/`, `/opt/` path component in a package's `postinst`/
@@ -273,7 +273,7 @@ shim above.
 ## Native dependency reuse (sudo-less's "native" idea, adapted)
 
 
-Status: **prototyped and verified working**, `scripts/native-seed.sh`.
+Status: **prototyped and verified working**, `scripts/install/native-seed.sh`.
 Builds on [`design.md`](design.md)'s two-layer-db
 idea and corrects it with what `findings.md` found.
 
@@ -299,7 +299,7 @@ own collection point (`$INSTDIR`, `~/.dn` by default) —
 that's the one place matching sudo-less's `.local` role, but scoped to the
 actual delta instead of everything.
 
-### How it works: `scripts/native-seed.sh`
+### How it works: `scripts/install/native-seed.sh`
 
 Before unpacking a `.deb`, seed `$ADMINDIR/status` with synthetic
 `Status: install ok installed` stanzas for Debian package names already
@@ -319,7 +319,7 @@ and `zlib1g`. Chosen specifically because it's a real-world case that
 (`hello`, tested first, has no non-libc dependency at all).
 
 ```
-$ scripts/prototype-install.sh ciso.deb
+$ scripts/survey/prototype-install.sh ciso.deb
 ==> seeding natively-satisfied dependencies into .../var/lib/dpkg
 seeded: libc6 <- glibc 2.44
 seeded: zlib1g <- zlib-glibc 1.3.2

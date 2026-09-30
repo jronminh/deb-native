@@ -64,8 +64,8 @@ echo "Translating $PKG:arm64 ($(sed -n 's/^Version: //p' "$WORK/pkg/DEBIAN/contr
 
 sed -i 's/^Architecture: all$/Architecture: arm64/' "$WORK/pkg/DEBIAN/control"
 
-if [ -x "$HERE/../custom/$PKG.sh" ]; then
-  "$HERE/../custom/$PKG.sh" "$WORK/pkg" "$DN"
+if [ -x "$HERE/../../custom/$PKG.sh" ]; then
+  "$HERE/../../custom/$PKG.sh" "$WORK/pkg" "$DN"
   echo "Applied custom/$PKG.sh to $PKG."
 fi
 

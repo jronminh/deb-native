@@ -13,7 +13,7 @@
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
+REPO=$(CDPATH= cd -- "$HERE/../.." && pwd)
 TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 
 FIX=0
@@ -100,7 +100,7 @@ else
   [ -n "$stale" ] && warn "0.1.x routing wrappers still on PATH:$stale"
   [ -x "$LAUNCHDIR/termux-apt" ] || warn "no termux-apt/termux-dpkg (run make-apt-wrappers.sh)"
   if [ "$FIX" = 1 ] && [ -d "$ROOT" ]; then
-    sh "$REPO/scripts/make-apt-wrappers.sh" "$ROOT" && ok "regenerated wrappers"
+    sh "$REPO/scripts/runtime/make-apt-wrappers.sh" "$ROOT" && ok "regenerated wrappers"
   fi
 fi
 
@@ -113,7 +113,7 @@ else
 fi
 
 if [ "$FIX" = 1 ] && [ -d "$LAUNCHDIR" ]; then
-  sh "$REPO/scripts/dn-activate.sh" "$ROOT" && ok "re-activated launchers (start a new shell)"
+  sh "$REPO/scripts/runtime/dn-activate.sh" "$ROOT" && ok "re-activated launchers (start a new shell)"
 fi
 
 [ "$fail" = 0 ] && echo "==> ok" || echo "==> problems found (re-run with --fix to repair)"
