@@ -844,3 +844,24 @@ own coreutils will need to run this way eventually, just not while
 avoidable via `COMPILER_PATH`/`PATH` choices), not investigated further
 here since the immediate build no longer needs it.
 
+**One real (non-flaky) compile error found and fixed once the segfault
+noise was gone**: `misc/clone3.S` (the raw syscall stub behind the
+*public* `clone3()` glibc function -- distinct from `clone-internal.c`'s
+internal usage, which `disable-clone3.patch` already handles) failed to
+assemble, `undefined symbol __NR_clone3 used as an immediate value`.
+Cause: `clone3` is in `fakesyscall.json`'s `ENOSYS` bucket (forked
+today), and the `disabled-syscall.h` codegen deliberately deletes the
+matching `#define __NR_clone3` out of `arch-syscall.h` so nothing can
+reach the kernel's real (Gate-A-killed) syscall by accident -- but
+`clone3.S`'s own raw wrapper still referenced it directly, outside the
+fakesyscall dispatch path. This is exactly why `gpkg/glibc/build.sh`
+itself does `rm sysdeps/unix/sysv/linux/*/clone3.S` unconditionally as
+its very first step (`termux_step_pre_configure`) -- a step this
+project's fork only partially carried over (the loose-file
+`disable-clone3.patch`, not build.sh's own `rm`). Fixed the same way
+upstream does: deleted `sysdeps/unix/sysv/linux/aarch64/clone3.S` from
+the work tree (aarch64 only, this project's one target). Needs folding
+back into `dn-glibc-android.patch` (as a deleted-file diff hunk) once
+the full build is confirmed green, so the fork stays reproducible from
+the patch alone.
+
