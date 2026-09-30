@@ -308,21 +308,40 @@ entirely (0.2.3) — without `dn-trace`, `dn-run` warns and runs
 untranslated. Tracked in
 [GitHub issue #1](https://github.com/jronminh/deb-native/issues/1).
 
-**Real bug found, not yet root-caused (2026-09-30)**: any `execve` two or
-more process-levels below `dn-shell` segfaults reproducibly — confirmed
-three independent ways (`find -exec test`, `env test`, and apt's own
-`xargs`-wrapped `DPkg::Pre-Install-Pkgs` hook pipeline all crash the same
-way; a *direct* child of `dn-shell` never does). Retested after swapping
-`dn-shell` to exec the prefix's own `bash` instead of Termux's borrowed
-one — reproduces identically, so it's independent of which bash is used;
-likely in `native/ld-dn.c` or `native/path-redirect.c`'s `execve`
-interposition (`do_exec`/`bionic_env`) re-establishing per-launch state
-incorrectly at nested exec depth. This may explain intermittent apt
-install failures generally, not just the case it was found in — worth
-prioritizing. Not written up in `docs/findings.md` yet.
+**Real bug found, partially root-caused (2026-09-30)**: any `execve` two
+or more process-levels below the top shell segfaults reproducibly —
+confirmed with `find -exec test`, `env test`, and apt's own
+`xargs`-wrapped `DPkg::Pre-Install-Pkgs` hook pipeline (a *direct* child
+never crashes). Independent of `dn-shell`/which `bash` is used (still
+reproduces with maintainer scripts now bypassing `dn-shell` entirely,
+above). Android's crash log (`logcat -b crash`) pins it precisely: the
+crashing process is **`/data/data/com.termux/files/usr/bin/coreutils`**
+(Termux's own Bionic multi-call binary providing `test`) — signal 11,
+null-pointer deref inside **Android's own `linker64`**, mid-relocation,
+while trying to process **`/data/data/com.termux/files/usr/glibc/lib/libc.so.6`**
+(glibc's libc, not Bionic-ABI-compatible — Bionic's linker cannot
+relocate it and crashes). This is exactly the failure mode
+`native/path-redirect.c`'s `bionic_env()` exists to prevent (stripping a
+glibc `LD_PRELOAD` before it reaches a Bionic child) — it is not being
+applied here. `dn-trace -v 4` on the same command shows the `execve`
+actually attempted is the **bare, unprefixed `/usr/bin/test`** (not the
+full `$DN/usr/bin/test` the explicitly-set `PATH` should have produced),
+which then resolves to Termux's own `/usr/bin/test` — consistent with
+`env`'s internal exec call using a `PATH`-unset/empty fallback (POSIX
+default `/bin:/usr/bin`) rather than the real environment, and/or
+Termux's own `termux-exec` preload rewriting that bare path instead of
+(or in addition to) this project's shim. Not yet pinned down further:
+*why* `env`'s (or `find`'s) call doesn't see the real `PATH`, and whether
+`termux-exec`'s own preload is genuinely re-entering the picture here.
 
 **Open**:
-- **The nested-exec segfault above** — needs its own investigation.
+- **The nested-exec segfault above** — root cause narrowed (Bionic
+  `test`/`coreutils` getting a leaked glibc `LD_PRELOAD` via a bare,
+  unprefixed exec path), but not yet fixed. Next step: find why the
+  failing `execve` sees an effectively-empty `PATH`/ends up calling the
+  real (un-interposed) `execvp` fallback instead of this project's
+  `path_search_exec`, and check whether `termux-exec`'s own preload is
+  involved.
 - Bake the shim into installed ELFs (`docs/design.md`, "Delivering the
   shim") so it survives an empty environment — `patchelf --add-needed`/
   `--add-rpath` or a `DT_AUDIT` module; the explicit loader
