@@ -222,14 +222,35 @@ decided. One known non-blocking bug: `ldconfig -r` `SIGSYS`s when run
 untraced, succeeds under `dn-trace` (`ld.so.cache` isn't required for the
 loader to work, not investigated further).
 
-**Not yet done**: turning the validated patch into the prefix's actual,
-installed `libc6` — it currently only lives in `~/dn-glibc-build/`, a
-scratch build directory, not a package.
+**`libc6` packaged and installed, 2026-10-01**: the validated patch is
+now the prefix's actual, running `libc6` — `dpkg -l libc6` shows `ii
+2.41-12+deb13u4+dn1`, replacing `dn-standins.sh`'s Termux-glibc stand-in.
+[`scripts/dn-package-glibc.sh`](scripts/dn-package-glibc.sh) builds it:
+real Debian `libc6.deb` as a template (its maintainer
+scripts/triggers/symbols/doc are still accurate, reused as-is), payload
+replaced with this project's own build, relocated from the build's flat
+`--disable-multi-arch` layout into Debian's real multiarch directory
+(confirmed safe -- no binary has that path baked in as a literal
+string). Recipe, including the one file `make install` doesn't produce
+(`gconv-modules.cache`, generated via the build's own `iconvconfig`), is
+in [`third_party/glibc-android-patches/README.md`](third_party/glibc-android-patches/README.md).
+Verified: NSS resolves real identities (`ls -l`), previously-installed
+packages keep running, the runtime-component-audit's regression battery
+(`find -exec test`, a fresh `apt-get install`) stays clean installing
+over the live prefix, not just in the scratch build dir. Scope was
+`libc6` only, per the user -- `libc6-dev`/`libc-bin`/`locales` still need
+their own packaging pass (this project's own build already produces the
+material for all three: headers/static libs, `ldconfig`/`iconv`/
+`locale`/..., locale data respectively).
 
 **Open**:
+- **Package the rest**: `libc6-dev`/`libc-bin`/`locales`, same approach
+  as `libc6` (real Debian `.deb` as template, this project's own build
+  output as payload) -- `libc6-dev` in particular unblocks the Alpha
+  goal's "Compilers" item (`gcc`/`make` hello-world in the prefix).
 - **Build pipeline**: cross-build in CI (too slow on-device for a real
-  release cadence), producing `libc6`/`libc6-dev`/`libc-bin`/`locales`
-  `.deb`s versioned like Debian's (e.g. `2.41-12+deb13u4+dn1`).
+  release cadence) instead of the on-device build this used -- needed
+  for a repeatable release process, not for this validation.
 - **Publishing**: `deb-native-repo`, shared with 0.4.0's prebuilt base —
   one pipeline for both.
 - **`dn-trace` upgrade** (bundled into 0.5.0 on purpose, not a separate
