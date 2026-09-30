@@ -805,9 +805,53 @@ against this new libc -- attempted directly against the raw source tree's
 headers (`work/include`, `work/posix`, ...) and failed with cascading
 parse errors (`bits/types.h`'s `__int32_t` etc. -- these are generated/
 finalized by `make install-headers`, not usable straight from the
-unconfigured source tree). `make -k install DESTDIR=.../destdir` running
-now to get a real, self-consistent installed header+library set to test
-against; NSS result not yet in.
+unconfigured source tree). `make -k install DESTDIR=.../destdir` used
+instead, for a real, self-consistent installed header+library set.
+
+**Install finished clean too** (all of `ld.so`, `libc.so.6`, `sprof`,
+`pldd`, `ldd`, `sotruss`, `sln`, `ldconfig`, headers, `stubs.h`
+installed) -- the only hiccup was the very last step, `ldconfig -r` run
+directly by the `Makefile` itself (not through this project's own
+pipeline) to refresh the destdir's `ld.so.cache`: **`Unknown signal 31`**
+(`SIGSYS`) -- expected, this is a self-built binary run raw, outside
+`ld-dn`/the tracer, hitting some Gate-A syscall not in the forked
+`ENOSYS`/substitute buckets. `make` reported it "(ignored)" and the
+install completed regardless -- same tolerance shape as `build-glibc.yml`
+already has for the `manual/` subdirectory.
+
+**NSS confirmed working, against the installed tree, with real headers
+this time.** Compiled a `getpwnam`/`getpwuid` test program against
+`destdir`'s installed `usr/include`, dynamically linked against the
+freshly-built `libc.so`/`ld.so` (`-Wl,--dynamic-linker=.../elf/ld.so`),
+run with no shim, no tracer, no `ld-dn` -- just this project's own build,
+directly:
+
+```
+$ elf/ld.so --library-path objdir t3
+getpwnam(root) FOUND uid=0 dir=/root shell=/bin/bash
+getpwuid(0) FOUND name=root
+```
+
+Matches the real prefix's actual `/etc/passwd` entry exactly
+(`root:*:0:0:root:/root:/bin/bash`) -- read directly from
+`/data/data/com.termux/files/home/.dn/etc/passwd` via `set-dirs.patch`'s
+retargeted path, confirmed earlier by `strings` on `libc.so.6`. **This is
+0.5.0's core goal, achieved**: NSS resolves through the prefix's own
+`/etc` with no tracer route, no `/etc` bind, no workaround -- the thing
+`shim-coverage.md` and `syscall-boundary.md` both concluded was
+structurally unreachable at the libc-interposition layer is now just...
+how this glibc behaves, because it was built that way.
+
+**Not yet done, to turn this into something the rest of the project can
+actually use**: package as `libc6`/`libc6-dev`/`libc-bin` `.deb`s,
+version them like Debian's own (`2.41-12+deb13u4+dn1`), replace
+`dn-adopt.sh`'s current symlink-to-whatever-Termux-has with these,
+re-verify `cc1`'s own segfault fix and the `mkdir`/`PATH` finding survive
+a second from-scratch build (this run reused an already-forked `work/`
+tree with several hand-fixes applied mid-build -- clean-room replay not
+yet done), and root-cause the `ldconfig`/`SIGSYS` gap properly (Gate-A
+clean-death handler, `android-seccomp-audit.md` Phase 6, still "not
+started") rather than relying on `make -k` to paper over it.
 Regenerated `dn-glibc-android.patch` (`diff -ruN --exclude=.pc
 --exclude=debian pristine/p work`, 147 file-diffs, up from 67) and
 round-trip-verified: fresh copy of `pristine`, apply the regenerated
