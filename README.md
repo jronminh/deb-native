@@ -300,9 +300,21 @@ Built on other people's work — see [`CREDITS.md`](CREDITS.md):
 - **[PRoot](https://github.com/termux/proot)** (`proot-me/PRoot`,
   GPL-2.0-or-later) — the `ptrace` syscall-interception core; `tracer/` is a
   reduced fork with its headers kept.
-- **[Termux](https://github.com/termux/termux-packages)** and
-  [`glibc-packages`](https://github.com/termux-pacman/glibc-packages) — the
-  host, the non-root `apt`/`dpkg` patches, and the glibc userland.
+- **[talloc](https://www.samba.org)** (the Samba Project, LGPL-3.0-or-later)
+  — PRoot's (and so `tracer/`'s) memory allocator; a build/run dependency,
+  unchanged.
+- **[Termux](https://github.com/termux/termux-packages)** — the Bionic host
+  and the non-root `apt`/`dpkg` patches this project reuses as-is.
+- **[`glibc-packages`](https://github.com/termux-pacman/glibc-packages)**
+  (`termux-pacman`) — the glibc side-install every Debian glibc binary was
+  repointed at before 0.5.0 (still the `install.sh` default); more directly,
+  0.5.0's own-glibc patch
+  ([`third_party/glibc-android-patches/`](third_party/glibc-android-patches/))
+  is a **fork of this repo's own Android compatibility patches for glibc**
+  itself, not written from scratch.
+- **[Debian](https://www.debian.org)** — every installed package is
+  Debian's own, unmodified beyond install-time translation; 0.5.0's `libc6`
+  is Debian's real `glibc` source package repackaged with the patch above.
 - **[sudo-less](https://github.com/jronminh/sudo-less)** — the prefix-install
   approach and the `apt`/`dpkg` lifecycle-hook idea.
 

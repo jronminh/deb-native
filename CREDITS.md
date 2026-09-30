@@ -25,9 +25,50 @@ builds on, and the license each part is under.
   non-root `apt`/`dpkg` patches the project reuses **as-is**.
 - <https://github.com/termux-pacman/glibc-packages> — the glibc side-install
   (`glibc-runner`/`grun`, `coreutils-glibc`, `bash-glibc`, `perl`, the loader
-  and libraries) that every Debian glibc binary here is repointed at.
+  and libraries) that every Debian glibc binary here is repointed at *before*
+  0.5.0, and still the fallback until 0.5.0's own glibc is wired into
+  `install.sh`.
+- Used for: 0.5.0's own-glibc patch,
+  [`third_party/glibc-android-patches/dn-glibc-android.patch`](third_party/glibc-android-patches/dn-glibc-android.patch),
+  is a **direct fork of this repo's own Android compatibility patch series
+  for glibc** (`gpkg/glibc/`, GPL-2.0-or-later, same license as glibc
+  itself) — not written from scratch. Per-file fork verdict for all 54
+  loose files there is in
+  [`docs/android-seccomp-audit.md`](docs/android-seccomp-audit.md), "Full
+  per-file fork verdict"; the patch carries every file marked "fork"
+  there, retargeted from Termux's dual-prefix layout to this project's
+  single fixed prefix. See
+  [`third_party/glibc-android-patches/README.md`](third_party/glibc-android-patches/README.md)
+  for the exact provenance and what was changed vs. kept as-is.
 - Without Termux there is no project: the approach is "reuse Termux, fake only
   the Debian layout".
+
+## Debian
+
+- <https://www.debian.org> — every package this project installs is
+  Debian's own, unmodified except for the install-time translation
+  (`scripts/dn-translate-deb.sh`) this project adds.
+- Used for: 0.5.0's `libc6` is Debian's real `glibc` source package
+  (`glibc_2.41-12+deb13u4`, including Debian's own ~80-patch
+  `debian/patches/series`), with the Termux-derived Android patch above
+  applied on top and repackaged as a `.deb`
+  (`scripts/dn-package-glibc.sh`) — Debian's own maintainer
+  scripts/triggers/symbols/doc are reused as-is, only the payload is
+  this project's build. `glibc` itself is
+  **LGPL-2.1-or-later** (with GPL-licensed pieces Debian's own packaging
+  already carries).
+
+## talloc (the Samba Project)
+
+- <https://www.samba.org> (`lib/talloc/` in the `samba` source package) —
+  **LGPL-3.0-or-later**, copyright Andrew Tridgell, Jelmer Vernooij and
+  the Samba Team.
+- Used for: a build-time and run-time dependency of `tracer/` (`dn-trace`),
+  inherited from PRoot's own build requirements — PRoot's hierarchical
+  memory allocation is built on talloc, unchanged by this project's fork.
+  Optional at install (`pkg install make libtalloc`, `tracer/README.md`);
+  without it, static binaries and programs making their own syscalls run
+  untranslated instead of failing to build.
 
 ## sudo-less
 
