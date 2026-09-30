@@ -1016,107 +1016,23 @@ this project ships — and (2) a syscall-level tracer via `ptrace` /
 FUSE are off the table by kernel and SELinux policy, exactly as the design
 assumed.
 
-## Findings: finishing the libc-level shim (2026-09-26)
+## Findings: finishing the libc-level shim, and closing the measured gaps (2026-09-26)
 
 The code review in
 [#1](https://github.com/jronminh/deb-native/issues/1) listed what the
 libc-level shim could not yet see. `521cc73` closed the review items
 (`unlink()` bug; `lstat`; the missing `*64` names; fortified `__open_2`/
 `__openat_2`/`__open64_2`; `statfs`/`statvfs`; `dlopen`/`dlmopen`; AF_UNIX
-`bind`/`connect`). This round finishes the layer, so the remaining gap is
-only the one libc interposition inherently cannot cover (raw syscalls,
-static binaries, libc-internal opens) — the syscall tracer's job.
+`bind`/`connect`). A second pass, once the corpus was measured against a
+decided scope, closed the remaining genuinely-imported-but-uncovered
+symbols and tested the NSS question to a conclusion.
 
-### What was added
-
-The rest of the path-taking libc surface: `creat`/`creat64`/`freopen`;
-`chown`/`lchown`/`fchownat`; `utime`; the xattr family (`setxattr`/
-`lsetxattr`/`getxattr`/`lgetxattr`/`listxattr`/`llistxattr`/`removexattr`/
-`lremovexattr`, which is how dpkg and capability-aware tools touch files);
-`mkfifo`/`mkfifoat`/`mknod`/`mknodat`; `statfs64`/`statvfs64`; `realpath`/
-`canonicalize_file_name`; `inotify_add_watch`; AF_UNIX `sendto` (reusing the
-existing `rewrite_sockaddr`); the temp-file templates `mkstemp`/`mkostemp`/
-`mkdtemp`; and `posix_spawn`/`posix_spawnp`.
-
-Two of these needed care beyond the usual rewrite-and-call:
-
-- **`mkstemp`/`mkostemp`/`mkdtemp` modify the caller's template in place**,
-  and that buffer is only `strlen(template)+1` long. Rewriting it to
-  `$INSTDIR/etc/...` cannot be copied back. The shim calls the real function
-  on the rewritten buffer, then copies back only the part after `$INSTDIR`
-  (the random suffix included), after a length check against the caller's
-  original template. Verified: the caller sees `/etc/zz_mkstemp9wnoFI` while
-  the file is created under `$INSTDIR/etc/`.
-- **`posix_spawn` bypasses the interposed `execve`** (glibc uses
-  clone+exec internally), so it gets its own wrapper: rewrite the path, keep
-  the environment for a glibc target and swap in `bionic_env()` otherwise.
-  `posix_spawnp` walks `$PATH` itself (glibc's internal walk is invisible
-  here) and delegates to `posix_spawn`. This matters because modern glibc
-  and coreutils spawn helpers through `posix_spawn`, not `fork`+`execve`.
-
-### How it was verified, on-device
-
-`tests/shim-libc/run.sh` builds a standalone glibc test binary, sets up a
-fake `$DN_INSTDIR` root, runs the test under the shim with
-`DN_REDIRECT_DEBUG=1`, and asserts that every intercepted symbol rewrote its
-path to the root and that nothing leaked into the real `/etc`.
-
-Two on-device facts made this possible and are worth recording:
-
-- **The glibc side-install does ship `Scrt1.o`/`crti.o`/`crtn.o`** (an
-  earlier note said a standalone glibc executable could not be linked, but
-  only because it was looking for `crtbeginS.o`/`crtendS.o`/`libgcc.a`).
-  Linking with `-nostartfiles -nodefaultlibs` and naming those three objects
-  explicitly produces a runnable glibc executable with the same clang that
-  builds the shim.
-- Tests that need a real child (`posix_spawn`) copy a glibc binary under
-  `$INSTDIR/usr/bin/` and spawn the `/usr/bin/...` path; the child runs and
-  exits 0, proving the redirect reached the real spawn, not just this
-  process's own libc calls.
-
-Result: 33 rewrites asserted, all new symbols covered, `mkstemp`/`mkdtemp`
-templates handed back un-prefixed, and the redirected `posix_spawn` child
-exits 0. Real `/etc` is untouched. The build is warning-free.
-
-## Findings: closing the measured shim gaps (2026-09-26)
-
-With a scope decided ([`standard.md`](standard.md)) and the imported-symbol
-corpus measured ([`shim-coverage.md`](shim-coverage.md)), the eight symbols
-that were genuinely imported but not intercepted are now covered in
-`native/path-redirect.c`: the legacy `__xstat`/`__lxstat` entry points (and
-their `*64` forms — `__fxstat` is fd-based and needs no redirect);
-`sendmsg`, rewriting the AF_UNIX address in a copied `msghdr` the same way
-`sendto` does; `lutimes`; `mkstemps`/`mkostemps`, with the same
-template copy-back as `mkstemp`; and `eaccess`/`euidaccess`, `setmntent`.
-`scandir`/`scandir64` were also promoted from "covered indirectly" to
-explicit redirects: glibc walks the directory with an internal `opendir`
-that does not pass through the interposed symbol, so relying on the
-one-level-down redirect was an assumption, not a fact.
-
-`tests/shim-libc/run.sh` grew to 46 asserted rewrites and passes on-device;
-`docs/coverage/path-symbols.tsv` now marks every imported path-taking symbol
-`shim` except the NSS lookups (untested), `glob`/`glob64` (indirect),
-`mount`/`umount2`/`chroot` (admin), and the raw-`syscall()` boundary.
-
-The NSS question was then tested and answered: **not redirected, and not
-fixable at the libc layer.** With a fake `$INSTDIR/etc/passwd` holding
-`dnshim:54321`, `getpwnam("dnshim")` and `getpwuid(54321)` returned
-`NOTFOUND`, and `getgrgid(54321)` returned the real Android group
-`all_a4321`, and `DN_REDIRECT_DEBUG=1` produced no rewrite line for
-`nsswitch.conf`/`passwd`/`group`/`hosts`/`resolv.conf` at all — every open
-is internal. `libc.so.6` defines `_nss_files_*`/`_nss_dns_*` itself; the
-bundled `libnss_files.so.2`/`libnss_dns.so.2` are empty ABI stubs that
-glibc never `dlopen`s. Stock Debian glibc is identical (its `libc.so.6`
-defines `_nss_files_getpwnam`; its `libnss_files.so.2` is a stub), so this
-is upstream glibc design, not Termux. The opens use the private
-`__open_nocancel`/`__open64_nocancel` (`GLIBC_PRIVATE`), and even the
-`nsswitch.conf` dispatch is internal, so a custom NSS module cannot be
-selected either.
-
-It is not unfixable, just not here: the syscall tracer catches the `openat`
-before any of this and covers NSS, raw `syscall()` and static binaries
-uniformly. The only libc-layer alternative — interposing the public
-`getpwnam`/`getpwuid_r`/… and reimplementing the `files` lookup — is a
-partial reimplementation and not worth it against the tracer. So the shim is
-complete at its layer; the remaining gaps all belong to the tracer.
+**Full details moved into [`shim-coverage.md`](shim-coverage.md)** — the
+corpus results, the complete symbol list, the NSS proof (not redirectable
+at the libc layer — upstream glibc design, not a Termux packaging bug), and
+the implementation notes for `mkstemp`'s in-place template and
+`posix_spawn`'s own wrapper — since that doc is the canonical, kept-current
+record of shim coverage. What's left all belongs to the tracer (raw
+`syscall()`, static binaries, libc-internal NSS opens) — see
+[`syscall-boundary.md`](syscall-boundary.md).
 

@@ -264,7 +264,10 @@ Without them those programs run untranslated.
 - [`docs/shim-coverage.md`](docs/shim-coverage.md) — measured shim coverage.
 - [`docs/syscall-boundary.md`](docs/syscall-boundary.md) — beyond libc.
 - [`docs/direct-usage.md`](docs/direct-usage.md) — tracer investigation + fork-lite plan.
+- [`docs/bind-only.md`](docs/bind-only.md) — what fork-lite strips down to a bind-only tracer.
 - [`docs/tracer-0.2.0.md`](docs/tracer-0.2.0.md) — the tracer (`dn-trace`) in 0.2.0: role, changes, tests, measurements.
+- [`docs/android-seccomp-audit.md`](docs/android-seccomp-audit.md) — which Android failures are seccomp/kernel-config (own-glibc can't fix) vs. glibc-internal (own-glibc can).
+- [`docs/install-flow.md`](docs/install-flow.md) — the bootstrap/install order, end to end.
 - [`docs/survey-0.2.0.md`](docs/survey-0.2.0.md) — 100 Debian packages installed and run in the 0.2.0 prefix.
 - [`docs/design-0.2.0.md`](docs/design-0.2.0.md) — the 0.2.0 self-contained prefix (partly superseded by `TODO.md`'s decisions).
 - [`docs/runtime-failures.md`](docs/runtime-failures.md) — what breaks when *running* a program.

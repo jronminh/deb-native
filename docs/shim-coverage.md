@@ -164,6 +164,42 @@ See `syscall-boundary.md`, "Solved: NSS", and `tests/tracer-nss/run.sh`.
 **Out of scope, deliberately:** `mount` (0/1), `umount2` (0/1), `chroot`
 (1/1) are admin operations; redirecting them is neither possible nor wanted.
 
+### Implementation notes (from closing the gaps, 2026-09-26)
+
+Two of the added symbols needed more than a rewrite-and-call:
+
+- **`mkstemp`/`mkostemp`/`mkdtemp`/`mkstemps`/`mkostemps` modify the
+  caller's template in place**, and that buffer is only
+  `strlen(template)+1` long — rewriting it to `$INSTDIR/etc/...` cannot be
+  copied back as-is. The shim calls the real function on the rewritten
+  buffer, then copies back only the part after `$INSTDIR` (the random
+  suffix included), after a length check against the caller's original
+  template. Verified: the caller sees `/etc/zz_mkstemp9wnoFI` while the
+  file is created under `$INSTDIR/etc/`.
+- **`posix_spawn` bypasses the interposed `execve`** (glibc uses
+  `clone`+`exec` internally), so it gets its own wrapper: rewrite the path,
+  keep the environment for a glibc target and swap in `bionic_env()`
+  otherwise. `posix_spawnp` walks `$PATH` itself (glibc's internal walk is
+  invisible here) and delegates to `posix_spawn`. This matters because
+  modern glibc and coreutils spawn helpers through `posix_spawn`, not
+  `fork`+`execve`.
+- `sendmsg` rewrites the AF_UNIX address in a copied `msghdr` the same way
+  `sendto` does.
+
+On-device verification (`tests/shim-libc/run.sh`): builds a standalone
+glibc test binary, sets up a fake `$DN_INSTDIR` root, runs it under the
+shim with `DN_REDIRECT_DEBUG=1`, and asserts every intercepted symbol
+rewrote its path (46 assertions) with nothing leaking into the real
+`/etc`. Two on-device facts made the test binary buildable at all: the
+glibc side-install does ship `Scrt1.o`/`crti.o`/`crtn.o` (an earlier note
+assumed a standalone glibc executable could not be linked, but that was
+only because it looked for `crtbeginS.o`/`crtendS.o`/`libgcc.a`; linking
+with `-nostartfiles -nodefaultlibs` and naming those three objects
+explicitly works with the same clang that builds the shim); and the
+`posix_spawn` test copies a glibc binary under `$INSTDIR/usr/bin/` and
+spawns it there, proving the redirect reached the real spawn, not just the
+test process's own libc calls.
+
 ### The real boundary
 
 **Raw `syscall()`: 12 in-scope ELFs import it, 0 in the base set.** These
