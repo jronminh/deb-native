@@ -470,7 +470,22 @@ entries.
   pass** (extending what `scan-direct-syscalls.py` already does once per
   package at install time, generalized past raw-syscall detection),
   not a per-launch runtime check — closer to (c)'s shape than (b)'s.
-  Explicitly next-plan, not now.
+  The routing/wiring decision itself is still explicitly next-plan, not
+  now; but the analysis pass needs visibility data to design against,
+  which didn't exist before, so that groundwork was done 2026-10-01:
+  `tracer/tracee/seccomp.c`'s SIGSYS `default` case (already a generic
+  catch-all for any blocked syscall, known or not) now `note()`s the
+  syscall's name and raw number before returning `ENOSYS`, visible at
+  default verbosity. Confirmed against `busybox-static`'s `true`
+  (already installed): every traced glibc/NPTL program hits `rseq`
+  (glibc >= 2.35 registers it for every thread, including the main one,
+  at startup) — previously silently swallowed as unnamed ("void",
+  syscall #293 had no entry in `sysnums-arm64.h` at all), now named.
+  Already handled correctly before this (clean `ENOSYS`, glibc's own
+  registration tolerates it) — this only adds visibility, no behavior
+  change. Next step for the analysis pass itself: run this logging
+  against a real package's actual binaries (not just a synthetic probe)
+  to gather data before choosing (b) vs (c).
 
 ## Runtime component audit (debt from rapid early development)
 
