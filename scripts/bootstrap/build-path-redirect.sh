@@ -22,7 +22,7 @@
 
 set -eu
 GLIBC=${DN_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
-HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 OUT=${1:-$HERE/native/path-redirect.so}
 
 echo "Building ${OUT##*/} ..."

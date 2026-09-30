@@ -181,7 +181,7 @@ cache file (`libc.so.6`, `gconv-modules.cache`) has that path baked in as
 a literal string (checked with `strings`), and `native/ld-dn.c` already
 sets `LD_LIBRARY_PATH` covering both locations per launch regardless.
 
-**Packaging as `libc6`**: [`scripts/dn-package-glibc.sh`](../../scripts/dn-package-glibc.sh)
+**Packaging as `libc6`**: [`scripts/bootstrap/dn-package-glibc.sh`](../../scripts/bootstrap/dn-package-glibc.sh)
 takes a real Debian `libc6_<ver>_arm64.deb` (`apt-get download
 libc6=<ver>`, matching version) as a template -- reusing Debian's own
 maintainer scripts/triggers/symbols/doc rather than reinventing them --
@@ -197,7 +197,7 @@ objdir/elf/ld.so --library-path "$DESTDIR/usr/lib" \
   "$DESTDIR/usr/sbin/iconvconfig" --nostdlib \
   -o "$DESTDIR/usr/lib/gconv/gconv-modules.cache" "$DESTDIR/usr/lib/gconv"
 
-scripts/dn-package-glibc.sh libc6_<ver>_arm64.deb "$DESTDIR" out.deb
+scripts/bootstrap/dn-package-glibc.sh libc6_<ver>_arm64.deb "$DESTDIR" out.deb
 dpkg -i out.deb   # not apt-get -- see TODO.md's Runtime component audit
                    # for why apt-get's own hook pipeline needed separate
                    # fixing; dpkg -i is the lower-risk path regardless

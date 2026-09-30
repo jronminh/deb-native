@@ -57,7 +57,7 @@ DIRECT_LIST="$tmp.direct"
 if [ -n "$(command -v python3 || true)" ]; then
   for d in $BIN_DIRS; do
     [ -d "$d" ] || continue
-    python3 "$HERE/scan-direct-syscalls.py" "$d" --trace-list >> "$DIRECT_LIST" || true
+    python3 "$HERE/../bench/scan-direct-syscalls.py" "$d" --trace-list >> "$DIRECT_LIST" || true
   done
 fi
 

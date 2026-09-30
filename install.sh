@@ -42,7 +42,7 @@ kv() { out "$(printf '   %s%-10s%s %s' "$D" "$1" "$R" "$2")"; }
 fail() { printf '%s error:%s %s\n' "$Y" "$R" "$*" >&2; exit 1; }
 
 # Piped (curl | sh) or run outside a checkout: fetch the repo, then re-exec.
-if [ ! -f "$HERE/scripts/setup-apt-prefix.sh" ]; then
+if [ ! -f "$HERE/scripts/bootstrap/setup-apt-prefix.sh" ]; then
     banner
     command -v git || fail "git is required (pkg install git)"
     printf '\n%s[1/1]%s fetching deb-native (%s) into %s\n' "$C" "$R" "$REF" "$DIR"
@@ -160,23 +160,23 @@ kv "prefix" "$DNPREFIX"
 
 if [ ! -s "$DNPREFIX/var/lib/dpkg/status" ]; then
     step "bootstrapping the Debian glibc base"
-    "$HERE/scripts/setup-apt-prefix.sh" "$DNPREFIX"
+    "$HERE/scripts/bootstrap/setup-apt-prefix.sh" "$DNPREFIX"
 else
     step "refreshing the existing prefix"
     kv "state" "reused (already bootstrapped)"
-    "$HERE/scripts/setup-runtime.sh" "$DNPREFIX"
-    "$HERE/scripts/make-launchers.sh" "$DNPREFIX"
-    "$HERE/scripts/make-apt-wrappers.sh" "$DNPREFIX"
-    "$HERE/scripts/dn-activate.sh" "$DNPREFIX"
+    "$HERE/scripts/install/setup-runtime.sh" "$DNPREFIX"
+    "$HERE/scripts/runtime/make-launchers.sh" "$DNPREFIX"
+    "$HERE/scripts/runtime/make-apt-wrappers.sh" "$DNPREFIX"
+    "$HERE/scripts/runtime/dn-activate.sh" "$DNPREFIX"
 fi
 
 if [ $# -gt 0 ]; then
     step "installing: $*"
-    "$HERE/scripts/apt-install.sh" "$DNPREFIX" "$@"
+    "$HERE/scripts/install/apt-install.sh" "$DNPREFIX" "$@"
 fi
 
 step "normalizing prefix symlinks"
-"$HERE/scripts/normalize-symlinks.sh" "$DNPREFIX"
+"$HERE/scripts/install/normalize-symlinks.sh" "$DNPREFIX"
 
 # --- summary ---------------------------------------------------------------
 T1=$(date +%s)

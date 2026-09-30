@@ -22,6 +22,6 @@ echo "== $(date '+%F %T') post" >> "$LOG"
 {
   "$HERE/dn-fix-alternatives.sh" "$DN"
   "$HERE/normalize-symlinks.sh" "$DN"
-  "$HERE/make-launchers.sh" "$DN"
+  "$HERE/../runtime/make-launchers.sh" "$DN"
 } 2>&1 | tee -a "$LOG"
 exit 0

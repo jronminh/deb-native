@@ -39,6 +39,6 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # mawk: base-files itself Pre-Depends on "awk" -- found by testing
 # (dpkg refuses to even unpack base-files without it registered as
 # configured first, a strict Pre-Depends ordering, not a normal Depends).
-"$HERE/apt-install.sh" "$NEWPREFIX" \
+"$HERE/../install/apt-install.sh" "$NEWPREFIX" \
   mawk base-files base-passwd dash debianutils debconf cdebconf \
   openssl ca-certificates

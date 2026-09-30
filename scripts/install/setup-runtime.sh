@@ -23,7 +23,7 @@ set -eu
 INSTDIR=${1:?usage: setup-runtime.sh INSTDIR}
 case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-SRC="$HERE/../native"
+SRC="$HERE/../../native"
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
 BINDIR="$INSTDIR/usr/bin"
@@ -53,7 +53,7 @@ put() {                                            # FROM TO
 
 # The path-redirect shim (glibc LD_PRELOAD library).
 if stale "$CACHE/path-redirect.so" "$SRC/path-redirect.c"; then
-  "$HERE/build-path-redirect.sh" "$CACHE/path-redirect.so"
+  "$HERE/../bootstrap/build-path-redirect.sh" "$CACHE/path-redirect.so"
 fi
 put "$CACHE/path-redirect.so" "$LIBDIR/path-redirect.so"
 
@@ -83,7 +83,7 @@ put "$CACHE/ld-dn" "$LIBDIR/ld-dn"
 # when its build needs are present (pkg install make libtalloc), once per
 # checkout like the rest; without them those programs run untranslated
 # (dn-run warns; there is no fallback to Termux's proot).
-TRACER="$HERE/../tracer"
+TRACER="$HERE/../../tracer"
 if [ -x "$(command -v make || true)" ] && [ -e "$PREFIX_DIR/lib/libtalloc.so" ]; then
   if [ ! -x "$TRACER/dn-trace" ] || [ -n "$(find "$TRACER" -name '*.[ch]' -newer "$TRACER/dn-trace" | head -n1)" ]; then
     echo "Building the tracer (dn-trace) ..."

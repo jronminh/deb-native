@@ -16,7 +16,7 @@ loading. Goal: a package reaches `dpkg` status `ii` and its program runs
 by name, unprivileged.
 
 Three path mechanisms:
-- **Maintainer scripts** — plain-text path rewrite (`scripts/patch-scripts-tree.sh`).
+- **Maintainer scripts** — plain-text path rewrite (`scripts/install/patch-scripts-tree.sh`).
 - **Dynamic glibc binaries** — `native/path-redirect.c`, an `LD_PRELOAD`
   shim interposing path-taking libc functions. Complete at its layer —
   `docs/shim-coverage.md`.

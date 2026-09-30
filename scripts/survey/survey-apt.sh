@@ -5,7 +5,7 @@
 # docs/findings.md's #1 finding (no dependency
 # installer was the dominant failure cause, not native-seed coverage).
 #
-# Usage: OUT=~/survey-apt scripts/survey-apt.sh LIST.tsv
+# Usage: OUT=~/survey-apt scripts/survey/survey-apt.sh LIST.tsv
 # LIST.tsv: "section<TAB>package<TAB>anything" (third column unused —
 # apt resolves the .deb itself; kept so the same sample file from
 # sample-packages.py works for both survey scripts).
@@ -40,8 +40,8 @@ survey_one() {
   local section=$1 pkg=$2 log=$OUT/logs/$pkg.log pfx=$OUT/work/$pkg
   rm -rf "$pfx"
   : > "$log"
-  "$HERE/setup-apt-prefix.sh" "$pfx" >>"$log" 2>&1
-  "$HERE/apt-install.sh" "$pfx" "$pkg" >>"$log" 2>&1
+  "$HERE/../bootstrap/setup-apt-prefix.sh" "$pfx" >>"$log" 2>&1
+  "$HERE/../install/apt-install.sh" "$pfx" "$pkg" >>"$log" 2>&1
   local inst=ok detail=""
   if ! dpkg-query --admindir="$pfx/var/lib/dpkg" -W -f '${db:Status-Abbrev}' "$pkg" | grep -q '^ii'; then
     detail=$(install_failure "$log")

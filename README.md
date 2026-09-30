@@ -131,7 +131,7 @@ then the Debian base (`base-files`, `base-passwd`, `dash`, `coreutils`,
 held. Termux's home is the prefix's `/root`.
 
 **Translation at install.** An apt hook translates every `.deb` before dpkg
-sees it (`scripts/dn-translate-deb.sh`): `Architecture: all` -> `arm64`,
+sees it (`scripts/install/dn-translate-deb.sh`): `Architecture: all` -> `arm64`,
 programs' ELF interpreter -> `ld-dn` and library path -> the prefix,
 script `#!` lines and maintainer scripts -> the prefix's shell, hard links
 -> copies (Android forbids them), per-package fixes in `custom/`.
@@ -216,7 +216,7 @@ Debian's own glibc source plus this project's own Android compatibility
 patches
 ([`third_party/glibc-android-patches/`](third_party/glibc-android-patches/)),
 built on-device and packaged as a real `.deb`
-([`scripts/dn-package-glibc.sh`](scripts/dn-package-glibc.sh)). Validated
+([`scripts/bootstrap/dn-package-glibc.sh`](scripts/bootstrap/dn-package-glibc.sh)). Validated
 (NSS resolves the prefix's own `/etc`, a 100+-package regression stays
 clean) and installable today. **Not yet the default**: `install.sh`'s
 bootstrap still uses the old stand-in described above ("Only glibc comes

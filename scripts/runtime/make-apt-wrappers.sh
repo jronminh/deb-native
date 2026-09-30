@@ -19,7 +19,7 @@ set -eu
 INSTDIR=${1:?usage: make-apt-wrappers.sh INSTDIR}
 case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
+REPO=$(CDPATH= cd -- "$HERE/../.." && pwd)
 LAUNCHDIR="$INSTDIR/usr/lib/deb-native/bin"
 TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 
@@ -47,7 +47,7 @@ done
 cat > "$LAUNCHDIR/termux-dn-doctor" <<EOF
 #!/system/bin/sh
 # deb-native doctor (generated; do not edit).
-exec sh "$REPO/scripts/dn-doctor.sh" "$INSTDIR" "\$@"
+exec sh "$REPO/scripts/tools/dn-doctor.sh" "$INSTDIR" "\$@"
 EOF
 chmod 755 "$LAUNCHDIR/termux-dn-doctor"
 
@@ -62,7 +62,7 @@ ln -sfn "$INSTDIR/usr/bin/dn-shell" "$LAUNCHDIR/dn-shell"
 cat > "$LAUNCHDIR/dn-adopt" <<EOF
 #!/system/bin/sh
 # deb-native dn-adopt (generated; do not edit).
-exec sh "$REPO/scripts/dn-adopt.sh" "$INSTDIR" "\$@"
+exec sh "$REPO/scripts/runtime/dn-adopt.sh" "$INSTDIR" "\$@"
 EOF
 chmod 755 "$LAUNCHDIR/dn-adopt"
 

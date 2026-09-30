@@ -8,12 +8,12 @@ chronological order. (Merged from the former `findings-*.md`.)
 
 Tested by hand on-device against a real package from `deb.debian.org`
 (`hello_2.10-5_arm64.deb`, no maintainer scripts — chosen deliberately as
-the simplest possible case). Script: `scripts/prototype-install.sh`.
+the simplest possible case). Script: `scripts/survey/prototype-install.sh`.
 
 ### Result: it works, end to end
 
 ```
-$ scripts/prototype-install.sh hello.deb
+$ scripts/survey/prototype-install.sh hello.deb
 ==> unpacking hello into ~/.termux-deb-bridge/root
 ==> configuring hello (dependency check bypassed — prototype only)
 ==> patching new ELF binaries with grun --configure
@@ -143,7 +143,7 @@ Direct follow-up to a design correction mid-session: instead of chasing
 real Debian assumes is "always already there" (`Priority: required`/
 `important` — `base-files`, `base-passwd`, `dash`, `debianutils`,
 `debconf`, `cdebconf`, plus `openssl`/`ca-certificates`) as **one bootstrap
-transaction**, via a new `scripts/bootstrap-base.sh`.
+transaction**, via a new `scripts/bootstrap/bootstrap-base.sh`.
 
 ### Real bug found and fixed: batched unpack/configure breaks Pre-Depends
 
@@ -448,7 +448,7 @@ single-file leaf tool like `ciso`/`figlet`.
 
 ### Real bug found and fixed along the way: apt's own dpkg invocation shape
 
-`scripts/apt-install.sh` originally ran a single `apt-get install`, relying
+`scripts/install/apt-install.sh` originally ran a single `apt-get install`, relying
 on `DPkg::Pre-Invoke` to run `patch-maintainer-scripts.sh` between unpack
 and configure (`design.md`'s original plan). It never fired at the
 right time: **apt calls dpkg once, and dpkg itself unpacks and configures
@@ -600,15 +600,15 @@ them) and both needed the identical fix.
 ## Findings: a complete base bootstrap, and the runtime fix that unblocked it (2026-09-25, PM)
 
 
-Outcome: on a **fresh** prefix, `scripts/setup-apt-prefix.sh` +
-`scripts/bootstrap-base.sh` now bring the entire base set to
+Outcome: on a **fresh** prefix, `scripts/bootstrap/setup-apt-prefix.sh` +
+`scripts/bootstrap/bootstrap-base.sh` now bring the entire base set to
 `Status: install ok installed` (`ii`) — `base-files`, `base-passwd`,
 `dash`, `debianutils`, `debconf`, `cdebconf`, `openssl`,
 `ca-certificates`, `mawk`, and their real dependency libraries (28
 packages). Confirmed by `dpkg --admindir=.../var/lib/dpkg -l` and by a
 functional check inside the prefix (`/etc/os-release` reports Debian 13
 trixie; `dash`, `mawk`, `openssl` resolve to the prefix and run). Then
-`scripts/apt-install.sh` installs a *new* package on top: `hello` lands and
+`scripts/install/apt-install.sh` installs a *new* package on top: `hello` lands and
 prints `Hello, world!`.
 
 This closes the two gaps
@@ -629,7 +629,7 @@ coverage) and the chicken-and-egg it left open for a fresh prefix.
    with Termux's own `clang`) that derives `$INSTDIR` from
    `/proc/self/exe`, sets `LD_PRELOAD`/`DN_INSTDIR`/`PATH`/`DEBIAN_FRONTEND`,
    and `exec`s Termux's glibc `bash` (or, when invoked as `dn-perl`, glibc
-   `perl`). `scripts/setup-runtime.sh` builds it and installs
+   `perl`). `scripts/install/setup-runtime.sh` builds it and installs
    `dn-shell`/`dn-perl`.
 
 2. **The chicken-and-egg (no Debian `dash` on a fresh prefix).** The old
@@ -696,17 +696,17 @@ targets and strips it for Bionic/scripts — which is what let the old
 ### Files changed
 
 - `native/dn-launch.c` (new), `native/path-redirect.c` (extended),
-  `scripts/setup-runtime.sh` (new),
-  `scripts/patch-deb.sh`, `scripts/patch-maintainer-scripts.sh`,
-  `scripts/apt-install.sh`, `scripts/setup-apt-prefix.sh`.
+  `scripts/install/setup-runtime.sh` (new),
+  `scripts/install/patch-deb.sh`, `scripts/install/patch-maintainer-scripts.sh`,
+  `scripts/install/apt-install.sh`, `scripts/bootstrap/setup-apt-prefix.sh`.
 ## Findings: first random-sample survey (2026-09-25)
 
 
 Following sudo-less's own methodology (`docs/survey-2026-09.md`,
 `dev/survey.sh`): a random, reproducible sample of real Debian packages,
-each installed into a fresh isolated prefix. `scripts/sample-packages.py`
+each installed into a fresh isolated prefix. `scripts/survey/sample-packages.py`
 (seed `20260925`, ≤2 per section, ≤5MB, excluding required/important/
-standard-priority and metapackages) + `scripts/survey.sh`.
+standard-priority and metapackages) + `scripts/survey/survey.sh`.
 
 ### Result: 2 of 30 installed (≈7%)
 
@@ -739,7 +739,7 @@ golang-github-bep-tmc-dev depends on golang-github-frankban-quicktest-dev; ...
 These are **ordinary Debian package dependencies** — other `.deb`s that
 would need to be downloaded and installed too, exactly what `apt-get
 install` does automatically by walking the dependency graph. **This
-project has never actually done that.** `scripts/prototype-install.sh`
+project has never actually done that.** `scripts/survey/prototype-install.sh`
 only ever unpacks the *one* `.deb` it's given, plus whatever
 `native-seed.sh`'s small stub table covers. `design.md`
 always intended real `apt` (not bare `dpkg`) for exactly this reason — but
@@ -778,7 +778,7 @@ something else — unknown).
 
 ### Raw data
 
-`scripts/survey.sh` + `scripts/sample-packages.py` are committed and
+`scripts/survey/survey.sh` + `scripts/survey/sample-packages.py` are committed and
 reproducible (same seed `20260925`) — re-running produces the same 30
 packages. Full per-package log kept locally during this run
 (`OUT/logs/*.log`), not committed (large, single-run artifact).
@@ -791,7 +791,7 @@ installed a package's dependencies — `prototype-install.sh` only unpacked
 the one `.deb` it was given. This round builds and tests the fix: real
 `apt`, pointed at a real Debian repo, scoped to a separate prefix.
 
-### The fix: `scripts/setup-apt-prefix.sh` + `scripts/apt-install.sh`
+### The fix: `scripts/bootstrap/setup-apt-prefix.sh` + `scripts/install/apt-install.sh`
 
 `setup-apt-prefix.sh` generates a prefix-scoped `sources.list` (real
 `deb.debian.org`) and `apt.conf` (`Dir::*` into the prefix, `Dpkg::options::`
@@ -932,7 +932,7 @@ Now (`native/path-redirect.c`):
   `$INSTDIR/...`, relative paths, `/dev`, `/proc`, `/system`) returns
   after that single compare instead of four `strlen`+`strncmp` rounds.
 - **`memcpy` instead of `snprintf`** to build the rewritten path.
-- `scripts/build-path-redirect.sh` now compiles with **`-O2`**; clang's
+- `scripts/bootstrap/build-path-redirect.sh` now compiles with **`-O2`**; clang's
   default is `-O0`, so the shim was previously built unoptimized.
 
 ### What the numbers actually say
