@@ -243,6 +243,20 @@ their own packaging pass (this project's own build already produces the
 material for all three: headers/static libs, `ldconfig`/`iconv`/
 `locale`/..., locale data respectively).
 
+**Considered, not now: split the glibc patch/build/packaging into its own
+repo** (2026-10-01), to become a real standalone Termux-glibc fork rather
+than living under `third_party/` here. Deliberately deferred: the patch
+currently retargets a hardcoded `deb-native`-specific prefix path
+(`/data/data/com.termux/files/home/.dn`, `set-dirs.patch`'s whole point),
+not a generic one, so the main benefit of splitting -- reuse by other
+projects -- doesn't exist yet; there is exactly one consumer. 0.5.0 also
+isn't done (`libc6-dev`/`libc-bin`/`locales` unpackaged, no CI pipeline)
+-- splitting mid-design would mean syncing two repos through changes that
+are still settling. Revisit once either all four packages + a CI
+pipeline are in place, or a second real consumer wants this -- at that
+point, splitting is also the natural moment to generalize the hardcoded
+path instead of carrying it over as-is.
+
 **Open**:
 - **Package the rest**: `libc6-dev`/`libc-bin`/`locales`, same approach
   as `libc6` (real Debian `.deb` as template, this project's own build
