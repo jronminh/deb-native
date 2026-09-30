@@ -53,6 +53,15 @@ jobs:
         run: |
           patch -p1 -d src/work < third_party/glibc-android-patches/dn-glibc-android.patch
 
+      - name: Work around Debian's source package stripping manual/*.texinfo
+        run: |
+          # Debian's glibc source package omits the manual's texinfo sources
+          # entirely (unrelated to the Android patch) -- 'make install'
+          # still wants manual/libc.texinfo to build the .info page. We do
+          # not need the manual; give it a trivial valid stand-in.
+          printf '@setfilename libc.info\n@settitle GNU C Library\n@bye\n' \
+            > src/work/manual/libc.texinfo
+
       - name: Configure
         run: |
           mkdir -p objdir
