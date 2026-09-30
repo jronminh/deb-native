@@ -5,12 +5,13 @@
 #
 #   - its interpreter becomes ld-dn ($DN/usr/lib/deb-native/ld-dn), so the
 #     kernel runs ld-dn first however the program is started: the prefix's
-#     glibc and the path shim are set up, and /proc/self/exe stays the
-#     program (single-file builds that read themselves -- Bun, Node SEA,
-#     Claude Code's native binary -- keep working);
-#   - the prefix's library dirs go first in its RUNPATH, only when it needs
-#     a library Termux's glibc does not have (a downloaded binary is often
-#     self-contained, and every rewrite of it is one more risk).
+#     glibc, the path shim and LD_LIBRARY_PATH (native/ld-dn.c) are set up,
+#     and /proc/self/exe stays the program (single-file builds that read
+#     themselves -- Bun, Node SEA, Claude Code's native binary -- keep
+#     working). No RUNPATH rewrite: ld-dn's LD_LIBRARY_PATH already covers
+#     the prefix's library dirs for every adopted program, and patching
+#     RUNPATH risked corrupting the program headers of a tightly-packed
+#     ET_EXEC binary (found on gcc's cc1, 2026-09-30, docs/findings.md).
 #
 # Only a program whose interpreter is a glibc loader that does not exist on
 # this device (/lib/ld-linux-aarch64.so.1) is adopted; Termux's own glibc
@@ -24,10 +25,7 @@ DN=${1:?usage: dn-adopt.sh PREFIX FILE...}
 shift
 [ $# -gt 0 ] || { echo "usage: dn-adopt FILE..." >&2; exit 2; }
 case "$DN" in /*) ;; *) DN="$PWD/$DN" ;; esac
-TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
-GLIBC_LIB=${DN_GLIBC_ROOT:-$TP/glibc}/lib
 LD="$DN/usr/lib/deb-native/ld-dn"
-LIBPATH="$DN/usr/lib/aarch64-linux-gnu:$DN/usr/lib"
 
 [ -x "$LD" ] || { echo "E: no ld-dn in $DN (install the prefix first)" >&2; exit 1; }
 
@@ -53,21 +51,6 @@ for f in "$@"; do
   [ -w "$f" ] || { echo "E: $f: not writable" >&2; rc=1; continue; }
 
   patchelf --set-interpreter "$LD" "$f"
-  missing=""
-  for lib in $(patchelf --print-needed "$f"); do
-    [ -e "$GLIBC_LIB/$lib" ] || missing="$missing $lib"
-  done
-  if [ -n "$missing" ]; then
-    old=$(patchelf --print-rpath "$f")
-    new=$LIBPATH
-    for e in $(printf '%s' "$old" | tr ':' ' '); do
-      case "$e" in "$DN"/*|'$ORIGIN'*) ;; /*) e=$DN$e ;; esac
-      case ":$new:" in *":$e:"*) ;; *) new=$new:$e ;; esac
-    done
-    patchelf --set-rpath "$new" "$f"
-    echo "$f: adopted (libraries from the prefix:$missing)."
-  else
-    echo "$f: adopted."
-  fi
+  echo "$f: adopted."
 done
 exit $rc

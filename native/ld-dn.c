@@ -104,7 +104,7 @@ static char *cat2(char *dst, u64 cap, const char *a, const char *b) {
   return dst;
 }
 
-static char g_dn[4096], g_ld[4096], g_env_pre[4200], g_env_inst[4200], g_env_bio[8300];
+static char g_dn[4096], g_ld[4096], g_env_pre[4200], g_env_inst[4200], g_env_bio[8300], g_env_lib[8300];
 static Phdr g_ph[32];
 
 struct ret { u64 sp, entry; };
@@ -145,10 +145,21 @@ struct ret ld_dn_main(u64 *sp) {
   cat2(g_env_pre, sizeof g_env_pre, "LD_PRELOAD=", g_dn);
   cat2(g_env_pre + slen(g_env_pre), sizeof g_env_pre - slen(g_env_pre), "", "/usr/lib/deb-native/path-redirect.so");
   cat2(g_env_inst, sizeof g_env_inst, "DN_INSTDIR=", g_dn);
+  /* Every dynamic ELF's own library search, replacing per-file RUNPATH
+   * patching (dn-translate-deb.sh, dn-adopt.sh): RUNPATH is not inherited
+   * transitively (a library's own RUNPATH does not help *its* dependencies),
+   * so LD_LIBRARY_PATH set once here covers the whole load graph instead of
+   * needing every .so in a package rewritten. Also sidesteps patchelf
+   * corrupting the program header table on tightly-packed ET_EXEC binaries
+   * with no room to grow (found on gcc's cc1, 2026-09-30). */
+  cat2(g_env_lib, sizeof g_env_lib, "LD_LIBRARY_PATH=", g_dn);
+  cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", "/usr/lib/aarch64-linux-gnu:");
+  cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", g_dn);
+  cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", "/usr/lib");
 
-  /* The new stack: argc, argv, envp (+3 of ours), auxv -- in the space
+  /* The new stack: argc, argv, envp (+4 of ours), auxv -- in the space
    * _start reserved just below the original stack. */
-  u64 words = 1 + (u64)argc + 1 + (u64)nenv + 3 + 1 + 2 * ((u64)naux + 1);
+  u64 words = 1 + (u64)argc + 1 + (u64)nenv + 4 + 1 + 2 * ((u64)naux + 1);
   if (words * 8 + 64 > RESERVE) die("environment too large", 0);
   u64 *ns = (u64 *)(((u64)sp - words * 8) & ~(u64)15);
   u64 k = 0;
@@ -156,12 +167,13 @@ struct ret ld_dn_main(u64 *sp) {
   for (long i = 0; i < argc; i++) ns[k++] = (u64)argv[i];
   ns[k++] = 0;
   for (long i = 0; i < nenv; i++) {
-    if (starts(envp[i], "LD_PRELOAD=") || starts(envp[i], "DN_INSTDIR=")) continue;
+    if (starts(envp[i], "LD_PRELOAD=") || starts(envp[i], "DN_INSTDIR=") || starts(envp[i], "LD_LIBRARY_PATH=")) continue;
     if (new_bio && starts(envp[i], "DN_BIONIC_PRELOAD=")) continue;
     ns[k++] = (u64)envp[i];
   }
   ns[k++] = (u64)g_env_pre;
   ns[k++] = (u64)g_env_inst;
+  ns[k++] = (u64)g_env_lib;
   if (new_bio) ns[k++] = (u64)g_env_bio;
   ns[k++] = 0;
   u64 *nauxv = ns + k;
