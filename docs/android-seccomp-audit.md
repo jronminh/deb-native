@@ -767,6 +767,47 @@ in the first place -- consistent with `kernel-features.h.patch`
 (forked in the same pass) already saying this arch has no separate
 `accept`/`recv`/`send` syscalls to disable.
 
+## First successful self-built `libc.so.6`/`ld.so`, and `hello` runs through it (2026-09-30)
+
+After the `clone3.S` fix above, one more real snag: the build got
+**`Terminated`** mid-compile (`math/e_jnf.o`), not from any bug in this
+project's patches -- Android reclaiming a backgrounded Termux session's
+child processes. Fixed with `termux-wake-lock` before restarting; no
+further terminations.
+
+**`elf/ld.so` and `libc.so`/`libc.so.6` built clean** -- the `make -k`
+rerun (idempotent: only the `clone3`-cascade targets and downstream
+`others`/`install` work were still outstanding) finished with **zero**
+`Error`/`Terminated` lines. First real test, the same `hello` control
+binary used throughout this doc, run directly against the freshly-built
+pair (no install step, no shim, no `ld-dn` -- just the raw output of this
+project's own build):
+
+```
+$ objdir/elf/ld.so --library-path objdir pristine/usr/bin/hello
+Hello, world!
+$ echo $?
+0
+```
+
+**This is the first glibc this project has ever built from source that
+actually runs a real Debian binary to completion.** The CI-built artifact
+from earlier today (`538555d`, only `set-dirs.patch` +
+`disable-clone3.patch`) died with `SIGSYS` at this exact step; forking
+`fakesyscall.json`'s two real buckets (substitute + honest `ENOSYS`) is
+what closed that gap, exactly as predicted when that CI result was first
+analyzed above ("forking `fakesyscall.json` ... is not optional
+groundwork, it's required for the build to survive its own startup").
+
+NSS verification (the actual point of 0.5.0, `set-dirs.patch`'s
+`@TERMUX_PREFIX@` retarget) needs a `getpwnam`-style test program compiled
+against this new libc -- attempted directly against the raw source tree's
+headers (`work/include`, `work/posix`, ...) and failed with cascading
+parse errors (`bits/types.h`'s `__int32_t` etc. -- these are generated/
+finalized by `make install-headers`, not usable straight from the
+unconfigured source tree). `make -k install DESTDIR=.../destdir` running
+now to get a real, self-consistent installed header+library set to test
+against; NSS result not yet in.
 Regenerated `dn-glibc-android.patch` (`diff -ruN --exclude=.pc
 --exclude=debian pristine/p work`, 147 file-diffs, up from 67) and
 round-trip-verified: fresh copy of `pristine`, apply the regenerated
