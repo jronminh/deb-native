@@ -146,3 +146,69 @@ against a **filtered** copy of `fakesyscall.json` with the `"0"` key
 removed (`jq 'del(.["0"])' fakesyscall.json`) -- re-run that filter, not
 the stock file, if `fakesyscall.json` itself changes upstream, or the
 fake-root-entangled bucket comes back in silently.
+
+## Building and packaging (validated 2026-09-30)
+
+On-device, against a fresh Debian glibc source (`2.41-12+deb13u4`) with
+this patch applied (`patch -p1`, no hand-fixes -- clean-room verified):
+
+```sh
+cc1_gcc=/data/data/com.termux/files/home/.dn/usr/bin/gcc-14
+KHEADERS=<merged linux-libc-dev headers, --with-headers target>
+PATH=/data/data/com.termux/files/usr/bin \
+  CC="$cc1_gcc" ../work/configure \
+  --prefix=/data/data/com.termux/files/home/.dn/usr \
+  --libdir=/data/data/com.termux/files/home/.dn/usr/lib \
+  --includedir=/data/data/com.termux/files/home/.dn/usr/include \
+  --host=aarch64-linux-gnu --build=aarch64-linux-gnu \
+  --with-headers="$KHEADERS" \
+  --enable-memory-tagging --enable-fortify-source --enable-bind-now \
+  --disable-multi-arch --enable-stack-protector=strong --disable-nscd \
+  --disable-profile --disable-werror --disable-default-pie
+PATH=/data/data/com.termux/files/usr/bin make -O -j8   # NOT -j1: $DN must
+  # be off PATH (COMPILER_PATH from ld-dn.c is sufficient) -- with $DN on
+  # PATH, this project's own coreutils going through ld-dn+shim under
+  # heavy repeated invocation was unstable (docs/findings.md); -j8 itself
+  # is not the issue and is ~3-4x faster than -j1.
+make -k install DESTDIR=<destdir>   # -k: the manual subdir fails for an
+  # unrelated missing-texinfo-source reason, nothing else is affected
+```
+
+`-disable-multi-arch` means `make install` lays libraries out flat under
+`$DESTDIR/usr/lib/`, not Debian's `usr/lib/aarch64-linux-gnu/`. Confirmed
+safe to relocate at packaging time rather than rebuild: no binary or
+cache file (`libc.so.6`, `gconv-modules.cache`) has that path baked in as
+a literal string (checked with `strings`), and `native/ld-dn.c` already
+sets `LD_LIBRARY_PATH` covering both locations per launch regardless.
+
+**Packaging as `libc6`**: [`scripts/dn-package-glibc.sh`](../../scripts/dn-package-glibc.sh)
+takes a real Debian `libc6_<ver>_arm64.deb` (`apt-get download
+libc6=<ver>`, matching version) as a template -- reusing Debian's own
+maintainer scripts/triggers/symbols/doc rather than reinventing them --
+and replaces only the shared-library payload with this build's own,
+relocated into the multiarch directory, plus a version bump
+(`<ver>+dn1`). One file needs generating first, not part of `make
+install`'s own output: `gconv-modules.cache` (a fastload cache, built by
+`iconvconfig`, itself part of this project's own build output under
+`usr/sbin/`):
+
+```sh
+objdir/elf/ld.so --library-path "$DESTDIR/usr/lib" \
+  "$DESTDIR/usr/sbin/iconvconfig" --nostdlib \
+  -o "$DESTDIR/usr/lib/gconv/gconv-modules.cache" "$DESTDIR/usr/lib/gconv"
+
+scripts/dn-package-glibc.sh libc6_<ver>_arm64.deb "$DESTDIR" out.deb
+dpkg -i out.deb   # not apt-get -- see TODO.md's Runtime component audit
+                   # for why apt-get's own hook pipeline needed separate
+                   # fixing; dpkg -i is the lower-risk path regardless
+```
+
+Verified end to end (2026-09-30): installs clean over the previous
+stand-in (`dn-standins.sh`'s Termux-glibc symlinks), `ls -l` resolves
+real NSS identities, previously-installed packages (`tree`, `figlet`,
+...) keep running, and the full regression battery from the runtime
+component audit (`find -exec test`, a fresh `apt-get install`) stays
+clean. Out of scope for this pass: `libc6-dev`/`libc-bin`/`locales` --
+this project's own build produces the material for all three
+(headers/static libs for `-dev`; `ldconfig`/`iconv`/`locale`/... for
+`-bin`) but packaging them is a separate, not-yet-done step.
