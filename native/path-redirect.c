@@ -241,6 +241,12 @@ static char **bionic_env(char *const *envp) {
   }
   if (want && !saw && n < 2045) out[n++] = entry;
   out[n] = NULL;
+  if (g_debug) {
+    fprintf(stderr, "[path-redirect] bionic_env: %d entries out:\n", n);
+    for (int i = 0; i < n; i++)
+      if (!strncmp(out[i], "LD_", 3) || !strncmp(out[i], "PATH=", 5) || !strncmp(out[i], "COMPILER_PATH", 13))
+        fprintf(stderr, "[path-redirect]   %s\n", out[i]);
+  }
   return out;
 }
 
