@@ -308,36 +308,34 @@ What it buys:
   Debian 5.40 gap).
 
 What it needs:
-- [ ] **patch series:** termux-pacman's `glibc-packages` Android patches,
-      kept as our own series, updated per glibc version. **Investigated
-      2026-09-30, see `docs/android-seccomp-audit.md`'s "Termux's actual
-      Android patch series" section for the full breakdown** -- fetched
-      the real source (`termux-pacman/glibc-packages`, `gpkg/glibc/`).
-      Confirmed via direct test: stock Debian `libc6` segfaults inside its
-      own dynamic linker before even reaching a syscall question (real
-      `.deb` downloaded, run through this project's own
-      `dn-translate-deb.sh`, tested with the `hello` package's binary) --
-      the patch series is load-bearing at the loader-startup level, not a
-      convenience, so it cannot be skipped or lightened. Good news: the
-      NSS/path fix specifically (`set-dirs.patch`) turned out to be one
-      plain, ~30-file unified diff templating a `@TERMUX_PREFIX@`
-      placeholder over hardcoded `/etc`/`/tmp`/`/var` paths -- forkable
-      and re-targetable to this project's own prefix path, not a novel
-      invention, which lowers this item's cost estimate versus what was
-      assumed when 0.5.0 was first reprioritized. Still unread in full:
-      `android_passwd_group.c` (custom NSS-adjacent Android-uid
-      synthesis), `fakesyscall.json` (declarative "answer instead of
-      crash" mechanism at the libc level -- same idea as this file's
-      tracer Phase-5 item, done differently), `shmem-android.c` (SysV
-      shm reimplemented in userspace). **Open, not decided:** fork
-      `termux-pacman/glibc-packages`'s patches as-is (retargeted) vs.
-      write this project's own independent series -- the former is
-      proven working and far less redundant effort, the latter avoids
-      inheriting Termux's own identity-model assumptions
-      (`android_passwd_group.c` may not fit this project's fake-root,
-      0.3.0) and any provenance/licensing question of carrying another
-      project's patch series long-term. Decide after reading
-      `getpwnam.c.patch`/`android_passwd_group.c` in full;
+- [x] **patch series:** termux-pacman's `glibc-packages` Android patches,
+      forked as our own series (decided: fork `termux-pacman`'s patches
+      retargeted, not an independent rewrite -- proven working, far less
+      redundant effort). **Full per-file reading + fork pass done
+      2026-09-30**, see `docs/android-seccomp-audit.md`'s "Full per-file
+      fork verdict" (all 54 files in `gpkg/glibc/` judged) and "Everything
+      marked 'fork' actually forked" (the actual work, onto
+      `~/dn-glibc-build/work`, regenerated + round-trip-verified into
+      [`third_party/glibc-android-patches/dn-glibc-android.patch`](third_party/glibc-android-patches/dn-glibc-android.patch),
+      147 file-diffs up from 67). Owner's rule applied throughout: don't
+      fake a feature that genuinely doesn't exist, report it honestly,
+      except an important feature, which needs deliberate consideration.
+      `fakesyscall.json` turned out to have three buckets under that rule,
+      not the two assumed earlier -- a real substitute for the missing
+      syscall (not a fake at all -- this also corrects the earlier
+      "`shmem-android.c`: defer" call, since its `shmat`/`shmctl`/`shmdt`/
+      `shmget` route here, not through a fake), an honest `ENOSYS`, and the
+      actual fake (`setuid`/`setgid`/... unconditionally succeed). Only
+      the fake bucket is parked (below); everything else -- including
+      `android_passwd_group.c` and `shmem-android.c`, both read in full and
+      confirmed low-risk/real -- is forked now. One patch
+      (`disable-termios2.patch`) targets glibc internals that no longer
+      exist in this shape in 2.41 and needs a real port, not a mechanical
+      reapply -- not forked yet, terminal I/O may still misbehave on
+      Android without it. **Not yet built or tested on-device** -- next
+      step, either via CI (`build-glibc.yml`) or on-device now that `cc1`'s
+      `ET_EXEC` segfault (`findings.md`, 2026-09-30) no longer blocks a
+      native build attempt;
 - [ ] **build pipeline:** cross-build in CI (too slow on a phone),
       producing `libc6`, `libc6-dev`, `libc-bin`, `locales` `.deb`s
       versioned like Debian's (e.g. `2.41-12+deb13u4+dn1`);

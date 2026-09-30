@@ -670,10 +670,7 @@ they map directly onto that rule:**
 | **Not a patch -- the build driver itself** | `build.sh` (reference when building this project's own pipeline, not "fork or don't") |
 
 Remaining unread in the same directory: none -- this completes the
-reading pass. Next, when 0.5.0 work resumes: fork everything marked
-"fork" above except the `set-ld-variables.patch` question and the
-fake-root-parked bucket-3 pieces, onto this project's own retargeted
-glibc source tree (`~/dn-glibc-build`).
+reading pass.
 
 ## 0.5.0 first build attempt: partial fork tested, confirmed insufficient (2026-09-30)
 
@@ -730,3 +727,55 @@ early startup trips `SIGSYS` (needs `dn-trace` or a `sigaction(SIGSYS,
 SA_SIGINFO)` probe wrapper around the `hello` test, since `strace`/`ltrace`
 are unavailable on-device) and confirm it's on `fakesyscall.json`'s known
 list before assuming forking that file fixes it outright.
+
+## Everything marked "fork" actually forked (2026-09-30)
+
+Done, onto `~/dn-glibc-build/work` (Debian's real glibc `2.41-12+deb13u4`
+source + Debian's own quilt series + this project's retargeted patch):
+every file/hunk marked "fork" in the table above, minus the
+`set-ld-variables.patch` question (left for its own read) and the
+fake-root-parked bucket-3 pieces (`"0"`-bucket `fakesyscall.json` entries,
+`setfsuid.c`/`setfsgid.c`, the `set*id.c`/`local-setxid.h` hunks of
+`set-fakesyscalls.patch` -- split out with `csplit` into
+`set-fakesyscalls-forked.patch`/`-parked.patch` and only the former
+applied). One patch (`disable-termios2.patch`) turned out to target glibc
+internals (`sysdeps/unix/sysv/linux/isatty.c`, a `termios2` struct) that no
+longer exist in this shape in 2.41 -- `isatty.c`/`isatty_nostatus.c`/
+`termios_internals.h` aren't even at those paths anymore, and
+`__ASSUME_TERMIOS2` is gone from `kernel-features.h` entirely; glibc
+restructured termios handling since whatever version this patch was
+written against. **Not forked, needs a real port to 2.41's current
+structure, not a mechanical reapply** -- terminal I/O (`isatty`,
+`tcgetattr`/`tcsetattr`) may still misbehave on Android without it; flagged
+for later, not blocking this pass.
+
+One patch (`set-static-stubs.patch`) had one hunk fail on context drift
+(2 leftover `link ()` call sites the same patch's own earlier hunk had
+already renamed to `link_unwind ()` elsewhere in the file, plus a missing
+`#if !HAVE_GCC_PERSONALITY_V0` guard) -- both hand-fixed identically to
+what the rejected hunk asked for, confirmed by reading the `.rej` file
+against the patch's own intent, not guessed.
+
+`disabled-syscall.h` generated for `aarch64` only (this project's only
+target) using `build.sh`'s own `jq`-driven codegen, against
+`fakesyscall.json` with the `"0"` key removed
+(`jq 'del(.["0"])' fakesyscall.json`) -- several bucket entries
+(`fchownat`->`chown`/`chown32`, `getpgrp`, `recvfrom`->`recv`, `symlink`,
+`link`, `unlinkat`->`rmdir`) produced no `case` at all, because `aarch64`'s
+own `arch-syscall.h` never defines separate `__NR_chown32`/`__NR_recv`/...
+in the first place -- consistent with `kernel-features.h.patch`
+(forked in the same pass) already saying this arch has no separate
+`accept`/`recv`/`send` syscalls to disable.
+
+Regenerated `dn-glibc-android.patch` (`diff -ruN --exclude=.pc
+--exclude=debian pristine/p work`, 147 file-diffs, up from 67) and
+round-trip-verified: fresh copy of `pristine`, apply the regenerated
+patch, diff against `work` -- empty. Landed in
+[`third_party/glibc-android-patches/`](../../third_party/glibc-android-patches/)
+(`dn-glibc-android.patch` + `README.md`, updated with the full
+per-file breakdown and a documented regeneration recipe). Not yet built
+or tested on-device -- that's the next step, either via CI
+(`build-glibc.yml`, unchanged, `patch -p1` handles the new-file hunks the
+same way) or on-device now that `cc1`'s `ET_EXEC` segfault (`findings.md`,
+2026-09-30) no longer blocks a native build attempt.
+
