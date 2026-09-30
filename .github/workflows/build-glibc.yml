@@ -1,0 +1,95 @@
+name: Build own-glibc (test)
+
+# Manual, exploratory build for 0.5.0's own-glibc milestone (see TODO.md).
+# Builds Debian's real glibc source + this project's Android patch
+# (third_party/glibc-android-patches/dn-glibc-android.patch) on a real
+# aarch64 Linux runner -- sidesteps the Termux/clang blocker found on-device
+# (glibc's configure requires a GCC-only builtin-redirection behavior clang
+# has never implemented; no real GCC cross-toolchain exists in Termux).
+# Output is a tarball artifact to copy onto a phone and test through the
+# existing ld-dn + shim pipeline -- this workflow does not run on Android
+# and proves nothing about runtime behavior there, only that the patched
+# source configures and builds.
+
+on:
+  workflow_dispatch: {}
+
+env:
+  GLIBC_VERSION: "2.41"
+  GLIBC_DEB_VERSION: "2.41-12+deb13u4"
+  DN_PREFIX: "/data/data/com.termux/files/home/.dn"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential quilt bison gawk gettext python3 \
+            xz-utils file rdfind symlinks netbase gperf
+
+      - name: Fetch Debian's real glibc source
+        run: |
+          mkdir -p src
+          cd src
+          curl -sLO "https://deb.debian.org/debian/pool/main/g/glibc/glibc_${GLIBC_VERSION}.orig.tar.xz"
+          curl -sLO "https://deb.debian.org/debian/pool/main/g/glibc/glibc_${GLIBC_DEB_VERSION}.debian.tar.xz"
+
+      - name: Extract and apply Debian's own patch series
+        run: |
+          cd src
+          tar xf "glibc_${GLIBC_VERSION}.orig.tar.xz"
+          mv "glibc-${GLIBC_VERSION}" work
+          tar xf "glibc_${GLIBC_DEB_VERSION}.debian.tar.xz" -C work
+          cd work
+          QUILT_PATCHES=debian/patches quilt push -a
+
+      - name: Apply this project's Android patch
+        run: |
+          patch -p1 -d src/work < third_party/glibc-android-patches/dn-glibc-android.patch
+
+      - name: Configure
+        run: |
+          mkdir -p objdir
+          cd objdir
+          ../src/work/configure \
+            --prefix="${DN_PREFIX}/usr" \
+            --libdir="${DN_PREFIX}/usr/lib" \
+            --includedir="${DN_PREFIX}/usr/include" \
+            --host=aarch64-linux-gnu \
+            --build=aarch64-linux-gnu \
+            --enable-memory-tagging \
+            --enable-fortify-source \
+            --enable-bind-now \
+            --disable-multi-arch \
+            --enable-stack-protector=strong \
+            --disable-nscd \
+            --disable-profile \
+            --disable-werror \
+            --disable-default-pie
+
+      - name: Build
+        run: |
+          cd objdir
+          make -O -j"$(nproc)"
+
+      - name: Install to a staging tree
+        run: |
+          cd objdir
+          mkdir -p "$GITHUB_WORKSPACE/destdir"
+          make install DESTDIR="$GITHUB_WORKSPACE/destdir"
+
+      - name: Package artifact
+        run: |
+          tar -C destdir -czf dn-glibc-android-${{ github.sha }}.tar.gz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dn-glibc-android
+          path: dn-glibc-android-${{ github.sha }}.tar.gz
+          retention-days: 14
