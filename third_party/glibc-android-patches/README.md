@@ -46,6 +46,20 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
     syscall variants, `/dev/std{in,out}` -> `/proc/self/fd/N`.
   - `disable-clone3.patch` is unconditional (toolchain/compat, not
     Android-specific).
+  - `sysdeps/unix/sysv/linux/aarch64/clone3.S` (aarch64's raw `clone3()`
+    syscall stub) is deleted as a diff hunk against `/dev/null`, the same
+    way `gpkg/glibc/build.sh` does it unconditionally as its first step
+    (`termux_step_pre_configure`). Needed because `clone3` is in
+    `fakesyscall.json`'s `ENOSYS` bucket, and the generated
+    `disabled-syscall.h` deletes `__NR_clone3` from `arch-syscall.h` so
+    nothing can reach the real (Gate-A-killed) syscall by accident — but
+    this raw `.S` stub referenced `__NR_clone3` directly, outside the
+    fakesyscall dispatch path, so it fails to assemble unless deleted.
+    Found and fixed during the first on-device build
+    (`docs/android-seccomp-audit.md`, 2026-09-30), initially as a manual
+    tree edit; folded into this patch (as opposed to `work/`'s hand-fix)
+    after a clean-room replay (fresh `pristine` + this patch alone, no
+    other hand-fixes) confirmed it was still missing.
 
 ## Explicitly not included yet (parked, not forgotten)
 

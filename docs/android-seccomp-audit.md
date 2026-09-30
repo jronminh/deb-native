@@ -1030,3 +1030,47 @@ fix), a full `make`/`make install` succeeds with zero real errors (`PATH`/
 end to end (NSS). 0.5.0's "what it needs" `proof:` checklist item (`gcc`
 hello-world, NSS without the tracer) is now demonstrated, not just planned.
 
+## Clean-room replay: patch alone, from a fresh `pristine` copy (2026-09-30)
+
+Closed the "not yet done" item from the previous section: the build above
+reused an already-forked `work/` tree with several hand-fixes applied
+mid-build (`PATH`, `clone3.S`) that were never folded back into
+`dn-glibc-android.patch`. Replayed from scratch to find out what a real
+user following `README.md`'s own "Applying this patch" recipe would
+actually hit: fresh `pristine` copy, `patch -p1` with the patch as it
+stood in the repo, nothing else.
+
+**Confirmed a real gap**: the `clone3.S` deletion was still missing from
+the patch (only ever applied as a manual `rm` in `work/`) — a clean apply
+of the patch alone reproduces the exact compile error from the first
+build attempt (`undefined symbol __NR_clone3 used as an immediate value`).
+Patch itself applied cleanly otherwise: 147 file-diffs, `.rej`-free, matches
+the documented count exactly.
+
+**Fixed properly this time**: deleted the file in the clean-room tree, then
+regenerated `dn-glibc-android.patch` (`diff -ruN --exclude=.pc
+--exclude=debian pristine work`, now 148 file-diffs) instead of leaving it
+as an undocumented tree edit. Round-trip verified per `README.md`'s own
+recipe (fresh `pristine`, apply the regenerated patch, diff against the
+clean-room `work` tree — empty). This is now a real fix in the patch, not
+a fact only true of one hand-edited tree.
+
+**Also settled an open question from the `PATH`-shadowing finding**:
+retried the full build at `-j8` (this device has 8 cores) instead of the
+`-j1` that first got a clean run, to check whether the earlier segfault
+instability was actually about parallelism or genuinely just the `PATH`
+issue. `make -j8`, `make install`, and the `hello` control test all
+succeeded with zero segfaults — confirms it was `PATH` alone; `-j8` is
+safe and roughly 3-4x faster wall-clock, no reason to keep defaulting to
+`-j1` for future builds on this device.
+
+The only non-zero-exit output from `make -k install` was the
+already-documented, non-blocking `ldconfig -r` `SIGSYS` (signal 31) gap
+from the section above — unrelated to this session's changes, still open.
+
+Net effect: `dn-glibc-android.patch`, as it now stands in the repo, is
+sufficient on its own (`patch -p1` against a fresh Debian `glibc` source,
+no manual tree edits) to reach a working `libc.so.6`/`ld.so` that runs
+`hello` — the gap between "works in this one hand-fixed tree" and "works
+by following the README" is now closed.
+
