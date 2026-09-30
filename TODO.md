@@ -129,7 +129,12 @@ combine rather than replace each other)**:
    not started: narrow `native/dn-run.c`'s `classify()`/`has_nss_import()`
    (routes a whole process to the tracer for its entire lifetime just for
    *importing* an NSS symbol, regardless of whether it's called) — measure
-   the false-positive rate on the survey sample first.
+   the false-positive rate on the survey sample first. Newly relevant, not
+   just theoretical: `classify()` had its own bug until the runtime
+   component audit (below) fixed it 2026-09-30 — it was misrouting
+   *every* prefix glibc binary to a bare, untraced `execv()` regardless of
+   NSS imports, so this "too broad" concern was moot until then (nothing
+   was actually being routed). It is a live cost now.
 
 ## 0.4.0: a lighter base (deferred until after alpha)
 
