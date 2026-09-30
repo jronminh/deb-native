@@ -80,6 +80,55 @@ after (`priv chroot` for maintainer scripts using
 Android's seccomp otherwise SIGSYS-kills) is a temporary fix, still
 standing until the identity/services layer replaces it.
 
+**Tried 2026-10-01, reverted: apt/dpkg as real base packages instead of
+Termux's borrowed binaries.** Motivated by the same principle already
+applied to `bash`/`dash` this session (self-contained > borrowed for
+bootstrap scaffolding), and by a real architectural itch: `apt`/`dpkg`
+are the one thing in the prefix that never goes through `ld-dn`/the shim
+at all. Two approaches tried, both hit a real, hard blocker:
+- **Real Debian `apt` 3.0.3/`dpkg` 1.22.22** (`apt-get download`,
+  translated and `dpkg -i`'d like any other package): installed clean,
+  DNS/downloads worked (after also symlinking a missing
+  `$DN/etc/resolv.conf` -- our own glibc's `libnss_dns` needs a real one,
+  unlike Termux's Bionic resolver; a `native-glibc-network-client` gap
+  worth remembering independent of this attempt), but every actual
+  package install failed: apt's `DPkg::Pre-Install-Pkgs`/debconf hooks
+  run via a **hardcoded, unconfigurable `Args[0] = "/bin/sh"`** in apt's
+  own C++ (`apt-pkg/deb/dpkgpm.cc`, `apt-private/private-json-hooks.cc`
+  -- no `Dir::Bin::sh`-style override exists). `/bin/sh` on this device is
+  Android's real, foreign Bionic `/system/bin/sh` (not this project's
+  `dash`), and it fails to start under the exec chain our own real
+  `apt`/`dpkg` create (`CANNOT LINK EXECUTABLE "/bin/sh": ... at
+  .../libc.so.6`) -- confirmed **not** an `LD_PRELOAD`/`LD_LIBRARY_PATH`
+  leak (a full `envp` dump showed the shim's `bionic_env()` correctly
+  stripping both; root mechanism still unknown). Termux's own apt build
+  patches exactly this line to `@TERMUX_PREFIX@/bin/sh`
+  (`termux-packages` `packages/apt/0004-no-hardcoded-paths.patch`) --
+  confirming this is a real, known-since-2020 incompatibility, not
+  something specific to this project.
+- **Termux's own real `apt`/`dpkg` `.deb`s** (already correctly patched,
+  downloaded via `apt-get download` from Termux's own repo, translated):
+  a different, also-fatal problem -- Termux's `.deb`s bake **absolute
+  Termux paths directly into the archive** (`./data/data/com.termux/...`,
+  not Debian's relative `./usr/bin/...`), so `dpkg --instdir=$DN` installs
+  them at `$DN/data/data/com.termux/...` instead of `$DN/usr/bin/...` --
+  a packaging-format incompatibility, not fixable by translation. Termux's
+  apt/dpkg control metadata also declares `Depends`/`Conflicts` in
+  Termux's own package names (`libc++`, `zlib`, ...), unresolvable against
+  a Debian package index regardless of the path issue.
+- **sudo-less** (a sibling project, `jronminh/sudo-less`) already solved
+  this properly: forks Termux's same apt/dpkg patches, cut down to what a
+  plain unprivileged prefix needs (not Android-specific), rebased onto
+  current Debian apt/dpkg source (`apt-dpkg/patches/`, `UPSTREAM.md` has
+  the full per-patch rationale). Real fix, if this is picked up again, is
+  building from Debian's source with (an adapted version of) that patch
+  series -- same shape of effort as 0.5.0's glibc patch, not attempted
+  this session given the time already spent. Reverted cleanly: `apt`/
+  `dpkg` are back to `dn-standins.sh`'s stand-in, unchanged in
+  architecture from before this attempt (the `$DN/usr/bin` priv/PATH fix
+  and `DN_REDIRECT_DEBUG`'s fuller dump, both found productive along the
+  way, were kept).
+
 **Open**:
 - Prefix location: keep `~/.dn` (a `$DN/root` -> `~` symlink loop is
   harmless for `find`/`du`, not for `-L`), or move it out of `$HOME`.
@@ -87,6 +136,12 @@ standing until the identity/services layer replaces it.
   like `dpkg-divert` if it double-prefixes.
 - `dpkg --print-architecture` answers `aarch64` inside the prefix — watch
   for a maintainer script expecting `arm64`.
+- `$DN/etc/resolv.conf` doesn't exist -- harmless today (nothing in the
+  base uses real glibc DNS resolution yet), but the first real glibc
+  network client will hit this exact gap again. Symlinking it to Termux's
+  own (`/data/data/com.termux/files/usr/etc/resolv.conf`) worked in
+  testing; worth adding to `setup-runtime.sh` alongside the `/root` link
+  before something else needs it.
 
 **Next release (not 0.2.0): the repo.** The same translation at repo
 build time in [`deb-native-repo`](https://github.com/jronminh/deb-native-repo)
