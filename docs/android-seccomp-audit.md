@@ -779,3 +779,68 @@ or tested on-device -- that's the next step, either via CI
 same way) or on-device now that `cc1`'s `ET_EXEC` segfault (`findings.md`,
 2026-09-30) no longer blocks a native build attempt.
 
+## First real on-device `configure`/`make` attempt (2026-09-30)
+
+Tried the on-device path right away, `~/dn-glibc-build/work` (the fully
+forked tree above) with `CC=$DN/usr/bin/gcc-14`.
+
+**`configure` succeeded outright** -- reached `config.status`/`Makefile`/
+`config.h`, including `checking for redirection of built-in functions...
+yes`, the exact check that fails `clang` unconditionally (`TODO.md`'s old
+build-step blocker). Direct confirmation the `cc1`/`ET_EXEC` fix
+(`findings.md`, 2026-09-30) actually unblocks a real, on-device glibc
+`configure`, not just a standalone `cc1 -v`/`gcc -S` smoke test.
+
+One real gap on the way there: **kernel UAPI headers**
+(`--with-headers`) aren't part of this project's base bootstrap or
+anything `dn-translate-deb.sh` touches -- `configure` fails outright
+without them ("GNU libc requires kernel header files"). Debian's
+`linux-libc-dev` package provides them normally; **now installed
+properly through the prefix's own apt** (`linux-libc-dev:arm64
+6.12.111-1`, confirmed `dpkg -s`) rather than left as the ad-hoc
+downloaded-and-merged scratch directory used to unblock this specific
+`configure` run. The multiarch layout needs care either way: Debian's
+`.deb` ships `usr/include/linux`, `usr/include/asm-generic` and the
+*real* `asm/` under `usr/include/aarch64-linux-gnu/asm` (a target-triplet
+subdir, not a top-level `usr/include/asm`) -- glibc's own build passes
+`-nostdinc` plus an explicit `--with-headers=DIR` merging all three into
+one flat directory, so it doesn't get gcc's own automatic multiarch
+search the way an ordinary compile would. A first attempt at that merge
+copied the `.deb`'s symlinks as-is (`cp -r`) -- `usr/include/
+aarch64-linux-gnu/asm/errno.h` is a *relative* symlink
+(`../../../lib/linux/uapi/arm64/asm/errno.h`) that only resolves from
+inside the original package tree, so copying it elsewhere without
+dereferencing breaks it silently until something includes
+`<asm/errno.h>`. Fixed with `cp -rL` (dereference, copy real content).
+
+**Then hit a real, reproducible instability during `make`**, not the
+kernel-header issue: intermittent `Segmentation fault` on totally
+unrelated recipes (`minihelp`, a bare `@echo`; `nscd`'s `stamp.os`; a
+plain `mkdir`), misattributed to whatever recipe `make` happened to be
+running when a stray SIGSEGV notification arrived -- confirmed by
+checking actual output: the "failed" `sysd-syscallsT` file this
+produced was in fact complete and correct, and running the exact same
+`make-syscalls.sh`/`gcc-14 -E` invocations by hand (40x in a loop) never
+crashed once. **Root cause: `PATH="$DN/usr/bin:$PATH"`** (set to help
+`gcc-14` find the prefix's binutils, before realizing `native/ld-dn.c`'s
+`COMPILER_PATH` fix from earlier today already makes that unnecessary)
+put this project's own glibc coreutils **ahead of Termux's own** --
+`mkinstalldirs`'s plain `mkdir` calls, and other trivial utility
+invocations throughout glibc's `Makefile`s, silently resolved to
+`$DN/usr/bin/mkdir` (a real glibc ELF, going through the full
+`ld-dn`+shim+loader dance) instead of Termux's lightweight Bionic
+`mkdir` -- hundreds of times over the course of a build, evidently not
+yet stable enough for that volume/rate of invocation. Fix: don't put
+the prefix on `PATH` at all -- `COMPILER_PATH` (already set
+automatically per-launch by `ld-dn`) is sufficient for `gcc-14` to find
+its own subprograms, so plain `PATH=/data/data/com.termux/files/usr/bin`
+(Termux's own tools only) is both correct and sufficient. Zero
+segfaults observed since.
+
+**Open, not yet root-caused**: *why* rapid, repeated invocation of a
+`ld-dn`-routed program is less stable than Termux's own binaries under
+this kind of sustained load -- parked as a real question (this project's
+own coreutils will need to run this way eventually, just not while
+avoidable via `COMPILER_PATH`/`PATH` choices), not investigated further
+here since the immediate build no longer needs it.
+
