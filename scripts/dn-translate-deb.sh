@@ -16,12 +16,18 @@
 #     corrupt its program headers, see docs/findings.md). Done here, not
 #     after install, so it is right before any maintainer script runs the
 #     binary;
-#   - program scripts' "#!" line pointed into the prefix (sh/bash/dash ->
-#     dn-shell, perl -> dn-perl, any other /usr, /bin, /sbin interpreter ->
-#     the same path under $DN), so a script started directly -- from
-#     Termux's side too -- runs with the prefix's interpreter;
-#   - maintainer-script shebangs -> dn-shell (patch-scripts-tree.sh, the
-#     loop patch-deb.sh runs).
+#   - program scripts' "#!" line pointed into the prefix: sh/dash ->
+#     $DN/usr/bin/dash, bash -> $DN/usr/bin/bash (both real, apt-installed
+#     packages with ld-dn as their own interpreter -- the kernel following
+#     the shebang already gets the shim/env set up, same as any other
+#     prefix binary, no extra indirection), perl -> dn-perl (Termux's own,
+#     no Debian-perl replacement yet), any other /usr, /bin, /sbin
+#     interpreter -> the same path under $DN. dn-shell is only the
+#     fallback for sh/bash/dash when the prefix's own isn't installed yet
+#     (true during early bootstrap, before bash/dash reach the base
+#     package set) -- bootstrap scaffolding, not the steady-state path;
+#   - maintainer-script shebangs: the same dash/bash-first, dn-shell-
+#     fallback logic (patch-scripts-tree.sh, the loop patch-deb.sh runs).
 #
 # One unpack and one repack per package, uncompressed (-Znone): the result
 # only lives in a temp or cache folder until dpkg installs it, and xz on a
@@ -93,7 +99,10 @@ for d in usr/bin usr/sbin usr/games usr/libexec bin sbin; do
     line=$(head -n1 "$f")
     interp=$(printf '%s' "$line" | sed -E 's/^#![[:space:]]*([^[:space:]]+).*/\1/')
     case "$interp" in
-      /bin/sh|/bin/bash|/bin/dash|/usr/bin/sh|/usr/bin/bash|/usr/bin/dash) new="$DN/usr/bin/dn-shell" ;;
+      /bin/sh|/usr/bin/sh|/bin/dash|/usr/bin/dash)
+        new="$DN/usr/bin/dash"; [ -x "$new" ] || new="$DN/usr/bin/dn-shell" ;;
+      /bin/bash|/usr/bin/bash)
+        new="$DN/usr/bin/bash"; [ -x "$new" ] || new="$DN/usr/bin/dn-shell" ;;
       /usr/bin/perl|/bin/perl) new="$DN/usr/bin/dn-perl" ;;
       /usr/*|/bin/*|/sbin/*) new="$DN$interp" ;;
       *) continue ;;

@@ -1,9 +1,17 @@
 #!/bin/sh
-# Point an extracted package's maintainer scripts at dn-shell: their
-# "#!/bin/sh" (or bash, dash) shebang is rewritten to the prefix's dn-shell,
-# a flag on it kept. Works on a package tree already unpacked with
-# dpkg-deb -R, so dn-translate-deb.sh can do it inside its one
-# unpack/repack pass; patch-deb.sh wraps it for a .deb file.
+# Point an extracted package's maintainer scripts at the prefix's own
+# interpreter: their "#!/bin/sh" (or bash, dash) shebang is rewritten to
+# $INSTDIR/usr/bin/dash or .../bash directly -- both are real,
+# apt-installed packages with ld-dn as their own ELF interpreter, so the
+# kernel following the shebang already gets the shim/environment set up
+# the same way any other prefix binary does, no extra indirection. Falls
+# back to dn-shell only when the target isn't installed yet (true during
+# early bootstrap, before bash/dash reach the base package set) -- that
+# fallback is bootstrap scaffolding, not something a steady-state prefix
+# should depend on. A flag on the shebang is kept either way. Works on a
+# package tree already unpacked with dpkg-deb -R, so dn-translate-deb.sh
+# can do it inside its one unpack/repack pass; patch-deb.sh wraps it for a
+# .deb file.
 #
 # Usage: patch-scripts-tree.sh PACKAGE_TREE INSTDIR
 set -eu
@@ -63,8 +71,14 @@ for f in "$TREE/DEBIAN/preinst" "$TREE/DEBIAN/postinst" \
     # killed the entire loop partway through -- every file alphabetically
     # after the one being processed when this hit never got touched, in
     # every run, looking like the mechanism just didn't work at all.
+    name=$(printf '%s' "$shebang" | sed -E 's,^#![[:space:]]*/bin/(sh|bash|dash)[[:space:]]*([^[:space:]]*)[[:space:]]*$,\1,')
     flag=$(printf '%s' "$shebang" | sed -E 's,^#![[:space:]]*/bin/(sh|bash|dash)[[:space:]]*([^[:space:]]*)[[:space:]]*$,\2,')
-    sed -i "1s#.*#\#!${WRAPPER}${flag:+ }${flag}#" "$f"
+    case "$name" in
+      bash) target="$INSTDIR/usr/bin/bash" ;;
+      *)    target="$INSTDIR/usr/bin/dash" ;;  # sh, dash: Debian's own /bin/sh target
+    esac
+    [ -x "$target" ] || target="$WRAPPER"
+    sed -i "1s#.*#\#!${target}${flag:+ }${flag}#" "$f"
     # No `unset LD_PRELOAD` line any more: the shim's own execve() dispatch
     # strips LD_PRELOAD for a non-glibc target and keeps it for a glibc one,
     # so a forked glibc coreutils command stays redirected while a forked
