@@ -441,6 +441,36 @@ entries.
   time), zero `logcat` crashes. Not proven (never caught a crash under
   the pre-fix shim specifically to confirm the mechanism), so watch for
   recurrence rather than close outright.
+- **Not scheduled: route a "well-behaved" binary to the tracer when it
+  needs it for a reason today's scans can't see.** Found via `ldconfig
+  -r` (0.5.0 status, above): it imports no NSS symbol and emits no raw
+  syscall of its own (so neither `classify()`'s NSS scan nor
+  `scan-direct-syscalls.py`'s syscall/`svc` scan flags it) — it dies
+  calling an ordinary public libc function whose *internal*
+  implementation probes a newer syscall and falls back on `ENOSYS`, a
+  graceful pattern on a real kernel that instead gets Android's seccomp
+  filter delivering a fatal `SIGSYS` (no `ENOSYS` to fall back from).
+  Nothing in the ELF says which public libc calls can do this on this
+  device's kernel/glibc build — it isn't a property of the package at
+  all, so per-package static scanning structurally can't catch it.
+  Discussed 2026-09-30/10-01, not attempted, three shapes on the table:
+  (a) route everything through the tracer — rejected, defeats the
+  shim's whole reason to exist; (b) reactive: run untraced, detect a
+  child killed specifically by `SIGSYS` (not any failure), re-exec the
+  same argv under `dn-trace`, and cache the verdict (path+mtime) so it
+  routes straight to the tracer next time — same pattern
+  `survey-prefix.sh`'s `try_program()` already uses ad hoc for
+  measurement, just never promoted to a real runtime mechanism; (c) a
+  one-time audit of glibc's own source (per glibc build, not per
+  package) against `docs/android-seccomp-audit.md`'s allowlist, to name
+  the exact handful of public libc functions with a probe-and-fallback
+  syscall pattern, then watch only those in the shim — more precise
+  than (b), more upfront cost, pays off once instead of per-crash.
+  User's framing: this should be a **post-install/post-adopt analysis
+  pass** (extending what `scan-direct-syscalls.py` already does once per
+  package at install time, generalized past raw-syscall detection),
+  not a per-launch runtime check — closer to (c)'s shape than (b)'s.
+  Explicitly next-plan, not now.
 
 ## Runtime component audit (debt from rapid early development)
 
