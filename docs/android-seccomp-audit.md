@@ -594,3 +594,59 @@ patch`, `getXXbyYY_r.c.patch`, `getgrnam.c.patch`, `getgrgid.c.patch`,
 same-shape variations on patterns already seen (path templating, `getXXbyYY`
 Android-fallback wiring, fakesyscall wiring); not read, no evidence yet
 either way, lowest priority unless 0.5.0 work actually starts.
+
+## 0.5.0 first build attempt: partial fork tested, confirmed insufficient (2026-09-30)
+
+A separate session (commits `9e70620`..`538555d`, `dev-0.2.0`) acted on
+direction 2 before the open questions above were settled: forked and
+retargeted only **`set-dirs.patch` + `disable-clone3.patch`** from
+`termux-pacman/glibc-packages` onto Debian's real glibc `2.41-12+deb13u4`
+source, built it via a new `.github/workflows/build-glibc.yml` (on-device
+build blocked separately -- `clang` can't build glibc, Debian's own
+`gcc-14` installed through this project's own apt segfaults on `cc1`, an
+unrelated pipeline bug). CI ran 9 times (`gh run list`); the two latest
+report "success", but that status is `make -k install` tolerating an
+`Error 2` in the install step to still package an artifact -- not a clean
+build. Also left an untracked 176 KB `core` file in the working tree,
+presumably from the local `gcc-14`/`cc1` SIGSEGV mentioned in the commit
+message.
+
+**Tested here, for real, against the actual artifact** (`gh run download`
+the latest success, `dn-glibc-android-538555d....tar.gz`): confirms both
+the good part and the gap.
+
+- **The NSS path retarget worked**: `strings` on the built `libc.so.6`
+  shows `/data/data/com.termux/files/home/.dn/etc/passwd` and
+  `.../nsswitch.conf` -- `set-dirs.patch`'s `@TERMUX_PREFIX@` placeholder
+  correctly substituted to this project's own prefix path, not Termux's.
+- **Still does not run.** Same `hello` control test used earlier in this
+  doc (against stock Debian glibc, which segfaulted immediately): this
+  build's `ld-linux-aarch64.so.1` + `libc.so.6`, via `--library-path`,
+  dies with **signal 31 (`SIGSYS`)** -- progress over stock Debian's
+  instant segfault (Gate-A kill happens later, not a loader-level crash),
+  but still not working. `LD_DEBUG=all` shows it getting through vDSO
+  symbol resolution (`__kernel_clock_gettime`/`_gettimeofday`/`_getres`
+  all bind normally) and into `libc.so.6`'s own load + `GLIBC_2.17`/
+  `2.34`/`2.35`/`2.38`/`GLIBC_PRIVATE` version checks, then the debug log
+  simply stops mid-stream with no further output -- consistent with an
+  unannounced `SIGSYS` kill, not narrowed to the exact syscall yet.
+- **Expected, matches this doc's own findings above, not a surprise.**
+  `set-dirs.patch` alone was never claimed to be sufficient -- the
+  "Termux's actual Android patch series" section above already named
+  `fakesyscall.json` (the `disabled-syscall.h` mechanism, wired into
+  glibc's build via several `.c` files: `mprotect.c`, `syscall.c`,
+  `setfsuid.c`/`setfsgid.c`, `fake_epoll_pwait2.c`, the `syscall.S`/
+  `disabled-syscall.h` codegen loop in `build.sh`) as the piece that
+  actually keeps glibc's own startup off Android's seccomp-killed
+  syscalls. `disable-clone3.patch` alone removes one specific offender;
+  it was never going to be the only one glibc's startup path hits.
+
+**Conclusion: the partial-fork approach is on the right track (NSS retarget
+proven) but incomplete -- forking `fakesyscall.json` and its supporting
+`.c` files is not optional groundwork, it's required for the build to
+survive its own startup**, not just a refinement for later. Next step
+before another CI cycle: narrow down which exact syscall in `libc.so.6`'s
+early startup trips `SIGSYS` (needs `dn-trace` or a `sigaction(SIGSYS,
+SA_SIGINFO)` probe wrapper around the `hello` test, since `strace`/`ltrace`
+are unavailable on-device) and confirm it's on `fakesyscall.json`'s known
+list before assuming forking that file fixes it outright.
