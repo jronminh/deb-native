@@ -31,7 +31,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential quilt bison gawk gettext python3 \
-            xz-utils file rdfind symlinks netbase gperf texinfo
+            xz-utils file rdfind symlinks netbase gperf
 
       - name: Fetch Debian's real glibc source
         run: |
@@ -53,14 +53,17 @@ jobs:
         run: |
           patch -p1 -d src/work < third_party/glibc-android-patches/dn-glibc-android.patch
 
-      - name: Work around Debian's source package stripping manual/*.texinfo
+      - name: Exclude manual/ from the build
         run: |
-          # Debian's glibc source package omits the manual's texinfo sources
-          # entirely (unrelated to the Android patch) -- 'make install'
-          # still wants manual/libc.texinfo to build the .info page. We do
-          # not need the manual; give it a trivial valid stand-in.
-          printf '@setfilename libc.info\n@settitle GNU C Library\n@bye\n' \
-            > src/work/manual/libc.texinfo
+          # Debian's glibc source package omits the manual's texinfo
+          # sources entirely (unrelated to the Android patch -- 'manual/'
+          # in the downloaded, unpatched source has only a Makefile, no
+          # .texinfo/.sh files). 'make install' still tries to build the
+          # .info page by default and fails one missing file at a time.
+          # We don't need the manual; drop it from subdirs instead of
+          # stubbing files piecemeal.
+          sed -i 's/^subdirs = \$(sorted-subdirs)/subdirs = $(filter-out manual,$(sorted-subdirs))/' \
+            src/work/Makeconfig
 
       - name: Configure
         run: |
