@@ -1090,3 +1090,67 @@ no manual tree edits) to reach a working `libc.so.6`/`ld.so` that runs
 `hello` — the gap between "works in this one hand-fixed tree" and "works
 by following the README" is now closed.
 
+## Seccomp visibility for the post-install analysis pass, and `rseq` found (2026-10-01)
+
+Groundwork for a design question in `TODO.md` ("Shim & tracer hardening"):
+routing a "well-behaved" binary to the tracer when a public libc call's
+*internal* syscall choice trips Gate A (the `ldconfig -r` case — no NSS
+import, no raw syscall of its own, so neither of the two existing routing
+scans flags it). Before deciding how to route such a binary automatically,
+we need to actually see which syscalls a traced program hits that get
+blocked — today that information exists but is discarded silently.
+
+**Found**: `tracer/tracee/seccomp.c`'s SIGSYS handler already has a
+generic `default:` case (`handle_seccomp_event_common()`) that answers
+*any* syscall this device's seccomp policy blocks with a clean `-ENOSYS`,
+whether or not the tracer's own syscall table (`sysnums-arm64.h`) has a
+name for it — this was already correct and already covers more than the
+one `set_robust_list` case `TODO.md`'s older phrasing named specifically.
+What was missing was visibility: nothing logged which syscall it was, even
+under `-v`.
+
+**Fix**: that `default:` case now calls `note()` (prints at default
+verbosity, not gated behind `-v`, unlike the existing `VERBOSE()` calls
+around it) naming the syscall via the existing `stringify_sysnum()` plus
+its raw number, before returning `ENOSYS`.
+
+**Immediately found a real gap while testing this** (against
+`busybox-static`'s `true`, already installed on the test device):
+syscall **#293 has no entry in `sysnums-arm64.h` at all** — it printed as
+unnamed ("void") even with the new logging. That number is **`rseq`**,
+which glibc >= 2.35 registers unconditionally for *every* thread,
+including the main one, at process startup. So this fires on essentially
+every traced glibc/NPTL program's first moment, not some rare edge case.
+It was already handled correctly before this session's change (falls to
+the same clean-`ENOSYS` default; glibc's own `rseq` registration already
+tolerates `ENOSYS` gracefully, unlike the fatal-`SIGSYS`-on-probe pattern
+this whole investigation is about) — it was just invisible. Added a named
+`[ 293 ] = PR_rseq` entry (`syscall/sysnums.list` + `sysnums-arm64.h`) so
+the log names it instead of "void" going forward.
+
+**Also caught and fixed a bug in the new logging itself while verifying
+it**: the first attempt peeked the raw syscall number from the `ORIGINAL`
+register snapshot while `sysnum` (used for the name) was resolved from
+`CURRENT` a few lines above — inconsistent, and printed a stale, unrelated
+number left over from an earlier syscall in the same seccomp batch
+(`set_robust_list`'s, from immediately before). Caught by cross-checking
+against `-v 4`'s full per-syscall trace, which prints `CURRENT` sysnum
+consistently (`print_current_regs()`, `tracee/reg.c`) — fixed to also peek
+`CURRENT`.
+
+Verified end to end: `busybox-static true` now logs exactly
+`blocked syscall rseq (#293) denied by seccomp; returning ENOSYS` and
+still exits 0; a full `apt-get install` and `find -exec test` regression
+pass with zero `logcat -b crash` entries after rebuilding and redeploying
+`dn-trace`.
+
+**Scope note**: this is visibility only, not the routing decision. Which
+mechanism actually gets an `ldconfig -r`-shaped binary *into* the tracer
+in the first place — reactive retry-and-cache vs. a one-time audit of
+glibc's own probe-and-fallback call sites — is still open, deliberately
+not attempted here (`TODO.md`). Next step for the analysis pass itself:
+run this logging against a real package's actual binaries, not just a
+synthetic probe, to see how common blocked-but-tolerated syscalls other
+than `rseq`/`set_robust_list` actually are before choosing between those
+two shapes.
+
