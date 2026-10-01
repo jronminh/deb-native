@@ -13,7 +13,9 @@ thematically closest.
   `runtime-failures.md`, `bind-only.md`, `vs-sudo-less.md`,
   `direct-usage.md`, `android-platform.md` (the Android enforcement-gate
   taxonomy and the glibc patch's per-file fork verdict — standing
-  reference extracted out of `log/android-seccomp-audit.md`).
+  reference extracted out of `log/android-seccomp-audit.md`),
+  `alternatives.md` (comparison with other ways to run Debian on
+  Android).
 - **log/** — chronological or one-off investigation, not current state:
   `findings.md` (the engineering log — append, don't rewrite),
   `android-seccomp-audit.md` (the investigation that produced

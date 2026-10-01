@@ -1022,3 +1022,56 @@ only as a fallback for packages not in the repo.
 - ~~Routing ("Termux wins")~~ -- superseded: in the user's interactive
   shell `apt`/`dpkg` are the prefix's (aliases), Termux's are `pkg`,
   `termux-apt`, `termux-dpkg`; see `TODO.md`.
+
+### Day-to-day commands
+
+What the aliasing above actually gives the user, in the interactive shell
+`dn-activate.sh` sets up (a managed block in `~/.bashrc`):
+
+- `apt`, `apt-get`, `apt-cache`, `apt-mark`, `dpkg`, `dpkg-query` are
+  **the prefix's** (Debian's packages). Termux's own are `pkg` (as Termux
+  recommends), `termux-apt`, `termux-dpkg` -- scripts are unaffected,
+  since shell aliases never reach them. Undo: `sed -i '/# deb-native/d'
+  ~/.bashrc` and delete the prefix.
+- **`dn-shell`** -- a shell inside the prefix (Termux's glibc `bash` with
+  the path shim, the prefix first on `PATH`), for scripts that expect
+  Debian's layout. `exit` returns to Termux.
+- **`dn-adopt FILE...`** -- make a glibc arm64 program obtained outside
+  apt (a release download, a direct installer's binary) run through the
+  prefix: its interpreter becomes `ld-dn`. The file is changed in place;
+  anything else (Termux's own programs, static ones, scripts) is left
+  alone.
+
+## Fake root (0.3.0)
+
+**Goal:** inside the prefix a program sees itself as root, as on a real
+Debian where apt, dpkg and maintainer scripts run as root -- `id` says
+`uid=0(root)`, files show as owned by root, `chown`/`setuid` succeed,
+`USER`/`LOGNAME` are `root`. Only the identity is faked: nothing gains a
+right it did not have, and Termux's own programs still see the real user.
+
+**Status: released, no further investment planned** (reconsidered
+2026-10-01, `TODO.md`'s "0.3.0: fake root"). It is a stand-in, not a
+destination -- the real fix for packages that need an actual second
+identity is a services/sudo layer (`TODO.md`), not a stronger fake. Kept
+exactly as released; the parked `set-fakesyscalls-parked.patch` (0.5.0's
+glibc patch, the `setuid`/`setgid`/... "0" bucket,
+[`android-platform.md`](android-platform.md)) stays unapplied for the
+same reason -- nothing about fake-root is being extended.
+
+**Mechanism:** the shim (`native/path-redirect.c`) fakes
+`get[e]uid`/`get[e]gid`/`getres[ug]id`/`getgroups` -> `0`, `stat`
+ownership, no-ops `chown`/`set*id`/`setgroups`/`initgroups`, and rewrites
+`USER`/`LOGNAME` in the environ array; `dn-trace` does the same at syscall
+exit for static programs, raw syscalls, and NSS.
+
+**Escape hatch:** `DN_ID=user CMD` runs a command (and its children) with
+the real identity instead, for programs that refuse to run as root
+(`postgres`, Chromium's sandbox).
+
+**Cost:** free for normal programs (the shim does this inline). Under the
+tracer (static programs, raw syscalls), faking file owners means every
+`stat` round-trips through `dn-trace` instead of the kernel directly: a
+stat-heavy `find` took 727 ms instead of 443 ms on the test phone.
+`DN_ID=user` under the tracer gets the untraced speed back, since it skips
+the identity fakery entirely.

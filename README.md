@@ -62,48 +62,12 @@ Not an emulator and not isolation: **install and run, not emulate**.
 ## Compared with other ways
 
 deb-native is not a container: nothing is isolated or emulated. Programs
-are ordinary Termux processes that *see* a Debian layout.
-
-| method | how Debian's `/usr`, `/etc` appear | cost | package manager | root? |
-|---|---|---|---|---|
-| chroot (Linux Deploy) | a real `chroot` into a rootfs | none at runtime | Debian's own, in the rootfs | **yes** |
-| proot-distro, UserLAnd, Andronix | a full rootfs image; every syscall of every process goes through proot (ptrace) | slow starts and file I/O, for everything | Debian's own, inside | no |
-| Termux packages | not Debian: Termux's own ports (Bionic) | native | `pkg`, Termux's repo | no |
-| glibc-runner (termux-pacman) | Termux's patched glibc; glibc binaries run by hand | native | no Debian packages | no |
-| namespaces (Docker, Podman, sudo-less) | the kernel mounts the layout | native | Debian's own | needs user namespaces, which Android blocks |
-| **deb-native** | the prefix is a real Debian tree; programs find it through `ld-dn` and an in-process path shim | native; the tracer only for static programs, raw syscalls, NSS | the prefix's own sources, database and base (Termux's apt/dpkg binaries) | no |
-
-What that buys:
-
-1. **No second system.** No distro image: `~/.dn` holds what you install
-   plus a ~23-package base. Only glibc comes from Termux (the `libc6`
-   stand-in); everything else is Debian's own `.deb`.
-2. **No proot for normal programs.** proot-distro pays a ptrace round trip
-   on every file access of every program. Here the shim rewrites paths
-   inside the process, set up by `ld-dn` when the program starts; in the
-   0.2.0 survey every program that ran, ran this way.
-3. **Mixed with Termux.** A Debian program is a Termux process: it calls
-   Termux's programs and they call it, Termux's home is its `/root`, its
-   launchers are on your `PATH`. There is no "logging in" to another
-   system: you type `figlet`.
-4. **Translated once, not emulated.** Each `.deb` is fixed at install
-   (interpreter, library path, `#!` lines, maintainer scripts, hard links);
-   afterwards it runs directly.
-5. **Removable.** Termux is never modified: delete `~/.dn` and the
-   `# deb-native` lines in `~/.bashrc`, and Termux is as before. (The
-   `naibed` branch is the opposite: it converts Termux itself, one way.)
-
-What it costs:
-
-- **A boundary, not everything.** Packages that need root, services and
-  (for now) toolchains are out; a proot rootfs runs almost anything, slowly.
-- **Not faithful Debian.** No real root, no init system; paths that bypass
-  libc need care (the tracer, per-package fixes).
-- **Not isolation.** A Debian program can touch your Termux files like any
-  Termux program. (proot is no security boundary either.)
-
-In one line: proot-distro puts a Debian machine next to Termux;
-deb-native puts Debian's packages into it.
+are ordinary Termux processes that *see* a Debian layout — unlike a
+chroot (needs root), proot-distro/UserLAnd (a full rootfs, every syscall
+through ptrace), or namespaces (Docker-style, blocked on Android). In one
+line: proot-distro puts a Debian machine next to Termux; deb-native puts
+Debian's packages into it. Full comparison table and trade-offs:
+[`docs/spec/alternatives.md`](docs/spec/alternatives.md).
 
 **The same idea as [sudo-less](https://github.com/jronminh/sudo-less), for
 a platform that is not Debian** — same goal, same scope, same proof, the
@@ -131,41 +95,18 @@ end to end), [`docs/spec/install-flow.md`](docs/spec/install-flow.md)
 
 ## apt and dpkg
 
-In your shell, `apt`, `apt-get`, `apt-cache`, `apt-mark`, `dpkg` and
-`dpkg-query` are **the prefix's** (Debian's packages), through a managed
-block in `~/.bashrc`. Termux's are `pkg` (as Termux recommends),
-`termux-apt` and `termux-dpkg`; scripts are unaffected, since aliases never
-reach them. To undo: `sed -i '/# deb-native/d' ~/.bashrc` and delete
-`~/.dn`.
+In your shell, `apt`/`apt-get`/`dpkg` (and friends) are **the prefix's**;
+Termux's own are `pkg`, `termux-apt`, `termux-dpkg`. Undo: `sed -i
+'/# deb-native/d' ~/.bashrc` and delete `~/.dn`.
 
-`install.sh` is idempotent. From a checkout: `sh install.sh [PREFIX] [pkg ...]`.
-The full install log is in `~/.dn/var/log/`.
+`install.sh` is idempotent — from a checkout: `sh install.sh [PREFIX]
+[pkg ...]`; log in `~/.dn/var/log/`.
 
-Two more commands:
-
-- **`dn-shell`** — a shell inside the prefix (Termux's glibc bash with the
-  path shim, the prefix first on `PATH`), for scripts that expect Debian's
-  layout. `exit` returns to Termux.
-- **`dn-adopt FILE...`** — make a glibc arm64 program obtained outside apt
-  (a release download, a direct installer's binary) run through the prefix:
-  its interpreter becomes `ld-dn`. The file is changed in place; anything
-  else (Termux's own programs, static ones, scripts) is left alone. Example:
-  Claude Code's native Linux binary runs once adopted.
-
-### Root inside the prefix
-
-Since 0.3.0 a prefix program sees itself as **root**, as on a Debian where
-apt, dpkg and maintainer scripts run as root: `id` says `uid=0(root)`,
-your files show as owned by root, `chown` and `setuid` succeed, `USER` is
-`root`. Only the identity is faked — nothing gains a right it did not
-have, and Termux's own programs still see your real user.
-
-- **`DN_ID=user CMD`** runs a command with your real identity, for the
-  programs that refuse to run as root (`postgres`, Chromium's sandbox).
-- **Speed:** free for normal programs (the shim). Under the tracer
-  (static programs, raw syscalls) faking file owners stops every `stat`:
-  a stat-heavy `find` took 727 ms instead of 443 ms on the test phone.
-  `DN_ID=user` there gets the old speed back.
+Two more commands (`dn-shell`, a shell inside the prefix; `dn-adopt`, to
+run a glibc binary obtained outside apt through the prefix) and how root
+works inside the prefix (fake identity, `DN_ID`, the tracer's cost):
+[`docs/spec/design.md`](docs/spec/design.md) — "Day-to-day commands" and
+"Fake root".
 
 ## Scope
 
