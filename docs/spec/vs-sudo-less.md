@@ -1,5 +1,14 @@
 # deb-native vs sudo-less: the diff
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 Both projects install stock Debian `.deb`s into a private prefix as an
 unprivileged user and make the installed programs work. The difference is
 **the base system and the virtualization mechanism**:
@@ -18,6 +27,23 @@ unprivileged user and make the installed programs work. The difference is
 Same goal, same "never root" rule; the whole mechanism is inverted because
 the host and the kernel are different.
 
+## Contents
+
+- [The diff](#the-diff)
+- [What the fusion buys, and what it costs](#what-the-fusion-buys-and-what-it-costs)
+- [What is left, in one line](#what-is-left-in-one-line)
+
+## Related docs
+
+- [`alternatives.md`](alternatives.md) — sudo-less's place among the
+  other ways to run Debian-like software, in one table row.
+- [`prior-art.md`](prior-art.md) — the narrative version of this diff,
+  with the proroot comparison this table doesn't cover.
+- [`path-shim.md`](path-shim.md) — the shim this table's "run-time
+  wrappers" row credits as deb-native's actual answer.
+- [`classic-design.md`](classic-design.md) — the unbuilt `prefix-wrap`
+  equivalent this table's row also mentions.
+
 ## The diff
 
 | concern | sudo-less (Debian host) | deb-native (Termux/Android) | delta |
@@ -33,7 +59,7 @@ the host and the kernel are different.
 | two-layer database | seed the prefix from the **host's** dpkg status so host libraries count as installed | seed from Termux's installed `*-glibc` packages so *those* count; only the delta lands in `$INSTDIR` | seeding runs in opposite directions |
 | architecture | host arch, native | Debian `arm64` on Android `aarch64` — archive name mismatch, worked around with `--force-architecture` | still-open, flagged unsafe |
 | isolation at install | install view hides `$HOME`, empty `/run`, so a hostile package can't reach your files or poke host services | **none** — maintainer scripts run with normal access to the user's home | unbuildable here (no namespaces) |
-| run-time wrappers | `prefix-wrap`: per-binary wrappers from detection heuristics (interpreter, module paths, `ldd`, `/usr` paths, i386 loader) | **not built** (design only: `design.md`); the shim covers hardcoded paths when a program is launched through `dn-shell` | the biggest unbuilt run-time piece |
+| run-time wrappers | `prefix-wrap`: per-binary wrappers from detection heuristics (interpreter, module paths, `ldd`, `/usr` paths, i386 loader) | **not built** (design only: `classic-design.md`); the shim covers hardcoded paths when a program is launched through `dn-shell` | the biggest unbuilt run-time piece |
 | services | `prefix-units`: systemd unit → `systemd --user` unit, sandboxed; `prefix-sandbox` seccomp | **not built**; Termux has no systemd, candidate is `termux-services`/runit (research only) | view-dependent and unbuilt |
 | classifier / refusal | stage 2 `prefix-check`: scope + mechanism + unsafe scripts, refuses before dpkg | **not built** | — |
 | integration | launchers, icons, desktop DB, alternatives | **not built** (largely N/A on Android) | — |

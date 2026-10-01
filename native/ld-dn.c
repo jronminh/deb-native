@@ -1,4 +1,4 @@
-/* ld-dn -- deb-native's program loader stub (docs/design-0.2.0.md).
+/* ld-dn -- deb-native's program loader stub (docs/spec/design.md).
  *
  * Every Debian program in the prefix names this file as its ELF interpreter
  * (PT_INTERP), so the kernel runs it first, however the program was started:

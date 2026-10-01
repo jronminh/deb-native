@@ -431,8 +431,8 @@ postinst all complete with zero segfaults and zero `logcat` crash
 entries.
 
 **Open**:
-- Bake the shim into installed ELFs (`docs/spec/design.md`, "Delivering the
-  shim") so it survives an empty environment — `patchelf --add-needed`/
+- Bake the shim into installed ELFs (`docs/spec/path-shim.md`, "Delivering
+  the shim") so it survives an empty environment — `patchelf --add-needed`/
   `--add-rpath` or a `DT_AUDIT` module; the explicit loader
   (`ld.so --preload`) is the simpler variant.
 - Test `dn-run` -> `dn-trace` from an installed prefix (not just the dev
@@ -575,7 +575,7 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
 
 - **Run Tailscale natively** — the target case for the tracer (a static
   Go daemon the shim cannot see). [`docs/guides/tailscale.md`](docs/guides/tailscale.md).
-- **Run wrappers** (`prefix-wrap` equivalent, `docs/spec/design.md`) — the
+- **Run wrappers** (`prefix-wrap` equivalent, `docs/spec/classic-design.md`) — the
   biggest unbuilt piece: for each binary a package puts on `PATH`, detect
   whether it needs path help and generate a wrapper, triggered via apt's
   `DPkg::Post-Invoke`.
@@ -587,7 +587,7 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
 - **Soname-based dependency matching** — replace
   `scripts/install/native-seed.sh`'s hand-written name table with matching a
   `.deb`'s `Depends:` against installed `*-glibc` packages' SONAMEs
-  (`docs/spec/design.md`, "Open work"). Small, direct install-success win.
+  (`docs/spec/native-reuse.md`, "Open work"). Small, direct install-success win.
 - **Launcher/icon/desktop-DB integration** — mostly N/A on Android; do
   only what Termux needs.
 - **State + `explain` + `doctor`** — record per package its scope,

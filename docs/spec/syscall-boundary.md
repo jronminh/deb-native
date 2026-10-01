@@ -1,10 +1,42 @@
 # The syscall boundary — what libc interposition cannot see
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 The shim ([`shim-coverage.md`](shim-coverage.md)) rewrites paths at the
 **preemptible dynamic symbol** layer. Everything that reaches the filesystem
 without crossing such a symbol is out of its reach. This doc maps that wider
 boundary, measures it against the in-scope corpus, and records where Termux's
 existing answer (`proot`) already applies.
+
+## Contents
+
+- [The cases, not just "static vs dynamic"](#the-cases-not-just-static-vs-dynamic)
+- [Measured against the corpus](#measured-against-the-corpus)
+- [The gap is routing, not the count](#the-gap-is-routing-not-the-count)
+- [Termux's existing answer](#termuxs-existing-answer)
+- [Solved (2026-09-26): NSS, case 2](#solved-2026-09-26-nss-case-2)
+- [Status by case (2026-09-26)](#status-by-case-2026-09-26)
+- [Solved (2026-09-26): the direct-syscall attribute (cases 3/4)](#solved-2026-09-26-the-direct-syscall-attribute-cases-34)
+- [Method](#method)
+- [Options, cheapest first](#options-cheapest-first)
+- [Open questions](#open-questions)
+
+## Related docs
+
+- [`shim-coverage.md`](shim-coverage.md) — the shim this doc's boundary
+  sits beyond.
+- [`direct-usage.md`](direct-usage.md) — the living investigation into
+  what actually crosses this boundary.
+- [`tracer.md`](tracer.md) — the mechanism that reaches past it.
+- [`android-platform.md`](android-platform.md) — the Android-specific
+  limits (seccomp/capability/SELinux) layered on top of this boundary.
 
 ## The cases, not just "static vs dynamic"
 

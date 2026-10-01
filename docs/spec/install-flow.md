@@ -1,10 +1,38 @@
 # Install flow — what happens, in order
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 From nothing to "any `apt-get install` works". Grounded in the scripts; the
 mechanisms each step installs are documented in
-[`design.md`](design.md) (shim/tracer/maintainer-script layers),
+[`path-shim.md`](path-shim.md) (shim and maintainer-script layers),
+[`tracer.md`](tracer.md) (the tracer),
 [`syscall-boundary.md`](syscall-boundary.md) (what each layer reaches), and
 [`bind-only.md`](bind-only.md) (the tracer's path fast path).
+
+## Contents
+
+- [The sequence](#the-sequence)
+- [Three clarifications](#three-clarifications)
+- [The apt/dpkg hooks](#the-aptdpkg-hooks)
+- [End-to-end test](#end-to-end-test)
+
+## Related docs
+
+- [`path-shim.md`](path-shim.md) — the shim and maintainer-script
+  layers this flow installs.
+- [`tracer.md`](tracer.md) — the tracer wired in during this flow.
+- [`syscall-boundary.md`](syscall-boundary.md) — what each layer
+  installed here actually reaches.
+- [`bind-only.md`](bind-only.md) — the tracer's path fast path.
+- [`classic-design.md`](classic-design.md) — the pre-0.2.0 install
+  pipeline this flow superseded.
 
 ## The sequence
 

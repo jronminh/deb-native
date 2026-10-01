@@ -1,11 +1,38 @@
 # Goal: run Tailscale natively
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 Install Tailscale's Debian `arm64` package into a deb-native prefix and run
 `tailscaled` + `tailscale` unprivileged. It is the cleanest worked example of
 the package class that lands on the **tracer boundary**: a static, path- and
 network-sensitive daemon.
 
 Not started — this is the plan, measured from the package itself.
+
+## Contents
+
+- [What the package is (`tailscale 1.102.4`)](#what-the-package-is-tailscale-11024)
+- [Why it is hard here](#why-it-is-hard-here)
+- [The identity problem](#the-identity-problem)
+- [Plan](#plan)
+- [Open questions](#open-questions)
+- [Status](#status)
+
+## Related docs
+
+- [`../spec/design.md`](../spec/design.md) — the day-to-day commands and
+  mechanism this guide assumes.
+- [`../spec/direct-usage.md`](../spec/direct-usage.md) — the fork-lite
+  plan this guide's static-daemon case motivates.
+- [`../spec/runtime-failures.md`](../spec/runtime-failures.md) — other
+  failure modes a daemon like this one can hit.
 
 ## What the package is (`tailscale 1.102.4`)
 

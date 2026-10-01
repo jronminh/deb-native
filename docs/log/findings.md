@@ -1,7 +1,42 @@
 # Findings
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 The engineering log for the prototype (2026-09-25), merged and in
 chronological order. (Merged from the former `findings-*.md`.)
+
+## Contents
+
+- [Findings: first working prototype (2026-09-25)](#findings-first-working-prototype-2026-09-25)
+- [Findings: a proper base-package bootstrap (2026-09-25)](#findings-a-proper-base-package-bootstrap-2026-09-25)
+- [Findings: a real glibc dash as the maintainer-script "shell" (2026-09-25)](#findings-a-real-glibc-dash-as-the-maintainer-script-shell-2026-09-25)
+- [Findings: a genuinely hard package (`ruby-adsf`), 2026-09-25](#findings-a-genuinely-hard-package-ruby-adsf-2026-09-25)
+- [Findings: a real sed-delimiter bug that silently broke everything (2026-09-25)](#findings-a-real-sed-delimiter-bug-that-silently-broke-everything-2026-09-25)
+- [Findings: a complete base bootstrap, and the runtime fix that unblocked it (2026-09-25, PM)](#findings-a-complete-base-bootstrap-and-the-runtime-fix-that-unblocked-it-2026-09-25-pm)
+- [Findings: first random-sample survey (2026-09-25)](#findings-first-random-sample-survey-2026-09-25)
+- [Findings: wiring real apt — 2/30 → 10/30 (2026-09-25)](#findings-wiring-real-apt-230-1030-2026-09-25)
+- [Findings: path-redirect shim performance (2026-09-25)](#findings-path-redirect-shim-performance-2026-09-25)
+- [Platform sandbox limits, by direct probe (2026-09-26)](#platform-sandbox-limits-by-direct-probe-2026-09-26)
+- [Findings: finishing the libc-level shim, and closing the measured gaps (2026-09-26)](#findings-finishing-the-libc-level-shim-and-closing-the-measured-gaps-2026-09-26)
+- [Findings: patchelf corrupting an `ET_EXEC` binary's program headers, and moving RUNPATH to the loader (2026-09-30)](#findings-patchelf-corrupting-an-etexec-binarys-program-headers-and-moving-runpath-to-the-loader-2026-09-30)
+
+## Related docs
+
+- [`android-seccomp-audit.md`](android-seccomp-audit.md) — the
+  follow-up investigation this log's platform-sandbox-limits probe fed
+  into.
+- [`../spec/shim-coverage.md`](../spec/shim-coverage.md) — the canonical,
+  kept-current record this log's shim-coverage findings were moved into.
+- [`../spec/design.md`](../spec/design.md), [`../spec/path-shim.md`](../spec/path-shim.md),
+  [`../spec/native-reuse.md`](../spec/native-reuse.md), [`../spec/classic-design.md`](../spec/classic-design.md) —
+  the spec docs this log's findings were eventually distilled into.
 
 ## Findings: first working prototype (2026-09-25)
 

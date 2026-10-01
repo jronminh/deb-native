@@ -1,5 +1,14 @@
 # dpkg multi-arch mechanics: what they are, and what they aren't
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 Reference doc, shared across both the classic (separate-prefix) design and
 the true fusion branch (`naibed`, formerly `fusion-no-prefix`) — the mechanics here are dpkg's own, and
 apply identically regardless of which install strategy is on top of them.
@@ -10,6 +19,23 @@ have prevented it. Researched against Debian's actual policy and dpkg's
 own man pages rather than assumed — the answer clarifies what each
 mechanism is actually *for*, which turns out to matter for how the two
 designs use them differently.
+
+## Contents
+
+- [The `Multi-Arch` control field](#the-multi-arch-control-field)
+- [The two mechanisms that actually govern *paths*](#the-two-mechanisms-that-actually-govern-paths)
+- [`--force-architecture` vs `--add-architecture`: not the same thing](#--force-architecture-vs---add-architecture-not-the-same-thing)
+- [Net: which branch needs which, and why](#net-which-branch-needs-which-and-why)
+
+## Related docs
+
+- [`classic-design.md`](classic-design.md) — the separate-prefix design
+  that uses `--force-architecture`, one of the mechanisms this doc
+  clarifies.
+- [`design.md`](design.md) — the 0.2.0 pivot's own architecture handling,
+  the other design this doc is shared across.
+- [`../log/findings.md`](../log/findings.md) — the live incident that
+  prompted this research.
 
 ## The `Multi-Arch` control field
 

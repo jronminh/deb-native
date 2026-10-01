@@ -1,5 +1,14 @@
 # Android platform limits: the three enforcement gates, and the glibc patch
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 What stops a syscall on this device, independent of which library issued
 it, and the current fork verdict for Termux's Android glibc patch series
 against that taxonomy. Extracted from
@@ -8,6 +17,25 @@ investigation that found this) to keep as a standing reference instead of
 buried in that log — update this doc, not the log, when the taxonomy or
 the patch's own fork status changes; the log stays the historical record
 of how it was found.
+
+## Contents
+
+- [The three enforcement gates](#the-three-enforcement-gates)
+- [Device probe: sandbox limits confirmed directly](#device-probe-sandbox-limits-confirmed-directly)
+- [Known findings, by gate](#known-findings-by-gate)
+- [Termux's Android glibc patch: catalog and fork verdict](#termuxs-android-glibc-patch-catalog-and-fork-verdict)
+
+## Related docs
+
+- [`../log/android-seccomp-audit.md`](../log/android-seccomp-audit.md) —
+  the investigation that produced this doc, plus the on-device glibc
+  build attempt log.
+- [`../log/findings.md`](../log/findings.md) — "Platform sandbox limits",
+  the probe this doc's device-probe section was pulled out of.
+- [`design.md`](design.md) — "Fake root", whose `set-fakesyscalls-parked.patch`
+  decision depends on this doc's per-file fork verdict.
+- [`../../third_party/glibc-android-patches/README.md`](../../third_party/glibc-android-patches/README.md) —
+  the actual patch this doc's catalog describes.
 
 ## The three enforcement gates
 

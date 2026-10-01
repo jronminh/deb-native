@@ -1,11 +1,40 @@
 # Runtime failure modes
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 What goes wrong when **running** a prefix program (as opposed to installing
 it), grouped by cause. Each is tagged with what handles it: **shim** = our
 libc interposer (`native/path-redirect.c`), **tracer** = fork-lite
 (`tracer/`), **—** = nothing today. Coverage of the shim itself is in
 [`shim-coverage.md`](shim-coverage.md); the syscall boundary in
 [`syscall-boundary.md`](syscall-boundary.md).
+
+## Contents
+
+- [A. Path / filesystem access](#a-path-filesystem-access)
+- [B. Dynamic loading](#b-dynamic-loading)
+- [C. Exec & process creation](#c-exec-process-creation)
+- [D. Identity & OS assumptions](#d-identity-os-assumptions)
+- [E. Privilege & kernel](#e-privilege-kernel)
+- [F. Services & process model](#f-services-process-model)
+- [G. Delivery / environment](#g-delivery-environment)
+- [H. Tracer-specific (once fork-lite is in)](#h-tracer-specific-once-fork-lite-is-in)
+- [Highest risk in practice](#highest-risk-in-practice)
+
+## Related docs
+
+- [`shim-coverage.md`](shim-coverage.md) — coverage of the shim itself.
+- [`syscall-boundary.md`](syscall-boundary.md) — the syscall-level
+  boundary behind several of these failure modes.
+- [`../guides/tailscale.md`](../guides/tailscale.md) — a static daemon
+  hitting one of these failure modes in practice.
 
 ## A. Path / filesystem access
 
