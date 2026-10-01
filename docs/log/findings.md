@@ -1177,10 +1177,30 @@ intervention, reproduced from a fresh bootstrap.
 **Confirmed, not a bug: `libc6-dev` has no installation candidate.**
 `apt install libc6-dev` fails outright ("no installation candidate") --
 Debian's real `libc6-dev` is versioned against stock `libc6 (=
-2.41-12+deb13u4)`, exact match, and this prefix's `libc6` is the project's
-own `2.41-12+deb13u4+dn1` build. This is `TODO.md`'s already-known
-"package the rest: `libc6-dev`/`libc-bin`/`locales`" item, now confirmed
-as the actual, reproducible blocker on `gcc -c hello.c` (`stdio.h: No such
-file or directory`) rather than an inferred one -- `gcc`/`cpp`/`binutils`
-themselves install and configure cleanly; only the headers are missing.
+2.41-12+deb13u4)`, an exact-version `Depends`, and this test prefix's
+`libc6` is `dn-standins.sh`'s stand-in, `2.44-0dn1` (Termux's own glibc
+version, a fresh bootstrap still defaults to the stand-in, not 0.5.0's
+real own-glibc build -- `TODO.md`). Either way the version string can
+never equal what Debian's archive demands, by construction -- a `+dn1`
+suffix on the real build would fail the same exact-match check. This is
+`TODO.md`'s already-known "package the rest: `libc6-dev`/`libc-bin`/
+`locales`" item, now confirmed as the actual, reproducible blocker on
+`gcc -c hello.c` (`stdio.h: No such file or directory`) rather than an
+inferred one -- `gcc`/`cpp`/`binutils` themselves install and configure
+cleanly; only the headers are missing.
+
+**Found checking the above, a real gap, fixed: `libc6`/`dpkg`/`apt`
+stand-ins were never `dpkg hold`-ed.** Only `setup-apt-prefix.sh`'s
+`$BASE` set gets `dpkg --set-selections hold`; the three stand-ins
+(installed earlier, by `dn-standins.sh`) did not. An `apt upgrade` would
+have been free to replace `libc6` with Debian's real one -- which
+segfaults at startup on this device (this doc's own patchelf/`ET_EXEC`
+section, and `android-seccomp-audit.md`'s "stock Debian `libc6` doesn't
+even reach a syscall question") -- or `dpkg`/`apt` with Debian's real
+ones, which don't work in this environment at all (`design.md`,
+"Prior art"). Fixed in `dn-standins.sh`'s shared `install_pkg()`, so
+every current and future stand-in installed through it is held
+automatically. Verified: fresh bootstrap, all three show `hold ok
+installed`; `apt full-upgrade -y --dry-run` no longer proposes touching
+any of them.
 

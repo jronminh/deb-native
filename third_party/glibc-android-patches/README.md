@@ -208,6 +208,10 @@ scripts/bootstrap/dn-package-glibc.sh libc6_<ver>_arm64.deb "$DESTDIR" out.deb
 dpkg -i out.deb   # not apt-get -- see TODO.md's Runtime component audit
                    # for why apt-get's own hook pipeline needed separate
                    # fixing; dpkg -i is the lower-risk path regardless
+echo "libc6:arm64 hold" | dpkg --set-selections   # persists across dpkg -i
+                   # if not already held by dn-standins.sh's stand-in --
+                   # a real Debian libc6 pulled in by a later `apt upgrade`
+                   # segfaults at startup (android-seccomp-audit.md)
 ```
 
 Verified end to end (2026-09-30): installs clean over the previous
