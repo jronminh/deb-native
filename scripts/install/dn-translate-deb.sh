@@ -27,7 +27,7 @@
 #     (true during early bootstrap, before bash/dash reach the base
 #     package set) -- bootstrap scaffolding, not the steady-state path;
 #   - maintainer-script shebangs: the same dash/bash-first, dn-shell-
-#     fallback logic (patch-scripts-tree.sh, the loop patch-deb.sh runs).
+#     fallback logic, via patch-scripts-tree.sh.
 #
 # One unpack and one repack per package, uncompressed (-Znone): the result
 # only lives in a temp or cache folder until dpkg installs it, and xz on a

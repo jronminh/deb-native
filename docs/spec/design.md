@@ -153,7 +153,7 @@ Phase A (built): translation on the device, in the prefix's apt hooks
 
 | Hook | Step |
 |---|---|
-| `DPkg::Pre-Install-Pkgs` | per `.deb`: control relabel; ELFs repointed at the `libc6` stand-in (`$DN/usr/lib/ld-linux-aarch64.so.1`, `RUNPATH` `$DN/usr/lib/aarch64-linux-gnu` first, shared libraries too) before any maintainer script runs; `custom/<package>.sh` fixes; maintainer-script shebangs -> `dn-shell` (`scripts/install/patch-deb.sh`) |
+| `DPkg::Pre-Install-Pkgs` | per `.deb`, via `dn-hook-pre.sh` -> `dn-translate-deb.sh`: control relabel; ELFs repointed at the `libc6` stand-in (`$DN/usr/lib/ld-linux-aarch64.so.1`, `RUNPATH` `$DN/usr/lib/aarch64-linux-gnu` first, shared libraries too) before any maintainer script runs; `custom/<package>.sh` fixes; maintainer-script shebangs -> `dn-shell` (`patch-scripts-tree.sh`) |
 | `DPkg::Post-Invoke` | alternatives links made relative at once (`dn-fix-alternatives.sh`); new packages' absolute symlinks made relative; launchers for their programs (and for alternatives links to them); stale launchers dropped |
 
 Phase B (not built): the same translation at **repo build time**

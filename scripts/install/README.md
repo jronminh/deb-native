@@ -6,10 +6,12 @@
 > whenever a new directory holds more than a couple of files that
 > aren't self-explanatory from their names alone.
 
-Runs on every package install, via apt hooks or directly. The classic
-(pre-0.2.0) design's own apt hooks (`apt-hook-pre.sh`/`apt-hook-post.sh`)
-and their maintainer-script patcher (`patch-maintainer-scripts.sh`) are
-gone — see [`../../docs/spec/classic-design.md`](../../docs/spec/classic-design.md)
+Runs on every package install, via the prefix's own apt hooks or
+directly. The classic (pre-0.2.0) design's apt hooks
+(`apt-hook-pre.sh`/`apt-hook-post.sh`), their maintainer-script patcher
+(`patch-maintainer-scripts.sh`), and the per-step ELF/control patchers
+they called (`patch-deb.sh`, `patch-elfs.sh`) are gone — see
+[`../../docs/spec/classic-design.md`](../../docs/spec/classic-design.md)
 for the record. See [`../../docs/spec/design.md`](../../docs/spec/design.md)
 (the install pipeline) and [`../../docs/spec/install-flow.md`](../../docs/spec/install-flow.md)
 for the current one.
@@ -25,11 +27,6 @@ for the current one.
   fixes from `custom/`.
 - `dn-debian-index.sh` — rewrites `Architecture: all` -> `arm64` in a
   downloaded Debian package index.
-- `patch-deb.sh` — patches a `.deb`'s maintainer control scripts before
-  dpkg ever sees it (the bare-`dpkg` path's equivalent of the apt hooks).
-- `patch-elfs.sh` — repoints every Debian glibc ELF in the prefix at
-  Termux's glibc loader (`grun --configure`); the classic design's
-  post-install step, since replaced by translating ELFs in the package.
 - `patch-scripts-tree.sh` — rewrites an extracted package's maintainer
   scripts' `#!` shebang to the prefix's own interpreter.
 - `normalize-symlinks.sh` — rewrites absolute symlinks inside the prefix
