@@ -337,7 +337,10 @@ path instead of carrying it over as-is.
   2.41-12+deb13u4)`, an exact-version `Depends`, not this prefix's
   `+dn1` build), and `gcc -c` fails solely on missing headers once
   `gcc`/`cpp`/`binutils` are already installed (`docs/log/findings.md`,
-  2026-10-01).
+  2026-10-01). Hold each one the same way `libc6` is (`dn-standins.sh`'s
+  `install_pkg()` convention) -- they'll have the same exact-version tie
+  to the installed `libc6` that makes an `apt upgrade`-pulled real one
+  break them.
 - **Build pipeline**: cross-build in CI (too slow on-device for a real
   release cadence) instead of the on-device build this used -- needed
   for a repeatable release process, not for this validation.
@@ -582,6 +585,14 @@ not chased down.
   the prefix's `apt.conf` (`setup-apt-prefix.sh`). Found installing
   `gcc`'s dependency `cpp` (`dpkg-maintscript-helper: not found`),
   `docs/log/findings.md`.
+- [x] ~~`libc6`/`dpkg`/`apt` stand-ins were never `dpkg hold`-ed (only
+  the `$BASE` set was)~~ — fixed 2026-10-01: `dn-standins.sh`'s shared
+  `install_pkg()` now holds every stand-in it installs. Without it, a
+  real Debian `libc6` pulled in by `apt upgrade` would have replaced the
+  working one with a build that segfaults at startup
+  (`docs/log/android-seccomp-audit.md`). Same reasoning noted in
+  `third_party/glibc-android-patches/README.md`'s manual recipe for when
+  the real own-glibc build replaces the stand-in.
 - [ ] Refresh `README.md`'s status numbers once the unfiltered survey
   (Alpha goal, above) reports.
 

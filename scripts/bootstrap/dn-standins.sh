@@ -63,6 +63,13 @@ install_pkg() {  # NAME VERSION
   echo "Building stand-in $1:arm64 ($2) ..."
   dpkg-deb -b --root-owner-group "$WORK/$1" "$WORK/$1_$2_arm64.deb"
   $DPKG -i "$WORK/$1_$2_arm64.deb"
+  # Hold: every stand-in's actual content is Termux's own binaries under a
+  # Debian name (or, for libc6, a patched build -- android-platform.md),
+  # never derivable by translating a real Debian .deb. An unheld libc6
+  # upgraded to Debian's real one would segfault at startup
+  # (android-seccomp-audit.md, "stock Debian libc6 doesn't even reach a
+  # syscall question"); dpkg/apt replaced likewise stop working at all.
+  echo "$1:arm64 hold" | "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --set-selections
 }
 launcher() {  # PKGDIR NAME COMMAND...
   d=$1 n=$2; shift 2
