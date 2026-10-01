@@ -41,10 +41,12 @@ replace the view's path-resolution job.
   (`canonicalize` → prefix rewrite): safe/keep/replace + whitelist + risks.
 - `docs/spec/install-flow.md` — the bootstrap/install order (runtime → auto-patch
   `.deb` → native seed → base transaction → launchers) and the E2E recipe.
-- `docs/log/android-seccomp-audit.md` — which Android failures are seccomp/
-  kernel-config (own-glibc can't fix these) vs. glibc-internal (own-glibc
-  can) — read before scoping 0.5.0 work.
-- `docs/spec/design.md`, `docs/log/findings.md`, `docs/spec/vs-sudo-less.md`.
+- `docs/spec/android-platform.md` — which Android failures are seccomp/
+  kernel-config/SELinux (own-glibc can't fix these) vs. glibc-internal
+  (own-glibc can) — read before scoping 0.5.0 work.
+- `docs/spec/design.md` (current design; points out to `path-shim.md`,
+  `native-reuse.md`, `classic-design.md`, `prior-art.md`),
+  `docs/log/findings.md`, `docs/spec/vs-sudo-less.md`.
 - `tracer/README.md` — fork-lite provenance, build, prune status.
 - `TODO.md` — roadmap.
 

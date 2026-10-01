@@ -47,7 +47,12 @@ corrupting an `ET_EXEC` binary's program headers", 2026-09-30).
 - `docs/log/android-seccomp-audit.md` — the investigation that found the
   above, plus the on-device build attempt log.
 - `docs/log/findings.md` — engineering log (chronological).
-- `docs/spec/design.md`, `docs/spec/vs-sudo-less.md`,
+- `docs/spec/design.md` — current design (scope, the 0.2.0 self-contained
+  prefix, day-to-day commands, fake root); points out to
+  `docs/spec/path-shim.md` (the shim), `docs/spec/native-reuse.md`,
+  `docs/spec/classic-design.md` (pre-0.2.0, superseded), and
+  `docs/spec/prior-art.md` for the rest.
+- `docs/spec/alternatives.md`, `docs/spec/vs-sudo-less.md`,
   `docs/spec/runtime-failures.md`, `docs/guides/tailscale.md`, `docs/spec/bind-only.md`,
   `docs/spec/install-flow.md`, `docs/spec/multiarch-mechanics.md`.
 - `third_party/glibc-android-patches/README.md` — the forked Android glibc

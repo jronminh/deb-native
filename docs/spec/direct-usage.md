@@ -3,7 +3,7 @@
 Living doc. The *map* of the boundary is [`syscall-boundary.md`](syscall-boundary.md);
 this is the working investigation into **what actually bypasses the libc shim
 in the packages we support, and which mechanism should reach it**. Results land
-here first, then get promoted into the boundary doc / `design.md`.
+here first, then get promoted into the boundary doc / `path-shim.md`.
 
 ## The decision this doc is for
 

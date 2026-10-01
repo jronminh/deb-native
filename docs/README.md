@@ -6,16 +6,19 @@ thematically closest.
 
 - **spec/** — technical specification: what the project does and how, as
   it stands right now. Read these as ground truth; update them when the
-  design changes. Includes `design.md` (one file, accumulated over
-  releases — see its own note), `standard.md`,
-  `multiarch-mechanics.md`, `syscall-boundary.md`, `shim-coverage.md`
-  (+ `coverage/`, its measured data), `tracer.md`, `install-flow.md`,
-  `runtime-failures.md`, `bind-only.md`, `vs-sudo-less.md`,
-  `direct-usage.md`, `android-platform.md` (the Android enforcement-gate
-  taxonomy and the glibc patch's per-file fork verdict — standing
-  reference extracted out of `log/android-seccomp-audit.md`),
-  `alternatives.md` (comparison with other ways to run Debian on
-  Android).
+  design changes. `design.md` is the live design (scope, the 0.2.0
+  self-contained prefix, day-to-day commands, fake root) — one file,
+  accumulated over releases, kept to the current picture; it points out to
+  the deeper or superseded write-ups split out of it: `path-shim.md` (the
+  path-redirect shim), `native-reuse.md`, `classic-design.md` (the
+  pre-0.2.0 approach, superseded in large part), `prior-art.md`
+  (sudo-less, proroot). Also: `standard.md`, `multiarch-mechanics.md`,
+  `syscall-boundary.md`, `shim-coverage.md` (+ `coverage/`, its measured
+  data), `tracer.md`, `install-flow.md`, `runtime-failures.md`,
+  `bind-only.md`, `vs-sudo-less.md`, `alternatives.md`, `direct-usage.md`,
+  `android-platform.md` (the Android enforcement-gate taxonomy and the
+  glibc patch's per-file fork verdict — standing reference extracted out
+  of `log/android-seccomp-audit.md`).
 - **log/** — chronological or one-off investigation, not current state:
   `findings.md` (the engineering log — append, don't rewrite),
   `android-seccomp-audit.md` (the investigation that produced

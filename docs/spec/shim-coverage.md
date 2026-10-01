@@ -2,7 +2,7 @@
 
 Which libc entry points `native/path-redirect.c` has to cover for the packages
 we support, and the ones it does not. The scope is [`standard.md`](standard.md);
-the design is [`design.md`](design.md).
+the design is [`path-shim.md`](path-shim.md).
 
 ## First, the layer: libc functions, not syscalls
 

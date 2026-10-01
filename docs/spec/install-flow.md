@@ -2,7 +2,8 @@
 
 From nothing to "any `apt-get install` works". Grounded in the scripts; the
 mechanisms each step installs are documented in
-[`design.md`](design.md) (shim/tracer/maintainer-script layers),
+[`path-shim.md`](path-shim.md) (shim and maintainer-script layers),
+[`tracer.md`](tracer.md) (the tracer),
 [`syscall-boundary.md`](syscall-boundary.md) (what each layer reaches), and
 [`bind-only.md`](bind-only.md) (the tracer's path fast path).
 
