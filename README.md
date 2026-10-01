@@ -60,10 +60,9 @@ by Debian section ([`docs/spec/standard.md`](docs/spec/standard.md)): install
 (reach `ii`) and run by name, unprivileged. Not yet: **services** (a package
 that ships one installs, the service does not run; `runit` is the plan), and
 packages that need root (system users, `setuid`, TUN, kernel modules; `sudo`
-modes are planned). Toolchains: `apt install gcc` and a full compile
-(`libc6-dev` included) both work now; running a binary built *inside* the
-prefix still hits a separate, unfixed gap (`TODO.md`) — installed Debian
-packages aren't affected.
+modes are planned). Toolchains: `apt install gcc`, a full compile
+(`libc6-dev` included), and running the result all work now
+(`TODO.md`).
 
 Proof, not just a claim: 99 of 100 random Debian 13 packages installed and
 ran, in a fresh prefix, with no tracer needed

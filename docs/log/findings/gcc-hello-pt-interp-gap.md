@@ -9,10 +9,10 @@
 > topic, a new one-off investigation, or a new guide — not just a
 > long addition to what a doc already covers.
 
-**Impact: Open gap.** The shim's `/lib`/`/bin`/`/sbin` gap was found
-and fixed in the same entry; the separate, deeper `PT_INTERP`
-kernel-level wall it uncovered was flagged, not fixed, as of this
-writing — see the note below on where that stood later.
+**Impact: Resolved 2026-10-01.** The shim's `/lib`/`/bin`/`/sbin` gap and
+the separate, deeper `PT_INTERP` kernel-level wall it uncovered were both
+found and fixed in this entry's follow-up work — see "Separate, fixed
+2026-10-01" below.
 
 With `libc6-dev` installed, `gcc -c hello.c` succeeded (the actual
 blocker from [`apt-install-gcc-end-to-end.md`](apt-install-gcc-end-to-end.md)), but `gcc -o hello hello.c` (compile +
@@ -27,7 +27,7 @@ by the compiler toolchain instead of by corpus inspection first.
 ## Contents
 
 - [The shim fix: /lib, /bin, /sbin](#the-shim-fix)
-- [Separate wall: PT_INTERP at the kernel level](#separate-not-yet-fixed-running-the-freshly-linked-hello-fails-at-the-kernel-level)
+- [Separate wall: PT_INTERP at the kernel level](#separate-fixed-2026-10-01-running-the-freshly-linked-hello-failed-at-the-kernel-level)
 
 ## Related docs
 
@@ -56,7 +56,7 @@ own merged-usr symlinks into `/usr/{lib,bin,sbin}`, which the prefix's
 the existing `/usr` coverage rather than adding new scope. Verified: `ld`
 now finds `libc.so.6` and links `hello` successfully, no errors.
 
-## Separate, not yet fixed: running the freshly-linked `hello` fails at the kernel level
+## Separate, fixed 2026-10-01: running the freshly-linked `hello` failed at the kernel level
 
 `cannot execute: required file not found` --
 `PT_INTERP` on a plain `gcc`-produced binary is the literal
@@ -67,10 +67,38 @@ works at the libc-call layer, cannot reach this. This is the same
 problem `native/ld-dn.c` exists to solve for installed Debian packages
 (their `PT_INTERP` gets pointed at `ld-dn.c`'s real, resolvable path as
 part of the install pipeline), but a binary freshly built with `gcc`
-inside the prefix was never put through that step -- it's a new,
-distinct gap (compiling *inside* the prefix, not just installing
-pre-built `.deb`s into it), not yet designed or fixed as of this entry.
-Flagged for the user rather than solved inline: fixing it means deciding
-how (a linker wrapper that passes `-dynamic-linker <real ld-dn path>`, a
-post-link `patchelf` step, or something else), which is an architecture
-call like the `/lib` one above, not a one-line follow-on.
+inside the prefix was never put through that step.
+
+Confirmed where the literal string comes from: `gcc -dumpspecs`'s `*link`
+spec embeds `-dynamic-linker ... /lib/ld-linux-aarch64%{mbig-endian:_be}
+%{mabi=ilp32:_ilp32}.so.1` directly (Debian's gcc-14 inlines it inline,
+not via a separate `%(dynamic_linker)` subspec) -- this string comes from
+GCC's own source (`gcc/config/aarch64/aarch64-linux.h`'s
+`GLIBC_DYNAMIC_LINKER` macro), baked in at GCC's own build time.
+
+No gcc/binutils patch or rebuild needed, though: GCC auto-reads an
+optional `specs` file from the same directory as its `libgcc.a` (`gcc
+-print-libgcc-file-name`'s dirname) if one is present, letting a site
+override any built-in default without recompiling gcc -- the exact
+mechanism musl-based and Android NDK toolchains use for the same kind of
+problem. Verified by hand first: `gcc -dumpspecs > specs`, `sed` the one
+dynamic-linker literal to `ld-dn`'s real path
+(`$DN/usr/lib/deb-native/ld-dn`), copy to
+`$DN/usr/lib/gcc/aarch64-linux-gnu/14/specs` -- `gcc -v` then shows
+`Reading specs from .../specs` and the resulting `-dynamic-linker` is
+`ld-dn`'s path; `readelf -l hello` confirms the `PT_INTERP` segment
+changed accordingly, and `./hello` runs and prints its output.
+
+Promoted to a real fix: `scripts/install/dn-fix-gcc-specs.sh` (new),
+wired into `dn-hook-post.sh` (apt's `DPkg::Post-Invoke`, so it reruns
+after every `apt install`/`upgrade`, not just once at bootstrap). For
+every `$DN/usr/lib/gcc/*/*` version directory with a matching gcc binary
+installed, generates that version's own specs file the same way, with
+only the dynamic-linker literal swapped; skipped once a version's specs
+file already contains `ld-dn`'s path (idempotent), and a no-op entirely
+if gcc or `ld-dn` isn't present yet (covers a fresh prefix with no
+compiler installed, and bootstrap ordering). Verified end to end:
+removed the manually-placed specs file, reran the script standalone
+(regenerates it), reran it again (no-op, no error), then `gcc -o hello
+hello.c && ./hello` through the real `dn-shell` -- prints its output,
+exit 0.

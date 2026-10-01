@@ -22,25 +22,23 @@ proot"), the comparison with proot-distro (README), and a `gcc` demo.
 
 **Status**: 0.2.0's foundation and 0.3.0's fake-root are released. 0.5.0's
 own-glibc patch is written, forked, and validated (clean-room rebuild,
-`hello` + NSS working) but not yet packaged as the prefix's real `libc6` —
-that's what "Compilers" below is still waiting on.
+`hello` + NSS working) but not yet packaged as the prefix's real `libc6`
+by default (`install.sh` still defaults to `dn-standins.sh`'s stand-in).
+
+**Compilers: done, 2026-10-01.** `apt install gcc` installs and configures
+cleanly (`gcc`/`cpp`/`binutils` and their whole dependency chain);
+`libc6-dev` installs unmodified from Debian's real archive (no custom
+packaging needed -- `dn-package-glibc.sh` keeps the own-built `libc6`'s
+version string an exact match instead); the shim's redirect scope now
+covers `/lib`/`/bin`/`/sbin`; and `gcc`'s own default dynamic linker is
+repointed at `ld-dn` via a generated `specs` file
+(`scripts/install/dn-fix-gcc-specs.sh`, wired into `dn-hook-post.sh`) --
+GCC's own site-customization hook, no gcc/binutils patch or rebuild
+needed. `gcc -o hello hello.c && ./hello` now compiles **and runs**
+end to end (`docs/log/findings/gcc-hello-pt-interp-gap.md` has the full chain of fixes). `make`
+untested; `ghc`/`rustc` as a bonus, unresearched.
 
 **Open**:
-- **Compilers**: `apt install gcc` installs and configures cleanly
-  (`gcc`/`cpp`/`binutils` and their whole dependency chain), `libc6-dev`
-  now installs unmodified from Debian's real archive (no custom
-  packaging needed -- `dn-package-glibc.sh` keeps the own-built `libc6`'s
-  version string an exact match instead,
-  `docs/log/findings/libc6-dev-gap-closed.md`), and `gcc -c hello.c` / `gcc -o hello hello.c` both compile
-  clean after extending the shim's redirect scope to `/lib`/`/bin`/`/sbin`
-  (`docs/spec/shim-coverage.md`, same date). Remaining blocker: running
-  the linked binary fails at the kernel level (`PT_INTERP` on a freshly
-  `gcc`-built ELF points at a literal, unresolvable
-  `/lib/ld-linux-aarch64.so.1`, same problem `native/ld-dn.c` solves for
-  installed `.deb`s but not yet for binaries built *inside* the prefix --
-  `docs/log/findings/gcc-hello-pt-interp-gap.md` has the detail, fix
-  approach undecided). `make`
-  untested; `ghc`/`rustc` as a bonus, unresearched.
 - **Popular languages**: `python3` + a C-extension package, `perl` + an XS
   module, `ruby`, `nodejs` — incl. the Perl version gap (`dn-perl` still
   uses Termux's 5.42; trixie's `perl` builds modules for 5.40, no fix yet).
@@ -676,10 +674,17 @@ not chased down.
   `/lib`, `/bin`, `/sbin` as three more redirected prefixes (Debian's own
   merged-usr aliases for `/usr/{lib,bin,sbin}`, same symlinks the
   prefix's `base-files` already sets up) — `docs/spec/shim-coverage.md`,
-  `docs/log/findings/gcc-hello-pt-interp-gap.md`. Running the resulting
-  binary still fails
-  separately (`PT_INTERP` at the kernel level, not a shim-layer problem)
-  — tracked under "Compilers" above, not fixed yet.
+  `docs/log/findings/gcc-hello-pt-interp-gap.md`.
+- [x] ~~A `gcc`-linked binary's `PT_INTERP` is a literal, unresolvable
+  `/lib/ld-linux-aarch64.so.1` -- fails `cannot execute: required file not
+  found` at the kernel level, before the shim ever runs~~ — fixed
+  2026-10-01: `scripts/install/dn-fix-gcc-specs.sh` (wired into
+  `dn-hook-post.sh`) writes a `specs` file next to each installed gcc
+  version's `libgcc.a`, overriding just the `-dynamic-linker` string to
+  `ld-dn`'s real path -- GCC's own site-customization hook (same mechanism
+  musl/NDK toolchains use), no gcc/binutils patch or rebuild. Idempotent,
+  no-op if gcc or `ld-dn` isn't present yet. `gcc -o hello hello.c &&
+  ./hello` now compiles and runs end to end.
 - [ ] Refresh `README.md`'s status numbers once the unfiltered survey
   (Alpha goal, above) reports.
 
