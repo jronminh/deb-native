@@ -582,12 +582,12 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
 - **Classifier/refusal** (`prefix-check` equivalent) — read each `.deb`
   before dpkg runs, classify scope and mechanism, refuse a "never"
   package before dpkg can wedge the prefix.
-- **Sync on `apt update`** — keep the prefix's view of Termux's
-  `*-glibc` packages fresh so a Termux upgrade doesn't leave stale seeds.
-- **Soname-based dependency matching** — replace
-  `scripts/install/native-seed.sh`'s hand-written name table with matching a
-  `.deb`'s `Depends:` against installed `*-glibc` packages' SONAMEs
-  (`docs/spec/native-reuse.md`, "Open work"). Small, direct install-success win.
+- **Soname-based dependency matching** — a possible future mechanism:
+  match a `.deb`'s `Depends:` against installed `*-glibc` packages'
+  SONAMEs directly, instead of a hand-written name table. Not a revival of
+  `native-seed.sh` (gone, replaced by the real `libc6` stand-in) — see
+  `docs/spec/native-reuse.md`, "Where this idea goes next", for the gap
+  this would close if ever built.
 - **Launcher/icon/desktop-DB integration** — mostly N/A on Android; do
   only what Termux needs.
 - **State + `explain` + `doctor`** — record per package its scope,
