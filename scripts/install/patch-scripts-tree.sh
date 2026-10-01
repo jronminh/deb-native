@@ -10,8 +10,7 @@
 # fallback is bootstrap scaffolding, not something a steady-state prefix
 # should depend on. A flag on the shebang is kept either way. Works on a
 # package tree already unpacked with dpkg-deb -R, so dn-translate-deb.sh
-# can do it inside its one unpack/repack pass; patch-deb.sh wraps it for a
-# .deb file.
+# can do it inside its one unpack/repack pass.
 #
 # Usage: patch-scripts-tree.sh PACKAGE_TREE INSTDIR
 set -eu
