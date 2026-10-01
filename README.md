@@ -274,22 +274,12 @@ Without them those programs run untranslated.
 
 ## Documentation
 
-- [`docs/spec/design.md`](docs/spec/design.md) — the design end to end, including the 0.2.0 self-contained-prefix pivot (partly superseded by `TODO.md`'s decisions).
-- [`docs/spec/standard.md`](docs/spec/standard.md) — package scope.
-- [`docs/spec/shim-coverage.md`](docs/spec/shim-coverage.md) — measured shim coverage.
-- [`docs/spec/syscall-boundary.md`](docs/spec/syscall-boundary.md) — beyond libc.
-- [`docs/spec/direct-usage.md`](docs/spec/direct-usage.md) — tracer investigation + fork-lite plan.
-- [`docs/spec/bind-only.md`](docs/spec/bind-only.md) — what fork-lite strips down to a bind-only tracer.
-- [`docs/spec/tracer.md`](docs/spec/tracer.md) — the tracer (`dn-trace`): role, changes, tests, measurements.
-- [`docs/spec/android-platform.md`](docs/spec/android-platform.md) — which Android failures are seccomp/kernel-config/SELinux (own-glibc can't fix) vs. glibc-internal (own-glibc can), and the glibc patch's per-file fork verdict.
-- [`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md) — the investigation and the on-device build attempt log.
-- [`docs/spec/install-flow.md`](docs/spec/install-flow.md) — the bootstrap/install order, end to end.
-- [`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md) — 100 Debian packages installed and run in the 0.2.0 prefix.
-- [`docs/spec/runtime-failures.md`](docs/spec/runtime-failures.md) — what breaks when *running* a program.
-- [`docs/guides/tailscale.md`](docs/guides/tailscale.md) — the static-daemon goal (userspace networking).
-- [`docs/log/findings.md`](docs/log/findings.md) — engineering log.
-- [`docs/spec/multiarch-mechanics.md`](docs/spec/multiarch-mechanics.md) — dpkg multi-arch mechanics, shared with the true fusion branch (`naibed`).
-- [`docs/spec/vs-sudo-less.md`](docs/spec/vs-sudo-less.md) — method, side by side with `sudo-less`.
+Full map in [`docs/README.md`](docs/README.md): specs (`docs/spec/` — the
+design, package scope, shim/tracer/Android coverage, install flow),
+engineering log and investigation history (`docs/log/`), and one-off
+guides (`docs/guides/`). Start with
+[`docs/spec/design.md`](docs/spec/design.md) for how the whole thing
+works and [`TODO.md`](TODO.md) for current status.
 - [`tracer/README.md`](tracer/README.md) — `dn-trace`, the ptrace tracer (from PRoot's core).
 - [`TODO.md`](TODO.md) — roadmap · [`AGENTS.md`](AGENTS.md) — conventions.
 
