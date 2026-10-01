@@ -87,8 +87,21 @@ EOF
 # under Android's seccomp filter, its dpkg/apt would replace the launchers.
 # sudo/doas: setuid-root binaries that cannot work here; the names are kept
 # for deb-native's own later (TODO.md, "sudo").
+#
+# libc6-dev/libc-dev-bin are NOT in this list on purpose (found 2026-10-01,
+# testing the Alpha goal's "Compilers" item): once libc6 is this project's
+# own patched build at Debian's *exact*, unmodified version string
+# (dn-package-glibc.sh, no +dnN suffix -- deliberately, for exactly this),
+# their `Depends: libc6 (= ...)`/`(>> ...) (<< ...)` is genuinely satisfied
+# and Debian's real packages install and work unmodified -- no reason to
+# fork them too, which would only cascade into their own dependencies
+# (confirmed hitting this trying to patch libc6-dev standalone first).
+# libc-bin/libc-l10n/locales stay pinned for now: same reasoning likely
+# applies (not yet tested) once libc6's version matches, but libc-bin's
+# ldconfig has its own known seccomp quirk (TODO.md, 0.5.0) worth checking
+# first rather than assuming.
 write_pins() {  # FILE
-  PINNED="libc6:arm64 libc-bin:arm64 libc6-dev:arm64 libc-dev-bin:arm64 libc-l10n:arm64 locales:arm64 dpkg:arm64 apt:arm64 sudo:arm64 doas:arm64"
+  PINNED="libc6:arm64 libc-bin:arm64 libc-l10n:arm64 locales:arm64 dpkg:arm64 apt:arm64 sudo:arm64 doas:arm64"
   for o in deb.debian.org security.debian.org; do
     printf 'Package: %s\nPin: origin %s\nPin-Priority: -1\n\n' "$PINNED" "$o"
   done > "$1"

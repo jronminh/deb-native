@@ -9,10 +9,22 @@
 # postrm, ldconfig triggers, debconf locale templates -- real, non-trivial,
 # already correct upstream), this takes the REAL Debian libc6 .deb as a
 # template and only replaces what actually differs: the shared-library
-# payload (built by us instead of Debian's buildds) and the version string.
-# Everything else (control metadata, maintainer scripts, doc, lintian
-# overrides) comes from Debian's own package as-is -- it is still
-# accurately describing glibc 2.41-12+deb13u4, just built here.
+# payload (built by us instead of Debian's buildds). Everything else
+# (control metadata including the version string, maintainer scripts,
+# doc, lintian overrides) comes from Debian's own package as-is -- it is
+# still accurately describing glibc 2.41-12+deb13u4, just built here, not
+# a different thing wearing its name: same upstream source, same Debian
+# patch series, our Android compatibility patch on top makes it *run*
+# here, it doesn't change what it is. No version-bump suffix, on purpose
+# -- the whole point is that `libc6-dev`/`libc-dev-bin`/`locales` (not yet
+# packaged by this project) keep working unmodified, straight from
+# Debian's archive, because their `Depends: libc6 (= ...)`/`(>> ...)
+# (<< ...)` sees an exact, true match instead of a `+dnN` that would force
+# forking every package in that dependency chain just to keep up
+# (confirmed hitting exactly this with libc6-dev and libc-dev-bin, both
+# version-pinned to libc6, 2026-10-01). Held (dn-standins.sh /
+# this script's own caller) so `apt upgrade` can't silently replace it
+# with Debian's real, unpatched build once a newer point release exists.
 #
 # Our own build was configured --disable-multi-arch (a flat usr/lib/, not
 # Debian's usr/lib/aarch64-linux-gnu/) -- confirmed safe to relocate at
@@ -22,9 +34,10 @@
 # libc6-dev's linker scripts hardcode /lib/aarch64-linux-gnu.
 #
 # Scope: libc6 only (the runtime shared libraries + NSS modules + gconv +
-# the dynamic linker). libc-bin (ldconfig, iconv, locale, ...) and
-# libc6-dev (headers, static libs) are separate packages this project's
-# own build also produces the material for, left for a later pass.
+# the dynamic linker). `libc6-dev`/`libc-dev-bin`/`locales`/`libc-bin`
+# need no equivalent script -- same reasoning as the no-version-bump
+# above, they install from Debian's archive as-is once libc6's version
+# matches exactly.
 #
 # Usage: dn-package-glibc.sh REAL_LIBC6_DEB DESTDIR OUT_DEB
 #   REAL_LIBC6_DEB  a real Debian libc6_<ver>_arm64.deb, same version the
@@ -49,9 +62,7 @@ echo "Unpacking $REAL_DEB as the template ..."
 dpkg-deb -R "$REAL_DEB" "$WORK/pkg"
 
 V=$(sed -n 's/^Version: //p' "$WORK/pkg/DEBIAN/control")
-NEWV="${V}+dn1"
-echo "Version $V -> $NEWV"
-sed -i "s/^Version: .*/Version: $NEWV/" "$WORK/pkg/DEBIAN/control"
+echo "Version: $V (unchanged -- see this script's own comment for why)"
 
 MA="$WORK/pkg/usr/lib/aarch64-linux-gnu"
 echo "Replacing the payload under usr/lib/aarch64-linux-gnu/ with our own build's ..."
