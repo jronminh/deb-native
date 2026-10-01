@@ -281,7 +281,8 @@ Without them those programs run untranslated.
 - [`docs/spec/direct-usage.md`](docs/spec/direct-usage.md) — tracer investigation + fork-lite plan.
 - [`docs/spec/bind-only.md`](docs/spec/bind-only.md) — what fork-lite strips down to a bind-only tracer.
 - [`docs/spec/tracer.md`](docs/spec/tracer.md) — the tracer (`dn-trace`): role, changes, tests, measurements.
-- [`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md) — which Android failures are seccomp/kernel-config (own-glibc can't fix) vs. glibc-internal (own-glibc can).
+- [`docs/spec/android-platform.md`](docs/spec/android-platform.md) — which Android failures are seccomp/kernel-config/SELinux (own-glibc can't fix) vs. glibc-internal (own-glibc can), and the glibc patch's per-file fork verdict.
+- [`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md) — the investigation and the on-device build attempt log.
 - [`docs/spec/install-flow.md`](docs/spec/install-flow.md) — the bootstrap/install order, end to end.
 - [`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md) — 100 Debian packages installed and run in the 0.2.0 prefix.
 - [`docs/spec/runtime-failures.md`](docs/spec/runtime-failures.md) — what breaks when *running* a program.

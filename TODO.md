@@ -255,7 +255,7 @@ project can read the prefix's `/etc` directly, no tracer route needed.
 below glibc entirely (a syscall failing there fails the same way no
 matter which library issued it) — the app seccomp allowlist, capability/
 kernel-config gaps, and SELinux (full detail:
-[`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md)). Its
+[`docs/spec/android-platform.md`](docs/spec/android-platform.md)). Its
 confirmed leverage is the NSS/loader-internal-path class (NSS, `gconv`,
 locale, `ld.so.cache`, `RUNPATH`) plus whatever syscall stock Debian
 `libc6` trips at startup. `io_uring` (real gap, Gate A) is deliberately
@@ -272,7 +272,9 @@ install` clean, `hello` runs, NSS resolves the prefix's real `/etc`
 natively, terminal I/O (`isatty`/`tcgetattr`/`tcsetattr`, baud-rate
 round-trip) works correctly with no port needed
 (`disable-termios2.patch` turned out unnecessary — `termios2` doesn't
-exist anywhere in glibc 2.41's source). Full history:
+exist anywhere in glibc 2.41's source). Patch catalog and per-file verdict:
+[`docs/spec/android-platform.md`](docs/spec/android-platform.md). Full
+investigation history:
 [`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md),
 [`docs/log/findings.md`](docs/log/findings.md). One parked decision: the
 fake-root-entangled `"0"`-bucket of `fakesyscall.json`
@@ -462,7 +464,7 @@ entries.
   `survey-prefix.sh`'s `try_program()` already uses ad hoc for
   measurement, just never promoted to a real runtime mechanism; (c) a
   one-time audit of glibc's own source (per glibc build, not per
-  package) against `docs/log/android-seccomp-audit.md`'s allowlist, to name
+  package) against `docs/spec/android-platform.md`'s allowlist, to name
   the exact handful of public libc functions with a probe-and-fallback
   syscall pattern, then watch only those in the shim — more precise
   than (b), more upfront cost, pays off once instead of per-crash.
