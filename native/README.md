@@ -1,5 +1,11 @@
 # native/
 
+> Template: [`templates/readme.template.md`](../templates/readme.template.md). Read this
+> file before touching anything in this directory or guessing a
+> file's purpose from its name alone. Add a `README.md` like this one
+> whenever a new directory holds more than a couple of files that
+> aren't self-explanatory from their names alone.
+
 The small set of C programs translated Debian programs actually run
 through. Built by `scripts/install/setup-runtime.sh` into each prefix;
 design background in [`../docs/spec/path-shim.md`](../docs/spec/path-shim.md)

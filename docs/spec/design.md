@@ -1,23 +1,42 @@
 # Design
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 How deb-native works, as it stands right now: scope, the 0.2.0
-self-contained prefix (what's actually built), day-to-day commands,
-and fake root. One doc for the live design, accumulated over releases
-rather than forked per release (a section that gets superseded says so
-in place instead of living on in a separate versioned file) — but kept
-to the current picture; deeper mechanism write-ups and superseded
-proposals live in their own docs, linked from here and from
-[`../README.md`](../README.md):
+self-contained prefix (what's actually built), day-to-day commands, and
+fake root. One doc for the live design, accumulated over releases rather
+than forked per release — a section that gets superseded says so in
+place instead of living on in a separate versioned file — but kept to
+the current picture; deeper mechanism write-ups and superseded proposals
+live in their own docs, listed below.
+
+## Contents
+
+- [Scope and design philosophy](#scope-and-design-philosophy)
+- [The 0.2.0 pivot: a self-contained prefix](#the-020-pivot-a-self-contained-prefix)
+- [Fake root (0.3.0)](#fake-root-030)
+
+## Related docs
 
 - [`path-shim.md`](path-shim.md) — the path-redirect shim: design,
-  verification, delivery mechanisms.
+  verification, delivery mechanisms. Split out of this doc.
 - [`native-reuse.md`](native-reuse.md) — native dependency reuse
-  (`native-seed.sh`).
+  (`native-seed.sh`). Split out of this doc.
 - [`classic-design.md`](classic-design.md) — the pre-0.2.0 approach
   (plain `dpkg --instdir`, static per-binary wrappers, the services
-  research) — superseded in large part by the 0.2.0 pivot below, kept
-  as the record.
-- [`prior-art.md`](prior-art.md) — sudo-less and proroot.
+  research) — superseded in large part by the 0.2.0 pivot below. Split
+  out of this doc.
+- [`prior-art.md`](prior-art.md) — sudo-less and proroot. Split out of
+  this doc.
+- [`android-platform.md`](android-platform.md) — the fake-root-entangled
+  glibc patch bucket mentioned under "Fake root" below.
 
 ## Scope and design philosophy
 

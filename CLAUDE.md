@@ -49,6 +49,12 @@ when a file moves or a new one is added. Start from
 [`scripts/README.md`](scripts/README.md) (which lifecycle stage a script
 belongs to) for the two biggest trees.
 
+Every `README.md` and every content doc under `docs/` follows a stable
+template in [`templates/`](templates/) (`readme.template.md`,
+`docs.template.md`) — each file points at it in a blockquote right after
+its title. Copy the matching template instead of improvising a layout
+when adding a new one.
+
 `docs/spec/design.md` is the live design doc (scope, the 0.2.0
 self-contained prefix, day-to-day commands, fake root) — read it before
 changing direction; its own intro points out to the deeper or superseded

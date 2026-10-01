@@ -1,5 +1,14 @@
 # Prior art: sudo-less, and proroot
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 What of sudo-less's own approach carries over as-is versus is blocked
 on Android (read 2026-09-25), and a later-found closed-source project
 doing a similar no-ptrace trick. For the structured, per-concern diff
@@ -7,14 +16,30 @@ against sudo-less specifically, see
 [`vs-sudo-less.md`](vs-sudo-less.md); for other ways to run Debian on
 Android, see [`alternatives.md`](alternatives.md).
 
-## Prior art: what carries over from sudo-less
+## Contents
 
+- [What sudo-less actually is](#what-sudo-less-actually-is)
+- [Reusable as-is (~40%)](#reusable-as-is-40)
+- [Blocked on Android (~60%)](#blocked-on-android-60)
+- [Formerly-open question, now answered](#formerly-open-question-now-answered)
+- [Related work found later: `proroot` (closed-source)](#related-work-found-later-proroot-closed-source)
+
+## Related docs
+
+- [`vs-sudo-less.md`](vs-sudo-less.md) — the structured, per-concern diff
+  against sudo-less (this doc is the narrative version).
+- [`alternatives.md`](alternatives.md) — other ways to run Debian on
+  Android, including `proroot`'s own niche.
+- [`path-shim.md`](path-shim.md) — the shim that replaced sudo-less's
+  view, the mechanism this doc's "Blocked on Android" section explains.
+- [`classic-design.md`](classic-design.md) — Direction 3's services
+  research, which starts from sudo-less's own `systemd --user` approach.
 
 Source: [`jronminh/sudo-less`](https://github.com/jronminh/sudo-less),
 docs read 2026-09-25 (`README.md`, `docs/porting.md`,
 `docs/apt-dpkg-port.md`, `docs/view.md`).
 
-### What sudo-less actually is
+## What sudo-less actually is
 
 Real `apt`+`dpkg`, forked from **Termux's own patches** to those two
 projects (`termux/termux-packages`), retargeted from Android/Bionic back
@@ -28,7 +53,7 @@ partly reverse that back onto Android — but Termux's own apt/dpkg already
 covers the parts sudo-less had to rebuild, so that part doesn't need
 touching at all.
 
-### Reusable as-is (~40%)
+## Reusable as-is (~40%)
 
 1. **apt/dpkg running root-less in a prefix.** Termux's apt/dpkg already do
    this natively (`$PREFIX=/data/data/com.termux/files/usr`), no fork
@@ -55,7 +80,7 @@ touching at all.
    the fix gets applied (mount namespace vs. static wrapper) — reusable
    directly for Direction 2.
 
-### Blocked on Android (~60%)
+## Blocked on Android (~60%)
 
 1. **The "view"** (`docs/view.md`): a private mount namespace overlaying
    the prefix onto `/usr /etc /var /opt`, live, so absolute paths compiled
@@ -79,14 +104,14 @@ touching at all.
    equivalent is `termux-services` (runit). See
    [`classic-design.md`](classic-design.md), "Direction 3".
 
-### Formerly-open question, now answered
+## Formerly-open question, now answered
 
 ~~Whether `unshare(CLONE_NEWNS)` alone... is available to Termux without
 root.~~ Answered: no — `EPERM`, confirmed by direct test and strace. See
 [`path-shim.md`](path-shim.md) for the full data and the replacement mechanism
 (userspace path redirection, no mount involved at all).
 
-### Related work found later: `proroot` (closed-source)
+## Related work found later: `proroot` (closed-source)
 
 [`coderredlab/proroot`](https://github.com/coderredlab/proroot) — a
 proprietary "drop-in `proot` replacement, zero ptrace overhead" for

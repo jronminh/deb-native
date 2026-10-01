@@ -1,11 +1,41 @@
 # Bind-only fork-lite — what is safe to remove
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 Audit of `tracer/` (fork-lite, the reduced arm64-only PRoot) to turn it into a
 **bind-only** path tracer suited to this project's scope. Findings only; no
 code changed. Method: read the actual tree, cite `file:line`. See
 [`direct-usage.md`](direct-usage.md) for the fork-lite plan and
 [`syscall-boundary.md`](syscall-boundary.md) for why syscall-level rewriting is
 needed at all.
+
+## Contents
+
+- [What "bind-only" means](#what-bind-only-means)
+- [Call graph of the removal](#call-graph-of-the-removal)
+- [Green — safe to delete](#green-safe-to-delete)
+- [Yellow — replace, do not just delete](#yellow-replace-do-not-just-delete)
+- [Red — keep](#red-keep)
+- [Syscall whitelist (`syscall/seccomp.c:331`)](#syscall-whitelist-syscallseccompc331)
+- [Risks — what canonicalize was silently handling](#risks-what-canonicalize-was-silently-handling)
+- [Status (2026-09-26, implemented)](#status-2026-09-26-implemented)
+- [Scope — our proot vs general proot](#scope-our-proot-vs-general-proot)
+- [Suggested order](#suggested-order)
+
+## Related docs
+
+- [`direct-usage.md`](direct-usage.md) — the fork-lite plan this audit
+  feeds into.
+- [`syscall-boundary.md`](syscall-boundary.md) — why syscall-level
+  rewriting is needed at all.
+- [`tracer.md`](tracer.md) — what fork-lite became after this audit.
 
 ## What "bind-only" means
 

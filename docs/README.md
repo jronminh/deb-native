@@ -1,5 +1,11 @@
 # docs/
 
+> Template: [`templates/readme.template.md`](../templates/readme.template.md). Read this
+> file before touching anything in this directory or guessing a
+> file's purpose from its name alone. Add a `README.md` like this one
+> whenever a new directory holds more than a couple of files that
+> aren't self-explanatory from their names alone.
+
 Split by what kind of writing a file is, not by topic. Each subdirectory
 has its own `README.md` listing its files; this is just the map. When
 adding a new doc, put it in the directory that matches what it *is*, not

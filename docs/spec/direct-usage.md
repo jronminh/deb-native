@@ -1,9 +1,37 @@
 # Direct syscall usage — investigation
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 Living doc. The *map* of the boundary is [`syscall-boundary.md`](syscall-boundary.md);
 this is the working investigation into **what actually bypasses the libc shim
 in the packages we support, and which mechanism should reach it**. Results land
 here first, then get promoted into the boundary doc / `path-shim.md`.
+
+## Contents
+
+- [The decision this doc is for](#the-decision-this-doc-is-for)
+- [Questions](#questions)
+- [Method / tools](#method-tools)
+- [Solutions](#solutions)
+- [Experiment log](#experiment-log)
+- [Working notes](#working-notes)
+- [Decision](#decision)
+- [Fork-lite (the plan)](#fork-lite-the-plan)
+- [Next step](#next-step)
+
+## Related docs
+
+- [`syscall-boundary.md`](syscall-boundary.md) — the map this doc's
+  investigation feeds into.
+- [`path-shim.md`](path-shim.md) — where a solved case gets promoted to.
+- [`tracer.md`](tracer.md) — the mechanism this investigation is scoping.
 
 ## The decision this doc is for
 

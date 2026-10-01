@@ -1,5 +1,11 @@
 # dn-glibc-android.patch
 
+> Template: [`templates/readme.template.md`](../../templates/readme.template.md). Read this
+> file before touching anything in this directory or guessing a
+> file's purpose from its name alone. Add a `README.md` like this one
+> whenever a new directory holds more than a couple of files that
+> aren't self-explanatory from their names alone.
+
 0.5.0's "own glibc" milestone 1 (see `TODO.md`'s 0.5.0 roadmap and
 `docs/spec/android-platform.md`'s "Termux's Android glibc patch: catalog
 and fork verdict" section for the catalog; `docs/log/android-seccomp-audit.md`

@@ -1,5 +1,14 @@
 # deb-native vs sudo-less: the diff
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 Both projects install stock Debian `.deb`s into a private prefix as an
 unprivileged user and make the installed programs work. The difference is
 **the base system and the virtualization mechanism**:
@@ -17,6 +26,23 @@ unprivileged user and make the installed programs work. The difference is
 
 Same goal, same "never root" rule; the whole mechanism is inverted because
 the host and the kernel are different.
+
+## Contents
+
+- [The diff](#the-diff)
+- [What the fusion buys, and what it costs](#what-the-fusion-buys-and-what-it-costs)
+- [What is left, in one line](#what-is-left-in-one-line)
+
+## Related docs
+
+- [`alternatives.md`](alternatives.md) — sudo-less's place among the
+  other ways to run Debian-like software, in one table row.
+- [`prior-art.md`](prior-art.md) — the narrative version of this diff,
+  with the proroot comparison this table doesn't cover.
+- [`path-shim.md`](path-shim.md) — the shim this table's "run-time
+  wrappers" row credits as deb-native's actual answer.
+- [`classic-design.md`](classic-design.md) — the unbuilt `prefix-wrap`
+  equivalent this table's row also mentions.
 
 ## The diff
 

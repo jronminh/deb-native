@@ -1,5 +1,14 @@
 # Android seccomp/capability audit (started 2026-09-30)
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 Why: `../spec/runtime-failures.md` and `findings.md` list several things
 Android blocks (`libc6` killed at startup, `set_robust_list` SIGSYS, SysV
 IPC denied, `mount`/`CLONE_NEWNS` `EPERM`, `CLONE_NEWUSER` `EINVAL`), but
@@ -14,6 +23,35 @@ docs/source first, then test on-device, then conclude -- in that order,
 not the reverse.
 
 Phase 1 (the three enforcement gates) and Phase 2 (reconciling known findings against them) have been extracted as a standing reference: see [`../spec/android-platform.md`](../spec/android-platform.md) — "The three enforcement gates" and "Known findings, by gate". What follows here is the investigation from Phase 2b onward.
+
+## Contents
+
+- [Phase 2b: relevance triage against project scope (2026-09-30)](#phase-2b-relevance-triage-against-project-scope-2026-09-30)
+- [Phase 3: group 5b tested on-device (2026-09-30, fe2, Termux app uid)](#phase-3-group-5b-tested-on-device-2026-09-30-fe2-termux-app-uid)
+- [Phase 3 (original plan, superseded by the direct test above)](#phase-3-original-plan-superseded-by-the-direct-test-above)
+- [Phase 4 idea, not decided (2026-09-30): fake the Gate-B failures too?](#phase-4-idea-not-decided-2026-09-30-fake-the-gate-b-failures-too)
+- [Phase 5 idea, not decided (2026-09-30): clean-failure translation (Gate A only, no faking)](#phase-5-idea-not-decided-2026-09-30-clean-failure-translation-gate-a-only-no-faking)
+- [Phase 6 decision (2026-09-30): narrow the tracer, give the shim its own SIGSYS fallback](#phase-6-decision-2026-09-30-narrow-the-tracer-give-the-shim-its-own-sigsys-fallback)
+- [Conclusion (2026-09-30)](#conclusion-2026-09-30)
+- [Termux's actual Android patch series, and the per-file fork verdict](#termuxs-actual-android-patch-series-and-the-per-file-fork-verdict)
+- [0.5.0 first build attempt: partial fork tested, confirmed insufficient (2026-09-30)](#050-first-build-attempt-partial-fork-tested-confirmed-insufficient-2026-09-30)
+- [Everything marked "fork" actually forked (2026-09-30)](#everything-marked-fork-actually-forked-2026-09-30)
+- [First successful self-built `libc.so.6`/`ld.so`, and `hello` runs through it (2026-09-30)](#first-successful-self-built-libcso6ldso-and-hello-runs-through-it-2026-09-30)
+- [First real on-device `configure`/`make` attempt (2026-09-30)](#first-real-on-device-configuremake-attempt-2026-09-30)
+- [First full on-device build: green, and it runs (2026-09-30)](#first-full-on-device-build-green-and-it-runs-2026-09-30)
+- [`make install`, and NSS confirmed functionally working, not just built-in (2026-09-30)](#make-install-and-nss-confirmed-functionally-working-not-just-built-in-2026-09-30)
+- [Clean-room replay: patch alone, from a fresh `pristine` copy (2026-09-30)](#clean-room-replay-patch-alone-from-a-fresh-pristine-copy-2026-09-30)
+- [Seccomp visibility for the post-install analysis pass, and `rseq` found (2026-10-01)](#seccomp-visibility-for-the-post-install-analysis-pass-and-rseq-found-2026-10-01)
+
+## Related docs
+
+- [`../spec/android-platform.md`](../spec/android-platform.md) — the
+  standing reference this investigation produced (the gate taxonomy, the
+  glibc patch catalog and fork verdict).
+- [`findings.md`](findings.md) — "Platform sandbox limits", the earlier
+  probe this audit builds on and reconciles with.
+- [`../../third_party/glibc-android-patches/README.md`](../../third_party/glibc-android-patches/README.md) —
+  the patch this audit's build-attempt log is about.
 
 ## Phase 2b: relevance triage against project scope (2026-09-30)
 

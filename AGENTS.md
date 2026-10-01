@@ -36,6 +36,9 @@ in that directory; so do `native/`, `tests/`,
 `third_party/glibc-android-patches/`, `custom/`, and `tracer/`. Read the
 relevant one before working in a directory or guessing a file's purpose
 from its name. Start from `docs/README.md` and `scripts/README.md`.
+Every `README.md` and content doc follows a stable template in
+`templates/` (`readme.template.md`, `docs.template.md`) — copy it instead
+of improvising a layout when adding a new one.
 
 `docs/spec/design.md` is the live design doc (scope, the 0.2.0
 self-contained prefix, day-to-day commands, fake root) — read it before

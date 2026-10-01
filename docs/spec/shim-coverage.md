@@ -1,8 +1,37 @@
 # What the libc shim must intercept
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 Which libc entry points `native/path-redirect.c` has to cover for the packages
 we support, and the ones it does not. The scope is [`standard.md`](standard.md);
 the design is [`path-shim.md`](path-shim.md).
+
+## Contents
+
+- [First, the layer: libc functions, not syscalls](#first-the-layer-libc-functions-not-syscalls)
+- [The universe](#the-universe)
+- [Method](#method)
+- [Results](#results)
+- [Open question (2026-09-30): the five-prefix view may be too narrow](#open-question-2026-09-30-the-five-prefix-view-may-be-too-narrow)
+- [Next steps](#next-steps)
+
+## Related docs
+
+- [`standard.md`](standard.md) — the scope this doc's corpus is drawn
+  from.
+- [`path-shim.md`](path-shim.md) — the shim this doc measures coverage
+  for.
+- [`syscall-boundary.md`](syscall-boundary.md) — what's left once this
+  doc's coverage is accounted for.
+- [`android-platform.md`](android-platform.md) — the per-file fork
+  verdict for the glibc patch that supersedes part of this shim's job.
 
 ## First, the layer: libc functions, not syscalls
 

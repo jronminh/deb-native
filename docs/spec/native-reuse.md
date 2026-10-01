@@ -1,19 +1,42 @@
 # Native dependency reuse
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 sudo-less's "host already has it" idea, adapted for a host (Termux)
 that has no glibc at all: how `native-seed.sh` decides a Debian
 dependency is already satisfied by one of Termux's own `*-glibc`
 packages, instead of duplicating it into the prefix. Split out of
 [`design.md`](design.md).
 
-## Native dependency reuse (sudo-less's "native" idea, adapted)
+## Contents
 
+- [The idea, restated for this project](#the-idea-restated-for-this-project)
+- [How it works: `scripts/install/native-seed.sh`](#how-it-works-scriptsinstallnative-seedsh)
+- [Verified end to end against a real package with a real dependency](#verified-end-to-end-against-a-real-package-with-a-real-dependency)
+- [Real problem found and fixed: epoch comparison](#real-problem-found-and-fixed-epoch-comparison)
+- [What `native-seed.sh` cannot do yet: the mapping is hand-written](#what-native-seedsh-cannot-do-yet-the-mapping-is-hand-written)
+- [Open work](#open-work)
+
+## Related docs
+
+- [`design.md`](design.md) — the doc this was split out of.
+- [`classic-design.md`](classic-design.md) — the two-layer-database idea
+  this doc builds on and corrects.
+- [`../log/findings.md`](../log/findings.md) — where the epoch-comparison
+  bug and the mapping gap were originally found.
 
 Status: **prototyped and verified working**, `scripts/install/native-seed.sh`.
 Builds on [`classic-design.md`](classic-design.md)'s two-layer-db
 idea and corrects it with what `../log/findings.md` found.
 
-### The idea, restated for this project
+## The idea, restated for this project
 
 sudo-less's original two-layer database seeds the prefix's dpkg status
 from the *host's* `/var/lib/dpkg/status`, so already-present system
@@ -35,7 +58,7 @@ own collection point (`$INSTDIR`, `~/.dn` by default) —
 that's the one place matching sudo-less's `.local` role, but scoped to the
 actual delta instead of everything.
 
-### How it works: `scripts/install/native-seed.sh`
+## How it works: `scripts/install/native-seed.sh`
 
 Before unpacking a `.deb`, seed `$ADMINDIR/status` with synthetic
 `Status: install ok installed` stanzas for Debian package names already
@@ -46,7 +69,7 @@ file list) takes over gracefully; verified in practice, not just assumed:
 dpkg prints a warning ("files list file... missing; assuming package has
 no files currently installed") and proceeds normally.
 
-### Verified end to end against a real package with a real dependency
+## Verified end to end against a real package with a real dependency
 
 `ciso` (`ciso_1.0.2-2+b1_arm64.deb`, from `deb.debian.org`) — a genuine,
 tiny CLI tool (PSP ISO↔CSO converter) whose only dependencies are `libc6`
@@ -84,7 +107,7 @@ existing glibc side-install, found automatically by the dynamic linker
 with no `LD_LIBRARY_PATH` or wrapper needed — the glibc `ld.so` living
 inside `$PREFIX/glibc` already searches its own prefix by default.
 
-### Real problem found and fixed: epoch comparison
+## Real problem found and fixed: epoch comparison
 
 First attempt seeded `Version: 1.3.2` (Termux's own zlib-glibc version
 string, no epoch) for `zlib1g`. `ciso`'s real dependency is `zlib1g (>=
@@ -102,7 +125,7 @@ time, and aren't worth tracking accurately for a claim that isn't a real
 version in the first place. An always-winning epoch makes that claim
 directly instead of guessing at Debian's current epoch per library.
 
-### What `native-seed.sh` cannot do yet: the mapping is hand-written
+## What `native-seed.sh` cannot do yet: the mapping is hand-written
 
 The Debian-name → Termux-package mapping (`libc6:glibc`,
 `zlib1g:zlib-glibc`, ...) inside the script is a **static, hand-maintained
@@ -127,7 +150,7 @@ remaining gap:
   verified against a real package — `libssl3`/`libncurses6`/etc. entries
   are unverified, added speculatively).
 
-### Open work
+## Open work
 
 - [ ] Build the soname-based mapping (walk `*-glibc` packages' `.so`
       files, extract `SONAME`, match against a `.deb`'s `Depends:` instead

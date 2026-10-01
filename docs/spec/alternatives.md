@@ -1,5 +1,14 @@
 # Compared with other ways onto Android
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 deb-native is not a container: nothing is isolated or emulated. Programs
 are ordinary Termux processes that *see* a Debian layout. The project's
 own method, and the five other ways people get Debian (or Debian-like)
@@ -13,6 +22,21 @@ software running on Android, side by side:
 | glibc-runner (termux-pacman) | Termux's patched glibc; glibc binaries run by hand | native | no Debian packages | no |
 | namespaces (Docker, Podman, sudo-less) | the kernel mounts the layout | native | Debian's own | needs user namespaces, which Android blocks |
 | **deb-native** | the prefix is a real Debian tree; programs find it through `ld-dn` and an in-process path shim | native; the tracer only for static programs, raw syscalls, NSS | the prefix's own sources, database and base (Termux's apt/dpkg binaries) | no |
+
+## Contents
+
+- [What that buys](#what-that-buys)
+- [What it costs](#what-it-costs)
+
+## Related docs
+
+- [`vs-sudo-less.md`](vs-sudo-less.md) — the structured, per-concern diff
+  against sudo-less, the one entry in this doc's table solving the exact
+  same problem on a different host.
+- [`prior-art.md`](prior-art.md) — sudo-less and proroot in more depth,
+  including what carries over and what's blocked on Android.
+- [`design.md`](design.md) — why deb-native's own mechanism (the shim,
+  `ld-dn`, the tracer) works the way the table's last row says.
 
 ## What that buys
 

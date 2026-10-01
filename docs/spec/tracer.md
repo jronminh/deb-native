@@ -1,11 +1,38 @@
 # The tracer: `dn-trace`
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 What the syscall tracer is for now that ld-dn exists, how it was measured,
 and what is still open. Living doc, not per-release — last major update
 2026-09-27 on `dev-0.2.0`, tested on `fe2`. Code: [`../../tracer/`](../../tracer/) (its
 [`README.md`](../../tracer/README.md) keeps the per-file prune list);
 earlier background: [`direct-usage.md`](direct-usage.md),
 [`bind-only.md`](bind-only.md), [`syscall-boundary.md`](syscall-boundary.md).
+
+## Contents
+
+- [Where it sits](#where-it-sits)
+- [What changed in 0.2.0](#what-changed-in-020)
+- [Tests](#tests)
+- [Measurements](#measurements)
+- [Open](#open)
+
+## Related docs
+
+- [`direct-usage.md`](direct-usage.md), [`bind-only.md`](bind-only.md),
+  [`syscall-boundary.md`](syscall-boundary.md) — the earlier background
+  (investigation, bind-only audit, the boundary map).
+- [`android-platform.md`](android-platform.md) — the Android enforcement
+  gates this tracer's SIGSYS emulation works around.
+- [`path-shim.md`](path-shim.md) — the shim this tracer is the fallback
+  for.
 
 ## Where it sits
 

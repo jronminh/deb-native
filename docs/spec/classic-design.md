@@ -1,5 +1,14 @@
 # The classic design: separate prefix, static wrappers, no namespaces
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 The pre-0.2.0 approach: reuse Termux's apt/dpkg via plain relocation
 flags (no own database), and static per-binary wrappers instead of a
 kernel view. Superseded in large part by
@@ -9,6 +18,24 @@ its own apt/dpkg database) and by the shim
 this section's wrapper-generation direction never got built for) —
 kept as the record of the proposal and the research it did settle
 (Direction 3 is still the project's only writing on services).
+
+## Contents
+
+- [Install path: reuse Termux's apt/dpkg, don't fork them](#install-path-reuse-termuxs-aptdpkg-dont-fork-them)
+- [Direction 2: static per-binary wrappers (replaces the "view")](#direction-2-static-per-binary-wrappers-replaces-the-view)
+- [Triggering Direction 2's wrapper generation: apt/dpkg hooks, not a patch](#triggering-direction-2s-wrapper-generation-aptdpkg-hooks-not-a-patch)
+- [Direction 3 (research): services without systemd](#direction-3-research-services-without-systemd)
+
+## Related docs
+
+- [`design.md`](design.md) — the doc this was split out of; the 0.2.0
+  pivot that superseded most of the install-path content here.
+- [`path-shim.md`](path-shim.md) — the shim that replaced Direction 2's
+  wrapper-generation approach for hardcoded-path packages.
+- [`native-reuse.md`](native-reuse.md) — the two-layer database idea
+  this doc's "Install path" section introduces.
+- [`prior-art.md`](prior-art.md) — sudo-less's own view/wrapper mechanism
+  this doc's directions are a static substitute for.
 
 ## Install path: reuse Termux's apt/dpkg, don't fork them
 

@@ -1,9 +1,34 @@
 # The deb-native standard (spec v1)
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 What `deb-native` supports, and how a claim about a package is written down
 and proved. The mechanism is in [`design.md`](design.md); the function-level
 coverage is measured in [`shim-coverage.md`](shim-coverage.md). The model is
 `sudo-less`'s `docs/standard.md`, adapted to Android.
+
+## Contents
+
+- [Triage, not universal support](#triage-not-universal-support)
+- [Scope](#scope)
+- ["Supported" is proved, not predicted](#supported-is-proved-not-predicted)
+- [Versioning](#versioning)
+
+## Related docs
+
+- [`design.md`](design.md) — the mechanism that makes a package meet
+  this standard.
+- [`shim-coverage.md`](shim-coverage.md) — the function-level coverage
+  this standard's claims are measured against.
+- [`vs-sudo-less.md`](vs-sudo-less.md) — sudo-less's own
+  `docs/standard.md`, the model this one is adapted from.
 
 ## Triage, not universal support
 

@@ -1,11 +1,38 @@
 # The path-redirect shim: design and delivery
 
+> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> (fix the relative path to match this file's depth). Read a doc's
+> summary and table of contents below before its sections, and read
+> its directory's own `README.md` first to confirm this is the right
+> doc to open. Create a new doc, instead of extending an existing
+> one, when the content is a distinct kind of writing -- a new spec
+> topic, a new one-off investigation, or a new guide -- not just a
+> long addition to what a doc already covers.
+
 How `native/path-redirect.c` fakes the Debian layout without a kernel
 view — the one gap left once everything else (dynamic linker search
 path, interpreter module paths, the ELF interpreter itself) was already
 solved elsewhere — and the ways a glibc target can actually be made to
 load it. Split out of [`design.md`](design.md) (it was the single
 largest section there).
+
+## Contents
+
+- [Faking the Debian layout with our own shim (no kernel view)](#faking-the-debian-layout-with-our-own-shim-no-kernel-view)
+- [Delivering the shim — "mimicking preload"](#delivering-the-shim-mimicking-preload)
+
+## Related docs
+
+- [`design.md`](design.md) — the doc this was split out of; the current,
+  live design overview.
+- [`shim-coverage.md`](shim-coverage.md) — which libc entry points the
+  shim built here actually covers, measured against a package corpus.
+- [`syscall-boundary.md`](syscall-boundary.md) — what this shim cannot
+  reach at all (static binaries, raw syscalls, libc-internal NSS).
+- [`classic-design.md`](classic-design.md) — Direction 2's wrapper
+  generation, which this doc's "Open work" items point into.
+- [`prior-art.md`](prior-art.md) — the view this shim replaces, and
+  sudo-less's own "no shims needed" framing it responds to.
 
 ## Faking the Debian layout with our own shim (no kernel view)
 
