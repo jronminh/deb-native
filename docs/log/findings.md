@@ -1122,3 +1122,65 @@ confirmed no `binfmt_misc` escape hatch on this device) — everything else
 patched today is worth re-checking against this question before assuming
 it has to stay static.
 
+## Findings: `apt install gcc` end to end -- two real bugs, one confirmed gap (2026-10-01)
+
+Testing the Alpha goal's "Compilers" item directly (`apt install gcc`,
+compile, run) rather than reasoning from the glibc-build groundwork alone
+surfaced two real bugs immediately, both fixed, plus a confirmation of an
+already-known packaging gap.
+
+**Bug 1: an already-bootstrapped prefix breaks when the repo's `scripts/`
+layout changes underneath it.** `setup-apt-prefix.sh` writes the prefix's
+`apt.conf` once, at bootstrap time, with absolute paths to the exact
+checkout state at that moment (`DPkg::Pre-Install-Pkgs`,
+`APT::Update::Post-Invoke-Success`, ...). Nothing regenerates it for an
+existing prefix -- `install.sh`'s "refreshing the existing prefix" branch
+calls `setup-runtime.sh`/`make-launchers.sh`/`make-apt-wrappers.sh`/
+`dn-activate.sh`, never `setup-apt-prefix.sh` again. A prefix bootstrapped
+before this session's `scripts/` reorg (flat -> `bootstrap`/`install`/
+`runtime`/...) had its hooks pointing at paths that no longer exist;
+`apt update` failed outright (`Post-Invoke-Success` script not found).
+Not unique to this reorg -- any future script move hits the same wall for
+anyone who already has a prefix. Worked around for this test session by
+deleting and re-bootstrapping; **not fixed as an architectural issue** --
+see `TODO.md` for the open item (candidates: have `termux-dn-doctor`
+detect and rewrite stale hook paths, or have the "refresh" path also
+rewrite just the hook lines of an existing `apt.conf`).
+
+**Bug 2 (the real find): apt-driven installs never see `$DN/usr/bin` on
+`PATH` for maintainer scripts, so anything only shipped there fails "not
+found".** `gcc`'s dependency `cpp` failed installing with `preinst: 4:
+dpkg-maintscript-helper: not found`, exit 127 -- `dpkg-maintscript-helper`
+is a plain POSIX-sh script `dn-standins.sh`'s `dpkg` stand-in already
+extracts from Debian's real `dpkg` `.deb` into `$DN/usr/bin` (not a new
+gap; already handled, correctly). Root cause, found by instrumenting a
+copy of `cpp`'s actual `preinst` with `set -x; env` and installing it
+directly: apt forks dpkg via its own compiled-in `Dir::Bin::dpkg` default
+(Termux's real `/usr/bin/dpkg`), **not** the project's own
+`launcher()`-generated `$DN/usr/bin/dpkg` wrapper that sets
+`PATH="$DN/usr/bin:$DN/usr/sbin:$PATH"` before exec'ing it -- confirmed by
+`apt-config dump` showing `Dir::Bin::dpkg
+"/data/data/com.termux/files/usr/bin/dpkg"` with no override in the
+prefix's own `apt.conf`. Running the exact same `.deb` through
+`$DN/usr/bin/dpkg` directly (not via apt) succeeds -- same package, same
+maintainer script, the only difference is which process tree invoked it.
+
+**Fix:** `DPkg::Path "$DN/usr/bin:$DN/usr/sbin:$TP/bin";` in the prefix's
+own `apt.conf` (`setup-apt-prefix.sh`). Confirmed empirically (Termux's
+own apt already ships a `DPkg::Path` default pointing at its own
+`$PREFIX/bin`, which is what led to testing this key rather than
+`Dir::Bin::dpkg` itself) -- `apt-config dump` shows it's read independent
+of `Dir::Bin::dpkg`, and a full `apt install gcc` after adding it unpacks
+and configures `cpp`/`gcc` and every other dependency with zero manual
+intervention, reproduced from a fresh bootstrap.
+
+**Confirmed, not a bug: `libc6-dev` has no installation candidate.**
+`apt install libc6-dev` fails outright ("no installation candidate") --
+Debian's real `libc6-dev` is versioned against stock `libc6 (=
+2.41-12+deb13u4)`, exact match, and this prefix's `libc6` is the project's
+own `2.41-12+deb13u4+dn1` build. This is `TODO.md`'s already-known
+"package the rest: `libc6-dev`/`libc-bin`/`locales`" item, now confirmed
+as the actual, reproducible blocker on `gcc -c hello.c` (`stdio.h: No such
+file or directory`) rather than an inferred one -- `gcc`/`cpp`/`binutils`
+themselves install and configure cleanly; only the headers are missing.
+
