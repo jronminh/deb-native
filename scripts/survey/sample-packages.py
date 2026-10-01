@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw a random, reproducible sample of Debian packages for scripts/survey.sh,
+"""Draw a random, reproducible sample of Debian packages for scripts/survey-apt.sh,
 mirroring sudo-less's own survey methodology (docs/survey-2026-09.md):
 leave out required/important/standard-priority packages (base install,
 not what a user installs by hand), metapackages, transitional/dummy
@@ -11,7 +11,7 @@ Usage:
     scripts/sample-packages.py Packages > sample.tsv
 
 Output: "section<TAB>package<TAB>pool/path/to/file.deb" lines, ready for
-scripts/survey.sh. At most 2 packages per section, capped at N total
+scripts/survey-apt.sh. At most 2 packages per section, capped at N total
 (default 30 — small enough to actually run in one sitting; sudo-less's
 own real-installation round used 129).
 """

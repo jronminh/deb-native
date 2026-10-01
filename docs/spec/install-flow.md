@@ -36,82 +36,98 @@ mechanisms each step installs are documented in
 
 ## The sequence
 
-1. **Runtime first, before dpkg touches anything.** `apt-hook-pre.sh:27` runs
-   `setup-runtime.sh` on every install (also from `patch-deb.sh:27` and
-   `patch-maintainer-scripts.sh:42`). It builds/installs:
-   - the **shim** `path-redirect.so` (`setup-runtime.sh:37`, glibc layer);
-   - **`dn-run`** (`:45`), the launch classifier, and **`dn-shell`/`dn-perl`**;
+This is `setup-apt-prefix.sh`'s own bootstrap, stage by stage (its `mark
+stage` lines name each one) — not a per-install sequence; a prefix only
+goes through this once.
+
+1. **Runtime first, before anything else.** `setup-apt-prefix.sh` calls
+   `setup-runtime.sh` directly, before the prefix's own dpkg database
+   even exists. It builds/installs:
+   - the **shim** `path-redirect.so` (glibc layer);
+   - **`dn-run`**, the launch classifier, and **`dn-shell`/`dn-perl`**;
    - the **tracer** as `dn-trace` when `make` and `libtalloc` are present;
      without it, `dn-run` warns and runs those programs untranslated (no
      fallback to Termux's `proot`).
    Ordering is load-bearing: maintainer scripts run during dpkg's `--unpack`,
-   so the interpreter and shim must already exist.
+   so the interpreter and shim must already exist before the base is
+   unpacked below.
 
-2. **Patch each `.deb` inside the archive, before unpack.** `apt-hook-pre.sh`
-   → `patch-deb.sh` rewrites control scripts (shebang → the `dn-shell`
-   wrapper, hardcoded paths) because a package's `preinst` runs during
-   `--unpack`, before any post-unpack step could see it. After unpack,
-   `patch-elfs.sh` (`apt-hook-post.sh:15`, and per package in
-   `apt-install.sh:60`) repoints each new ELF's interpreter at Termux glibc,
-   and `patch-maintainer-scripts.sh` re-sweeps once the wrapper exists.
+2. **Stand-ins, then the base, downloaded and translated as a batch.**
+   `dn-standins.sh` installs the `libc6`/`dpkg`/`apt` stand-ins into a
+   throwaway apt config; `apt-get --download-only` then resolves and
+   fetches the base package set. Each downloaded `.deb` is translated in
+   parallel by `dn-translate-deb.sh` directly (the prefix's own apt hooks
+   don't exist yet at this point in the bootstrap) — `Architecture: all`
+   -> `arm64`, ELF interpreter -> `ld-dn`, maintainer-script shebangs ->
+   `dn-shell`, per-package fixes from `custom/`.
 
-3. **Seed the native side.** `native-seed.sh` (`setup-apt-prefix.sh:71`)
-   writes stubs into the prefix's dpkg status so Debian's `Depends: libc6,
-   libssl3, …` are satisfied by Termux's `*-glibc` packages instead of being
-   reinstalled. This is the "native" in deb-native: one libc, reused.
+3. **Unpack, then configure, the whole base in one dpkg call.** `dpkg
+   --unpack` on every translated base `.deb` (libraries first, tools
+   next, strict Pre-Depends order), then one `dpkg --configure -a` —
+   every file of the base is already on disk before any `postinst` runs,
+   since Debian never declares its own Essential tools as dependencies.
+   The base set is then held. `dn-fix-alternatives.sh` and
+   `normalize-symlinks.sh` run once over the result.
 
-4. **Bootstrap the base as one transaction.** `bootstrap-base.sh` installs
-   `mawk base-files base-passwd dash debianutils debconf cdebconf openssl
-   ca-certificates` via `apt-install.sh`'s three phases:
-   download-only (apt resolves the graph) → patch each `.deb` →
-   unpack / `patch-elfs` / re-patch scripts / configure **one package at a
-   time in apt's order** (strict Pre-Depends like base-files→awk need this).
+4. **Write the prefix's permanent apt config and wire the hooks.** From
+   here on, the prefix's own `apt.conf` has `DPkg::Pre-Install-Pkgs` ->
+   `dn-hook-pre.sh` and `DPkg::Post-Invoke` -> `dn-hook-post.sh`, so every
+   later install — through `apt-install.sh`, a user's own `apt install`,
+   or a direct `dpkg -i` via the routing wrapper — goes through them
+   automatically; see "The apt/dpkg hooks" below.
 
-5. **Finalize and activate.** `make-launchers.sh` (wrappers; also tags NSS and
-   direct-syscall binaries), `make-apt-wrappers.sh` (arch-aware apt/dpkg),
-   `dn-activate.sh` (PATH), and `normalize-symlinks.sh`. Normalization runs
-   from **`apt-hook-post.sh`** and from `apt-install.sh`, so any apt/dpkg
-   install — not just `install.sh` — keeps the tree bind-only-safe.
+5. **Finalize and activate.** `make-launchers.sh` (wrappers; also tags
+   NSS and direct-syscall binaries), `make-apt-wrappers.sh` (`termux-apt`/
+   `termux-dpkg`/`termux-dn-doctor`/`dn-adopt`), and `dn-activate.sh`
+   (the `~/.bashrc` block, PATH).
 
-6. **Now `apt-get install` works.** The apt.conf hooks
-   (`setup-apt-prefix.sh:67-68`, `DPkg::Pre-Install-Pkgs` / `Post-Invoke`) keep
-   steps 1–2 and launcher regeneration wired for every later install.
+6. **Now `apt install` works, for anything after this point.** A
+   subsequent `apt-install.sh PREFIX pkg` is a plain `apt-get install -y`
+   — all the translation logic lives in the hooks wired in step 4, not in
+   `apt-install.sh` itself.
 
 ## Three clarifications
 
-- **Not a manual patch.** Patching is automatic via the apt hooks;
-  `apt-install.sh` also patches explicitly as a safety net. "Base" is just the
-  one-transaction bootstrap set (`bootstrap-base.sh`).
+- **Not a manual patch.** Patching is automatic via the apt hooks from
+  step 4 onward; the bootstrap's own base install (steps 2–3) runs the
+  same translation directly, before those hooks exist to run it.
 - **Not an overlay.** There is **no overlay / mount namespace** — user
   namespaces are off kernel-wide (`TODO.md`, "Blocked"). It is a
   **Debian-layout directory prefix** made transparent by three mechanisms:
   patched maintainer scripts, the `LD_PRELOAD` shim, and the syscall tracer.
 - **"Native" ≠ custom libc.** It means reusing **Termux's glibc side-install**
-  (glibc + `*-glibc` packages) via `native-seed.sh`, not shipping a second
-  one. Nothing is prebuilt-and-shipped either: the shim and `dn-trace` are
-  built from source on-device; Termux's `proot` is not used.
+  (glibc + `*-glibc` packages) for the `libc6` stand-in, not shipping a
+  second one. Nothing is prebuilt-and-shipped either: the shim and
+  `dn-trace` are built from source on-device; Termux's `proot` is not used.
+  (`native-seed.sh`'s own stub-database approach is the pre-0.2.0 classic
+  design's version of this idea — see
+  [`classic-design.md`](classic-design.md) and
+  [`native-reuse.md`](native-reuse.md) — superseded here by the real
+  `libc6` stand-in itself satisfying the dependency.)
 
-One-liner: **runtime (shim + `dn-run` + tracer) → auto-patch each `.deb` →
-seed native glibc deps → bootstrap base in one transaction → wire
-launchers/apt/PATH → any `apt-get install` works.**
+One-liner: **runtime first → stand-ins + base, downloaded and translated
+as a batch → unpack/configure the base once, held → write the permanent
+apt config and wire the hooks → launchers/apt/PATH → any `apt install`
+works from here on.**
 
 ## The apt/dpkg hooks
 
-`setup-apt-prefix.sh` wires two hooks into `apt.conf`
-(`DPkg::Pre-Install-Pkgs` / `DPkg::Post-Invoke`); the generated `dpkg` wrapper
-calls the same two scripts for a direct `dpkg -i`:
+`setup-apt-prefix.sh` wires two hooks into the prefix's `apt.conf`
+(`DPkg::Pre-Install-Pkgs` / `DPkg::Post-Invoke`); the generated `dpkg`
+wrapper calls the same two scripts for a direct `dpkg -i`:
 
-- **`apt-hook-pre.sh`** — builds the runtime (`setup-runtime.sh`) and patches
-  every `.deb` (`patch-deb.sh`) *before* dpkg unpacks it.
-- **`apt-hook-post.sh`** — `patch-elfs.sh` → `normalize-symlinks.sh` →
-  `make-launchers.sh`. Never fails the transaction.
+- **`dn-hook-pre.sh`** — translates every incoming `.deb`
+  (`dn-translate-deb.sh`) before dpkg unpacks it, and refuses one that
+  would overwrite a file no package owns (deb-native's own runtime or
+  launchers).
+- **`dn-hook-post.sh`** — `dn-fix-alternatives.sh` -> `normalize-symlinks.sh`
+  -> `make-launchers.sh`. Never fails the transaction.
 
-`normalize-symlinks.sh` was **added to the post hook (2026-09-26)**: the
-bind-only tracer needs a normalized tree, and without it an apt/dpkg install
-that did not go through `install.sh` left absolute symlinks the tracer would
-resolve against the real host root. Verified: `apt-get install sysvbanner`
-through the wrapper logs the patch, the normalize, and the launcher regen, and
-`banner` then runs by name.
+`normalize-symlinks.sh` runs after **every** install this way, not just
+`install.sh`'s own bootstrap: the bind-only tracer needs a normalized
+tree, and without it an absolute symlink from a package installed outside
+`install.sh` would resolve against the real host root instead of the
+prefix.
 
 ## End-to-end test
 

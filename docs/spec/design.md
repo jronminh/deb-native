@@ -97,7 +97,7 @@ an app no namespace "view" to fake paths with.
 |---|---|
 | `libc6` | stand-in: a real package whose files are links at Debian's libc paths into Termux's glibc (`$PREFIX/glibc/lib`). Debian's own `libc6` is killed by Android's seccomp filter at startup; Termux's glibc is the same library patched for Android at source level. Version = Termux's glibc version. |
 | `dpkg`, `apt` | stand-ins for Termux's own `dpkg`/`apt`, versioned like Termux's, so `Depends: dpkg (>= ...)` is satisfied |
-| `mawk`, `base-files`, `base-passwd`, `dash`, `debianutils`, `debconf`, `cdebconf`, `openssl`, `ca-certificates` | Debian's own (the `bootstrap-base.sh` set), translated at install, then **held** |
+| `mawk`, `base-files`, `base-passwd`, `dash`, `debianutils`, `debconf`, `cdebconf`, `openssl`, `ca-certificates` | Debian's own, translated at install, then **held** |
 
 A separate database has no name clashes with Termux, so, unlike `naibed`,
 `dash`, `openssl` and `ca-certificates` are Debian's own packages. Only
