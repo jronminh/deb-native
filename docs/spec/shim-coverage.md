@@ -19,7 +19,7 @@ the design is [`path-shim.md`](path-shim.md).
 - [The universe](#the-universe)
 - [Method](#method)
 - [Results](#results)
-- [Open question (2026-09-30): the five-prefix view may be too narrow](#open-question-2026-09-30-the-five-prefix-view-may-be-too-narrow)
+- [Resolved (2026-10-01): `/lib`, `/bin`, `/sbin` added; `/run`, `/lib64` still open](#resolved-2026-10-01-lib-bin-sbin-added-run-lib64-still-open)
 - [Next steps](#next-steps)
 
 ## Related docs
@@ -244,31 +244,38 @@ libc layer can be.** The wider boundary — inline `svc #0`, static executables,
 explicit `syscall()`, and the `PT_INTERP` routing gap in `dn-run.c` — is mapped
 and measured in [`syscall-boundary.md`](syscall-boundary.md).
 
-## Open question (2026-09-30): the five-prefix view may be too narrow
+## Resolved (2026-10-01): `/lib`, `/bin`, `/sbin` added; `/run`, `/lib64` still open
 
-`native/path-redirect.c`'s `rewrite()` only dispatches on 5 top-level
-prefixes: `/usr`, `/etc`, `/var`, `/opt`, `/root` (dispatched by the path's
-second byte, `path-redirect.c:139-155`). Anything else passes through
-unrewritten to the real Android root. Two concrete gaps found by inspection,
-not yet measured against the corpus:
+The five-prefix view (`/usr`, `/etc`, `/var`, `/opt`, `/root`) turned out too
+narrow in practice, not just by inspection: `apt install gcc` end to end
+(`docs/log/findings.md`, 2026-10-01) hit it directly — `ld` failed with
+`cannot find /lib/aarch64-linux-gnu/libc.so.6` because `gcc`'s own linker
+invocation hardcodes `-dynamic-linker /lib/ld-linux-aarch64.so.1` and searches
+`/lib/aarch64-linux-gnu` regardless of how the package that shipped it spells
+paths internally. That is exactly the "program hardcodes the literal `/bin/x`
+or `/lib/x.so`" gap predicted below, just surfaced by the compiler toolchain
+instead of found by corpus inspection first.
 
-- **`/bin`, `/sbin`, `/lib`, `/lib64`** — on real Debian (usrmerge) these are
-  symlinks into `/usr/...`, so a program that spells the path as `/usr/bin/x`
-  is already covered. But a program that hardcodes the literal `/bin/x` or
-  `/lib/x.so` (common — plenty of software predates or ignores usrmerge) is
-  not: it doesn't match any of the 5 cases. The shim already special-cases
-  `/bin/sh`, `/bin/dash`, `/bin/bash`, `/bin/perl` for **execve only**
-  (`path-redirect.c:307-313`) — that is a narrow, execve-specific carve-out,
-  not general `open()`/`stat()` coverage of the `/bin` etc. prefixes.
+Fix: `path-redirect.c`'s `rewrite()` now also dispatches `/lib` and `/bin`
+(second byte `'l'`/`'b'`, default `prelen = 4`) and `/sbin` (second byte
+`'s'`, `prelen = 5` like `/root`) — none collide with the existing five.
+These three are Debian's merged-usr symlinks into `/usr/{lib,bin,sbin}`
+anyway (the prefix's own `base-files` sets them up the same way, confirmed:
+`$DN/bin -> usr/bin`, `$DN/lib -> usr/lib`, `$DN/sbin -> usr/sbin`), so
+redirecting the literal prefix and then following the real symlink lands in
+the same place `/usr/...` already did — this completes that existing
+coverage rather than adding a new one. `/bin/sh` etc.'s execve-specific
+carve-out (`path-redirect.c:307-313`, line numbers now shifted by this
+addition) is unaffected and still separately necessary (execve, not
+open/stat).
+
+Still open, deliberately not added yet (no measured need so far):
+
+- **`/lib64`** — not used on Debian arm64 (that's an x86_64 convention); no
+  evidence it's needed here.
 - **`/run`** — modern packages (systemd-era sockets, PID files) commonly use
-  `/run/...` directly rather than `/var/run/...`. Not covered either.
-
-Before adding these as new cases: measure real occurrence against the
-existing 258-package corpus the same way `shim-coverage.md`'s "Results"
-section already did for the current 5, rather than adding cases blind. The
-dispatch trick (switch on path's second byte) stays cheap as long as new
-prefixes don't collide in their second letter with an existing case; check
-before adding.
+  `/run/...` directly rather than `/var/run/...`. Add if and when something
+  actually hits it, same as `/lib` above — don't add blind.
 
 ## Next steps
 

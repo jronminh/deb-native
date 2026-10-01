@@ -140,10 +140,16 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
   if (!g_init) dn_init();
   if (!g_root || !path || path[0] != '/') return path;
 
-  /* Only /usr, /etc, /var, /opt and /root qualify; dispatch on the second
-   * byte so a non-matching path costs one compare instead of five
-   * strncmp()s. /root: the prefix's root links to Termux's home (base-passwd's
-   * only user is root, and maintainer scripts write to its home). */
+  /* Only /usr, /etc, /var, /opt, /root, /lib, /bin and /sbin qualify;
+   * dispatch on the second byte so a non-matching path costs one compare
+   * instead of eight strncmp()s. /root: the prefix's root links to Termux's
+   * home (base-passwd's only user is root, and maintainer scripts write to
+   * its home). /lib, /bin, /sbin: Debian's merged-usr symlinks into
+   * /usr/{lib,bin,sbin} (setup.sh creates the same symlinks inside the
+   * prefix) -- without this, anything that hardcodes the non-merged path
+   * (e.g. libc6-dev's /lib/<triplet>/libc.so linker script) misses the
+   * prefix entirely instead of following the symlink, because the path
+   * never gets to $DN in the first place (docs/log/findings.md, 2026-10-01). */
   const char *pre;
   size_t prelen = 4;
   switch (path[1]) {
@@ -152,6 +158,9 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
     case 'v': pre = "/var"; break;
     case 'o': pre = "/opt"; break;
     case 'r': pre = "/root"; prelen = 5; break;
+    case 'l': pre = "/lib"; break;
+    case 'b': pre = "/bin"; break;
+    case 's': pre = "/sbin"; prelen = 5; break;
     default: return path;
   }
   if (strncmp(path, pre, prelen) != 0) return path;

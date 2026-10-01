@@ -1204,3 +1204,86 @@ automatically. Verified: fresh bootstrap, all three show `hold ok
 installed`; `apt full-upgrade -y --dry-run` no longer proposes touching
 any of them.
 
+## Findings: closing the `libc6-dev` gap -- no version bump, not a custom package (2026-10-01)
+
+Following up the "confirmed, not a bug" item above: first tried packaging a
+custom `libc6-dev` too (own build's headers/static libs over Debian's real
+package as a template, same technique as `dn-package-glibc.sh`). Got it
+working -- built, installed, `gcc -c` found `stdio.h` -- but this is the
+wrong direction: it only moves the exact-version-match wall one package
+down the dependency graph (`libc-dev-bin`, then whatever depends on
+*that* at an exact version, indefinitely -- a patch chain with no natural
+end).
+
+**Real fix: don't version-bump the custom `libc6` build at all.**
+`dn-package-glibc.sh` previously appended `+dn1` to the version string
+pulled from the real Debian `.deb` template; removed. Our own build is
+the *same* upstream source plus the *same* Debian patch series plus one
+more patch that only changes what's needed to run under Android's
+seccomp filter (`third_party/glibc-android-patches/`) -- it doesn't stop
+being "glibc 2.41-12+deb13u4", so claiming a different version was never
+accurate, and it was the only thing standing between `libc6-dev`'s
+`Depends: libc6 (= 2.41-12+deb13u4)` and a true match. With the suffix
+gone, Debian's real `libc6-dev`/`libc-dev-bin` install **unmodified**,
+straight from the archive -- no custom packaging script needed for either
+(deleted the one just built). Held via the same mechanism as `libc6`
+itself (`dn-standins.sh`/this script's caller), so `apt upgrade` can't
+silently swap it for Debian's real, unpatched `libc6` later.
+
+That alone wasn't enough: `apt install libc6-dev` still failed with "no
+installation candidate" even after rebuilding `libc6` without the suffix.
+Cause: `setup-apt-prefix.sh`'s `write_pins()` pins `libc6-dev:arm64` and
+`libc-dev-bin:arm64` to priority -1 against both Debian mirrors -- a
+leftover from when the plan was still "patch every related package",
+written before this version-match approach existed. Removed both names
+from the `PINNED` list (and hand-patched the live test prefix's existing
+`etc/apt/preferences.d/deb-native` to match, since pins are written once
+at bootstrap). `libc-bin`/`libc-l10n`/`locales` stay pinned for now --
+same reasoning likely applies once `libc6`'s version matches, but
+untested, and `libc-bin` ships `ldconfig`, which has its own known
+seccomp quirk (`TODO.md`, 0.5.0) worth checking on its own before
+assuming it's as simple as `libc6-dev` turned out to be.
+
+## Findings: `gcc -o hello hello.c` -- the shim's `/lib` gap, and a separate `PT_INTERP` wall (2026-10-01)
+
+With `libc6-dev` installed, `gcc -c hello.c` succeeded (the actual
+blocker from the entry above), but `gcc -o hello hello.c` (compile +
+link) failed: `ld: cannot find /lib/aarch64-linux-gnu/libc.so.6`. `gcc`'s
+linker invocation hardcodes `-dynamic-linker /lib/ld-linux-aarch64.so.1`
+and searches `/lib/aarch64-linux-gnu` directly (confirmed with `gcc -v`),
+regardless of how `libc6-dev`'s own files spell paths internally. This is
+exactly the "`/bin`, `/sbin`, `/lib`" gap `shim-coverage.md` had flagged
+as an open question since 2026-09-30 but left unmeasured -- now measured,
+by the compiler toolchain instead of by corpus inspection first.
+
+Considered two fixes: a "full view" (redirect every top-level path
+through the shim, matching a real chroot more closely) vs. extending the
+existing targeted dispatch with just the three missing merged-usr
+aliases. Chose the latter (full detail: `docs/spec/shim-coverage.md`'s
+now-resolved "the five-prefix view may be too narrow" section) --
+`native/path-redirect.c`'s `rewrite()` now also dispatches `/lib`, `/bin`
+(second byte `'l'`/`'b'`, default `prelen = 4`) and `/sbin` (`'s'`,
+`prelen = 5`); none collide with the existing five. These are Debian's
+own merged-usr symlinks into `/usr/{lib,bin,sbin}`, which the prefix's
+`base-files` already sets up identically inside `$DN`, so this completes
+the existing `/usr` coverage rather than adding new scope. Verified: `ld`
+now finds `libc.so.6` and links `hello` successfully, no errors.
+
+**Separate, not yet fixed: running the freshly-linked `hello` fails at
+the kernel level**, `cannot execute: required file not found` --
+`PT_INTERP` on a plain `gcc`-produced binary is the literal
+`/lib/ld-linux-aarch64.so.1` string `ld` wrote into it, and the kernel
+resolves `PT_INTERP` itself at `execve()` time, before any userspace
+code (the shim included) runs -- so the `/lib` redirect above, which
+works at the libc-call layer, cannot reach this. This is the same
+problem `native/ld-dn.c` exists to solve for installed Debian packages
+(their `PT_INTERP` gets pointed at `ld-dn.c`'s real, resolvable path as
+part of the install pipeline), but a binary freshly built with `gcc`
+inside the prefix was never put through that step -- it's a new,
+distinct gap (compiling *inside* the prefix, not just installing
+pre-built `.deb`s into it), not yet designed or fixed. Flagged for the
+user rather than solved inline: fixing it means deciding how (a linker
+wrapper that passes `-dynamic-linker <real ld-dn path>`, a post-link
+`patchelf` step, or something else), which is an architecture call like
+the `/lib` one above, not a one-line follow-on.
+

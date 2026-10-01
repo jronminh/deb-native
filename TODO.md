@@ -26,13 +26,20 @@ own-glibc patch is written, forked, and validated (clean-room rebuild,
 that's what "Compilers" below is still waiting on.
 
 **Open**:
-- **Compilers**: `apt install gcc` now installs and configures cleanly
-  (`gcc`/`cpp`/`binutils` and their whole dependency chain, verified
-  2026-10-01, `docs/log/findings.md`) -- the one remaining blocker is
-  packaging `libc6-dev` (same approach as 0.5.0's `libc6`; see that
-  section), confirmed as the actual gap: `gcc -c hello.c` fails on
-  `stdio.h: No such file or directory`, nothing else. `make` untested;
-  `ghc`/`rustc` as a bonus, unresearched.
+- **Compilers**: `apt install gcc` installs and configures cleanly
+  (`gcc`/`cpp`/`binutils` and their whole dependency chain), `libc6-dev`
+  now installs unmodified from Debian's real archive (no custom
+  packaging needed -- `dn-package-glibc.sh` keeps the own-built `libc6`'s
+  version string an exact match instead, `docs/log/findings.md`
+  2026-10-01), and `gcc -c hello.c` / `gcc -o hello hello.c` both compile
+  clean after extending the shim's redirect scope to `/lib`/`/bin`/`/sbin`
+  (`docs/spec/shim-coverage.md`, same date). Remaining blocker: running
+  the linked binary fails at the kernel level (`PT_INTERP` on a freshly
+  `gcc`-built ELF points at a literal, unresolvable
+  `/lib/ld-linux-aarch64.so.1`, same problem `native/ld-dn.c` solves for
+  installed `.deb`s but not yet for binaries built *inside* the prefix --
+  `docs/log/findings.md` has the detail, fix approach undecided). `make`
+  untested; `ghc`/`rustc` as a bonus, unresearched.
 - **Popular languages**: `python3` + a C-extension package, `perl` + an XS
   module, `ruby`, `nodejs` — incl. the Perl version gap (`dn-perl` still
   uses Termux's 5.42; trixie's `perl` builds modules for 5.40, no fix yet).
@@ -295,7 +302,7 @@ loader to work, not investigated further).
 
 **`libc6` packaged and installed, 2026-10-01**: the validated patch is
 now the prefix's actual, running `libc6` — `dpkg -l libc6` shows `ii
-2.41-12+deb13u4+dn1`, replacing `dn-standins.sh`'s Termux-glibc stand-in.
+2.41-12+deb13u4`, replacing `dn-standins.sh`'s Termux-glibc stand-in.
 [`scripts/bootstrap/dn-package-glibc.sh`](scripts/bootstrap/dn-package-glibc.sh) builds it:
 real Debian `libc6.deb` as a template (its maintainer
 scripts/triggers/symbols/doc are still accurate, reused as-is), payload
@@ -308,11 +315,20 @@ in [`third_party/glibc-android-patches/README.md`](third_party/glibc-android-pat
 Verified: NSS resolves real identities (`ls -l`), previously-installed
 packages keep running, the runtime-component-audit's regression battery
 (`find -exec test`, a fresh `apt-get install`) stays clean installing
-over the live prefix, not just in the scratch build dir. Scope was
-`libc6` only, per the user -- `libc6-dev`/`libc-bin`/`locales` still need
-their own packaging pass (this project's own build already produces the
-material for all three: headers/static libs, `ldconfig`/`iconv`/
-`locale`/..., locale data respectively).
+over the live prefix, not just in the scratch build dir.
+
+**`libc6-dev`/`libc-dev-bin` need no packaging pass at all, 2026-10-01**:
+first tried packaging them too (same template-and-replace approach as
+`libc6`), but that only pushes the exact-version-match wall one package
+down the dependency graph indefinitely -- a patch chain. The actual fix:
+`dn-package-glibc.sh` keeps the custom `libc6` build's version string an
+*exact* match to Debian's (no `+dn1` suffix, removed), since it's the
+same upstream source and Debian patch series plus one Android
+compatibility patch on top, not a different thing wearing the name. With
+that, `libc6-dev`/`libc-dev-bin`'s `Depends: libc6 (= ...)` sees a true
+match and both install straight from Debian's real archive, unmodified
+(`docs/log/findings.md`). `locales`/`libc-bin` likely work the same way
+but untested -- see Open below.
 
 **Considered, not now: split the glibc patch/build/packaging into its own
 repo** (2026-10-01), to become a real standalone Termux-glibc fork rather
@@ -321,26 +337,21 @@ currently retargets a hardcoded `deb-native`-specific prefix path
 (`/data/data/com.termux/files/home/.dn`, `set-dirs.patch`'s whole point),
 not a generic one, so the main benefit of splitting -- reuse by other
 projects -- doesn't exist yet; there is exactly one consumer. 0.5.0 also
-isn't done (`libc6-dev`/`libc-bin`/`locales` unpackaged, no CI pipeline)
--- splitting mid-design would mean syncing two repos through changes that
-are still settling. Revisit once either all four packages + a CI
-pipeline are in place, or a second real consumer wants this -- at that
-point, splitting is also the natural moment to generalize the hardcoded
-path instead of carrying it over as-is.
+isn't done (`libc-bin`/`locales` still pinned and untested, no CI
+pipeline) -- splitting mid-design would mean syncing two repos through
+changes that are still settling. Revisit once either that's settled plus
+a CI pipeline are in place, or a second real consumer wants this -- at
+that point, splitting is also the natural moment to generalize the
+hardcoded path instead of carrying it over as-is.
 
 **Open**:
-- **Package the rest**: `libc6-dev`/`libc-bin`/`locales`, same approach
-  as `libc6` (real Debian `.deb` as template, this project's own build
-  output as payload) -- `libc6-dev` is now the *only* confirmed blocker on
-  the Alpha goal's "Compilers" item: `apt install libc6-dev` has no
-  candidate (Debian's real one is pinned to stock `libc6 (=
-  2.41-12+deb13u4)`, an exact-version `Depends`, not this prefix's
-  `+dn1` build), and `gcc -c` fails solely on missing headers once
-  `gcc`/`cpp`/`binutils` are already installed (`docs/log/findings.md`,
-  2026-10-01). Hold each one the same way `libc6` is (`dn-standins.sh`'s
-  `install_pkg()` convention) -- they'll have the same exact-version tie
-  to the installed `libc6` that makes an `apt upgrade`-pulled real one
-  break them.
+- **`libc-bin`/`libc-l10n`/`locales`**: still pinned to -1 in
+  `setup-apt-prefix.sh` (unlike `libc6-dev`/`libc-dev-bin`, unpinned
+  2026-10-01). The same exact-version-match reasoning likely lets them
+  install unmodified too, once tried -- but `libc-bin` ships `ldconfig`,
+  which has its own known seccomp quirk (see the `dn-trace` Gate-A work
+  below), worth checking before assuming it's as simple as
+  `libc6-dev` turned out to be.
 - **Build pipeline**: cross-build in CI (too slow on-device for a real
   release cadence) instead of the on-device build this used -- needed
   for a repeatable release process, not for this validation.
@@ -593,6 +604,15 @@ not chased down.
   (`docs/log/android-seccomp-audit.md`). Same reasoning noted in
   `third_party/glibc-android-patches/README.md`'s manual recipe for when
   the real own-glibc build replaces the stand-in.
+- [x] ~~`path-redirect.c`'s shim only redirected `/usr`, `/etc`, `/var`,
+  `/opt`, `/root` -- `ld` couldn't find `/lib/aarch64-linux-gnu/libc.so.6`
+  linking a plain `gcc -o hello hello.c`~~ — fixed 2026-10-01: added
+  `/lib`, `/bin`, `/sbin` as three more redirected prefixes (Debian's own
+  merged-usr aliases for `/usr/{lib,bin,sbin}`, same symlinks the
+  prefix's `base-files` already sets up) — `docs/spec/shim-coverage.md`,
+  `docs/log/findings.md`. Running the resulting binary still fails
+  separately (`PT_INTERP` at the kernel level, not a shim-layer problem)
+  — tracked under "Compilers" above, not fixed yet.
 - [ ] Refresh `README.md`'s status numbers once the unfiltered survey
   (Alpha goal, above) reports.
 
