@@ -87,7 +87,7 @@ set -- "$ROOT"/etc/zz_mkstemp*
 [ -f "$1" ] || { echo "not created under root: mkstemp file"; fail=1; }
 if [ -e /etc/zz_creat ]; then echo "leaked into real /etc"; fail=1; fi
 
-# NSS probe result (see docs/shim-coverage.md): did glibc's nss_files backend
+# NSS probe result (see docs/spec/shim-coverage.md): did glibc's nss_files backend
 # reach the fake root's passwd/group through the interposed fopen? Reported,
 # not asserted, until the mechanism is confirmed.
 echo "NSS probe: $(grep -h '^NSS_' "$OUT" | tr '\n' ' ')"

@@ -1,8 +1,9 @@
 # dn-glibc-android.patch
 
 0.5.0's "own glibc" milestone 1 (see `TODO.md`'s 0.5.0 roadmap and
-`docs/android-seccomp-audit.md`'s "Termux's actual Android patch series"
-section for the full history). One combined, ready-to-apply patch that
+`docs/spec/android-platform.md`'s "Termux's Android glibc patch: catalog
+and fork verdict" section for the catalog; `docs/log/android-seccomp-audit.md`
+has the full investigation history). One combined, ready-to-apply patch that
 turns Debian's real, unmodified `glibc` source into a build that runs under
 deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
 
@@ -18,8 +19,8 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
   a direct on-device test, `android-seccomp-audit.md`).
 - **This patch:** forked from [`termux-pacman/glibc-packages`](https://github.com/termux-pacman/glibc-packages)
   (`gpkg/glibc/`, GPL-2.0+, same license as glibc itself). Per-file fork
-  verdict for all 54 loose files there is in `docs/android-seccomp-audit.md`,
-  "Full per-file fork verdict" — this patch carries every file marked
+  verdict for all 54 loose files there is in `docs/spec/android-platform.md`,
+  "Per-file verdict, everything in `gpkg/glibc/`" — this patch carries every file marked
   "fork" there. Highlights:
   - `set-dirs.patch`: `@TERMUX_PREFIX@`/`@TERMUX_PREFIX_CLASSICAL@`
     retargeted to this project's single fixed prefix,
@@ -56,15 +57,15 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
     this raw `.S` stub referenced `__NR_clone3` directly, outside the
     fakesyscall dispatch path, so it fails to assemble unless deleted.
     Found and fixed during the first on-device build
-    (`docs/android-seccomp-audit.md`, 2026-09-30), initially as a manual
+    (`docs/log/android-seccomp-audit.md`, 2026-09-30), initially as a manual
     tree edit; folded into this patch (as opposed to `work/`'s hand-fix)
     after a clean-room replay (fresh `pristine` + this patch alone, no
     other hand-fixes) confirmed it was still missing.
 
 ## Explicitly not included yet (parked, not forgotten)
 
-**Fake-root-entangled, waiting on that decision** (`docs/android-seccomp-audit.md`,
-"Full per-file fork verdict"): the `"0"`-bucket entries in
+**Fake-root-entangled, waiting on that decision** (`docs/spec/android-platform.md`,
+"Per-file verdict, everything in `gpkg/glibc/`"): the `"0"`-bucket entries in
 `fakesyscall.json` (`setuid`/`setgid`/`setreuid`/`setregid`/`setresuid`/
 `setresgid`/`setfsuid`/`setfsgid`), `setfsuid.c`, `setfsgid.c`, and the
 `set-fakesyscalls.patch` hunks touching `setegid.c`/`seteuid.c`/`setgid.c`/
@@ -168,7 +169,7 @@ PATH=/data/data/com.termux/files/usr/bin \
 PATH=/data/data/com.termux/files/usr/bin make -O -j8   # NOT -j1: $DN must
   # be off PATH (COMPILER_PATH from ld-dn.c is sufficient) -- with $DN on
   # PATH, this project's own coreutils going through ld-dn+shim under
-  # heavy repeated invocation was unstable (docs/findings.md); -j8 itself
+  # heavy repeated invocation was unstable (docs/log/findings.md); -j8 itself
   # is not the issue and is ~3-4x faster than -j1.
 make -k install DESTDIR=<destdir>   # -k: the manual subdir fails for an
   # unrelated missing-texinfo-source reason, nothing else is affected

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Prove the tracer route resolves glibc's statically-bound NSS reads against
-# the prefix.  NSS is case 2 of docs/syscall-boundary.md: the LD_PRELOAD shim
+# the prefix.  NSS is case 2 of docs/spec/syscall-boundary.md: the LD_PRELOAD shim
 # cannot see the open inside libc, so the syscall tracer (dn-trace) is the fix.
 # Termux glibc reads its sysconfdir $PREFIX/glibc/etc (a host path), so dn-run
 # adds a bind of the prefix's /etc over it on the NSS route.

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Create the maintainer-script runtime inside INSTDIR. Idempotent.
 #
-# Why this exists (docs/findings.md, and the
+# Why this exists (docs/log/findings.md, and the
 # on-device re-test 2026-09-25 PM that produced docs/findings-runtime-and-
 # base-2026-09-25.md): maintainer scripts are executed by the *kernel*
 # resolving their shebang, and the kernel follows only one `#!` level. An
@@ -28,7 +28,7 @@ PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
 BINDIR="$INSTDIR/usr/bin"
 LIBDIR="$INSTDIR/usr/lib/deb-native"
-# The privilege layer (docs/design-0.2.0.md, TODO.md "sudo"): every command
+# The privilege layer (docs/spec/design.md, TODO.md "sudo"): every command
 # an unprivileged prefix has to fake or redirect lives here, first on a
 # maintainer script's PATH (dn-launch.c), so a Debian package's real
 # chown/update-alternatives never shadows it, and a later sudo/fake-root

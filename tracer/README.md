@@ -8,7 +8,7 @@ derived files keep proot's GPLv2-or-later headers and copyright.
 Why it exists: rewriting a syscall's path arguments requires `ptrace` —
 seccomp user-notification can inspect and inject fds but cannot modify
 arguments — so proot's `ptrace` core is the hard part worth reusing. See
-[`../docs/direct-usage.md`](../docs/direct-usage.md).
+[`../docs/spec/direct-usage.md`](../docs/spec/direct-usage.md).
 
 ## Status
 
@@ -29,7 +29,7 @@ static binary reads through a bind. **The bind-only fast path has landed**
 resolve the rest. This is correct only because deb-native's scope guarantees
 rootfs `/` (no chroot), flat top-level binds, and a symlink-normalized guest
 tree. **It is not a general proot optimization** — it assumes what stock proot
-cannot: see [`../docs/bind-only.md`](../docs/bind-only.md).
+cannot: see [`../docs/spec/bind-only.md`](../docs/spec/bind-only.md).
 
 Safe mechanics for the three traps:
 

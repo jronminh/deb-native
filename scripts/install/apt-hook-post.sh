@@ -1,7 +1,7 @@
 #!/bin/sh
 # apt's DPkg::Post-Invoke hook: after dpkg ran, make what was installed
 # usable -- repoint new ELFs at Termux glibc, normalize absolute symlinks
-# (required by the bind-only tracer, docs/bind-only.md), and regenerate the
+# (required by the bind-only tracer, docs/spec/bind-only.md), and regenerate the
 # launcher wrappers (sudo-less's stage-4 "integrate", hooked into apt's
 # lifecycle). Never fails an apt transaction.
 #

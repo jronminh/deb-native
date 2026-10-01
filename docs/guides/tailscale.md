@@ -96,7 +96,7 @@ Either way the shipped binaries remain static → runtime still needs the tracer
    HTTP proxy is how the rest of the system then reaches the tailnet.
 
 5. There is no service manager: start `tailscaled` manually (later: a
-   `termux-services`/runit `run` script, see [`design.md`](design.md)).
+   `termux-services`/runit `run` script, see [`design.md`](../spec/design.md)).
 
 ## Open questions
 
@@ -111,4 +111,4 @@ Either way the shipped binaries remain static → runtime still needs the tracer
 ## Status
 
 Not started. First dependency is **fork-lite running static binaries** — see
-[`direct-usage.md`](direct-usage.md) and [`../tracer/README.md`](../tracer/README.md).
+[`direct-usage.md`](../spec/direct-usage.md) and [`../../tracer/README.md`](../../tracer/README.md).

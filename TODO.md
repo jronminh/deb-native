@@ -1,15 +1,15 @@
 # TODO / roadmap
 
-Ordered the way `sudo-less` orders its own work (`docs/design.md`, "Order
+Ordered the way `sudo-less` orders its own work (`docs/spec/design.md`, "Order
 of work"), judged by its criterion: **per-section coverage from a random
-sample**, not feature count. See [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md)
+sample**, not feature count. See [`docs/spec/vs-sudo-less.md`](docs/spec/vs-sudo-less.md)
 for the side-by-side diff.
 
 **Format**: each section below has a **Goal** (stable, rarely changes), a
 **Status** paragraph (the current, stable truth — when an Open item is
 finished, its outcome is folded in here and the item is deleted, not kept
 as a checked-off line), and an **Open** list (short, no narrative — the
-"why"/investigation history lives in [`docs/findings.md`](docs/findings.md)
+"why"/investigation history lives in [`docs/log/findings.md`](docs/log/findings.md)
 (chronological engineering log) and the other `docs/*.md` files each
 section links to).
 
@@ -33,7 +33,7 @@ that's what "Compilers" below is still waiting on.
   uses Termux's 5.42; trixie's `perl` builds modules for 5.40, no fix yet).
 - **Unfiltered survey**: the seeded 100 across all 43 sections without the
   size filter — a number for heavy packages, no asterisk
-  ([`docs/survey-0.2.0.md`](docs/survey-0.2.0.md) is lightweight only).
+  ([`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md) is lightweight only).
 - **More than one device**: a second phone / Android version, and the
   Google Play build of Termux.
 - **Upgrade and remove**: `apt upgrade` across a Debian point release;
@@ -70,11 +70,11 @@ never touched.
 
 **Status**: released and verified on a vanilla Termux — fresh install,
 the 100-package survey (99 install / 98 run,
-[`docs/survey-0.2.0.md`](docs/survey-0.2.0.md)), a full prefix delete
+[`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md)), a full prefix delete
 leaving Termux untouched. Design decisions (real nested Debian root, no
 `usr ->.` flattening, Termux's own apt/dpkg through launchers,
 `$DN/root` -> Termux home) are recorded in
-[`docs/design-0.2.0.md`](docs/design-0.2.0.md). The hotfix that shipped
+[`docs/spec/design.md`](docs/spec/design.md). The hotfix that shipped
 after (`priv chroot` for maintainer scripts using
 `chroot "$DPKG_ROOT"`, e.g. `dbus`/`ipp-usb`/`avahi-daemon`, which
 Android's seccomp otherwise SIGSYS-kills) is a temporary fix, still
@@ -176,15 +176,15 @@ discussion below is kept for the record, not as planned work.
 **Tracer-cost discussion (2026-09-30, record only — not planned work per
 the note above)**:
 1. `SECCOMP_RET_USER_NOTIF` instead of `ptrace` for `dn-trace` — flagged
-   as "the endgame" in `docs/direct-usage.md`/`docs/syscall-boundary.md`/
-   `docs/shim-coverage.md`, never attempted. Can allow/deny/inject an
+   as "the endgame" in `docs/spec/direct-usage.md`/`docs/spec/syscall-boundary.md`/
+   `docs/spec/shim-coverage.md`, never attempted. Can allow/deny/inject an
    fd/return a value, but cannot rewrite a syscall's arguments in place
    the way `ptrace` can (path rewriting, the tracer's main job, would
    need `process_vm_writev`) — needs a small prototype against
    `dn-trace`'s rewrite paths (`path/path.c`) before committing.
 2. Narrow what still falls through to the tracer, rather than speeding it
    up. Widening the *shim* to catch NSS was tried and closed negative
-   (`docs/shim-coverage.md`, `docs/syscall-boundary.md`) — glibc's NSS
+   (`docs/spec/shim-coverage.md`, `docs/spec/syscall-boundary.md`) — glibc's NSS
    opens through a private, link-time-bound symbol no `LD_PRELOAD`
    reaches. 0.5.0's own-glibc is the real fix (below). Cheaper interim,
    not started: narrow `native/dn-run.c`'s `classify()`/`has_nss_import()`
@@ -207,7 +207,7 @@ everything else in the prefix depends on), not required for alpha.
 Leaning, per the findings below: **prebuilt base + apt-cache cleaning
 (+ parallel translation, already released) first; a busybox base only if
 size still matters after that.** Full options/tradeoffs recorded in
-[`docs/design-0.4.0.md`](docs/design-0.4.0.md) once written; findings so
+[`docs/spec/design-0.4.0.md`](docs/spec/design-0.4.0.md) once written; findings so
 far (trixie index, 2026-09-27):
 - The kept GNU base (`mawk coreutils sed grep findutils debianutils
   diffutils gzip tar hostname`) is Essential and depended on
@@ -255,7 +255,7 @@ project can read the prefix's `/etc` directly, no tracer route needed.
 below glibc entirely (a syscall failing there fails the same way no
 matter which library issued it) — the app seccomp allowlist, capability/
 kernel-config gaps, and SELinux (full detail:
-[`docs/android-seccomp-audit.md`](docs/android-seccomp-audit.md)). Its
+[`docs/spec/android-platform.md`](docs/spec/android-platform.md)). Its
 confirmed leverage is the NSS/loader-internal-path class (NSS, `gconv`,
 locale, `ld.so.cache`, `RUNPATH`) plus whatever syscall stock Debian
 `libc6` trips at startup. `io_uring` (real gap, Gate A) is deliberately
@@ -272,9 +272,11 @@ install` clean, `hello` runs, NSS resolves the prefix's real `/etc`
 natively, terminal I/O (`isatty`/`tcgetattr`/`tcsetattr`, baud-rate
 round-trip) works correctly with no port needed
 (`disable-termios2.patch` turned out unnecessary — `termios2` doesn't
-exist anywhere in glibc 2.41's source). Full history:
-[`docs/android-seccomp-audit.md`](docs/android-seccomp-audit.md),
-[`docs/findings.md`](docs/findings.md). One parked decision: the
+exist anywhere in glibc 2.41's source). Patch catalog and per-file verdict:
+[`docs/spec/android-platform.md`](docs/spec/android-platform.md). Full
+investigation history:
+[`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md),
+[`docs/log/findings.md`](docs/log/findings.md). One parked decision: the
 fake-root-entangled `"0"`-bucket of `fakesyscall.json`
 (`setuid`/`setgid`/...) is split out as
 [`set-fakesyscalls-parked.patch`](third_party/glibc-android-patches/set-fakesyscalls-parked.patch),
@@ -398,7 +400,7 @@ structurally cannot reach (static binaries, raw `syscall()`, libc-internal
 opens) is caught by the tracer instead.
 
 **Status**: the libc-interposition layer is complete for its scope —
-[`docs/shim-coverage.md`](docs/shim-coverage.md)'s 258-package in-scope
+[`docs/spec/shim-coverage.md`](docs/spec/shim-coverage.md)'s 258-package in-scope
 corpus has every imported path-taking symbol intercepted (full family:
 `open`/`stat`/`exec`/`spawn`/`xattr`/`mkfifo`/`mknod`/AF_UNIX/
 `inotify`/`mkstemp`/... — see `tests/shim-libc/run.sh`), except NSS
@@ -429,7 +431,7 @@ postinst all complete with zero segfaults and zero `logcat` crash
 entries.
 
 **Open**:
-- Bake the shim into installed ELFs (`docs/design.md`, "Delivering the
+- Bake the shim into installed ELFs (`docs/spec/design.md`, "Delivering the
   shim") so it survives an empty environment — `patchelf --add-needed`/
   `--add-rpath` or a `DT_AUDIT` module; the explicit loader
   (`ld.so --preload`) is the simpler variant.
@@ -462,7 +464,7 @@ entries.
   `survey-prefix.sh`'s `try_program()` already uses ad hoc for
   measurement, just never promoted to a real runtime mechanism; (c) a
   one-time audit of glibc's own source (per glibc build, not per
-  package) against `docs/android-seccomp-audit.md`'s allowlist, to name
+  package) against `docs/spec/android-platform.md`'s allowlist, to name
   the exact handful of public libc functions with a probe-and-fallback
   syscall pattern, then watch only those in the shim — more precise
   than (b), more upfront cost, pays off once instead of per-crash.
@@ -572,8 +574,8 @@ Ideas with a design sketch but no committed slot — pick up after the
 Alpha goal and the sections above. Detail in the linked docs, not here.
 
 - **Run Tailscale natively** — the target case for the tracer (a static
-  Go daemon the shim cannot see). [`docs/tailscale.md`](docs/tailscale.md).
-- **Run wrappers** (`prefix-wrap` equivalent, `docs/design.md`) — the
+  Go daemon the shim cannot see). [`docs/guides/tailscale.md`](docs/guides/tailscale.md).
+- **Run wrappers** (`prefix-wrap` equivalent, `docs/spec/design.md`) — the
   biggest unbuilt piece: for each binary a package puts on `PATH`, detect
   whether it needs path help and generate a wrapper, triggered via apt's
   `DPkg::Post-Invoke`.
@@ -585,7 +587,7 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
 - **Soname-based dependency matching** — replace
   `scripts/install/native-seed.sh`'s hand-written name table with matching a
   `.deb`'s `Depends:` against installed `*-glibc` packages' SONAMEs
-  (`docs/design.md`, "Open work"). Small, direct install-success win.
+  (`docs/spec/design.md`, "Open work"). Small, direct install-success win.
 - **Launcher/icon/desktop-DB integration** — mostly N/A on Android; do
   only what Termux needs.
 - **State + `explain` + `doctor`** — record per package its scope,
@@ -594,12 +596,12 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
 ## Known unsafe, not yet fixed
 
 - `--force-architecture` workaround for the archive-name mismatch
-  (`arm64` vs `aarch64`) — flagged unsafe in `docs/findings.md`, needs a
+  (`arm64` vs `aarch64`) — flagged unsafe in `docs/log/findings.md`, needs a
   real fix.
 
 ## Blocked / impossible on this device
 
-Kernel-wide, probed 2026-09-26 (`docs/findings.md`, "Platform sandbox
+Kernel-wide, probed 2026-09-26 (`docs/log/findings.md`, "Platform sandbox
 limits"): user namespaces off entirely (`CLONE_NEWUSER` = `EINVAL` even
 seccomp-free), mount namespaces need `CAP_SYS_ADMIN`, `/dev/fuse` is
 root-only. Keep these out of scope:

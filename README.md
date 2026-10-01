@@ -20,7 +20,7 @@ How that differs from proot-distro, chroot and the rest:
 > [!WARNING]
 > **Pre-alpha, AI-assisted, not security-reviewed.** Tested: a fresh install
 > on vanilla Termux, and a 100-package survey of Debian 13 "trixie"
-> ([`docs/survey-0.2.0.md`](docs/survey-0.2.0.md): 99 install, 98 run within
+> ([`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md): 99 install, 98 run within
 > the survey's limits, the other 2 fixed since). It never touches Termux's
 > own `sources.list`, `dpkg` database or binaries. Still: written with AI
 > assistants and not independently audited, so read `install.sh`/`scripts/`
@@ -149,7 +149,7 @@ program is started, from Termux's side too. Maintainer scripts run under
 glibc's NSS bypass the shim; `dn-trace` (`tracer/`, deb-native's own ptrace
 tracer, grown out of PRoot's core and cut to what the prefix needs; built
 at install when `make` and `libtalloc` are present) rewrites their paths at
-the syscall level — see [`docs/tracer-0.2.0.md`](docs/tracer-0.2.0.md).
+the syscall level — see [`docs/spec/tracer.md`](docs/spec/tracer.md).
 
 **Run by name.** Installed programs are linked into
 `~/.dn/usr/lib/deb-native/bin`, first on `PATH`; the base system's tools
@@ -196,7 +196,7 @@ have, and Termux's own programs still see your real user.
 ## Scope
 
 The same packages as [`sudo-less`](https://github.com/jronminh/sudo-less),
-by Debian section ([`docs/standard.md`](docs/standard.md)): install (reach
+by Debian section ([`docs/spec/standard.md`](docs/spec/standard.md)): install (reach
 `ii`) and run by name, unprivileged. Not yet: **services** (a package that
 ships one installs, the service does not run; `runit` is the plan), and
 packages that need root (system users, `setuid`, TUN, kernel modules;
@@ -208,7 +208,7 @@ packaged yet.
 ## Status
 
 **Pre-alpha, 0.5.0.** Install and run are measured, not just hand-checked
-([`docs/survey-0.2.0.md`](docs/survey-0.2.0.md)). `termux-dn-doctor` checks
+([`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md)). `termux-dn-doctor` checks
 the common breakages.
 
 **New this release: a real Debian `libc6`, not a Termux stand-in** —
@@ -230,8 +230,8 @@ then services, then `sudo`.
 100 Debian 13 "trixie" packages, picked at random (seeded) across the 43
 in-scope sections, each installed into a fresh prefix with its own apt and
 its programs run by name — sudo-less's method, on a phone
-([`docs/survey-0.2.0.md`](docs/survey-0.2.0.md), raw data in
-[`docs/survey-0.2.0/`](docs/survey-0.2.0/)).
+([`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md), raw data in
+[`docs/log/survey-0.2.0/`](docs/log/survey-0.2.0/)).
 
 | | packages |
 |---|---|
@@ -274,22 +274,12 @@ Without them those programs run untranslated.
 
 ## Documentation
 
-- [`docs/design.md`](docs/design.md) — the design end to end.
-- [`docs/standard.md`](docs/standard.md) — package scope.
-- [`docs/shim-coverage.md`](docs/shim-coverage.md) — measured shim coverage.
-- [`docs/syscall-boundary.md`](docs/syscall-boundary.md) — beyond libc.
-- [`docs/direct-usage.md`](docs/direct-usage.md) — tracer investigation + fork-lite plan.
-- [`docs/bind-only.md`](docs/bind-only.md) — what fork-lite strips down to a bind-only tracer.
-- [`docs/tracer-0.2.0.md`](docs/tracer-0.2.0.md) — the tracer (`dn-trace`) in 0.2.0: role, changes, tests, measurements.
-- [`docs/android-seccomp-audit.md`](docs/android-seccomp-audit.md) — which Android failures are seccomp/kernel-config (own-glibc can't fix) vs. glibc-internal (own-glibc can).
-- [`docs/install-flow.md`](docs/install-flow.md) — the bootstrap/install order, end to end.
-- [`docs/survey-0.2.0.md`](docs/survey-0.2.0.md) — 100 Debian packages installed and run in the 0.2.0 prefix.
-- [`docs/design-0.2.0.md`](docs/design-0.2.0.md) — the 0.2.0 self-contained prefix (partly superseded by `TODO.md`'s decisions).
-- [`docs/runtime-failures.md`](docs/runtime-failures.md) — what breaks when *running* a program.
-- [`docs/tailscale.md`](docs/tailscale.md) — the static-daemon goal (userspace networking).
-- [`docs/findings.md`](docs/findings.md) — engineering log.
-- [`docs/multiarch-mechanics.md`](docs/multiarch-mechanics.md) — dpkg multi-arch mechanics, shared with the true fusion branch (`naibed`).
-- [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md) — method, side by side with `sudo-less`.
+Full map in [`docs/README.md`](docs/README.md): specs (`docs/spec/` — the
+design, package scope, shim/tracer/Android coverage, install flow),
+engineering log and investigation history (`docs/log/`), and one-off
+guides (`docs/guides/`). Start with
+[`docs/spec/design.md`](docs/spec/design.md) for how the whole thing
+works and [`TODO.md`](TODO.md) for current status.
 - [`tracer/README.md`](tracer/README.md) — `dn-trace`, the ptrace tracer (from PRoot's core).
 - [`TODO.md`](TODO.md) — roadmap · [`AGENTS.md`](AGENTS.md) — conventions.
 

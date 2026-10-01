@@ -1,6 +1,6 @@
 # Android seccomp/capability audit (started 2026-09-30)
 
-Why: `docs/runtime-failures.md` and `docs/findings.md` list several things
+Why: `../spec/runtime-failures.md` and `findings.md` list several things
 Android blocks (`libc6` killed at startup, `set_robust_list` SIGSYS, SysV
 IPC denied, `mount`/`CLONE_NEWNS` `EPERM`, `CLONE_NEWUSER` `EINVAL`), but
 each was found ad hoc, one program at a time. Before scoping 0.5.0 ("our
@@ -13,87 +13,7 @@ SIGSYS-emulation trick, or nothing, can). Method requested: check AOSP
 docs/source first, then test on-device, then conclude -- in that order,
 not the reverse.
 
-## Phase 1: what AOSP's source says (done, 2026-09-30)
-
-Two independent gates exist, and a syscall can fail either one:
-
-**Gate A -- seccomp-bpf filter, installed by zygote into every app process**
-(`Seccomp: 2`, confirmed by direct probe in `findings.md`). Default-deny:
-a syscall not on the allowlist is refused (historically SIGSYS/crash --
-"Android O crashes an app that uses an illegal syscall", see sources).
-The allowlist is assembled from:
-
-- [`bionic/libc/SYSCALLS.TXT`](https://android.googlesource.com/platform/bionic/+/refs/heads/main/libc/SYSCALLS.TXT)
-  -- every syscall bionic itself exposes a wrapper for.
-- [`bionic/libc/SECCOMP_ALLOWLIST_APP.TXT`](https://android.googlesource.com/platform/bionic/+/refs/heads/main/libc/SECCOMP_ALLOWLIST_APP.TXT)
-  -- app-process additions. Confirmed present (fetched 2026-09-30):
-  `pipe`, `access`, `stat64`, `open`, `getdents`, `eventfd`, `epoll_wait`,
-  `epoll_create`, `creat`, `unlink`, `lstat64`, `fcntl`, `fork`, `poll`,
-  `inotify_init`, `getuid`, `remap_file_pages`, `rename`, `mmap`, `dup2`,
-  `compat_select:_newselect`, `mkdir`, `renameat`.
-- [`bionic/libc/SECCOMP_ALLOWLIST_COMMON.TXT`](https://android.googlesource.com/platform/bionic/+/refs/heads/main/libc/SECCOMP_ALLOWLIST_COMMON.TXT)
-  -- shared with other domains. Confirmed present: `pivot_root`,
-  `ioprio_get`/`_set`, `gettid`, `futex`(`_time64`), `clone`/`clone3`,
-  `sigreturn`/`rt_sigreturn`, `rt_tgsigqueueinfo`, `restart_syscall`,
-  `riscv_hwprobe`, `vfork`, `perf_event_open`, `tkill`, `seccomp`, `open`,
-  `stat64`/`stat`, `readlink`, the `io_*` AIO family (`io_setup`,
-  `io_submit`, ... -- **not `io_uring_setup`/`_enter`/`_register`**,
-  confirming `runtime-failures.md`'s "`io_uring` not intercepted" is really
-  "not even on the app allowlist"), `execveat`, `membarrier`,
-  `userfaultfd`, the `_time64` clock/timer family, `pselect6_time64`,
-  `ppoll_time64`, `recvmmsg_time64`, `rt_sigtimedwait_time64`,
-  `futex_time64`, `sched_rr_get_interval_time64`.
-- Assembly logic lives in
-  [`libc/seccomp/seccomp_policy.cpp`](https://android.googlesource.com/platform/bionic/+/704772bda034448165d071f68b6aeca716f4220e/libc/seccomp/seccomp_policy.cpp)
-  (per-arch, generated at build time from the TXT files above).
-- Background: [Android Developers Blog, "Seccomp filter in Android
-  O"](https://android-developers.googleblog.com/2017/07/seccomp-filter-in-android-o.html)
-  -- "blocks 17 of 271 syscalls in arm64" is the **2017/O baseline**, not
-  this device's policy (`main` branch's TXT files above are current AOSP,
-  years of additions since O; the device here is Android 16 -- treat the
-  blog's number as historical context only, not a live count).
-- [source.android.com: Application Sandbox](https://source.android.com/docs/security/app-sandbox)
-  -- the general sandboxing model (uid-per-app, SELinux, seccomp stacked
-  together, matching `findings.md`'s own probe table).
-
-**Gate B -- capability / kernel-config**, independent of seccomp: a
-syscall can be *allowed* by the filter and still fail, because it needs a
-capability the app uid never has (`CapEff = 0`, confirmed by probe) or a
-kernel feature compiled out. Confirmed example from this fetch:
-`pivot_root` **is** on `SECCOMP_ALLOWLIST_COMMON.TXT` -- it passes Gate A
--- but needs `CAP_SYS_ADMIN`, which `findings.md`'s probe already showed
-is `0` in both the Termux app domain and the seccomp-free shell domain.
-Same shape as the already-confirmed `CLONE_NEWUSER` -> `EINVAL`
-(`CONFIG_USER_NS` off, kernel-wide, no app or seccomp involvement at all)
-and `CLONE_NEWNS`/`mount` -> `EPERM` (`CAP_SYS_ADMIN` missing).
-
-**Why the two gates matter for 0.5.0's scope:** own-glibc changes what
-glibc does at the *libc* layer (sysconfdir, default search paths, NSS
-dispatch) -- it cannot move a syscall through Gate A or Gate B, because
-both are enforced by the kernel/zygote before the syscall's arguments (or
-the calling library) are ever inspected. A syscall failing either gate
-fails the same way no matter whose glibc issued it. Only the *shim's*
-territory (libc-internal path resolution) is where own-glibc has any
-leverage at all.
-
-## Phase 2: reconcile with what's already recorded (done, 2026-09-30)
-
-| finding | where recorded | gate | own-glibc fixes? |
-|---|---|---|---|
-| Debian's stock `libc6` killed at startup | `design-0.2.0.md:30` | A (unclear which syscall yet -- TODO Phase 3) | **partially** -- own-glibc *is* "Termux's glibc" in this framing, i.e. the fix is patching glibc's startup path around whatever it trips, same as Termux already does |
-| `set_robust_list` SIGSYS on static binaries | `tracer-0.2.0.md` | A | no (tracer's SIGSYS emulation already answers it) |
-| NSS opens (`getpwnam`, ...) via `__open_nocancel` | `shim-coverage.md`, `syscall-boundary.md` | neither -- not a kernel block, a *libc-internal symbol binding* choice | **yes** -- this is the case 0.5.0 already targets |
-| `gconv`/locale modules, `ld.so.cache`, `RUNPATH` | `runtime-failures.md` B | neither -- same as NSS, loader-internal path choice | **yes**, same mechanism as NSS |
-| SysV IPC (`shmget`/`semget`/`msgget`) | `runtime-failures.md` E | A or B, not yet distinguished | **TODO Phase 3** |
-| `mount`, `pivot_root`, `swapon`, netlink, TUN, ports <1024, `mknod` | `runtime-failures.md` E | B (`CAP_SYS_ADMIN`/similar missing; `pivot_root` confirmed Gate-A-allowed) | no |
-| `CLONE_NEWUSER` | `findings.md` probe | B, kernel-wide (`CONFIG_USER_NS` off) | no -- not even a seccomp question |
-| `CLONE_NEWNS` | `findings.md` probe | B (`CAP_SYS_ADMIN`) | no |
-| `io_uring*` | `runtime-failures.md` A, H | A -- absent from both allowlist TXT files | no (tracer would need to emulate it; not attempted) |
-
-Everything in the last four rows is **Gate A or B, library-agnostic** --
-own-glibc's scope should be understood as "fixes the NSS/loader-internal
-row and whatever startup syscall stock `libc6` trips," not a general fix
-for "things Android breaks."
+Phase 1 (the three enforcement gates) and Phase 2 (reconciling known findings against them) have been extracted as a standing reference: see [`../spec/android-platform.md`](../spec/android-platform.md) — "The three enforcement gates" and "Known findings, by gate". What follows here is the investigation from Phase 2b onward.
 
 ## Phase 2b: relevance triage against project scope (2026-09-30)
 
@@ -168,7 +88,8 @@ asked again.
 Goal: turn the Phase-1 allowlist into a real allow/deny table for this
 device's actual arch (arm64) and kernel (5.10.240), and classify every
 `runtime-failures.md` entry into Gate A / Gate B / neither, using the
-existing probe method (`findings.md`, "Platform sandbox limits") --
+existing probe method (`../spec/android-platform.md`, "Device probe:
+sandbox limits confirmed directly") --
 Termux app uid (`untrusted_app_27`) and `dsh` shell uid (`u:r:shell:s0`),
 since comparing the two separates "kernel-wide" from "app-seccomp-only."
 Turned out unnecessary for group 5b (a direct test settled it in two
@@ -366,14 +287,8 @@ confirmed by a syscall that passed A and needed nothing from B yet still
 failed. `io_uring` (group 6) is a confirmed real gap but deliberately
 deferred, not a current goal.
 
-**Net scope for three gates, now named with evidence each:**
+**Net scope for three gates, now named with evidence each** — table moved to [`../spec/android-platform.md`](../spec/android-platform.md) ("The three enforcement gates"), updated with Gate C (SELinux, confirmed just above).
 
-| gate | enforced by | own-glibc fixes? | tracer fixes? |
-|---|---|---|---|
-| A: seccomp allowlist | zygote, per-syscall | no | yes, by SIGSYS emulation (already done for `set_robust_list`) |
-| B: capability / kernel config | kernel, per-capability or compile-time | no | no |
-| C: SELinux | policy, per-syscall/resource | no | no (same as B -- a policy/kernel decision, not a missing translation) |
-| neither (libc-internal path choice) | glibc's own build config | **yes** | n/a (this is what `dn-trace`'s NSS route works around today, but own-glibc removes the need for that route entirely) |
 
 **Closed 2026-09-30 (was "still open" above): stock Debian `libc6` doesn't
 even reach a syscall question.** Tested directly: downloaded the real
@@ -412,7 +327,7 @@ one cost-effective NSS fix left standing, distinct from and much cheaper
 than full source-rebuild 0.5.0.
 
 **Cross-checked, not contaminated by a later finding:** a separate bug
-found the same day (`docs/findings.md`, "patchelf corrupting an `ET_EXEC`
+found the same day (`findings.md`, "patchelf corrupting an `ET_EXEC`
 binary's program headers") showed `dn-translate-deb.sh`'s old
 `--set-rpath` step could corrupt an `ET_EXEC` binary into an identically-
 shaped crash (segfault, no syscall in flight, inside loader startup).
@@ -421,257 +336,9 @@ Re-ran this section's own test material (`libc.so.6`,
 pipeline as it stood at the time: no corruption, clean program headers.
 The bug is `ET_EXEC`-only; this section's conclusion stands.
 
-## Termux's actual Android patch series (found 2026-09-30, `termux-pacman/glibc-packages`)
+## Termux's actual Android patch series, and the per-file fork verdict
 
-Since stock Debian glibc can't even start (above), it's worth knowing
-exactly what makes Termux's build work, rather than treating it as a
-black box. Fetched `gpkg/glibc/` from
-[`termux-pacman/glibc-packages`](https://github.com/termux-pacman/glibc-packages)
-(the primary source; `termux/glibc-packages` is a Debian-format mirror of
-the same). Layout: `build.sh` (glibc 2.44, configure flags, install
-steps) plus ~50 loose files -- some are unified `.patch` files against
-upstream glibc source, some are whole replacement/added `.c`/`.h` files
-copied in before configure.
-
-**What `build.sh` does, in order:**
-1. Deletes `clone3.S` for every arch (`clone3` disabled outright --
-   independent of the seccomp-allowlist question in Phase 1; a
-   toolchain/compat decision, not a permission one).
-2. Copies in Termux-authored replacements: `shm{at,ctl,dt,get}.c`,
-   `mprotect.c`, `syscall.c`, `setfs{u,g}id.c`, `fake_epoll_pwait2.c` --
-   these implement `fakesyscall.json`'s mechanism (a declarative
-   syscall-number -> C-function map compiled into
-   `disabled-syscall.h`, used when a syscall Android's kernel doesn't
-   support gets called -- **the same "answer instead of crash" idea as
-   this doc's own Phase 5**, except done at the libc source level instead
-   of a tracer intercepting after the fact).
-3. Copies in `android_passwd_group.c`/`.h` + generates `android_ids.h`
-   (`gen-android-ids.sh`) into `nss/` -- a **custom NSS-adjacent source
-   addition**, not yet read in full; synthesizes passwd/group entries
-   from Android's own uid/gid space (`android_system_user_ids.h`),
-   likely how `root`/`nobody`/app uids resolve without a real
-   `/etc/passwd` entry (`findings.md` already noted "glibc still
-   synthesizes root/nobody/Android uids"). Needs its own read-through
-   before deciding whether to keep, replace, or drop it for this
-   project -- it may assume Termux's own identity model, which differs
-   from this project's fake-root (0.3.0).
-4. Copies in `shmem-android.c`/`.h` into `sysvipc/` -- **SysV shared
-   memory reimplemented in userspace** for Android (real `shmget` is
-   Gate-B/blocked, per this doc's earlier triage group 4). Doesn't change
-   the "don't need SysV IPC" verdict from Phase 2b (still not a goal), but
-   is useful precedent if that verdict is ever revisited: Termux already
-   solved it once.
-5. Runs `set-dirs.patch` (see below).
-6. Bumps `version.h` to Termux's own version string.
-
-**`set-dirs.patch`: the real NSS/path fix, confirmed as a plain,
-forkable source patch.** A standard unified diff touching ~30 files
-(`resolv/resolv.h`, `resolv/netdb.h`, `nss/nss_files/files-init.c`,
-`nss/nss_files/files-XXX.c`, `nss/nss_compat/compat-{pwd,grp,spwd}.c`,
-`nscd/nscd.h`, `misc/fstab.h`, `misc/ttyent.h`, `libio/stdio.h`, and
-more) -- every hardcoded `"/etc/..."`, `"/tmp/..."`, `"/var/..."` string
-replaced with a `@TERMUX_PREFIX@` or `@TERMUX_PREFIX_CLASSICAL@`
-placeholder, substituted to Termux's real prefix path at build time
-(ordinary `sed`, not seen yet but implied by the placeholder style).
-Confirms exactly what Phase 1-3 above inferred by testing (NSS opens use
-`__nss_files_fopen("/etc/passwd")` internally, unreachable by any
-external interposer) -- and shows the actual, known-working fix is
-this **one source patch, not a novel invention**: `nss/nss_files/
-files-init.c`'s `register_file(cb, pwddb, "@TERMUX_PREFIX@/etc/passwd",
-0)` is the literal line already solving case #2 for Termux's own prefix.
-
-**What this changes about 0.5.0's cost estimate:** the patch series is
-mostly plain textual path substitution across well-identified files, not
-a mysterious body of Android-specific systems work. Forking it and
-retargeting the placeholder to this project's own prefix path is
-concretely scoped now, not an open-ended unknown -- lowers 0.5.0's
-estimated cost relative to what was assumed when it was first
-reprioritized above (still real work: ~30 files, a build pipeline, and
-whatever `android_passwd_group.c`/`fakesyscall.json`/`shmem-android.c`
-turn out to require, none of which are read in full yet).
-
-**Open question, resolved into a decision framework (2026-09-30): fork
-per-piece, judged against "a package gets exactly one view."** A Debian
-package assumes one consistent system identity -- `getuid()`, `/etc/
-passwd`, NSS, every API agreeing on "who am I, what does this system look
-like." This project's entire architecture (shim, fake-root, the tracer's
-`/etc` bind) exists to construct and hold that one illusion, over a
-reality that has no real isolation at all (same kernel, same Android uid,
-same seccomp filter as any other Termux process -- confirmed repeatedly
-above; the "prefix" is Termux's own process wearing a costume, not a
-sandboxed one). Termux's patches were written for a *different* illusion
-(Termux wants to honestly reflect Android, not impersonate Debian root),
-so each piece needs judging on whether adopting it reinforces this
-project's single view or punctures it:
-
-- **`set-dirs.patch` (path templating) -- fork as-is, low risk.** It only
-  relocates *where* a config file is read from; it introduces no new
-  identity source and directly completes work fake-root and the tracer's
-  `/etc` bind already started (NSS reading the prefix's own `/etc`,
-  consistent with everything else). Proven correct on-device already (the
-  `hello` control test above ran through Termux's build of exactly this
-  patch). Fork it, just retarget the placeholder.
-- **`android_passwd_group.c` -- read in full 2026-09-30, risk revised
-  down from the earlier verdict above.** It is wired in as a **fallback
-  only**, appended to the tail of glibc's own `getXXbyYY.c` NSS chain via
-  `#define ANDROID_SYS getpwnam_android` (`getpwnam.c.patch`, three call
-  sites: `nss/getpwnam.c`, `nss/getpwnam_r.c`, `nscd/getpwnam_r.c` --
-  same shape presumably for `getpwuid`/`getgrnam`/`getgrgid`, not
-  individually confirmed). It only runs **after** the normal `files`
-  lookup against the prefix's own `/etc/passwd`/`/etc/group` has already
-  failed to find a match. Concretely: `getpwuid(0)` resolves via the
-  prefix's `/etc/passwd` (`root:x:0:0:...`, always present, `base-passwd`
-  provides it) -- `getpwuid_android` never even runs for that case. It
-  only activates for a uid/name genuinely absent from the prefix's own
-  files (e.g. a file legitimately owned by some other real Android app
-  uid that fake-root never touched, since fake-root only fakes ownership
-  for the process's *own* real uid/gid) -- there it synthesizes a
-  readable name (`u0_a1010`) instead of leaving a bare number. **This
-  does not compete with fake-root's `getuid()`/`stat`-owner answers at
-  all** -- it fills a gap fake-root was never asked to cover, rather than
-  contradicting it. Verdict revised: **low risk, fork candidate**, not
-  "do not fork as-is." The "one view" concern from the framework above
-  still applies in principle, just not to this specific file the way
-  first assumed before reading it -- a lesson in itself: the framework is
-  for judging what's actually read, not a substitute for reading it.
-- **`fakesyscall.json` -- read in full 2026-09-30, splits into two buckets
-  with very different verdicts, both now confirmed by content, not
-  guesswork.**
-  - **`INLINE_SYSCALL_ERROR_RETURN_VALUE(ENOSYS)` bucket -- fork
-    candidate, and it **already does this project's Phase 5 idea**, at
-    the libc-source level instead of the tracer.** Contains exactly
-    `io_uring_setup`/`_enter`/`_register`, `set_robust_list`/
-    `get_robust_list`, and the SysV IPC family (`semget`/`msgctl`/
-    `msgget`/...), each compiled to return a clean `ENOSYS` instead of
-    reaching the kernel and `SIGSYS`-dying. Honest, not a fake success --
-    same judgment this doc's Phase 5 already reached independently. If
-    0.5.0 forks this, **the tracer's Phase-5 work becomes unnecessary for
-    any program linked against this glibc** (only fully static binaries,
-    which bring their own libc code built against upstream Debian's
-    unpatched syscall wrappers, would still need the tracer's own
-    separate `SIGSYS` catch -- consistent with the loader/tracer boundary
-    already established throughout this doc).
-  - **The `"0"` bucket (`setuid`/`setgid`/`setreuid`/`setresuid`/
-    `setfsuid`/`setfsgid`/... all unconditionally return success) --
-    open question, now directly entangled with today's fake-root
-    reconsideration, not a simple fork-or-don't.** This duplicates, at
-    the glibc layer, exactly what this project's own fake-root shim
-    already does at a different layer (`native/path-redirect.c`: "chown,
-    set*id, setgroups, initgroups refused for lack of rights ->
-    succeed"). Termux's version is **unconditional** -- every program
-    using this glibc gets silent `set*id` success regardless of whether
-    any "root illusion" is even wanted, because Android never grants real
-    root either way so Termux's general-purpose build treats it as
-    always-harmless. This project is currently reconsidering whether it
-    even wants a root illusion at all (fake-root's tracer-side cost, and
-    the identity-conflict framework above) and leaning toward "plain user
-    is fine for now." Forking this bucket as-is would silently reinstate
-    fake-root's exact behavior at the glibc layer even if the project
-    scales fake-root back or drops it elsewhere -- the two decisions
-    (own-glibc patch selection, fake-root's future) need to be made
-    together, not independently, or one could quietly undo the other.
-
-**`shmem-android.c`/`.h` -- read in full 2026-09-30, more involved than
-"lowest risk" assumed above; deprioritized, not risk-graded.** Vendored
-from [`termux/libandroid-shmem`](https://github.com/termux/libandroid-shmem)
-into glibc directly. Real client-server IPC infrastructure, not a small
-shim: creates regions via `/dev/ashmem` (`ASHMEM_SET_NAME`/`_SET_SIZE`
-ioctls), then -- since ashmem regions are per-fd with no system-wide key
-the way real SysV shm has -- runs a background listener thread per
-process on an **abstract-namespace Unix socket**
-(`sun_path[0] == '\0'`, `ANDROID_SHMEM_SOCKNAME`) that answers other
-processes' requests for a given `shmid` by passing the ashmem fd over
-`SCM_RIGHTS`. Two things untested for this project's actual sandbox:
-whether `/dev/ashmem` opens cleanly from the Termux app uid (Termux's own
-successful use of it doesn't guarantee this project's process/SELinux
-context behaves the same), and whether an app-domain SELinux policy
-(recall Gate C, found earlier this session) permits abstract-socket
-`connect()`/`accept()` between two of this project's own processes at
-all. Given Phase 2b's group 4 verdict already stands (SysV IPC: don't
-need, not a current goal) -- **not worth risk-grading or reading deeper
-right now**; the complexity found here is a reason to leave it deferred
-alongside `io_uring`, not a reason to invest in it.
-
-All four pieces from `gpkg/glibc/` planned for this reading pass are now
-read: `set-dirs.patch`, `android_passwd_group.c`, `fakesyscall.json`,
-`shmem-android.c`.
-
-## Full per-file fork verdict, all 54 files in `gpkg/glibc/` (2026-09-30)
-
-Read the rest to a decision (`readelf`-style: every file, not just the
-big ones). **Project owner's standing rule for this pass**: don't fake a
-feature that genuinely doesn't exist here -- report it honestly (an error,
-or just not present) -- except an *important* feature, which is worth
-deliberate consideration rather than a reflex fork. Fake-root (below) is
-explicitly parked under that "important, needs a decision" bucket, not
-decided in this pass.
-
-**`fakesyscall.json` itself turned out to have three buckets, not two, and
-they map directly onto that rule:**
-
-1. **Real substitute, not a fake at all** (19 entries, the file's first
-   block) -- the target syscall is missing, so call a *different, real*
-   function that gets the same actual effect: `statx` -> `statx_generic`
-   (glibc's own real fstatat-based emulation); `accept4`/`recv`/`send` ->
-   `accept`/`recvfrom`/`sendto`; `shmat`/`shmctl`/`shmdt`/`shmget` ->
-   `shmem-android.c`'s real `/dev/ashmem`-backed implementation (**not a
-   fake** -- corrects this doc's own earlier "defer, not risk-graded"
-   framing of `shmem-android.c`, which undersold it); `epoll_pwait2` ->
-   `fake_epoll_pwait2.c` (a real polyfill on older `epoll_wait`, despite
-   the name); `close_range`/`fchownat`/`ftruncate`/`clock_gettime`/
-   `getpgrp`/`unlinkat`/`symlink`/`link`/`faccessat`/`fchmodat` -> older
-   syscall variants that do the same thing. **Fork candidate, no
-   reservations** -- the rule above doesn't even apply, since nothing here
-   is faked.
-2. **Honest `ENOSYS`** (the file's last block, 9 entries + families) --
-   `msgctl`/`msgget`/`msgrcv`/`msgsnd` (message queues), `semget`/
-   `semctl`/`semop`/`semtimedop*` (semaphores -- note: *not* `shmget`
-   and friends, which are real per bucket 1 above), `io_uring_setup`/
-   `_enter`/`_register`, `set_robust_list`/`get_robust_list`, `clone3`,
-   `mq_open`, `open_by_handle_at`, `rseq`, `pidfd_send_signal`/
-   `pidfd_getfd`, `mbind`/`get_mempolicy`/`set_mempolicy`, `kcmp`,
-   `landlock_create_ruleset`. A clean "not implemented," exactly the rule
-   above. **Fork candidate, no reservations.**
-3. **Actual fake** (the `"0"` bucket) -- `setuid`/`setgid`/`setreuid`/
-   `setregid`/`setresuid`/`setresgid`/`setfsuid`/`setfsgid` (+ syscall
-   `1008`) unconditionally return success. This is the "important feature"
-   case the rule calls out for deliberate consideration, not a reflex
-   fork: plenty of ordinary programs call `setuid(getuid())`/`seteuid()`
-   as a harmless drop-privilege idiom even when already unprivileged, so
-   an honest `EPERM` would break things that work today -- but Termux's
-   version fakes success *unconditionally*, with no way to tell "harmless
-   no-op" from "a real privilege change was wanted." This project already
-   has a similarly-shaped mechanism at a different layer
-   (`native/path-redirect.c`'s `chown`/`set*id`/`setgroups`/`initgroups`
-   refused-for-lack-of-rights -> succeed), scoped to fake-root's own
-   decisions. Forking Termux's version as-is would reinstate that
-   behavior unconditionally at the glibc layer, independent of whatever
-   this project decides fake-root's future is. **Parked, not forked,
-   until fake-root is decided** -- see "Not forked yet" below for exactly
-   which files/hunks that touches.
-
-**Per-file verdict, everything in `gpkg/glibc/`:**
-
-| verdict | files |
-|---|---|
-| **Fork -- already decided/verified working** | `set-dirs.patch` |
-| **Fork -- real substitute (bucket 1) or its companion source** | `fake_epoll_pwait2.c`, `shmat.c`, `shmctl.c`, `shmdt.c`, `shmget.c`, `shmem-android.c`, `shmem-android.h` |
-| **Fork -- honest `ENOSYS` (bucket 2) or its wiring** | most of `set-fakesyscalls.patch` (the SysV-IPC/`statx`/`mq_open`/`open_by_handle_at`/`epoll_pwait2`/`close_range` hunks), `sysvipc-Makefile.patch` |
-| **Fork -- `fakesyscall.json`'s dispatch mechanism itself** | `fakesyscall.json` (buckets 1+2 only, see "Not forked yet"), `fakesyscall.h`, `fakesyscall-base.h`, `syscall.c`, `syscall.S.patch`, `unistd.h.patch` (declares the renamed `syscallS`), `set-sigrestore.patch` (small `#include` glue for the same mechanism) |
-| **Fork -- real, independently-confirmed Android kernel/ABI fixes, not fakesyscall-related** | `disable-clone3.patch` (also independently in bucket 2's `clone3` -- either route works), `dl-execstack.c.patch` (Android's real W^X enforcement on stack pages), `kernel-features.h.patch` (no separate `accept`/`recv`/`send` syscalls -- needed for sockets to work at all), `clock_gettime.c.patch`, `faccessat.c.patch`, `fchmodat.c.patch`, `fstatat64.c.patch` (all: prefer an older syscall variant Android actually has), `sem_open.c.patch` (`link()` -> `symlink()` -- **independently confirmed by this project's own finding**: `dn-translate-deb.sh`'s own comment already documents "Android refuses `link(2)` in app data (EACCES)"), `set-nptl-syscalls.patch` (drops `set_robust_list` calls from pthread create/fork/TLS-init entirely -- same Gate-A problem the tracer already SIGSYS-emulates, fixed further upstream), `set-static-stubs.patch` (static-linking unwind glue, low risk either way) |
-| **Fork -- real Android-specific fix, found outside `fakesyscall.json`** | `mprotect.c` (Android's W^X blocks `mprotect(..., PROT_EXEC)` on an *existing* mapping -- real Termux issue #49, real fix via remap; matters for any JIT -- Node, a JIT-enabled Python -- directly touching the Alpha goal's "popular languages" item) |
-| **Fork -- NSS identity fallback, already risk-graded in this doc** | `android_passwd_group.c`, `android_passwd_group.h`, `android_system_user_ids.h`, `gen-android-ids.sh`, `getXXbyYY.c.patch`, `getXXbyYY_r.c.patch`, `getgrgid.c.patch`, `getgrnam.c.patch`, `getpwnam.c.patch`, `getpwuid.c.patch` |
-| **Fork -- build glue for whatever the above pulls in** | `misc-Makefile.patch`, `misc-Versions.patch`, `nss-Makefile.patch`, `posix-Makefile.patch` |
-| **Not applicable, empirically confirmed -- not just hard to port** | `disable-termios2.patch`: targets a `termios2`-based `isatty`/`tcgetattr`/`tcsetattr` implementation that no longer exists anywhere in 2.41's source (`grep -rl 'TCGETS2\|struct termios2\|__ASSUME_TERMIOS2' sysdeps/` returns nothing); 2.41 already uses plain `TCGETS`/`TCSETS` unconditionally, confirmed live via `dn-trace` against the clean-room build (real pty, `isatty`/`tcgetattr`/`cfsetispeed`+`tcsetattr`(`B9600`)/re-`tcgetattr`, every `ioctl` is `0x5401`/`0x5402`, baud round-trips correctly). Not forked, not needed. |
-| **Needs its own careful evaluation -- not a simple fork/skip** | `set-ld-variables.patch`: adds a parallel `GLIBC_LD_*` env-var namespace (`GLIBC_LD_LIBRARY_PATH`, `GLIBC_LD_PRELOAD`, ...), checked *before* the plain `LD_*` name, to keep Android's own Bionic linker from reacting to the same env vars a glibc child inherits. This lands squarely on top of `native/ld-dn.c`'s own env-building job (it now sets plain `LD_PRELOAD`/`LD_LIBRARY_PATH`/`DN_INSTDIR`/`COMPILER_PATH` per launch, `docs/findings.md` 2026-09-30) -- forking this patch would mean `ld-dn.c` needs to set the `GLIBC_LD_*` names too (or instead). Read the *reason* this exists (what actually breaks without it, in this project's own process tree, not Termux's) before deciding, not just the diff. |
-| **Not forked yet -- parked on the fake-root decision (bucket 3 above)** | the `"0"`-bucket entries inside `fakesyscall.json` (`setuid`/`setgid`/`setreuid`/`setregid`/`setresuid`/`setresgid`/`setfsuid`/`setfsgid`), `setfsuid.c`, `setfsgid.c`, and the `set-fakesyscalls.patch` hunks touching `setegid.c`/`seteuid.c`/`setgid.c`/`setregid.c`/`setresgid.c`/`setresuid.c`/`setreuid.c`/`setuid.c`/`local-setxid.h` (the file otherwise forks now, per bucket 2 above -- only these specific hunks wait) |
-| **Defer -- real feature, just not urgent for the Alpha goal** | `locale-gen`, `locale.gen.txt` (locale generation -- i18n, not blocking compilers/languages), `syslog.c` (routes `syslog()` to Android's real `logd` via `/dev/socket/logdw` -- a genuine integration, just not urgent) |
-| **Not applicable -- wrong architecture** | `i386-syscalls.list.patch`, `glibc32.subpackage.sh` (i386/32-bit; this project is arm64-only) |
-| **Generic build plumbing, not an Android patch** | `sdt-config.h`, `sdt.h` (SystemTap probe-point support, vendored/pre-generated rather than Android-specific) |
-| **Not a patch -- the build driver itself** | `build.sh` (reference when building this project's own pipeline, not "fork or don't") |
-
-Remaining unread in the same directory: none -- this completes the
-reading pass.
+Extracted as a standing reference once the full read-through below settled: see [`../spec/android-platform.md`](../spec/android-platform.md), "Termux's Android glibc patch: catalog and fork verdict" for the patch catalog and the per-file verdict for all 54 files in `gpkg/glibc/`. The reading pass itself, and the reasoning behind each verdict, happened in this session (2026-09-30) following directly from the Conclusion above.
 
 ## 0.5.0 first build attempt: partial fork tested, confirmed insufficient (2026-09-30)
 
@@ -709,8 +376,8 @@ the good part and the gap.
   simply stops mid-stream with no further output -- consistent with an
   unannounced `SIGSYS` kill, not narrowed to the exact syscall yet.
 - **Expected, matches this doc's own findings above, not a surprise.**
-  `set-dirs.patch` alone was never claimed to be sufficient -- the
-  "Termux's actual Android patch series" section above already named
+  `set-dirs.patch` alone was never claimed to be sufficient -- the patch
+  catalog (`../spec/android-platform.md`) already named
   `fakesyscall.json` (the `disabled-syscall.h` mechanism, wired into
   glibc's build via several `.c` files: `mprotect.c`, `syscall.c`,
   `setfsuid.c`/`setfsgid.c`, `fake_epoll_pwait2.c`, the `syscall.S`/
@@ -1036,7 +703,7 @@ Matches the prefix's real `/etc/passwd` (`root:*:0:0:root:/root:/bin/bash`)
 exactly -- NSS is genuinely resolving against this project's own `/etc`, at
 runtime, not just carrying the right path as a dead string. This closes the
 loop `set-dirs.patch` was forked for in the first place: the tracer's NSS
-route (`docs/shim-coverage.md`, "Resolved 2026-09-26") is no longer the only
+route (`../spec/shim-coverage.md`, "Resolved 2026-09-26") is no longer the only
 way to get this -- own-glibc now does it natively, no tracer needed, for any
 program linked against it.
 

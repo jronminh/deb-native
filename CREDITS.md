@@ -17,7 +17,7 @@ builds on, and the license each part is under.
   theirs.
 - Why a fork and not a fresh tracer: rewriting a syscall's path arguments
   requires `ptrace` (seccomp user-notification can inspect and inject but not
-  modify arguments). See [`docs/direct-usage.md`](docs/direct-usage.md).
+  modify arguments). See [`docs/spec/direct-usage.md`](docs/spec/direct-usage.md).
 
 ## Termux
 
@@ -34,7 +34,7 @@ builds on, and the license each part is under.
   for glibc** (`gpkg/glibc/`, GPL-2.0-or-later, same license as glibc
   itself) — not written from scratch. Per-file fork verdict for all 54
   loose files there is in
-  [`docs/android-seccomp-audit.md`](docs/android-seccomp-audit.md), "Full
+  [`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md), "Full
   per-file fork verdict"; the patch carries every file marked "fork"
   there, retargeted from Termux's dual-prefix layout to this project's
   single fixed prefix. See
@@ -76,7 +76,7 @@ builds on, and the license each part is under.
 - Used for: the prefix-install approach and its documentation are the starting
   point, and the `apt`/`dpkg` lifecycle-hook idea (`DPkg::Pre-Install-Pkgs` /
   `DPkg::Post-Invoke`) follows it. See
-  [`docs/vs-sudo-less.md`](docs/vs-sudo-less.md). `sudo-less` solves the same
+  [`docs/spec/vs-sudo-less.md`](docs/spec/vs-sudo-less.md). `sudo-less` solves the same
   problem on a real Debian host with a kernel mount-namespace "view"; this
   project is that idea on Android, where the view is unavailable.
 

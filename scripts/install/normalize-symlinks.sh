@@ -1,6 +1,6 @@
 #!/bin/sh
 # Rewrite absolute symlinks inside a deb-native prefix so the kernel resolves
-# them within the prefix.  Under bind-only tracing (tracer/, docs/bind-only.md)
+# them within the prefix.  Under bind-only tracing (tracer/, docs/spec/bind-only.md)
 # the guest path is prefix-rewritten and handed to the kernel: a symlink whose
 # target is a guest-absolute path under a bound dir (/usr /etc /var /opt /bin
 # /sbin) would otherwise be followed against the real host "/", not $INSTDIR.

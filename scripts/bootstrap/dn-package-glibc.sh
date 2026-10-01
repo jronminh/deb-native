@@ -1,7 +1,7 @@
 #!/bin/sh
 # Package this project's own-built glibc (third_party/glibc-android-patches/
 # dn-glibc-android.patch applied, configured and `make install DESTDIR=...`'d
-# on-device -- docs/android-seccomp-audit.md has the build recipe and
+# on-device -- docs/log/android-seccomp-audit.md has the build recipe and
 # validation) as a real libc6 .deb, instead of dn-standins.sh's stand-in
 # (Termux's glibc, symlinked in under Debian's name).
 #

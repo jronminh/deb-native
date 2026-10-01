@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pick a random, in-scope survey sample from a Debian Packages index.
 
-Scope is docs/standard.md's (the same split as sudo-less): the package's
+Scope is docs/spec/standard.md's (the same split as sudo-less): the package's
 Section must be `user`, and none of the signals that make it the admin's:
 Priority required/important/standard, Essential, a dependency on adduser
 (a system user) or init-system-helpers (a system service). Setuid files

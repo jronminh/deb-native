@@ -58,7 +58,7 @@ libc interposer (`native/path-redirect.c`), **tracer** = fork-lite
 - **`uname` reports `Android`**, and **`os-release` exists only under the
   shim** → static binaries and anything evading the shim see "other-linux".
   This is exactly Tailscale's installer failure
-  ([`tailscale.md`](tailscale.md)).
+  ([`tailscale.md`](../guides/tailscale.md)).
 - **No systemd / dbus / `lsb_release`** → programs that branch on them take
   wrong paths or fail (`systemctl`, `sd_notify`).
 - **Distro / codename branches** in installers and apps.
