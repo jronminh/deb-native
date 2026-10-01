@@ -18,14 +18,21 @@ How that differs from proot-distro, chroot and the rest:
 [Compared with other ways](#compared-with-other-ways).
 
 > [!WARNING]
-> **Pre-alpha, AI-assisted, not security-reviewed.** Tested: a fresh install
-> on vanilla Termux, and a 100-package survey of Debian 13 "trixie"
-> ([`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md): 99 install, 98 run within
-> the survey's limits, the other 2 fixed since). It never touches Termux's
-> own `sources.list`, `dpkg` database or binaries. Still: written with AI
-> assistants and not independently audited, so read `install.sh`/`scripts/`
-> before running them; the layout can change between releases; heavy
-> packages (toolchains) are not there yet. Use a throwaway Termux/device.
+> **Pre-alpha, AI-assisted, not independently audited.** Read `install.sh`
+> and `scripts/` before running them. The on-disk layout can change between
+> releases, heavy packages (toolchains) aren't supported yet, and this has
+> had no security review. Use a throwaway Termux install or device.
+
+## Requirements
+
+Termux with `git`, `clang`, `patchelf`, and the glibc side-install
+(`termux-pacman/glibc-packages`: `glibc-runner`, `coreutils-glibc`,
+`bash-glibc`, `perl`, the loader and libraries). Everything else the project
+needs (`apt`, `dpkg`, `dpkg-deb`) ships with Termux.
+
+Optional: `make` and `libtalloc` (`pkg install make libtalloc`) to build the
+syscall tracer, needed by static programs and ones making their own syscalls.
+Without them those programs run untranslated.
 
 ```sh
 # pinned pre-alpha release:
@@ -40,24 +47,26 @@ Or the rolling edge: replace both `v0.5.0-prealpha` occurrences with `main`.
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 
-## Why this exists
+## Why this exists, and scope
 
 The usual way to get Debian on Android is a **separate rootfs image under
 proot** (or root): every syscall of every program through proot.
 `deb-native` instead keeps a small Debian root of its own, `~/.dn`, and
-runs its programs as ordinary Termux processes:
+runs its programs as ordinary Termux processes. Not an emulator and not
+isolation: **install and run, not emulate**.
 
-- **Its own apt and dpkg, Termux's binaries.** The prefix has its own dpkg
-  database, sources and Debian base; the `apt`/`dpkg` that manage it are
-  Termux's own, through launchers. Nothing is rebuilt.
-- **Only glibc comes from Termux.** The prefix's `libc6` is a stand-in for
-  Termux's patched glibc (the one piece Android needs); everything else is
-  Debian's own package.
-- **No proot for the common case.** Programs start through a tiny loader
-  (`ld-dn`) that sets up an in-process path shim; only static binaries,
-  raw syscalls and NSS need the tracer.
+Scope is the same packages as [`sudo-less`](https://github.com/jronminh/sudo-less),
+by Debian section ([`docs/spec/standard.md`](docs/spec/standard.md)): install
+(reach `ii`) and run by name, unprivileged. Not yet: **services** (a package
+that ships one installs, the service does not run; `runit` is the plan), and
+packages that need root (system users, `setuid`, TUN, kernel modules; `sudo`
+modes are planned). Toolchains wait for `libc6-dev` ([`TODO.md`](TODO.md)) —
+`libc6` itself is Debian's own glibc source now (see "How it works"), but the
+headers/static libs that make it a build target aren't packaged yet.
 
-Not an emulator and not isolation: **install and run, not emulate**.
+Proof, not just a claim: 99 of 100 random Debian 13 packages installed and
+ran, in a fresh prefix, with no tracer needed
+([`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md)).
 
 ## Compared with other ways
 
@@ -88,6 +97,12 @@ can't reach (static binaries, raw syscalls, NSS) falls to `dn-trace`, a
 ptrace tracer grown out of PRoot's core. Installed programs are linked
 into `~/.dn/usr/lib/deb-native/bin`, first on `PATH`.
 
+A real Debian `libc6` (Debian's own glibc source plus this project's own
+Android compatibility patches,
+[`third_party/glibc-android-patches/`](third_party/glibc-android-patches/))
+is built and packaged, but not yet the `install.sh` default — tracked in
+[`TODO.md`](TODO.md).
+
 Full detail: [`docs/spec/design.md`](docs/spec/design.md) (the mechanism
 end to end), [`docs/spec/install-flow.md`](docs/spec/install-flow.md)
 (the bootstrap/install order), [`docs/spec/tracer.md`](docs/spec/tracer.md)
@@ -100,7 +115,8 @@ Termux's own are `pkg`, `termux-apt`, `termux-dpkg`. Undo: `sed -i
 '/# deb-native/d' ~/.bashrc` and delete `~/.dn`.
 
 `install.sh` is idempotent — from a checkout: `sh install.sh [PREFIX]
-[pkg ...]`; log in `~/.dn/var/log/`.
+[pkg ...]`; log in `~/.dn/var/log/`. `termux-dn-doctor` checks the common
+breakages.
 
 Two more commands (`dn-shell`, a shell inside the prefix; `dn-adopt`, to
 run a glibc binary obtained outside apt through the prefix) and how root
@@ -108,46 +124,7 @@ works inside the prefix (fake identity, `DN_ID`, the tracer's cost):
 [`docs/spec/design.md`](docs/spec/design.md) — "Day-to-day commands" and
 "Fake root".
 
-## Scope
-
-The same packages as [`sudo-less`](https://github.com/jronminh/sudo-less),
-by Debian section ([`docs/spec/standard.md`](docs/spec/standard.md)): install (reach
-`ii`) and run by name, unprivileged. Not yet: **services** (a package that
-ships one installs, the service does not run; `runit` is the plan), and
-packages that need root (system users, `setuid`, TUN, kernel modules;
-`sudo` modes are planned). Toolchains wait for `libc6-dev`
-([`TODO.md`](TODO.md)) — `libc6` itself is Debian's own glibc source now
-(below), but the headers/static libs that make it a build target aren't
-packaged yet.
-
-## Status
-
-**Pre-alpha, 0.5.0.** Install and run are measured, not just hand-checked
-([`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md)). `termux-dn-doctor` checks
-the common breakages.
-
-**New this release: a real Debian `libc6`, not a Termux stand-in** —
-Debian's own glibc source plus this project's own Android compatibility
-patches
-([`third_party/glibc-android-patches/`](third_party/glibc-android-patches/)),
-built on-device and packaged as a real `.deb`
-([`scripts/bootstrap/dn-package-glibc.sh`](scripts/bootstrap/dn-package-glibc.sh)). Validated
-(NSS resolves the prefix's own `/etc`, a 100+-package regression stays
-clean) and installable today. **Not yet the default**: `install.sh`'s
-bootstrap still uses the old stand-in described above ("Only glibc comes
-from Termux") until the packaged `.deb` is hosted somewhere a fresh
-install can fetch it — tracked in [`TODO.md`](TODO.md). Next: `libc6-dev`
-(unlocks toolchains), then wiring the real `libc6` into `install.sh`,
-then services, then `sudo`.
-
-### Survey: 0.2.0-prealpha
-
-100 random Debian 13 "trixie" packages, each in a fresh prefix: **99
-installed**, every program that ran did so natively through `ld-dn` (none
-needed the tracer). Full results and raw data:
-[`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md).
-
-### Experimental: true fusion (separate branch, not for general use)
+## Experimental: true fusion branch
 
 The [`naibed`](https://github.com/jronminh/deb-native/tree/naibed)
 branch builds on this project's core to go one step further: it
@@ -162,17 +139,6 @@ before touching it. `main`'s separate prefix stays the recommended path.
 `dn-trace`, the survey) and gets no new work until it is rebuilt on
 `main`'s core.
 
-## Requirements
-
-Termux with `git`, `clang`, `patchelf`, and the glibc side-install
-(`termux-pacman/glibc-packages`: `glibc-runner`, `coreutils-glibc`,
-`bash-glibc`, `perl`, the loader and libraries). Everything else the project
-needs (`apt`, `dpkg`, `dpkg-deb`) ships with Termux.
-
-Optional: `make` and `libtalloc` (`pkg install make libtalloc`) to build the
-syscall tracer, needed by static programs and ones making their own syscalls.
-Without them those programs run untranslated.
-
 ## Documentation
 
 Full map in [`docs/README.md`](docs/README.md): specs (`docs/spec/` — the
@@ -181,6 +147,7 @@ engineering log and investigation history (`docs/log/`), and one-off
 guides (`docs/guides/`). Start with
 [`docs/spec/design.md`](docs/spec/design.md) for how the whole thing
 works and [`TODO.md`](TODO.md) for current status.
+
 - [`tracer/README.md`](tracer/README.md) — `dn-trace`, the ptrace tracer (from PRoot's core).
 - [`TODO.md`](TODO.md) — roadmap · [`AGENTS.md`](AGENTS.md) — conventions.
 
