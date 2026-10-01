@@ -1,6 +1,6 @@
 #!/bin/sh
 # Translate one Debian .deb for the prefix, in place, before dpkg sees it
-# (docs/spec/design-0.2.0.md; naibed's fuse-repack.sh, minus the flat-layout
+# (docs/spec/design.md; naibed's fuse-repack.sh, minus the flat-layout
 # steps -- the prefix is a real, nested Debian root):
 #
 #   - "Architecture: all" -> "arm64", the same rule dn-debian-index.sh

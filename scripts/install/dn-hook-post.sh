@@ -1,5 +1,5 @@
 #!/bin/sh
-# The prefix's apt DPkg::Post-Invoke hook (docs/spec/design-0.2.0.md): after dpkg
+# The prefix's apt DPkg::Post-Invoke hook (docs/spec/design.md): after dpkg
 # ran, make what was installed usable.
 #   1. alternatives links relative (dn-fix-alternatives.sh, Termux's gawk by
 #      full path: when the group is awk, awk itself is broken until then);

@@ -80,8 +80,8 @@ leverage at all.
 
 | finding | where recorded | gate | own-glibc fixes? |
 |---|---|---|---|
-| Debian's stock `libc6` killed at startup | `design-0.2.0.md:30` | A (unclear which syscall yet -- TODO Phase 3) | **partially** -- own-glibc *is* "Termux's glibc" in this framing, i.e. the fix is patching glibc's startup path around whatever it trips, same as Termux already does |
-| `set_robust_list` SIGSYS on static binaries | `tracer-0.2.0.md` | A | no (tracer's SIGSYS emulation already answers it) |
+| Debian's stock `libc6` killed at startup | `design.md:30` | A (unclear which syscall yet -- TODO Phase 3) | **partially** -- own-glibc *is* "Termux's glibc" in this framing, i.e. the fix is patching glibc's startup path around whatever it trips, same as Termux already does |
+| `set_robust_list` SIGSYS on static binaries | `tracer.md` | A | no (tracer's SIGSYS emulation already answers it) |
 | NSS opens (`getpwnam`, ...) via `__open_nocancel` | `shim-coverage.md`, `syscall-boundary.md` | neither -- not a kernel block, a *libc-internal symbol binding* choice | **yes** -- this is the case 0.5.0 already targets |
 | `gconv`/locale modules, `ld.so.cache`, `RUNPATH` | `runtime-failures.md` B | neither -- same as NSS, loader-internal path choice | **yes**, same mechanism as NSS |
 | SysV IPC (`shmget`/`semget`/`msgget`) | `runtime-failures.md` E | A or B, not yet distinguished | **TODO Phase 3** |

@@ -39,13 +39,13 @@ corrupting an `ET_EXEC` binary's program headers", 2026-09-30).
 - `docs/spec/standard.md` — package scope.
 - `docs/spec/shim-coverage.md` — measured libc-shim coverage; what's left.
 - `docs/spec/syscall-boundary.md` — what libc interposition can't reach.
-- `docs/spec/tracer-0.2.0.md` — the tracer (`dn-trace`) status, tests, measurements.
+- `docs/spec/tracer.md` — the tracer (`dn-trace`) status, tests, measurements.
 - `docs/log/android-seccomp-audit.md` — the three enforcement gates (A: seccomp
   allowlist, B: capability/kernel-config, C: SELinux) and which own-glibc
   can/can't fix; the full per-file fork verdict for Termux's Android glibc
   patches; the on-device build attempt log.
 - `docs/log/findings.md` — engineering log (chronological).
-- `docs/spec/design.md`, `docs/spec/design-0.2.0.md`, `docs/spec/vs-sudo-less.md`,
+- `docs/spec/design.md`, `docs/spec/vs-sudo-less.md`,
   `docs/spec/runtime-failures.md`, `docs/guides/tailscale.md`, `docs/spec/bind-only.md`,
   `docs/spec/install-flow.md`, `docs/spec/multiarch-mechanics.md`.
 - `third_party/glibc-android-patches/README.md` — the forked Android glibc

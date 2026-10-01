@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build and install the prefix's stand-in packages (docs/spec/design-0.2.0.md):
+# Build and install the prefix's stand-in packages (docs/spec/design.md):
 # real packages in the prefix's own dpkg database, under Debian's names,
 # whose content is Termux's. Idempotent; re-run after Termux upgrades glibc,
 # dpkg or apt to track their versions.

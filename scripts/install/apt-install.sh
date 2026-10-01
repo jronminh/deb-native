@@ -3,7 +3,7 @@
 # setup-apt-prefix.sh. Since 0.2.0 this is plain apt: the prefix's apt.conf
 # runs the translation pipeline in apt's own hooks (dn-hook-pre.sh /
 # dn-hook-post.sh), so dpkg keeps its own Pre-Depends ordering and the
-# 0.1.x one-package-at-a-time loop is gone (docs/spec/design-0.2.0.md).
+# 0.1.x one-package-at-a-time loop is gone (docs/spec/design.md).
 #
 # Usage: apt-install.sh PREFIX package [package...]
 set -eu

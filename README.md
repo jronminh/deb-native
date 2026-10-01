@@ -149,7 +149,7 @@ program is started, from Termux's side too. Maintainer scripts run under
 glibc's NSS bypass the shim; `dn-trace` (`tracer/`, deb-native's own ptrace
 tracer, grown out of PRoot's core and cut to what the prefix needs; built
 at install when `make` and `libtalloc` are present) rewrites their paths at
-the syscall level — see [`docs/spec/tracer-0.2.0.md`](docs/spec/tracer-0.2.0.md).
+the syscall level — see [`docs/spec/tracer.md`](docs/spec/tracer.md).
 
 **Run by name.** Installed programs are linked into
 `~/.dn/usr/lib/deb-native/bin`, first on `PATH`; the base system's tools
@@ -274,17 +274,16 @@ Without them those programs run untranslated.
 
 ## Documentation
 
-- [`docs/spec/design.md`](docs/spec/design.md) — the design end to end.
+- [`docs/spec/design.md`](docs/spec/design.md) — the design end to end, including the 0.2.0 self-contained-prefix pivot (partly superseded by `TODO.md`'s decisions).
 - [`docs/spec/standard.md`](docs/spec/standard.md) — package scope.
 - [`docs/spec/shim-coverage.md`](docs/spec/shim-coverage.md) — measured shim coverage.
 - [`docs/spec/syscall-boundary.md`](docs/spec/syscall-boundary.md) — beyond libc.
 - [`docs/spec/direct-usage.md`](docs/spec/direct-usage.md) — tracer investigation + fork-lite plan.
 - [`docs/spec/bind-only.md`](docs/spec/bind-only.md) — what fork-lite strips down to a bind-only tracer.
-- [`docs/spec/tracer-0.2.0.md`](docs/spec/tracer-0.2.0.md) — the tracer (`dn-trace`) in 0.2.0: role, changes, tests, measurements.
+- [`docs/spec/tracer.md`](docs/spec/tracer.md) — the tracer (`dn-trace`): role, changes, tests, measurements.
 - [`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md) — which Android failures are seccomp/kernel-config (own-glibc can't fix) vs. glibc-internal (own-glibc can).
 - [`docs/spec/install-flow.md`](docs/spec/install-flow.md) — the bootstrap/install order, end to end.
 - [`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md) — 100 Debian packages installed and run in the 0.2.0 prefix.
-- [`docs/spec/design-0.2.0.md`](docs/spec/design-0.2.0.md) — the 0.2.0 self-contained prefix (partly superseded by `TODO.md`'s decisions).
 - [`docs/spec/runtime-failures.md`](docs/spec/runtime-failures.md) — what breaks when *running* a program.
 - [`docs/guides/tailscale.md`](docs/guides/tailscale.md) — the static-daemon goal (userspace networking).
 - [`docs/log/findings.md`](docs/log/findings.md) — engineering log.

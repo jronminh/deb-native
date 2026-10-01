@@ -74,7 +74,7 @@ the 100-package survey (99 install / 98 run,
 leaving Termux untouched. Design decisions (real nested Debian root, no
 `usr ->.` flattening, Termux's own apt/dpkg through launchers,
 `$DN/root` -> Termux home) are recorded in
-[`docs/spec/design-0.2.0.md`](docs/spec/design-0.2.0.md). The hotfix that shipped
+[`docs/spec/design.md`](docs/spec/design.md). The hotfix that shipped
 after (`priv chroot` for maintainer scripts using
 `chroot "$DPKG_ROOT"`, e.g. `dbus`/`ipp-usb`/`avahi-daemon`, which
 Android's seccomp otherwise SIGSYS-kills) is a temporary fix, still

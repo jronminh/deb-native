@@ -2,8 +2,11 @@
 
 How deb-native works: we fake the Debian layout, not root — with our own
 libc-interposition shim — plus native dependency reuse, the install path,
-run-time wrappers, the apt/dpkg hooks, services, and prior art. (Merged from
-the former `design-*.md`, `services-research.md` and `prior-art.md`.)
+run-time wrappers, the apt/dpkg hooks, services, the 0.2.0 pivot, and prior
+art. One doc, accumulated over time rather than forked per release (merged
+from the former `design-*.md`, `design-0.2.0.md`, `services-research.md`
+and `prior-art.md`) — a section that gets superseded says so in place
+instead of living on in a separate versioned file.
 
 ## Scope and design philosophy
 
@@ -899,4 +902,122 @@ has no dynamic symbols and no loader** — its libc is compiled in — so none o
 the above reaches it. The same is true of raw `syscall()` and libc-internal
 calls such as `dlopen`. Those need a syscall-level tracer
 (`ptrace` / `SECCOMP_RET_USER_NOTIF`) inside the app uid, which the platform
-probe shows is available (`docs/findings.md`, "Platform sandbox limits").
+probe shows is available (`docs/log/findings.md`, "Platform sandbox limits").
+
+## The 0.2.0 pivot: a self-contained prefix
+
+Everything above is the classic, separate-prefix design (`dpkg --instdir`
+straight into a plain directory, no database of its own). `dev-0.2.0`
+proposed replacing it with a small, complete Debian system of its own:
+its own `apt` and `dpkg`, its own database, its own `libc6` and Debian
+base, installed at bootstrap — "just apt", the way it is on Debian.
+Termux is never touched; deleting the prefix restores it exactly.
+
+**Status: partly superseded.** `TODO.md`'s current roadmap keeps `arm64`
+as a foreign architecture (naibed's method) instead of this section's
+`aarch64` relabel, and reuses naibed's code base directly. What follows is
+kept as the record of the proposal, with the divergence noted; the rest —
+the self-contained-prefix idea itself, the stand-in packages, the launcher
+wrappers — is what got built (`scripts/bootstrap/setup-apt-prefix.sh`).
+
+This is the principle `sudo-less` uses on Debian and the
+[`naibed`](https://github.com/jronminh/deb-native/tree/naibed) branch
+proved on Termux: **apt and dpkg own their root.** When the place packages
+live is apt/dpkg's own `/`, dpkg's normal rules (dependencies, Pre-Depends
+order, alternatives, diversions, upgrades) just work, and the glue between
+two package managers disappears. `naibed` gets that by taking over
+Termux's own prefix (one way, unsafe); 0.2.0 gets it inside a sandbox.
+
+The split stays as above: **self-contained for installing, a guest of
+Termux for running.** Programs run through the runtime layer (path shim,
+`dn-shell`, launchers, `dn-run`) on Termux's glibc, because Android gives
+an app no namespace "view" to fake paths with.
+
+### What the prefix contains from the start
+
+| Package (prefix's own dpkg database) | What it is |
+|---|---|
+| `libc6` | stand-in: a real package whose files are links at Debian's libc paths into Termux's glibc (`$PREFIX/glibc/lib`). Debian's own `libc6` is killed by Android's seccomp filter at startup; Termux's glibc is the same library patched for Android at source level. Version = Termux's glibc version. |
+| `dpkg`, `apt` | stand-ins for Termux's own `dpkg`/`apt`, versioned like Termux's, so `Depends: dpkg (>= ...)` is satisfied |
+| `mawk`, `base-files`, `base-passwd`, `dash`, `debianutils`, `debconf`, `cdebconf`, `openssl`, `ca-certificates` | Debian's own (the `bootstrap-base.sh` set), translated at install, then **held** |
+
+A separate database has no name clashes with Termux, so, unlike `naibed`,
+`dash`, `openssl` and `ca-certificates` are Debian's own packages. Only
+`libc6`, `dpkg` and `apt` are stand-ins.
+
+### apt and dpkg: Termux's own, through launchers (decided, built)
+
+The prefix uses the `apt`/`dpkg` Termux already has: no build toolchain,
+no rebuilt packages, lowest requirements. Termux updates to them carry
+through.
+
+- **`$DN/bin/apt*`, `$DN/bin/dpkg*`** are small launchers that run Termux's
+  binaries with the prefix given explicitly: `APT_CONFIG=$DN/etc/apt.conf`,
+  `--admindir=$DN/var/lib/dpkg`, `--instdir=$DN`. Explicit, never
+  `DPKG_ROOT` alone: Termux's tools have Termux's paths compiled in, and
+  under `DPKG_ROOT` they prepend the prefix to a path that already contains
+  one (the doubled-path bug class, below).
+- **dpkg's helpers** compute paths from `DPKG_ROOT` by themselves when a
+  maintainer script calls them, so each gets a wrapper forcing its own
+  paths (from `naibed`, where each was root-caused with `strace`):
+  - `update-alternatives`: `--altdir`/`--admindir`, and `--log
+    /var/log/alternatives.log` with `DPKG_ROOT` set -- it joins
+    `DPKG_ROOT` onto an explicit `--log` too.
+  - `dpkg-divert`: `--admindir`/`--instdir` (it opened
+    `$DN$PREFIX/var/lib/dpkg/diversions`).
+  - `dpkg-statoverride`: no-op (unprivileged, no ownership).
+  - `dpkg-trigger`: to check when a trigger-using package comes through.
+
+### Layout: Debian's own, nested
+
+`~/.dn/usr/bin`, `~/.dn/etc`, ... exactly as on Debian, merged-`/usr`
+links from `base-files` included. `naibed` flattens `usr/` only because
+Termux's own prefix is flat; a prefix of our own has no reason to. The
+shim keeps mapping `/usr` -> `$DN/usr`.
+
+### Architecture: proposed relabel to `aarch64` (not what shipped)
+
+Termux's dpkg calls this CPU `aarch64` (compiled in); Debian calls it
+`arm64`. This section proposed rewriting the Debian index and every
+package's control file (`Architecture: arm64`/`all` -> `aarch64`) after
+each `apt update`, so dpkg would see native packages: no
+`--force-architecture`, no foreign architecture, `all` no longer special.
+**`TODO.md` kept `arm64` as a foreign architecture instead** — `arm64`
+stays foreign, `dn-debian-index.sh` only rewrites `all` -> `arm64`, and
+`--force-architecture` is still in use where the classic design needed it
+(`docs/log/findings.md` calls that "not a real fix", but the relabel was
+never built to replace it).
+
+### Install pipeline
+
+Phase A (built): translation on the device, in the prefix's apt hooks
+(naibed's pipeline, minus what only fusion needs):
+
+| Hook | Step |
+|---|---|
+| `DPkg::Pre-Install-Pkgs` | per `.deb`: control relabel; ELFs repointed at the `libc6` stand-in (`$DN/usr/lib/ld-linux-aarch64.so.1`, `RUNPATH` `$DN/usr/lib/aarch64-linux-gnu` first, shared libraries too) before any maintainer script runs; `custom/<package>.sh` fixes; maintainer-script shebangs -> `dn-shell` (`scripts/install/patch-deb.sh`) |
+| `DPkg::Post-Invoke` | alternatives links made relative at once (`dn-fix-alternatives.sh`); new packages' absolute symlinks made relative; launchers for their programs (and for alternatives links to them); stale launchers dropped |
+
+Phase B (not built): the same translation at **repo build time**
+([`deb-native-repo`](https://github.com/jronminh/deb-native-repo),
+private): packages arrive translated and **signed** (ending
+`[trusted=yes]`), hashes match what gets installed, the device hooks stay
+only as a fallback for packages not in the repo.
+
+### What went away from the classic design
+
+- `native-seed.sh` (stub database entries): replaced by the real `libc6`
+  stand-in and Debian's own libraries.
+- `patch-elfs.sh` after install (`grun --configure` on the whole prefix):
+  ELFs are repointed in the package, before any script runs.
+- `apt-install.sh`'s one-package-at-a-time loop: it exists because patching
+  had to happen outside apt; with hooks, plain `apt install` keeps dpkg's
+  own Pre-Depends ordering.
+
+### What stays
+
+- The runtime layer: shim, `dn-shell`/`dn-perl`, `dn-run`, launchers,
+  `termux-dn-doctor`.
+- ~~Routing ("Termux wins")~~ -- superseded: in the user's interactive
+  shell `apt`/`dpkg` are the prefix's (aliases), Termux's are `pkg`,
+  `termux-apt`, `termux-dpkg`; see `TODO.md`.

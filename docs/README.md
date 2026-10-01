@@ -6,9 +6,10 @@ thematically closest.
 
 - **spec/** — technical specification: what the project does and how, as
   it stands right now. Read these as ground truth; update them when the
-  design changes. Includes `design.md`, `design-0.2.0.md`, `standard.md`,
+  design changes. Includes `design.md` (one file, accumulated over
+  releases — see its own note), `standard.md`,
   `multiarch-mechanics.md`, `syscall-boundary.md`, `shim-coverage.md`
-  (+ `coverage/`, its measured data), `tracer-0.2.0.md`, `install-flow.md`,
+  (+ `coverage/`, its measured data), `tracer.md`, `install-flow.md`,
   `runtime-failures.md`, `bind-only.md`, `vs-sudo-less.md`,
   `direct-usage.md`.
 - **log/** — chronological or one-off investigation, not current state:
