@@ -1,5 +1,5 @@
 #!/bin/sh
-# Same idea and classification as survey.sh, but installing through real
+# Installs a random sample of real Debian .deb packages through real
 # apt (setup-apt-prefix.sh + apt-install.sh) instead of bare dpkg on a
 # single .deb — the before/after comparison for
 # docs/log/findings.md's #1 finding (no dependency

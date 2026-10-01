@@ -16,10 +16,10 @@ and [`../docs/spec/design.md`](../docs/spec/design.md).
   first, sets up the shim, and hands over to glibc's real loader.
 - `path-redirect.c` — the shim: an `LD_PRELOAD` library that rewrites
   `/usr /etc /var /opt /root` into the prefix for glibc dynamic binaries.
-- `path-redirect-bionic.c` — a Bionic build of the same idea for
-  maintainer scripts; a dead end, kept for the record (see
+  A Bionic build of the same idea for maintainer scripts was tried and
+  abandoned — removed from the tree; see
   [`../docs/spec/path-shim.md`](../docs/spec/path-shim.md), "Dead end,
-  fully explored").
+  fully explored" for the record.
 - `dn-launch.c` — the maintainer-script interpreter, as a real ELF binary
   (not a shell script — the kernel follows only one `#!` level).
 - `dn-run.c` — the runtime launch dispatcher: classifies a target's ELF
