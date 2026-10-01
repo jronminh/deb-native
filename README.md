@@ -106,54 +106,28 @@ In one line: proot-distro puts a Debian machine next to Termux;
 deb-native puts Debian's packages into it.
 
 **The same idea as [sudo-less](https://github.com/jronminh/sudo-less), for
-a platform that is not Debian.** sudo-less installs Debian packages without
-root *on Debian*: the host already is the Debian base, and the kernel's
-namespaces lay the user's prefix over it. Termux is not Debian, only
-Debian-compatible once glibc is there, and Android forbids those namespaces.
-So deb-native needs what sudo-less does not:
-
-- **a bootstrap stage** -- the Debian base the host would have provided
-  (`base-files`, `base-passwd`, `dash`, `coreutils`, `debconf`, ...) is
-  built into `~/.dn` first, around a `libc6` stand-in for Termux's glibc;
-- **translation instead of a kernel view** -- packages are fixed at install
-  and programs find the prefix through `ld-dn` and the shim.
-
-Same goal, same scope (Debian sections, the same "admin" signals), same
-proof (a random survey, installed to `ii` and run by name).
+a platform that is not Debian** — same goal, same scope, same proof, the
+mechanism inverted because the host and kernel are different. Full
+side-by-side diff: [`docs/spec/vs-sudo-less.md`](docs/spec/vs-sudo-less.md).
 
 ## How it works
 
-**The prefix.** `install.sh` builds `~/.dn` debootstrap-style: Debian's
-index and archive keyring (checked against pinned fingerprints), the
-stand-ins (`libc6` -> Termux's glibc, `dpkg`/`apt` -> Termux's binaries),
-then the Debian base (`base-files`, `base-passwd`, `dash`, `coreutils`,
-`debconf`, `ca-certificates`, ...) installed by the prefix's own dpkg and
-held. Termux's home is the prefix's `/root`.
+`install.sh` builds `~/.dn` debootstrap-style (Debian's index, a `libc6`
+stand-in for Termux's glibc, `dpkg`/`apt` -> Termux's binaries, then the
+Debian base). An apt hook translates every `.deb` before dpkg sees it:
+ELF interpreter -> `ld-dn`, library path -> the prefix, scripts and
+maintainer scripts -> the prefix's shell. `native/ld-dn.c` is every
+installed program's interpreter — it loads a path shim
+(`native/path-redirect.c`, `LD_PRELOAD`, rewrites `/usr /etc /var /opt
+/root` into the prefix) and hands over to glibc's loader; what the shim
+can't reach (static binaries, raw syscalls, NSS) falls to `dn-trace`, a
+ptrace tracer grown out of PRoot's core. Installed programs are linked
+into `~/.dn/usr/lib/deb-native/bin`, first on `PATH`.
 
-**Translation at install.** An apt hook translates every `.deb` before dpkg
-sees it (`scripts/install/dn-translate-deb.sh`): `Architecture: all` -> `arm64`,
-programs' ELF interpreter -> `ld-dn` and library path -> the prefix,
-script `#!` lines and maintainer scripts -> the prefix's shell, hard links
--> copies (Android forbids them), per-package fixes in `custom/`.
-
-**The runtime.** `native/ld-dn.c` is every Debian program's interpreter:
-it finds the prefix, puts the path shim (`native/path-redirect.c`, an
-`LD_PRELOAD` layer rewriting `/usr /etc /var /opt /root` into the prefix)
-in the environment, and hands over to glibc's loader — however the
-program is started, from Termux's side too. Maintainer scripts run under
-`dn-shell`, with a privilege layer first on their `PATH`
-(`usr/lib/deb-native/priv/`: no-op `chown`, `update-rc.d`, ...; prefix-aware
-`update-alternatives`, `dpkg-divert`, `getent`).
-
-**Beyond libc.** Static binaries, programs making their own syscalls and
-glibc's NSS bypass the shim; `dn-trace` (`tracer/`, deb-native's own ptrace
-tracer, grown out of PRoot's core and cut to what the prefix needs; built
-at install when `make` and `libtalloc` are present) rewrites their paths at
-the syscall level — see [`docs/spec/tracer.md`](docs/spec/tracer.md).
-
-**Run by name.** Installed programs are linked into
-`~/.dn/usr/lib/deb-native/bin`, first on `PATH`; the base system's tools
-are not, so Termux's own `ls`, `awk`, ... stay in charge.
+Full detail: [`docs/spec/design.md`](docs/spec/design.md) (the mechanism
+end to end), [`docs/spec/install-flow.md`](docs/spec/install-flow.md)
+(the bootstrap/install order), [`docs/spec/tracer.md`](docs/spec/tracer.md)
+(the tracer).
 
 ## apt and dpkg
 
@@ -227,24 +201,10 @@ then services, then `sudo`.
 
 ### Survey: 0.2.0-prealpha
 
-100 Debian 13 "trixie" packages, picked at random (seeded) across the 43
-in-scope sections, each installed into a fresh prefix with its own apt and
-its programs run by name — sudo-less's method, on a phone
-([`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md), raw data in
-[`docs/log/survey-0.2.0/`](docs/log/survey-0.2.0/)).
-
-| | packages |
-|---|---|
-| installed (`ii`) | **99** |
-| programs run (of the 26 that ship any) | 18 all, 3 partly, 2 need a terminal, 3 fail |
-| failures that were deb-native's | 2, **both fixed** since (`/usr/lib` library path, `update-rc.d`) |
-
-Every program that ran, ran natively through `ld-dn`; none needed the
-tracer. The other failures are the survey's limits (a program wanting an
-input file, a touchscreen, a missing debhelper). The sample is
-**lightweight** (a package plus its new dependencies under 1.5 MB); an
-unfiltered first run hit heavier chains: `passwd` and `perl-base` (both
-fixed) and `libc6-dev` (toolchains, next on the roadmap).
+100 random Debian 13 "trixie" packages, each in a fresh prefix: **99
+installed**, every program that ran did so natively through `ld-dn` (none
+needed the tracer). Full results and raw data:
+[`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md).
 
 ### Experimental: true fusion (separate branch, not for general use)
 
