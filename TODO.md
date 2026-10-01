@@ -26,8 +26,13 @@ own-glibc patch is written, forked, and validated (clean-room rebuild,
 that's what "Compilers" below is still waiting on.
 
 **Open**:
-- **Compilers**: package 0.5.0's own-glibc as the prefix's real `libc6`
-  (see that section); `gcc`/`make`/C hello-world; `ghc`/`rustc` as a bonus.
+- **Compilers**: `apt install gcc` now installs and configures cleanly
+  (`gcc`/`cpp`/`binutils` and their whole dependency chain, verified
+  2026-10-01, `docs/log/findings.md`) -- the one remaining blocker is
+  packaging `libc6-dev` (same approach as 0.5.0's `libc6`; see that
+  section), confirmed as the actual gap: `gcc -c hello.c` fails on
+  `stdio.h: No such file or directory`, nothing else. `make` untested;
+  `ghc`/`rustc` as a bonus, unresearched.
 - **Popular languages**: `python3` + a C-extension package, `perl` + an XS
   module, `ruby`, `nodejs` — incl. the Perl version gap (`dn-perl` still
   uses Termux's 5.42; trixie's `perl` builds modules for 5.40, no fix yet).
@@ -326,8 +331,13 @@ path instead of carrying it over as-is.
 **Open**:
 - **Package the rest**: `libc6-dev`/`libc-bin`/`locales`, same approach
   as `libc6` (real Debian `.deb` as template, this project's own build
-  output as payload) -- `libc6-dev` in particular unblocks the Alpha
-  goal's "Compilers" item (`gcc`/`make` hello-world in the prefix).
+  output as payload) -- `libc6-dev` is now the *only* confirmed blocker on
+  the Alpha goal's "Compilers" item: `apt install libc6-dev` has no
+  candidate (Debian's real one is pinned to stock `libc6 (=
+  2.41-12+deb13u4)`, an exact-version `Depends`, not this prefix's
+  `+dn1` build), and `gcc -c` fails solely on missing headers once
+  `gcc`/`cpp`/`binutils` are already installed (`docs/log/findings.md`,
+  2026-10-01).
 - **Build pipeline**: cross-build in CI (too slow on-device for a real
   release cadence) instead of the on-device build this used -- needed
   for a repeatable release process, not for this validation.
@@ -565,6 +575,13 @@ not chased down.
   `$DN/usr/bin` ahead of `PATH` for their child processes (maintainer
   scripts), without touching the interactive shell's `PATH`. Verified
   against the real `ca-certificates` postinst.
+- [x] ~~`apt install`-driven maintainer scripts can't see `$DN/usr/bin`
+  (only a direct `dpkg -i` through the launcher wrapper could)~~ — fixed
+  2026-10-01: `apt` forks dpkg via its own compiled-in `Dir::Bin::dpkg`,
+  bypassing the project's dpkg wrapper entirely; added `DPkg::Path` to
+  the prefix's `apt.conf` (`setup-apt-prefix.sh`). Found installing
+  `gcc`'s dependency `cpp` (`dpkg-maintscript-helper: not found`),
+  `docs/log/findings.md`.
 - [ ] Refresh `README.md`'s status numbers once the unfiltered survey
   (Alpha goal, above) reports.
 
@@ -573,6 +590,16 @@ not chased down.
 Ideas with a design sketch but no committed slot — pick up after the
 Alpha goal and the sections above. Detail in the linked docs, not here.
 
+- **Stale `apt.conf` hook paths after a repo move** — `setup-apt-prefix.sh`
+  writes the prefix's `apt.conf` once, at bootstrap, with absolute paths
+  into the checkout as it was that day; nothing regenerates it for an
+  existing prefix (`install.sh`'s "refresh" branch never calls
+  `setup-apt-prefix.sh` again). Any later script move/rename (this
+  session's `scripts/` reorg, for one) breaks `apt`/`dpkg` for anyone with
+  an already-bootstrapped prefix (`docs/log/findings.md`, 2026-10-01).
+  Candidates: `termux-dn-doctor --fix` detects and rewrites the hook
+  lines; or the "refresh" path rewrites just those lines of an existing
+  `apt.conf` instead of leaving it untouched.
 - **Run Tailscale natively** — the target case for the tracer (a static
   Go daemon the shim cannot see). [`docs/guides/tailscale.md`](docs/guides/tailscale.md).
 - **Run wrappers** (`prefix-wrap` equivalent, `docs/spec/classic-design.md`) — the

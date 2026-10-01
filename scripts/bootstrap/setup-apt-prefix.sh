@@ -278,6 +278,16 @@ Dpkg::Options:: "--instdir=$DN";
 Dpkg::Options:: "--admindir=$DN/var/lib/dpkg";
 Dpkg::Options:: "--force-not-root";
 Dpkg::Options:: "--force-script-chrootless";
+// apt forks dpkg directly via its own compiled-in Dir::Bin::dpkg default
+// (Termux's real binary, not the launcher()-generated $DN/usr/bin/dpkg
+// wrapper that sets this same PATH) -- an apt-driven install's maintainer
+// scripts otherwise can't see $DN/usr/bin at all, so anything only shipped
+// there (dpkg-maintscript-helper: Termux's own dpkg doesn't ship it; the
+// dpkg stand-in's own copy, dn-standins.sh) fails "not found" (found
+// installing gcc's dependency cpp, 2026-10-01). DPkg::Path is apt's own
+// hook for exactly this -- it is read even though Dir::Bin::dpkg itself
+// is not overridden.
+DPkg::Path "$DN/usr/bin:$DN/usr/sbin:$TP/bin";
 DPkg::Pre-Install-Pkgs { "$INSTALL/dn-hook-pre.sh $DN"; };
 DPkg::Tools::Options::$INSTALL/dn-hook-pre.sh "";
 DPkg::Tools::Options::$INSTALL/dn-hook-pre.sh::Version "3";
