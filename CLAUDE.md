@@ -55,6 +55,14 @@ template in [`templates/`](templates/) (`readme.template.md`,
 its title. Copy the matching template instead of improvising a layout
 when adding a new one.
 
+After moving, renaming, or deleting a doc or a script, run
+`scripts/tools/check-repo.py` — it catches broken markdown links, broken
+table-of-contents anchors, and scripts nothing calls any more (reported,
+not failed on, since some of that is deliberate: `bench/`, `survey/`,
+and similar are meant to be run by hand). This project has found and
+removed the same class of dead file by hand several times; use the
+script instead of re-deriving the check.
+
 `docs/spec/design.md` is the live design doc (scope, the 0.2.0
 self-contained prefix, day-to-day commands, fake root) — read it before
 changing direction; its own intro points out to the deeper or superseded
