@@ -36,14 +36,14 @@ Without them those programs run untranslated.
 
 ```sh
 # pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.5.0-prealpha/install.sh | DEB_NATIVE_REF=v0.5.0-prealpha sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.5.1-prealpha/install.sh | DEB_NATIVE_REF=v0.5.1-prealpha sh
 
 # then restart Termux (or: . ~/.bashrc)
 apt install figlet # the prefix's apt: Debian's packages
 figlet hi          # an installed program, run by name
 ```
 
-Or the rolling edge: replace both `v0.5.0-prealpha` occurrences with `main`.
+Or the rolling edge: replace both `v0.5.1-prealpha` occurrences with `main`.
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 
@@ -60,9 +60,10 @@ by Debian section ([`docs/spec/standard.md`](docs/spec/standard.md)): install
 (reach `ii`) and run by name, unprivileged. Not yet: **services** (a package
 that ships one installs, the service does not run; `runit` is the plan), and
 packages that need root (system users, `setuid`, TUN, kernel modules; `sudo`
-modes are planned). Toolchains wait for `libc6-dev` ([`TODO.md`](TODO.md)) —
-`libc6` itself is Debian's own glibc source now (see "How it works"), but the
-headers/static libs that make it a build target aren't packaged yet.
+modes are planned). Toolchains: `apt install gcc` and a full compile
+(`libc6-dev` included) both work now; running a binary built *inside* the
+prefix still hits a separate, unfixed gap (`TODO.md`) — installed Debian
+packages aren't affected.
 
 Proof, not just a claim: 99 of 100 random Debian 13 packages installed and
 ran, in a fresh prefix, with no tracer needed
@@ -92,10 +93,10 @@ ELF interpreter -> `ld-dn`, library path -> the prefix, scripts and
 maintainer scripts -> the prefix's shell. `native/ld-dn.c` is every
 installed program's interpreter — it loads a path shim
 (`native/path-redirect.c`, `LD_PRELOAD`, rewrites `/usr /etc /var /opt
-/root` into the prefix) and hands over to glibc's loader; what the shim
-can't reach (static binaries, raw syscalls, NSS) falls to `dn-trace`, a
-ptrace tracer grown out of PRoot's core. Installed programs are linked
-into `~/.dn/usr/lib/deb-native/bin`, first on `PATH`.
+/root /lib /bin /sbin` into the prefix) and hands over to glibc's loader;
+what the shim can't reach (static binaries, raw syscalls, NSS) falls to
+`dn-trace`, a ptrace tracer grown out of PRoot's core. Installed programs
+are linked into `~/.dn/usr/lib/deb-native/bin`, first on `PATH`.
 
 A real Debian `libc6` (Debian's own glibc source plus this project's own
 Android compatibility patches,
