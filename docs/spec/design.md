@@ -28,7 +28,7 @@ live in their own docs, listed below.
 - [`path-shim.md`](path-shim.md) — the path-redirect shim: design,
   verification, delivery mechanisms. Split out of this doc.
 - [`native-reuse.md`](native-reuse.md) — native dependency reuse
-  (`native-seed.sh`). Split out of this doc.
+  (`native-seed.sh`, since superseded). Split out of this doc.
 - [`classic-design.md`](classic-design.md) — the pre-0.2.0 approach
   (plain `dpkg --instdir`, static per-binary wrappers, the services
   research) — superseded in large part by the 0.2.0 pivot below. Split

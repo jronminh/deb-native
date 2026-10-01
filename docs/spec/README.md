@@ -16,8 +16,10 @@ changes.
   history.
 - `path-shim.md` — the path-redirect shim: design, verification, and the
   ways a glibc target can be made to load it.
-- `native-reuse.md` — native dependency reuse (`native-seed.sh`): how a
-  Debian dependency is matched against what Termux's `*-glibc` already has.
+- `native-reuse.md` — native dependency reuse: how `native-seed.sh`
+  matched a Debian dependency against Termux's `*-glibc` packages, before
+  the real `libc6` stand-in made it unnecessary. Superseded, kept as the
+  record.
 - `classic-design.md` — the pre-0.2.0 approach (plain `dpkg --instdir`,
   static per-binary wrappers, the services research) — superseded in
   large part by the 0.2.0 pivot, kept as the record.

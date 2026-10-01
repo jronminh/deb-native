@@ -9,9 +9,11 @@
 Runs on every package install, via the prefix's own apt hooks or
 directly. The classic (pre-0.2.0) design's apt hooks
 (`apt-hook-pre.sh`/`apt-hook-post.sh`), their maintainer-script patcher
-(`patch-maintainer-scripts.sh`), and the per-step ELF/control patchers
-they called (`patch-deb.sh`, `patch-elfs.sh`) are gone — see
-[`../../docs/spec/classic-design.md`](../../docs/spec/classic-design.md)
+(`patch-maintainer-scripts.sh`), the per-step ELF/control patchers they
+called (`patch-deb.sh`, `patch-elfs.sh`), and the stub-database dependency
+seeder (`native-seed.sh`, replaced by the real `libc6` stand-in) are gone
+— see [`../../docs/spec/classic-design.md`](../../docs/spec/classic-design.md)
+and [`../../docs/spec/native-reuse.md`](../../docs/spec/native-reuse.md)
 for the record. See [`../../docs/spec/design.md`](../../docs/spec/design.md)
 (the install pipeline) and [`../../docs/spec/install-flow.md`](../../docs/spec/install-flow.md)
 for the current one.
@@ -33,7 +35,5 @@ for the current one.
   so the kernel resolves them within it (needed for bind-only tracing).
 - `dn-fix-alternatives.sh` — makes every `update-alternatives` link in
   the prefix relative instead of absolute.
-- `native-seed.sh` — seeds a dpkg admindir with stub entries for Debian
-  dependencies already satisfied by a Termux `*-glibc` package.
 - `setup-runtime.sh` — builds and installs the maintainer-script runtime
   (`ld-dn`, `dn-run`, the shim, the tracer) inside a prefix.
