@@ -969,52 +969,10 @@ time. The visible cost of running an installed program is Termux's
 
 ## Platform sandbox limits, by direct probe (2026-09-26)
 
-Probed the device from both sandboxes: the Termux app uid (`untrusted_app_27`)
-and the seccomp-free Android shell uid (`u:r:shell:s0`, reached with `dsh`,
-which runs commands at uid 2000). Android 16 userspace, kernel 5.10.240, arm64.
-
-| | Termux app uid | shell uid (`dsh`) |
-|---|---|---|
-| uid / SELinux | 10663, `untrusted_app_27` | 2000, `u:r:shell:s0` |
-| CapEff | 0 | 0 |
-| seccomp | filter active (`Seccomp: 2`, 1 filter) | **none** (`Seccomp: 0`) |
-| `unshare(CLONE_NEWUSER)` | `EINVAL` | `EINVAL` |
-| `unshare(CLONE_NEWNS)` | `EPERM` | `EPERM` |
-| `/dev/fuse` | — | `crw------- root root` (unreadable) |
-| read `$PREFIX` | yes (owner) | no (`/data/data/com.termux` permission denied) |
-| `run-as com.termux` | — | `package not debuggable` |
-
-Findings:
-
-- **User namespaces are off kernel-wide, not an app restriction.**
-  `unshare -U` returns `EINVAL` even from the seccomp-free shell, and
-  `/proc/self/ns/` has no `user` entry — the kernel is built without
-  `CONFIG_USER_NS`. This is the hard reason sudo-less's kernel "view" (user +
-  mount ns + unprivileged overlayfs) cannot exist here: no sandbox or
-  permission unlocks it.
-- **Mount namespaces and overlayfs are unreachable.** `unshare(CLONE_NEWNS)`
-  and `mount` need `CAP_SYS_ADMIN`; `CapEff` is `0` in both domains and
-  SELinux is enforcing. The kernel does list `overlay` and `fuse` in
-  `/proc/filesystems`, but overlay needs mount privileges and `/dev/fuse` is
-  root-only — neither is usable.
-- **`ptrace` works in the app domain.** `proot -0` runs in Termux (fake uid 0,
-  context still `untrusted_app_27`), so a `ptrace`-based syscall tracer is
-  feasible from the app uid. A tracer in the shell domain is not: cross-domain
-  tracing would need `CAP_SYS_PTRACE` and access to the app prefix, both absent.
-- **`dsh`/shell is a probe and provisioning tool only.** Its lack of a seccomp
-  filter makes it useful for reading the kernel's real state, but it cannot
-  host the enforcement layer — it can neither read the private prefix nor
-  `run-as` the app.
-- **The app already runs under one seccomp filter.** Any filter a project adds
-  stacks on top (most restrictive wins); Android's baseline cannot be lifted.
-  That baseline, plus SELinux, is why `CLONE_NEWUSER` is denied even where
-  seccomp is off.
-
-Net: the only mechanisms available are (1) libc-level interposition — the shim
-this project ships — and (2) a syscall-level tracer via `ptrace` /
-`SECCOMP_RET_USER_NOTIF` **inside the app uid**. Namespaces, overlayfs and
-FUSE are off the table by kernel and SELinux policy, exactly as the design
-assumed.
+Moved to [`../spec/android-platform.md`](../spec/android-platform.md),
+"Device probe: sandbox limits confirmed directly" -- this probe is the
+evidence behind that doc's gate taxonomy, so it lives there as a standing
+reference instead of here.
 
 ## Findings: finishing the libc-level shim, and closing the measured gaps (2026-09-26)
 
@@ -1100,8 +1058,9 @@ transitively, for free. Checked for a kernel-native shortcut first
 (`binfmt_misc`, which would let the kernel pick an interpreter without any
 per-file `PT_INTERP` patch at all): not mounted in the app sandbox
 (`/proc/sys/fs/binfmt_misc/register`: "No such file or directory"),
-consistent with the namespace/mount limits already probed in this doc's
-"Platform sandbox limits" section — no shortcut exists, `--set-interpreter`
+consistent with the namespace/mount limits already probed
+(`../spec/android-platform.md`, "Device probe: sandbox limits confirmed
+directly") — no shortcut exists, `--set-interpreter`
 stays a required static patch (and is not itself buggy: tested alone
 above, clean on `ET_EXEC`).
 

@@ -88,7 +88,8 @@ asked again.
 Goal: turn the Phase-1 allowlist into a real allow/deny table for this
 device's actual arch (arm64) and kernel (5.10.240), and classify every
 `runtime-failures.md` entry into Gate A / Gate B / neither, using the
-existing probe method (`findings.md`, "Platform sandbox limits") --
+existing probe method (`../spec/android-platform.md`, "Device probe:
+sandbox limits confirmed directly") --
 Termux app uid (`untrusted_app_27`) and `dsh` shell uid (`u:r:shell:s0`),
 since comparing the two separates "kernel-wide" from "app-seccomp-only."
 Turned out unnecessary for group 5b (a direct test settled it in two

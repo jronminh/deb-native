@@ -902,7 +902,8 @@ has no dynamic symbols and no loader** — its libc is compiled in — so none o
 the above reaches it. The same is true of raw `syscall()` and libc-internal
 calls such as `dlopen`. Those need a syscall-level tracer
 (`ptrace` / `SECCOMP_RET_USER_NOTIF`) inside the app uid, which the platform
-probe shows is available (`docs/log/findings.md`, "Platform sandbox limits").
+probe shows is available (`docs/spec/android-platform.md`, "Device probe:
+sandbox limits confirmed directly").
 
 ## The 0.2.0 pivot: a self-contained prefix
 
