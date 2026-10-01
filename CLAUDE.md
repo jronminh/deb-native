@@ -34,30 +34,27 @@ would solve the same problem — one code path, no risk of `patchelf`
 miscomputing a binary's layout (see `docs/log/findings.md`, "patchelf
 corrupting an `ET_EXEC` binary's program headers", 2026-09-30).
 
-## Docs map (read before changing direction)
+## Repository layout: read the directory's own README.md first
 
-- `docs/spec/standard.md` — package scope.
-- `docs/spec/shim-coverage.md` — measured libc-shim coverage; what's left.
-- `docs/spec/syscall-boundary.md` — what libc interposition can't reach.
-- `docs/spec/tracer.md` — the tracer (`dn-trace`) status, tests, measurements.
-- `docs/spec/android-platform.md` — the three enforcement gates (A: seccomp
-  allowlist, B: capability/kernel-config, C: SELinux) and which own-glibc
-  can/can't fix; the full per-file fork verdict for Termux's Android glibc
-  patches.
-- `docs/log/android-seccomp-audit.md` — the investigation that found the
-  above, plus the on-device build attempt log.
-- `docs/log/findings.md` — engineering log (chronological).
-- `docs/spec/design.md` — current design (scope, the 0.2.0 self-contained
-  prefix, day-to-day commands, fake root); points out to
-  `docs/spec/path-shim.md` (the shim), `docs/spec/native-reuse.md`,
-  `docs/spec/classic-design.md` (pre-0.2.0, superseded), and
-  `docs/spec/prior-art.md` for the rest.
-- `docs/spec/alternatives.md`, `docs/spec/vs-sudo-less.md`,
-  `docs/spec/runtime-failures.md`, `docs/guides/tailscale.md`, `docs/spec/bind-only.md`,
-  `docs/spec/install-flow.md`, `docs/spec/multiarch-mechanics.md`.
-- `third_party/glibc-android-patches/README.md` — the forked Android glibc
-  patch (0.5.0), what's in/out, how to regenerate.
-- `TODO.md` — roadmap, current status source of truth.
+Every directory that holds more than one or two files has its own
+`README.md` indexing what's in it and what each file is for — `scripts/`
+and `docs/` each have one at every level (`scripts/install/README.md`,
+`docs/spec/README.md`, ...), and so do `native/`, `tests/`,
+`third_party/glibc-android-patches/`, `custom/`, and `tracer/`. Read the
+relevant one before working in a directory, or before guessing a file's
+purpose from its name alone — it's cheaper and more current than
+re-deriving it from the code, and these are the first thing to update
+when a file moves or a new one is added. Start from
+[`docs/README.md`](docs/README.md) (which doc kind goes where) and
+[`scripts/README.md`](scripts/README.md) (which lifecycle stage a script
+belongs to) for the two biggest trees.
+
+`docs/spec/design.md` is the live design doc (scope, the 0.2.0
+self-contained prefix, day-to-day commands, fake root) — read it before
+changing direction; its own intro points out to the deeper or superseded
+write-ups split out of it. `docs/log/findings.md` is the chronological
+engineering log. `TODO.md` is the roadmap and current-status source of
+truth.
 
 ## Current state
 

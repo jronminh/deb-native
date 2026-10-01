@@ -28,27 +28,24 @@ Three path mechanisms:
 mount-namespace "view"; the view is impossible here, so these mechanisms
 replace the view's path-resolution job.
 
-## Docs map (read these before changing direction)
+## Repository layout: read the directory's own README.md first
 
-- `docs/spec/standard.md` — package scope (Debian-section based).
-- `docs/spec/shim-coverage.md` + `docs/spec/coverage/` — measured libc-shim coverage
-  against a 258-package corpus; what is left.
-- `docs/spec/syscall-boundary.md` — the cases libc interposition cannot reach.
-- `docs/spec/direct-usage.md` — the living investigation + **fork-lite plan**.
-- `docs/spec/runtime-failures.md` — what breaks when *running* a program (wide).
-- `docs/guides/tailscale.md` — the static-daemon goal (userspace networking).
-- `docs/spec/bind-only.md` — what to strip to make fork-lite a bind-only tracer
-  (`canonicalize` → prefix rewrite): safe/keep/replace + whitelist + risks.
-- `docs/spec/install-flow.md` — the bootstrap/install order (runtime → auto-patch
-  `.deb` → native seed → base transaction → launchers) and the E2E recipe.
-- `docs/spec/android-platform.md` — which Android failures are seccomp/
-  kernel-config/SELinux (own-glibc can't fix these) vs. glibc-internal
-  (own-glibc can) — read before scoping 0.5.0 work.
-- `docs/spec/design.md` (current design; points out to `path-shim.md`,
-  `native-reuse.md`, `classic-design.md`, `prior-art.md`),
-  `docs/log/findings.md`, `docs/spec/vs-sudo-less.md`.
-- `tracer/README.md` — fork-lite provenance, build, prune status.
-- `TODO.md` — roadmap.
+`scripts/` and `docs/` each have a `README.md` at every level
+(`scripts/install/README.md`, `docs/spec/README.md`, ...) indexing what's
+in that directory; so do `native/`, `tests/`,
+`third_party/glibc-android-patches/`, `custom/`, and `tracer/`. Read the
+relevant one before working in a directory or guessing a file's purpose
+from its name. Start from `docs/README.md` and `scripts/README.md`.
+
+`docs/spec/design.md` is the live design doc (scope, the 0.2.0
+self-contained prefix, day-to-day commands, fake root) — read it before
+changing direction; its intro points out to `path-shim.md`,
+`native-reuse.md`, `classic-design.md` and `prior-art.md` for depth or
+history. `docs/log/findings.md` is the chronological engineering log.
+`docs/spec/android-platform.md` has the Android enforcement-gate taxonomy
+(seccomp/capability/SELinux) — read before scoping 0.5.0 work.
+`tracer/README.md` has fork-lite's provenance, build, and prune status.
+`TODO.md` is the roadmap.
 
 ## Current state (2026-09-26)
 
@@ -71,11 +68,9 @@ replace the view's path-resolution job.
 
 ## Layout
 
-- `native/` — `path-redirect.c` (shim), `dn-launch.c`, `dn-run.c`.
-- `tracer/` — fork-lite (reduced proot), GPLv2+ headers kept.
-- `tests/shim-libc/` — on-device shim smoke test.
-- `scripts/` — bootstrap, apt/dpkg wiring, patching, launchers, surveys,
-  `scan-libc-symbols.sh`, `scan-direct-syscalls.py`, `scope-sample.py`.
+See each directory's own `README.md` (`native/README.md`,
+`tracer/README.md`, `tests/README.md`, `scripts/README.md` and its
+per-subdirectory ones) — kept current there, not duplicated here.
 
 ## Where truth lives / workflow
 
