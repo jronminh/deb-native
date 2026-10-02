@@ -107,6 +107,20 @@ OUT=$(run) || { echo "probe died on a malformed config"; fail=1; }
 want "DN_INSTDIR=$T" "$OUT"
 want "LD_LIBRARY_PATH=$T/usr/lib/aarch64-linux-gnu:$T/usr/lib:$T/opt" "$OUT"
 
+# 5. Size overflows must fail open too, not kill every prefix program
+#    (0.5.4): a too-long env value, a too-long lib-add path, and an
+#    over-cap config file each warn and are skipped.
+{ printf 'env BIG='; head -c 3000 /dev/zero | tr '\0' 'a'; printf '\n'; } > "$T/etc/deb-native/ld-dn.conf"
+OUT=$(run) || { echo "probe died on an oversized env value"; fail=1; }
+want "DN_INSTDIR=$T" "$OUT"
+{ printf 'lib-add /'; head -c 5000 /dev/zero | tr '\0' 'x'; printf '\n'; } > "$T/etc/deb-native/ld-dn.conf"
+OUT=$(run) || { echo "probe died on an oversized lib-add path"; fail=1; }
+want "DN_INSTDIR=$T" "$OUT"
+head -c 20000 /dev/zero | tr '\0' '#' > "$T/etc/deb-native/ld-dn.conf"
+OUT=$(run) || { echo "probe died on an oversized config"; fail=1; }
+want "DN_INSTDIR=$T" "$OUT"
+want "LD_LIBRARY_PATH=$T/usr/lib/aarch64-linux-gnu:$T/usr/lib" "$OUT"
+
 if [ "$fail" -eq 0 ]; then
   echo "PASS: ld-dn-config (defaults, default file, overrides, fail-open)"
 else

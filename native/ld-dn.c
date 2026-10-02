@@ -79,7 +79,7 @@ typedef struct {
 #define MAP_ANONYMOUS 0x20
 
 /* The version this loader reports under DN_REDIRECT_DEBUG. */
-#define DN_VERSION "0.5.3"
+#define DN_VERSION "0.5.4"
 
 /* Space _start reserves between this function's frame and the original
  * stack, for the rebuilt argc/argv/envp/auxv. */
@@ -132,43 +132,53 @@ static void die(const char *what, const char *arg) {
   sys6(SYS_exit, 127, 0, 0, 0, 0, 0);
   for (;;) {}
 }
-/* dst = a + b, NUL-terminated; dies if it does not fit. */
+/* dst = a + b, NUL-terminated; dies if it does not fit. For core strings
+ * only -- the prefix and the fixed literals, which are known to fit. A
+ * config-sourced value must go through join_prefix()/app(), which report
+ * failure instead of killing every prefix process. */
 static char *cat2(char *dst, u64 cap, const char *a, const char *b) {
   u64 la = slen(a), lb = slen(b);
   if (la + lb + 1 > cap) die("path too long", a);
   memcpy(dst, a, la); memcpy(dst + la, b, lb); dst[la + lb] = 0;
   return dst;
 }
-/* dst += s, NUL-terminated; dies if it does not fit. */
-static void app(char *dst, u64 cap, const char *s) {
+/* dst += s, NUL-terminated. Returns 0 on success, -1 if it would not fit;
+ * the caller warns and skips, never dies. */
+static int app(char *dst, u64 cap, const char *s) {
   u64 l = slen(dst), ls = slen(s);
-  if (l + ls + 1 > cap) die("value too long", s);
+  if (l + ls + 1 > cap) return -1;
   memcpy(dst + l, s, ls + 1);
+  return 0;
 }
 static char g_dn[DN_PATH_MAX];
 
 /* A "path inside the prefix": a leading / is the Debian path, anything else
- * is relative; both join under $DN. */
-static void join_prefix(char *dst, u64 cap, const char *val) {
-  if (val[0] == '/') { cat2(dst, cap, g_dn, val); return; }
+ * is relative; both join under $DN. Returns 0, or -1 if it would not fit. */
+static int join_prefix(char *dst, u64 cap, const char *val) {
   u64 a = slen(g_dn), v = slen(val);
-  if (a + 1 + v + 1 > cap) die("path too long", val);
-  memcpy(dst, g_dn, a); dst[a] = '/'; memcpy(dst + a + 1, val, v + 1);
+  u64 need = (val[0] == '/') ? a + v + 1 : a + 1 + v + 1;
+  if (need > cap) return -1;
+  memcpy(dst, g_dn, a);
+  if (val[0] == '/') { memcpy(dst + a, val, v + 1); }
+  else { dst[a] = '/'; memcpy(dst + a + 1, val, v + 1); }
+  return 0;
 }
-/* Copy src into dst with the token "$DN" replaced by the prefix. */
-static void expand(char *dst, u64 cap, const char *src) {
+/* Copy src into dst with the token "$DN" replaced by the prefix. Returns 0,
+ * or -1 if it would not fit (the caller skips the entry). */
+static int expand(char *dst, u64 cap, const char *src) {
   u64 k = 0;
   while (*src) {
     if (src[0] == '$' && src[1] == 'D' && src[2] == 'N') {
       u64 l = slen(g_dn);
-      if (k + l + 1 > cap) die("env too long", src);
+      if (k + l + 1 > cap) return -1;
       memcpy(dst + k, g_dn, l); k += l; src += 3;
     } else {
-      if (k + 1 >= cap) die("env too long", src);
+      if (k + 1 >= cap) return -1;
       dst[k++] = *src++;
     }
   }
   dst[k] = 0;
+  return 0;
 }
 static const char *findenv(char **envp, long nenv, const char *name) {
   u64 n = slen(name);
@@ -196,11 +206,13 @@ static Phdr g_ph[32];
 
 static void add_lib(const char *val) {
   if (nlib >= MAX_LIB) { warn("config: too many lib-add, ignored", val); return; }
-  join_prefix(lib_buf[nlib], DN_PATH_MAX, val); libs[nlib] = lib_buf[nlib]; nlib++;
+  if (join_prefix(lib_buf[nlib], DN_PATH_MAX, val) != 0) { warn("config: lib-add path too long, ignored", val); return; }
+  libs[nlib] = lib_buf[nlib]; nlib++;
 }
 static void add_pre(const char *val) {
   if (npre >= MAX_PRE) { warn("config: too many preload, ignored", val); return; }
-  join_prefix(pre_buf[npre], DN_PATH_MAX, val); pres[npre] = pre_buf[npre]; npre++;
+  if (join_prefix(pre_buf[npre], DN_PATH_MAX, val) != 0) { warn("config: preload path too long, ignored", val); return; }
+  pres[npre] = pre_buf[npre]; npre++;
 }
 static void add_unset(const char *name) {
   if (!*name) return;
@@ -210,19 +222,27 @@ static void add_unset(const char *name) {
   memcpy(unset_buf[nunset], name, l); unset_buf[nunset][l] = 0;
   unsets[nunset] = unset_buf[nunset]; nunset++;
 }
-static void set_env(const char *k, const char *v) {
+/* Set (or replace) an env entry. Builds into a local buffer first so a
+ * too-long value leaves the table untouched. warn_skip distinguishes a
+ * config error (warn) from a compiled default (silent -- known to fit). */
+static int set_env(const char *k, const char *v, int warn_skip) {
   u64 kl = slen(k);
-  if (!kl) return;
+  if (!kl) return 0;
+  if (kl + 1 >= DN_ENV_MAX) { if (warn_skip) warn("config: env key too long, ignored", k); return 0; }
+  char tmp[DN_ENV_MAX];
+  memcpy(tmp, k, kl); tmp[kl] = '=';
+  if (expand(tmp + kl + 1, DN_ENV_MAX - kl - 1, v) != 0) {
+    if (warn_skip) warn("config: env value too long, ignored", k);
+    return 0;
+  }
   int idx = -1;
   for (int i = 0; i < nset; i++) if (same_n(sets[i], k, kl) && sets[i][kl] == '=') { idx = i; break; }
   if (idx < 0) {
-    if (nset >= MAX_ENV) { warn("config: too many env, ignored", k); return; }
+    if (nset >= MAX_ENV) { if (warn_skip) warn("config: too many env, ignored", k); return 0; }
     idx = nset++; sets[idx] = env_buf[idx];
   }
-  if (kl + 1 >= DN_ENV_MAX) { warn("config: env key too long, ignored", k); return; }
-  char *d = env_buf[idx];
-  memcpy(d, k, kl); d[kl] = '=';
-  expand(d + kl + 1, DN_ENV_MAX - kl - 1, v);
+  memcpy(env_buf[idx], tmp, slen(tmp) + 1);
+  return 1;
 }
 static int env_is_set(const char *e, u64 n) {
   for (int i = 0; i < nset; i++) if (same_n(sets[i], e, n) && sets[i][n] == '=') return 1;
@@ -247,7 +267,7 @@ static void policy_defaults(void) {
   /* COMPILER_PATH: gcc's cc1/as/ld do not fall back to PATH (ld-dn.c
    * history); one of the generic env entries now, so a config can replace
    * it with `env COMPILER_PATH=...`. */
-  set_env("COMPILER_PATH", "$DN/usr/bin");
+  set_env("COMPILER_PATH", "$DN/usr/bin", 0);
   /* Replaced by ld-dn itself or rebuilt below; drop the caller's copy. */
   add_unset("LD_PRELOAD"); add_unset("DN_INSTDIR");
   add_unset("LD_LIBRARY_PATH"); add_unset("COMPILER_PATH");
@@ -272,25 +292,25 @@ static void do_unset(char *rest) {
   }
 }
 static void do_shimprefix(char *rest) {
-  char *p = rest; int any = 0;
+  char *p = rest; int any = 0, bad = 0;
   char build[DN_PATH_MAX]; build[0] = 0;
   while (*p) {
     char *t = skip_ws(p);
     if (!*t) break;
     char *e = t; while (*e && *e != ' ' && *e != '\t') e++;
     char save = *e; *e = 0;
-    if (any) app(build, sizeof build, ":");
-    app(build, sizeof build, t);
+    if ((any && app(build, sizeof build, ":") != 0) || app(build, sizeof build, t) != 0) { bad = 1; break; }
     any = 1;
     p = save ? e + 1 : e;
   }
+  if (bad) { warn("config: shim-prefix too long, ignored", 0); return; }
   if (any) { cat2(g_rprefix, sizeof g_rprefix, "", build); has_rprefix = 1; }
 }
 static void do_env(char *rest) {
   char *eq = rest; while (*eq && *eq != '=') eq++;
   if (!*eq) { warn("config: env needs KEY=VALUE", rest); return; }
   *eq = 0;
-  set_env(rest, eq + 1);
+  set_env(rest, eq + 1, 1);
 }
 static void dispatch(char *s) {
   char *sp = s; while (*sp && *sp != ' ' && *sp != '\t') sp++;
@@ -299,8 +319,8 @@ static void dispatch(char *s) {
   memcpy(dir, s, dl); dir[dl] = 0;
   char *rest = skip_ws(sp);
   if (same(dir, "loader")) {
-    if (*rest) join_prefix(g_loader, DN_PATH_MAX, rest);
-    else warn("config: loader needs a path", 0);
+    if (!*rest) warn("config: loader needs a path", 0);
+    else if (join_prefix(g_loader, DN_PATH_MAX, rest) != 0) warn("config: loader path too long, ignored", rest);
   } else if (same(dir, "lib-add")) {
     if (*rest) add_lib(rest); else warn("config: lib-add needs a path", 0);
   } else if (same(dir, "no-default-lib")) {
@@ -388,19 +408,27 @@ static int lib_has(const char *val, const char *tok, u64 tl) {
 }
 /* Append tok to the value of a "LD_LIBRARY_PATH=..." string, unless it is
  * already there. */
-static void append_lib(char *dst, u64 cap, const char *tok, u64 tl) {
+static int append_lib(char *dst, u64 cap, const char *tok, u64 tl) {
   const char *val = dst + sizeof("LD_LIBRARY_PATH=") - 1;
-  if (lib_has(val, tok, tl)) return;
-  if (*val) app(dst, cap, ":");
-  app(dst, cap, tok);
+  if (lib_has(val, tok, tl)) return 0;
+  if (*val && app(dst, cap, ":") != 0) return -1;
+  return app(dst, cap, tok);
 }
 
 static void build_env(void) {
   cat2(g_env_pre, sizeof g_env_pre, "LD_PRELOAD=", "");
-  int first = 1;
-  if (default_pre) { app(g_env_pre, sizeof g_env_pre, g_default_pre); first = 0; }
-  for (int i = 0; i < npre; i++) { if (!first) app(g_env_pre, sizeof g_env_pre, ":"); app(g_env_pre, sizeof g_env_pre, pres[i]); first = 0; }
-  if (g_extra_preload && *g_extra_preload) { if (!first) app(g_env_pre, sizeof g_env_pre, ":"); app(g_env_pre, sizeof g_env_pre, g_extra_preload); }
+  int first = 1, over = 0;
+  if (default_pre) { over = app(g_env_pre, sizeof g_env_pre, g_default_pre) != 0; if (!over) first = 0; }
+  for (int i = 0; i < npre && !over; i++) {
+    if (!first) over = app(g_env_pre, sizeof g_env_pre, ":") != 0;
+    if (!over) over = app(g_env_pre, sizeof g_env_pre, pres[i]) != 0;
+    if (!over) first = 0;
+  }
+  if (!over && g_extra_preload && *g_extra_preload) {
+    if (!first) over = app(g_env_pre, sizeof g_env_pre, ":") != 0;
+    if (!over) over = app(g_env_pre, sizeof g_env_pre, g_extra_preload) != 0;
+  }
+  if (over) warn("config: preload list too long, truncated", 0);
 
   cat2(g_env_inst, sizeof g_env_inst, "DN_INSTDIR=", g_dn);
 
@@ -410,21 +438,24 @@ static void build_env(void) {
    * `LD_LIBRARY_PATH=... prog` behave the way a glibc developer expects,
    * with no project-specific escape hatch (docs/guides/gcc-glibc-dev.md). */
   cat2(g_env_lib, sizeof g_env_lib, "LD_LIBRARY_PATH=", "");
-  for (int i = 0; i < nlib; i++) append_lib(g_env_lib, sizeof g_env_lib, libs[i], slen(libs[i]));
+  int libover = 0;
+  for (int i = 0; i < nlib && !libover; i++)
+    if (append_lib(g_env_lib, sizeof g_env_lib, libs[i], slen(libs[i])) != 0) libover = 1;
   if (g_inherited_lib && *g_inherited_lib) {
     const char *p = g_inherited_lib;
-    while (*p) {
+    while (*p && !libover) {
       const char *e = p;
       while (*e && *e != ':') e++;
       u64 l = (u64)(e - p);
       if (l && l < DN_PATH_MAX) {
         char tok[DN_PATH_MAX];
         memcpy(tok, p, l); tok[l] = 0;
-        append_lib(g_env_lib, sizeof g_env_lib, tok, l);
+        if (append_lib(g_env_lib, sizeof g_env_lib, tok, l) != 0) libover = 1;
       }
       p = *e ? e + 1 : e;
     }
   }
+  if (libover) warn("config: library list too long, truncated", 0);
 
   if (has_rprefix) cat2(g_env_rprefix, sizeof g_env_rprefix, "DN_REDIRECT_PREFIXES=", g_rprefix);
 }
@@ -479,7 +510,11 @@ struct ret ld_dn_main(u64 *sp) {
   g_inherited_lib = findenv(envp, nenv, "LD_LIBRARY_PATH");
   g_extra_preload = findenv(envp, nenv, "DN_PRELOAD");
   g_new_bio = inherited && *inherited && !has(inherited, "path-redirect.so");
-  if (g_new_bio) cat2(g_env_bio, sizeof g_env_bio, "DN_BIONIC_PRELOAD=", inherited);
+  if (g_new_bio) {
+    if (slen(inherited) + sizeof("DN_BIONIC_PRELOAD=") - 1 < sizeof g_env_bio)
+      cat2(g_env_bio, sizeof g_env_bio, "DN_BIONIC_PRELOAD=", inherited);
+    else { warn("inherited LD_PRELOAD too long, DN_BIONIC_PRELOAD dropped", 0); g_new_bio = 0; }
+  }
 
   program_name(argv);
   policy_defaults();

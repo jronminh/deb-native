@@ -220,6 +220,14 @@ Semantics:
   `COMPILER_PATH`, `DN_BIONIC_PRELOAD` minus those ld-dn re-adds).
 - `shim-prefix` is passed *through* to the shim (next section), not
   consumed by ld-dn.
+- **Global directives must precede the first `[name]` block.** Once a
+  block starts, every following directive belongs to it (applied only
+  when that program matches, ignored otherwise) — there is no "return to
+  global". Keep globals at the top of the file.
+- A line whose value does not fit (`env`, `lib-add`, `preload`, `loader`,
+  `shim-prefix`) or that overflows a table cap is warned about and
+  skipped; it is never fatal (0.5.4 fixed the per-value case, which had
+  `die`d).
 
 Deliberately **not** in v1: `include`, globs, arithmetic, conditionals.
 A freestanding parser is the riskiest new code; keep its surface tiny so
@@ -300,12 +308,15 @@ tracer, and gives ld-dn a clean reason to exist beyond "set five vars".
   rest (fail open; never `die` on config).
 - **Unknown directive** — warn and skip, so a newer config on an older
   ld-dn degrades instead of bricking.
-- **Arena overflow** — stop parsing, warn, keep what fit; the caps
-  (`RESERVE`, arena size) are checked and reported, never silently
-  truncating a terminated string.
-- **Bad `loader`** — fall back to the compiled loader path and warn; a
-  loader that fails to map is already fatal by nature (`ld-dn.c:212-227`)
-  but should name the loader it tried, and where the path came from.
+- **Value/table overflow** — a value too long for its cell (`env`,
+  `lib-add`, `preload`, `loader`, `shim-prefix`) or a full table
+  (`MAX_LIB`, `MAX_ENV`, ...) warns and skips that line, never `die`; the
+  fixed `RESERVE`/table caps are checked and reported, never silently
+  truncating a terminated string. (0.5.4: per-value overflows used to be
+  fatal, which turned a config typo into a prefix-wide outage.)
+- **Bad `loader`** — a too-long path warns and keeps the previous loader;
+  a loader that fails to map is fatal by nature (the program cannot start
+  at all) but names the loader it tried.
 - **Security note** — `preload` = arbitrary code in every prefix
   process, and the prefix is user-writable. This grants no privilege the
   user lacks (env vars already do), but the doc and the reader should
@@ -359,12 +370,13 @@ shim.
 ## Status
 
 Landed end to end — the config layer in 0.5.2, the `LD_LIBRARY_PATH`
-merge in 0.5.3. Evidence: `tests/ld-dn-config/run.sh` passes on-device
-(compiled defaults, the shipped default file, explicit overrides,
-per-program blocks, the caller's `LD_LIBRARY_PATH` merged and
-deduplicated, and a malformed config), and an on-prefix `gcc` build of a
-shared library runs with `LD_LIBRARY_PATH=.` and fails without it. As
-built, against the plan above:
+merge in 0.5.3, and fail-open hardening in 0.5.4. Evidence:
+`tests/ld-dn-config/run.sh` passes on-device (compiled defaults, the
+shipped default file, explicit overrides, per-program blocks, the
+caller's `LD_LIBRARY_PATH` merged and deduplicated, a malformed config,
+and oversized-value/oversized-file cases that must fail open), and an
+on-prefix `gcc` build of a shared library runs with `LD_LIBRARY_PATH=.`
+and fails without it. As built, against the plan above:
 
 - **Implementation** — `native/ld-dn.c` splits into prefix discovery, a
   `policy` table (lib / preload / env / unset / shim-prefix), a
@@ -384,10 +396,16 @@ built, against the plan above:
   `no-default-preload`, `env`, `unset`, `shim-prefix`, `[program]`.
 - **Shim** — `native/path-redirect.c` reads `DN_REDIRECT_PREFIXES`; its
   compiled `/usr /etc /var /opt /root /lib /bin /sbin` set is the default
-  when unset, and `shim-prefix` replaces it.
+  when unset, and `shim-prefix` replaces it. Since 0.5.4 the shipped
+  `native/ld-dn.conf` sets `shim-prefix` active, so the config — not the
+  shim's compiled switch — is the source for an installed prefix.
 - **Diagnostics** — `DN_REDIRECT_DEBUG=1` dumps the resolved policy;
   config problems warn to stderr and the bad line is skipped, never
   fatal. `DN_NO_CONFIG` skips the read; `DN_CONFIG` relocates it.
+- **Fail-open (0.5.4)** — a value too long for its cell, or a full table,
+  now warns and skips instead of `die`ing; before this a single oversized
+  `env` value or `lib-add` path killed every prefix program. Global
+  directives are documented to precede the first `[program]` block.
 - **Not done** — the `DN_CONFIG`-gated fast path (always-probe chosen for
   reachability), globbing in `[program]` names, and pointing the tracer
   at the same file (loader and shim only for now). `DN_PRELOAD` remains

@@ -417,6 +417,27 @@ fails without it. Design:
 
 **Open**: none.
 
+## 0.5.4: fail-open hardening (released)
+
+**Goal**: a config mistake warns and is skipped, never takes the whole
+prefix down; and the config file, not a compiled default, is the source
+for an installed prefix.
+
+**Status**: released 2026-10-02. `native/ld-dn.c` no longer `die`s on a
+value too long for its cell or a full table -- `env`, `lib-add`,
+`preload`, `loader` and `shim-prefix` overflows now warn and skip, as the
+"fail open" design always claimed (previously one oversized `env` value
+or `lib-add` path killed every prefix program with exit 127).
+`native/ld-dn.conf` sets `shim-prefix` active, so the redirect roots come
+from the config rather than the shim's compiled switch, and it documents
+that global directives must precede the first `[program]` block.
+`tests/ld-dn-config/run.sh` covers oversized values, an oversized file
+and aggregate overflow. Design:
+[`docs/spec/ld-dn-config.md`](docs/spec/ld-dn-config.md).
+
+**Open**:
+- Gate/benchmark the always-probe `openat` (see 0.5.2 Open).
+
 ## Services, then sudo (after alpha)
 
 **Goal**: same scope as `sudo-less` — a service needs something to run it
