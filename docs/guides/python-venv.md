@@ -15,14 +15,15 @@ compiled extensions (`pydantic-core`, `cffi`, …). Done and working: this
 is the escape hatch for any Python project that needs a wheel Termux's
 own Bionic Python cannot install because there is no `manylinux`/
 `android` wheel and no feasible from-source build (Rust targeting
-`aarch64-linux-android` is the common failure). Status: working, one
-reproducible launcher quirk documented below with a workaround.
+`aarch64-linux-android` is the common failure). Status: working, two
+reproducible rough edges documented below, each with a workaround.
 
 ## Contents
 
 - [Why Termux's own Python hits a wall](#why-termuxs-own-python-hits-a-wall)
 - [Setup](#setup)
 - [The `pip` launcher quirk](#the-pip-launcher-quirk)
+- [`pytest` needs `dn-trace`](#pytest-needs-dn-trace)
 - [Status](#status)
 
 ## Related docs
@@ -111,9 +112,34 @@ translated path rather than by `python3 -m`).
 .venv-dn/bin/pip install <packages>              # fails every time
 ```
 
+## `pytest` needs `dn-trace`
+
+Running `pytest` (even a trivial pure-Python test file, no compiled
+extensions involved) through the venv's launcher dies with `Bad system
+call` (`SIGSYS`), the same class of gap as the `ldconfig -r` one noted in
+`docs/log/android-seccomp-audit.md` — some syscall `pytest`'s own
+machinery makes (collection, capture, or cache handling; not
+root-caused) isn't in the shim's covered set and isn't auto-routed to
+the tracer. `-p no:cacheprovider`, `-p no:faulthandler`, and `-s` (no
+capture) do not avoid it, so it isn't any one obvious plugin.
+
+**Workaround**: run `pytest` explicitly under `dn-trace`:
+
+```sh
+~/deb-native/tracer/dn-trace -- .venv-dn/bin/python3 -m pytest tests/
+```
+
+This is slower (every syscall goes through `ptrace`) but has run a full
+suite (protocol-layer tests: signing, canonicalization, tag
+normalization, Pydantic models) with no further issues. Worth
+revisiting once `pytest`'s exact offending syscall is identified — it
+may be a small, fixable shim/`fakesyscall.json` gap rather than
+something that needs the tracer for every run.
+
 ## Status
 
 Working end to end: a `pydantic`/`fastapi`/`sqlalchemy`/`pynacl`-class
 dependency set installs cleanly via prebuilt wheels through this path,
-no Rust and no from-source build needed. The `pip` launcher quirk above
-is a known, worked-around rough edge, not a blocker.
+no Rust and no from-source build needed. The `pip` launcher quirk and
+the `pytest`/`dn-trace` requirement above are known, worked-around
+rough edges, not blockers.
