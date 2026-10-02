@@ -248,7 +248,7 @@ and measured in [`syscall-boundary.md`](syscall-boundary.md).
 
 The five-prefix view (`/usr`, `/etc`, `/var`, `/opt`, `/root`) turned out too
 narrow in practice, not just by inspection: `apt install gcc` end to end
-(`docs/log/findings.md`, 2026-10-01) hit it directly — `ld` failed with
+(`docs/log/findings/gcc-hello-pt-interp-gap.md`) hit it directly — `ld` failed with
 `cannot find /lib/aarch64-linux-gnu/libc.so.6` because `gcc`'s own linker
 invocation hardcodes `-dynamic-linker /lib/ld-linux-aarch64.so.1` and searches
 `/lib/aarch64-linux-gnu` regardless of how the package that shipped it spells

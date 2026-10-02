@@ -31,8 +31,8 @@ per-launch environment (`LD_PRELOAD`, `DN_INSTDIR`, `LD_LIBRARY_PATH`,
 `COMPILER_PATH`) before handing off to glibc's real loader. Prefer adding
 a launch-time env var here over a static per-`.deb` ELF patch when both
 would solve the same problem — one code path, no risk of `patchelf`
-miscomputing a binary's layout (see `docs/log/findings.md`, "patchelf
-corrupting an `ET_EXEC` binary's program headers", 2026-09-30).
+miscomputing a binary's layout (see
+`docs/log/findings/patchelf-et-exec-runpath.md`).
 
 ## Repository layout: read the directory's own README.md first
 
@@ -66,9 +66,9 @@ script instead of re-deriving the check.
 `docs/spec/design.md` is the live design doc (scope, the 0.2.0
 self-contained prefix, day-to-day commands, fake root) — read it before
 changing direction; its own intro points out to the deeper or superseded
-write-ups split out of it. `docs/log/findings.md` is the chronological
-engineering log. `TODO.md` is the roadmap and current-status source of
-truth.
+write-ups split out of it. `docs/log/findings/` is the chronological
+engineering log, one entry per file. `TODO.md` is the roadmap and
+current-status source of truth.
 
 ## Current state
 

@@ -143,7 +143,7 @@ Two real differences from this project's approach, worth naming plainly:
   `proroot`'s full rootfs presumably "just works" for far more packages
   out of the box, where this project has to be more selective about which
   packages it can actually get working (per the low real success rate in
-  `findings.md`) rather than getting broad compatibility
+  `docs/log/findings/README.md`) rather than getting broad compatibility
   for free.
 
 Being closed-source, `proroot` can't be inspected or reused directly —

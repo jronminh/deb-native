@@ -9,7 +9,7 @@
 > topic, a new one-off investigation, or a new guide -- not just a
 > long addition to what a doc already covers.
 
-Why: `../spec/runtime-failures.md` and `findings.md` list several things
+Why: `../spec/runtime-failures.md` and `docs/log/findings/` list several things
 Android blocks (`libc6` killed at startup, `set_robust_list` SIGSYS, SysV
 IPC denied, `mount`/`CLONE_NEWNS` `EPERM`, `CLONE_NEWUSER` `EINVAL`), but
 each was found ad hoc, one program at a time. Before scoping 0.5.0 ("our
@@ -48,8 +48,10 @@ Phase 1 (the three enforcement gates) and Phase 2 (reconciling known findings ag
 - [`../spec/android-platform.md`](../spec/android-platform.md) — the
   standing reference this investigation produced (the gate taxonomy, the
   glibc patch catalog and fork verdict).
-- [`findings.md`](findings.md) — "Platform sandbox limits", the earlier
-  probe this audit builds on and reconciles with.
+- [`../spec/android-platform.md`](../spec/android-platform.md) —
+  "Device probe: sandbox limits confirmed directly", the earlier probe
+  this audit builds on and reconciles with (originally a
+  `docs/log/findings.md` entry, moved there in full).
 - [`../../third_party/glibc-android-patches/README.md`](../../third_party/glibc-android-patches/README.md) —
   the patch this audit's build-attempt log is about.
 
@@ -107,7 +109,7 @@ probe (`cc` is available in Termux):
 Phase 1: it's not just Gate A (seccomp) and Gate B (capability/kernel
 config) -- there is also **Gate C: SELinux**, enforced independently of
 both (confirmed here: the syscall passed seccomp, no capability was
-needed for what was requested, and it still failed). `findings.md`'s
+needed for what was requested, and it still failed). `../spec/android-platform.md`'s
 probe table already noted "SELinux is enforcing" for both domains but had
 not pinned a concrete syscall to it before this test.
 
@@ -335,8 +337,9 @@ the project's actual translation pipeline
 (`scripts/install/dn-translate-deb.sh`, against a live `~/.dn` prefix) to get a
 faithfully-`patchelf`'d `libc.so.6`/`ld-linux-aarch64.so.1` (confirmed
 `PT_INTERP`/`RUNPATH` correctly repointed into the prefix), then ran the
-minimal `hello` package's binary (the same one `findings.md` already uses
-as a test case) through it directly with `--library-path`.
+minimal `hello` package's binary (the same one
+`docs/log/findings/first-working-prototype.md` already uses as a test
+case) through it directly with `--library-path`.
 
 **Result: segfault, before `LD_DEBUG=all` could write a single line** --
 the crash is inside the dynamic linker's own startup, earlier than any
@@ -365,8 +368,8 @@ one cost-effective NSS fix left standing, distinct from and much cheaper
 than full source-rebuild 0.5.0.
 
 **Cross-checked, not contaminated by a later finding:** a separate bug
-found the same day (`findings.md`, "patchelf corrupting an `ET_EXEC`
-binary's program headers") showed `dn-translate-deb.sh`'s old
+found the same day
+(`docs/log/findings/patchelf-et-exec-runpath.md`) showed `dn-translate-deb.sh`'s old
 `--set-rpath` step could corrupt an `ET_EXEC` binary into an identically-
 shaped crash (segfault, no syscall in flight, inside loader startup).
 Re-ran this section's own test material (`libc.so.6`,
@@ -582,8 +585,8 @@ patch, diff against `work` -- empty. Landed in
 per-file breakdown and a documented regeneration recipe). Not yet built
 or tested on-device -- that's the next step, either via CI
 (`build-glibc.yml`, unchanged, `patch -p1` handles the new-file hunks the
-same way) or on-device now that `cc1`'s `ET_EXEC` segfault (`findings.md`,
-2026-09-30) no longer blocks a native build attempt.
+same way) or on-device now that `cc1`'s `ET_EXEC` segfault
+(`docs/log/findings/patchelf-et-exec-runpath.md`) no longer blocks a native build attempt.
 
 ## First real on-device `configure`/`make` attempt (2026-09-30)
 
@@ -594,7 +597,7 @@ forked tree above) with `CC=$DN/usr/bin/gcc-14`.
 `config.h`, including `checking for redirection of built-in functions...
 yes`, the exact check that fails `clang` unconditionally (`TODO.md`'s old
 build-step blocker). Direct confirmation the `cc1`/`ET_EXEC` fix
-(`findings.md`, 2026-09-30) actually unblocks a real, on-device glibc
+(`docs/log/findings/patchelf-et-exec-runpath.md`) actually unblocks a real, on-device glibc
 `configure`, not just a standalone `cc1 -v`/`gcc -S` smoke test.
 
 One real gap on the way there: **kernel UAPI headers**
@@ -681,7 +684,7 @@ hunk), done below.
 `objdir/elf/ld.so` built, 1.2 MB) after two false starts, both from this
 build's own setup rather than the patch content: the `-k`/dependency-order
 issue above, and the earlier `PATH`-shadowing `mkdir` instability
-(`findings.md`). A straight (non-`-k`) `make -O -j1` run, once those two
+(`docs/log/findings/`). A straight (non-`-k`) `make -O -j1` run, once those two
 were fixed, went start to finish without a single real error.
 
 **Ran the `hello` control test this doc has used throughout** (the same

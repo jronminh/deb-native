@@ -1,9 +1,8 @@
 #!/bin/sh
 # Create the maintainer-script runtime inside INSTDIR. Idempotent.
 #
-# Why this exists (docs/log/findings.md, and the
-# on-device re-test 2026-09-25 PM that produced docs/findings-runtime-and-
-# base-2026-09-25.md): maintainer scripts are executed by the *kernel*
+# Why this exists (docs/log/findings/complete-base-bootstrap.md):
+# maintainer scripts are executed by the *kernel*
 # resolving their shebang, and the kernel follows only one `#!` level. An
 # interpreter that is itself a shell script (`dn-shell` used to be) leaves
 # dpkg falling back to Bionic /bin/sh with no shim and no glibc PATH --
@@ -110,7 +109,8 @@ put "$CACHE/dn-shell" "$BINDIR/dn-perl"
 
 # No-op shims for root-only/unshipped commands a maintainer script may call
 # by bare name: an unprivileged process cannot chown/chgrp no matter what
-# path the shim points it at (findings.md, next step 1); dpkg-statoverride
+# path the shim points it at
+# (docs/log/findings/proper-base-bootstrap.md, next step 1); dpkg-statoverride
 # isn't shipped by Termux's own dpkg either (TODO.md quick wins), and
 # without a shim its postinst call prints a bare "command not found" on
 # every install (e.g. ca-certificates) even though it still reaches ii.

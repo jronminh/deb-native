@@ -175,7 +175,7 @@ PATH=/data/data/com.termux/files/usr/bin \
 PATH=/data/data/com.termux/files/usr/bin make -O -j8   # NOT -j1: $DN must
   # be off PATH (COMPILER_PATH from ld-dn.c is sufficient) -- with $DN on
   # PATH, this project's own coreutils going through ld-dn+shim under
-  # heavy repeated invocation was unstable (docs/log/findings.md); -j8 itself
+  # heavy repeated invocation was unstable (docs/log/findings/); -j8 itself
   # is not the issue and is ~3-4x faster than -j1.
 make -k install DESTDIR=<destdir>   # -k: the manual subdir fails for an
   # unrelated missing-texinfo-source reason, nothing else is affected

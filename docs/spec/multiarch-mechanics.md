@@ -34,8 +34,9 @@ designs use them differently.
   clarifies.
 - [`design.md`](design.md) — the 0.2.0 pivot's own architecture handling,
   the other design this doc is shared across.
-- [`../log/findings.md`](../log/findings.md) — the live incident that
-  prompted this research.
+- [`../log/findings/README.md`](../log/findings/README.md) — the live
+  incident that prompted this research happened on the `naibed` branch,
+  whose own engineering log isn't part of this split.
 
 ## The `Multi-Arch` control field
 

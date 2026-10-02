@@ -9,7 +9,7 @@ for the side-by-side diff.
 **Status** paragraph (the current, stable truth — when an Open item is
 finished, its outcome is folded in here and the item is deleted, not kept
 as a checked-off line), and an **Open** list (short, no narrative — the
-"why"/investigation history lives in [`docs/log/findings.md`](docs/log/findings.md)
+"why"/investigation history lives in [`docs/log/findings/`](docs/log/findings/README.md)
 (chronological engineering log) and the other `docs/*.md` files each
 section links to).
 
@@ -30,15 +30,16 @@ that's what "Compilers" below is still waiting on.
   (`gcc`/`cpp`/`binutils` and their whole dependency chain), `libc6-dev`
   now installs unmodified from Debian's real archive (no custom
   packaging needed -- `dn-package-glibc.sh` keeps the own-built `libc6`'s
-  version string an exact match instead, `docs/log/findings.md`
-  2026-10-01), and `gcc -c hello.c` / `gcc -o hello hello.c` both compile
+  version string an exact match instead,
+  `docs/log/findings/libc6-dev-gap-closed.md`), and `gcc -c hello.c` / `gcc -o hello hello.c` both compile
   clean after extending the shim's redirect scope to `/lib`/`/bin`/`/sbin`
   (`docs/spec/shim-coverage.md`, same date). Remaining blocker: running
   the linked binary fails at the kernel level (`PT_INTERP` on a freshly
   `gcc`-built ELF points at a literal, unresolvable
   `/lib/ld-linux-aarch64.so.1`, same problem `native/ld-dn.c` solves for
   installed `.deb`s but not yet for binaries built *inside* the prefix --
-  `docs/log/findings.md` has the detail, fix approach undecided). `make`
+  `docs/log/findings/gcc-hello-pt-interp-gap.md` has the detail, fix
+  approach undecided). `make`
   untested; `ghc`/`rustc` as a bonus, unresearched.
 - **Popular languages**: `python3` + a C-extension package, `perl` + an XS
   module, `ruby`, `nodejs` — incl. the Perl version gap (`dn-perl` still
@@ -288,7 +289,7 @@ exist anywhere in glibc 2.41's source). Patch catalog and per-file verdict:
 [`docs/spec/android-platform.md`](docs/spec/android-platform.md). Full
 investigation history:
 [`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md),
-[`docs/log/findings.md`](docs/log/findings.md). One parked decision: the
+[`docs/log/findings/`](docs/log/findings/README.md). One parked decision: the
 fake-root-entangled `"0"`-bucket of `fakesyscall.json`
 (`setuid`/`setgid`/...) is split out as
 [`set-fakesyscalls-parked.patch`](third_party/glibc-android-patches/set-fakesyscalls-parked.patch),
@@ -327,7 +328,7 @@ same upstream source and Debian patch series plus one Android
 compatibility patch on top, not a different thing wearing the name. With
 that, `libc6-dev`/`libc-dev-bin`'s `Depends: libc6 (= ...)` sees a true
 match and both install straight from Debian's real archive, unmodified
-(`docs/log/findings.md`). `locales`/`libc-bin` likely work the same way
+(`docs/log/findings/libc6-dev-gap-closed.md`). `locales`/`libc-bin` likely work the same way
 but untested -- see Open below.
 
 **Considered, not now: split the glibc patch/build/packaging into its own
@@ -518,8 +519,8 @@ entries.
 **Goal**: the runtime support components (`native/path-redirect.c` the
 shim, `native/ld-dn.c` the loader stub, `native/dn-launch.c`/`dn-run.c`,
 the translate-time scripts that wire them together) were built fast,
-iteratively, patch-by-patch as each new failure surfaced (findings.md is
-the record of that) -- not from a single coherent design pass. That's a
+iteratively, patch-by-patch as each new failure surfaced (`docs/log/findings/`
+is the record of that) -- not from a single coherent design pass. That's a
 reasonable way to get here, but it means logic in these files hasn't had
 a systematic re-read since; bugs can hide in interactions between pieces
 that were each individually reasoned-through in isolation, at different
@@ -595,7 +596,7 @@ not chased down.
   bypassing the project's dpkg wrapper entirely; added `DPkg::Path` to
   the prefix's `apt.conf` (`setup-apt-prefix.sh`). Found installing
   `gcc`'s dependency `cpp` (`dpkg-maintscript-helper: not found`),
-  `docs/log/findings.md`.
+  `docs/log/findings/apt-install-gcc-end-to-end.md`.
 - [x] ~~`libc6`/`dpkg`/`apt` stand-ins were never `dpkg hold`-ed (only
   the `$BASE` set was)~~ — fixed 2026-10-01: `dn-standins.sh`'s shared
   `install_pkg()` now holds every stand-in it installs. Without it, a
@@ -610,7 +611,8 @@ not chased down.
   `/lib`, `/bin`, `/sbin` as three more redirected prefixes (Debian's own
   merged-usr aliases for `/usr/{lib,bin,sbin}`, same symlinks the
   prefix's `base-files` already sets up) — `docs/spec/shim-coverage.md`,
-  `docs/log/findings.md`. Running the resulting binary still fails
+  `docs/log/findings/gcc-hello-pt-interp-gap.md`. Running the resulting
+  binary still fails
   separately (`PT_INTERP` at the kernel level, not a shim-layer problem)
   — tracked under "Compilers" above, not fixed yet.
 - [ ] Refresh `README.md`'s status numbers once the unfiltered survey
@@ -627,7 +629,8 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
   existing prefix (`install.sh`'s "refresh" branch never calls
   `setup-apt-prefix.sh` again). Any later script move/rename (this
   session's `scripts/` reorg, for one) breaks `apt`/`dpkg` for anyone with
-  an already-bootstrapped prefix (`docs/log/findings.md`, 2026-10-01).
+  an already-bootstrapped prefix
+  (`docs/log/findings/apt-install-gcc-end-to-end.md`).
   Candidates: `termux-dn-doctor --fix` detects and rewrites the hook
   lines; or the "refresh" path rewrites just those lines of an existing
   `apt.conf` instead of leaving it untouched.
@@ -654,13 +657,14 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
 ## Known unsafe, not yet fixed
 
 - `--force-architecture` workaround for the archive-name mismatch
-  (`arm64` vs `aarch64`) — flagged unsafe in `docs/log/findings.md`, needs a
+  (`arm64` vs `aarch64`) — flagged unsafe in
+  `docs/log/findings/first-working-prototype.md`, needs a
   real fix.
 
 ## Blocked / impossible on this device
 
-Kernel-wide, probed 2026-09-26 (`docs/log/findings.md`, "Platform sandbox
-limits"): user namespaces off entirely (`CLONE_NEWUSER` = `EINVAL` even
+Kernel-wide, probed 2026-09-26 (`docs/spec/android-platform.md`, "Device
+probe: sandbox limits confirmed directly"): user namespaces off entirely (`CLONE_NEWUSER` = `EINVAL` even
 seccomp-free), mount namespaces need `CAP_SYS_ADMIN`, `/dev/fuse` is
 root-only. Keep these out of scope:
 

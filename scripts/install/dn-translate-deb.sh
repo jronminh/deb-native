@@ -13,7 +13,8 @@
 #     $DN/usr/lib/aarch64-linux-gnu and $DN/usr/lib (ld-dn.c, not a
 #     per-file RUNPATH rewrite here -- RUNPATH is not inherited
 #     transitively, and rewriting it on a tightly-packed ET_EXEC binary can
-#     corrupt its program headers, see docs/log/findings.md). Done here, not
+#     corrupt its program headers, see
+#     docs/log/findings/patchelf-et-exec-runpath.md). Done here, not
 #     after install, so it is right before any maintainer script runs the
 #     binary;
 #   - program scripts' "#!" line pointed into the prefix: sh/dash ->
@@ -85,8 +86,8 @@ find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print | while IFS= 
   # to do was needed for every .so in a package, not just the executable;
   # LD_LIBRARY_PATH covers the whole load graph in one place. Also avoids
   # patchelf corrupting the program header table of a tightly-packed
-  # ET_EXEC binary with no room to grow (found on gcc's cc1, 2026-09-30,
-  # docs/log/findings.md).
+  # ET_EXEC binary with no room to grow (found on gcc's cc1,
+  # docs/log/findings/patchelf-et-exec-runpath.md).
 done
 
 "$HERE/patch-scripts-tree.sh" "$WORK/pkg" "$DN"

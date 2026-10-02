@@ -174,7 +174,7 @@ needed:
 
 ### Scope limit found later: doesn't reach maintainer scripts
 
-`docs/findings.md` found this the hard way: this
+`docs/log/findings/wiring-real-apt.md` found this the hard way: this
 shim only helps **glibc dynamically-linked binaries**. A real package's
 `postinst` doing `. /usr/share/debconf/confmodule` or
 `ln -s ... /usr/lib/ssl` hits the exact same "hardcoded absolute path,

@@ -10,8 +10,10 @@ Chronological or one-off investigation, not current state. Durable
 reference knowledge found along the way gets pulled into `../spec/` with
 a pointer left here — see each file's own note.
 
-- `findings.md` — the engineering log (chronological). Append, don't
-  rewrite.
+- [`findings/`](findings/README.md) — the engineering log, one entry
+  per file (split 2026-10-02 from the former single `findings.md`, for
+  searchability and a per-entry repo-impact label). Add a new file,
+  don't rewrite an existing one.
 - `android-seccomp-audit.md` — the investigation that produced
   [`../spec/android-platform.md`](../spec/android-platform.md) (the gate
   taxonomy, the glibc patch catalog), plus the on-device glibc build

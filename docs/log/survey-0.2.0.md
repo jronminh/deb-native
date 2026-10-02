@@ -29,8 +29,9 @@ run, stopped after 10). Columns: `scripts/survey/survey-prefix.sh`'s header.
 
 ## Related docs
 
-- [`findings.md`](findings.md) — the earlier, 0.1.x-era survey (2 of 30
-  installed) this run's 99-of-100 result should be read against.
+- [`findings/first-random-sample-survey.md`](findings/first-random-sample-survey.md)
+  — the earlier, 0.1.x-era survey (2 of 30 installed) this run's
+  99-of-100 result should be read against.
 - [`../spec/standard.md`](../spec/standard.md) — the scope this survey's
   package selection follows.
 - [`../../scripts/survey/README.md`](../../scripts/survey/README.md) —

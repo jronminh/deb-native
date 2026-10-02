@@ -80,7 +80,8 @@ scope as an exception.
 
 - **Architecture:** `arm64` only. The Debian archive name (`arm64`) differs
   from the platform's `aarch64`; the current `--force-architecture` workaround
-  is flagged unsafe (`findings.md`) and still open.
+  is flagged unsafe (`docs/log/findings/first-working-prototype.md`) and
+  still open.
 - **`gui` is an attribute, not a refusal.** On Termux the display is
   Termux:X11/VNC; a package can be `user` and still need a display to do
   anything.

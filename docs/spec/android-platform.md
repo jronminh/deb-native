@@ -30,8 +30,11 @@ of how it was found.
 - [`../log/android-seccomp-audit.md`](../log/android-seccomp-audit.md) —
   the investigation that produced this doc, plus the on-device glibc
   build attempt log.
-- [`../log/findings.md`](../log/findings.md) — "Platform sandbox limits",
-  the probe this doc's device-probe section was pulled out of.
+- This doc's own "Device probe: sandbox limits confirmed directly"
+  section was originally a `docs/log/findings.md` entry ("Platform
+  sandbox limits, by direct probe"), moved here in full rather than
+  split out separately when the log was later split into
+  `docs/log/findings/`.
 - [`design.md`](design.md) — "Fake root", whose `set-fakesyscalls-parked.patch`
   decision depends on this doc's per-file fork verdict.
 - [`../../third_party/glibc-android-patches/README.md`](../../third_party/glibc-android-patches/README.md) —

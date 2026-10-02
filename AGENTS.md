@@ -46,7 +46,8 @@ links, broken ToC anchors, scripts nothing calls any more).
 self-contained prefix, day-to-day commands, fake root) — read it before
 changing direction; its intro points out to `path-shim.md`,
 `native-reuse.md`, `classic-design.md` and `prior-art.md` for depth or
-history. `docs/log/findings.md` is the chronological engineering log.
+history. `docs/log/findings/` is the chronological engineering log,
+one entry per file.
 `docs/spec/android-platform.md` has the Android enforcement-gate taxonomy
 (seccomp/capability/SELinux) — read before scoping 0.5.0 work.
 `tracer/README.md` has fork-lite's provenance, build, and prune status.

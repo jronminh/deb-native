@@ -11,7 +11,8 @@
 #     working). No RUNPATH rewrite: ld-dn's LD_LIBRARY_PATH already covers
 #     the prefix's library dirs for every adopted program, and patching
 #     RUNPATH risked corrupting the program headers of a tightly-packed
-#     ET_EXEC binary (found on gcc's cc1, 2026-09-30, docs/log/findings.md).
+#     ET_EXEC binary (found on gcc's cc1,
+#     docs/log/findings/patchelf-et-exec-runpath.md).
 #
 # Only a program whose interpreter is a glibc loader that does not exist on
 # this device (/lib/ld-linux-aarch64.so.1) is adopted; Termux's own glibc

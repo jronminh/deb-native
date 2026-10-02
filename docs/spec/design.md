@@ -143,8 +143,8 @@ each `apt update`, so dpkg would see native packages: no
 **`TODO.md` kept `arm64` as a foreign architecture instead** — `arm64`
 stays foreign, `dn-debian-index.sh` only rewrites `all` -> `arm64`, and
 `--force-architecture` is still in use where the classic design needed it
-(`../log/findings.md` calls that "not a real fix", but the relabel was
-never built to replace it).
+(`../log/findings/first-working-prototype.md` calls that "not a real
+fix", but the relabel was never built to replace it).
 
 ### Install pipeline
 

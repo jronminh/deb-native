@@ -2,8 +2,9 @@
 # Installs a random sample of real Debian .deb packages through real
 # apt (setup-apt-prefix.sh + apt-install.sh) instead of bare dpkg on a
 # single .deb — the before/after comparison for
-# docs/log/findings.md's #1 finding (no dependency
-# installer was the dominant failure cause, not native-seed coverage).
+# docs/log/findings/first-random-sample-survey.md's #1 finding (no
+# dependency installer was the dominant failure cause, not native-seed
+# coverage).
 #
 # Usage: OUT=~/survey-apt scripts/survey/survey-apt.sh LIST.tsv
 # LIST.tsv: "section<TAB>package<TAB>anything" (third column unused —
