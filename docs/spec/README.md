@@ -39,6 +39,10 @@ changes.
   - `direct-usage.md` — living investigation into what bypasses the shim.
   - `bind-only.md` — the tracer's bind-only path fast path.
   - `tracer.md` — the syscall tracer (`dn-trace`) itself.
+- `ld-dn-config.md` — proposal to rebuild the loader stub
+  (`native/ld-dn.c`) so its policy (preloads, library dirs, env set/
+  strip, loader, per-program overrides) comes from a prefix config file
+  instead of C literals.
 - `runtime-failures.md` — what goes wrong when *running* a program,
   grouped by cause.
 - `android-platform.md` — the Android enforcement-gate taxonomy (seccomp/

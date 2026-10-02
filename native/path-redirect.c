@@ -68,6 +68,12 @@ static size_t g_rootlen;
 static int g_debug;
 static const char *g_bionic_preload;
 static int g_init;
+/* Redirect roots a caller (ld-dn, from ld-dn.conf's shim-prefix) chose to
+ * replace the compiled set with: ':'-separated guest paths, e.g.
+ * "/usr:/etc:/var". Unset keeps the switch-based default below, with no
+ * per-call list walk. */
+static char g_rprefixes[512];
+static int g_rprefixes_custom;
 
 /* Fake root (since 0.2.3): inside the prefix a program sees itself as
  * root, as on a Debian where apt, dpkg and maintainer scripts run as root
@@ -103,6 +109,14 @@ static void dn_init(void) {
   g_rootlen = g_root ? strlen(g_root) : 0;
   g_debug = getenv("DN_REDIRECT_DEBUG") != NULL;
   g_bionic_preload = getenv("DN_BIONIC_PRELOAD");
+  const char *rp = getenv("DN_REDIRECT_PREFIXES");
+  if (rp && *rp) {
+    size_t n = strlen(rp);
+    if (n >= sizeof g_rprefixes) n = sizeof g_rprefixes - 1;
+    memcpy(g_rprefixes, rp, n);
+    g_rprefixes[n] = 0;
+    g_rprefixes_custom = 1;
+  }
   const char *id = getenv("DN_ID");
   g_fakeroot = g_root && !(id && strcmp(id, "user") == 0);
   g_ruid = (uid_t)syscall(SYS_getuid);
@@ -150,21 +164,34 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
    * (e.g. libc6-dev's /lib/<triplet>/libc.so linker script) misses the
    * prefix entirely instead of following the symlink, because the path
    * never gets to $DN in the first place (docs/log/findings.md, 2026-10-01). */
-  const char *pre;
-  size_t prelen = 4;
-  switch (path[1]) {
-    case 'u': pre = "/usr"; break;
-    case 'e': pre = "/etc"; break;
-    case 'v': pre = "/var"; break;
-    case 'o': pre = "/opt"; break;
-    case 'r': pre = "/root"; prelen = 5; break;
-    case 'l': pre = "/lib"; break;
-    case 'b': pre = "/bin"; break;
-    case 's': pre = "/sbin"; prelen = 5; break;
-    default: return path;
+  size_t prelen;
+  if (g_rprefixes_custom) {
+    prelen = 0;
+    const char *p = g_rprefixes;
+    while (*p) {
+      const char *e = p;
+      while (*e && *e != ':') e++;
+      size_t l = (size_t)(e - p);
+      if (l && strncmp(path, p, l) == 0 && (path[l] == '/' || path[l] == '\0')) { prelen = l; break; }
+      p = *e ? e + 1 : e;
+    }
+  } else {
+    const char *pre;
+    prelen = 4;
+    switch (path[1]) {
+      case 'u': pre = "/usr"; break;
+      case 'e': pre = "/etc"; break;
+      case 'v': pre = "/var"; break;
+      case 'o': pre = "/opt"; break;
+      case 'r': pre = "/root"; prelen = 5; break;
+      case 'l': pre = "/lib"; break;
+      case 'b': pre = "/bin"; break;
+      case 's': pre = "/sbin"; prelen = 5; break;
+      default: return path;
+    }
+    if (strncmp(path, pre, prelen) != 0) return path;
   }
-  if (strncmp(path, pre, prelen) != 0) return path;
-  if (path[prelen] != '/' && path[prelen] != '\0') return path;
+  if (prelen == 0 || (path[prelen] != '/' && path[prelen] != '\0')) return path;
 
   size_t plen = strlen(path);
   if (g_rootlen + plen + 1 > bufsz) return path;

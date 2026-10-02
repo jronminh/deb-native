@@ -250,6 +250,11 @@ shim above.
       real mapping table (multiple prefixes per process) — needed once
       this is wired into [`classic-design.md`](classic-design.md)'s wrapper-generation pipeline
       for packages with more than one hardcoded path.
+- [x] The top-level redirect **roots** are now caller-configurable:
+      `DN_REDIRECT_PREFIXES` (set from `ld-dn.conf`'s `shim-prefix`)
+      replaces the compiled `/usr /etc /var /opt /root /lib /bin /sbin`
+      set with no rebuild; unset keeps the compiled set, so the hot path
+      is unchanged ([`ld-dn-config.md`](ld-dn-config.md)).
 - [x] Intercept the relevant libc surface: `access`, `readlink`, `opendir`,
       `execve` (a binary that `exec`s another absolute path, sudo-less's own
       `figlet` → `figlet-figlet` alternative-link case) and `realpath` are

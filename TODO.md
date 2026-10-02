@@ -373,6 +373,31 @@ hardcoded path instead of carrying it over as-is.
      performance gain, not correctness; revisit only after (1) ships and
      only if `dn-trace` is still small.
 
+## 0.5.2: a config-driven loader (released)
+
+**Goal**: `native/ld-dn.c`'s policy stops being C literals -- extending it
+(preloads, library search dirs, extra env, redirect roots, per-program
+overrides) is a config edit in the prefix, no rebuild.
+
+**Status**: released 2026-10-02. The loader reads
+`$DN/etc/deb-native/ld-dn.conf` (shipped as `native/ld-dn.conf`), and
+compiled defaults reproduce the pre-0.5.2 environment when the file is
+absent, so a fresh prefix still bootstraps. `setup-runtime.sh` installs
+the file once (a prefix's own edits survive a reinstall) and replaces
+binaries atomically. `native/path-redirect.c` consumes
+`DN_REDIRECT_PREFIXES`, so `ld-dn.conf`'s `shim-prefix` changes the shim's
+redirect roots with no rebuild. `tests/ld-dn-config/run.sh` covers
+defaults, the default file, overrides, per-program blocks and fail-open.
+Design and as-built detail:
+[`docs/spec/ld-dn-config.md`](docs/spec/ld-dn-config.md).
+
+**Open**:
+- Benchmark the always-probe `openat` per exec on a spawn-heavy workload;
+  add the `DN_CONFIG`-gated fast path only if it shows.
+- Point `dn-trace`/`dn-run` at the same policy file (loader + shim only
+  today).
+- Globbing in `[program]` names, if a real case needs it.
+
 ## Services, then sudo (after alpha)
 
 **Goal**: same scope as `sudo-less` — a service needs something to run it

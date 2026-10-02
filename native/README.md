@@ -13,7 +13,13 @@ and [`../docs/spec/design.md`](../docs/spec/design.md).
 
 - `ld-dn.c` — the program loader stub: every Debian program in the prefix
   names this as its ELF interpreter (`PT_INTERP`), so the kernel runs it
-  first, sets up the shim, and hands over to glibc's real loader.
+  first, sets up the shim, and hands over to glibc's real loader. Its
+  policy (loader, library dirs, preloads, env, per-program overrides)
+  comes from `ld-dn.conf`, installed to
+  `$PREFIX/etc/deb-native/ld-dn.conf` — data, so extending it needs no
+  rebuild ([`../docs/spec/ld-dn-config.md`](../docs/spec/ld-dn-config.md)).
+- `ld-dn.conf` — the loader's default policy file (copied into a prefix by
+  `setup-runtime.sh`; compiled defaults stand in when it is absent).
 - `path-redirect.c` — the shim: an `LD_PRELOAD` library that rewrites
   `/usr /etc /var /opt /root` into the prefix for glibc dynamic binaries.
   A Bionic build of the same idea for maintainer scripts was tried and

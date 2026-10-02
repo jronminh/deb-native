@@ -36,14 +36,14 @@ Without them those programs run untranslated.
 
 ```sh
 # pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.5.1-prealpha/install.sh | DEB_NATIVE_REF=v0.5.1-prealpha sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.5.2-prealpha/install.sh | DEB_NATIVE_REF=v0.5.2-prealpha sh
 
 # then restart Termux (or: . ~/.bashrc)
 apt install figlet # the prefix's apt: Debian's packages
 figlet hi          # an installed program, run by name
 ```
 
-Or the rolling edge: replace both `v0.5.1-prealpha` occurrences with `main`.
+Or the rolling edge: replace both `v0.5.2-prealpha` occurrences with `main`.
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 
@@ -93,7 +93,11 @@ ELF interpreter -> `ld-dn`, library path -> the prefix, scripts and
 maintainer scripts -> the prefix's shell. `native/ld-dn.c` is every
 installed program's interpreter — it loads a path shim
 (`native/path-redirect.c`, `LD_PRELOAD`, rewrites `/usr /etc /var /opt
-/root /lib /bin /sbin` into the prefix) and hands over to glibc's loader;
+/root /lib /bin /sbin` into the prefix), then hands over to glibc's
+loader. Its policy (library dirs, preloads, extra env, redirect roots,
+per-program overrides) is read at startup from
+`~/.dn/etc/deb-native/ld-dn.conf`, so extending it is a config edit, not
+a rebuild ([`docs/spec/ld-dn-config.md`](docs/spec/ld-dn-config.md));
 what the shim can't reach (static binaries, raw syscalls, NSS) falls to
 `dn-trace`, a ptrace tracer grown out of PRoot's core. Installed programs
 are linked into `~/.dn/usr/lib/deb-native/bin`, first on `PATH`.

@@ -1,4 +1,5 @@
-/* ld-dn -- deb-native's program loader stub (docs/spec/design.md).
+/* ld-dn -- deb-native's program loader stub (docs/spec/design.md,
+ * docs/spec/ld-dn-config.md).
  *
  * Every Debian program in the prefix names this file as its ELF interpreter
  * (PT_INTERP), so the kernel runs it first, however the program was started:
@@ -6,12 +7,18 @@
  *
  *   1. finds the prefix from the program's own PT_INTERP string
  *      ($DN/usr/lib/deb-native/ld-dn);
- *   2. builds a corrected environment: Termux's Bionic preload (termux-exec)
- *      moves to DN_BIONIC_PRELOAD -- a glibc process cannot load it -- and
- *      LD_PRELOAD becomes the path-redirect shim, DN_INSTDIR the prefix;
+ *   2. builds a corrected environment from a compiled-in default policy,
+ *      overlaid by $DN/etc/deb-native/ld-dn.conf (or $DN_CONFIG) and then by
+ *      two one-shot env overrides (DN_EXTRA_LIB_PATH, DN_PRELOAD);
  *   3. maps glibc's real loader ($DN/usr/lib/ld-linux-aarch64.so.1, the
  *      libc6 stand-in's link into Termux's glibc) into this same process and
  *      jumps to it with the corrected stack, AT_BASE pointing at it.
+ *
+ * The policy (loader, library dirs, preloads, env set/unset, shim redirect
+ * roots, per-program overrides) is data, so extending behaviour is a config
+ * edit in the prefix, not a rebuild -- see docs/spec/ld-dn-config.md. The
+ * compiled defaults reproduce the pre-config behaviour exactly, so a prefix
+ * with no config file (the bootstrap case) is unchanged.
  *
  * No re-exec: the program stays the process's executable (/proc/self/exe),
  * which restarting through glibc's loader would change. The approach of
@@ -52,8 +59,10 @@ typedef struct {
 
 #define SYS_openat 56
 #define SYS_close 57
+#define SYS_read 63
 #define SYS_write 64
 #define SYS_pread64 67
+#define SYS_readlinkat 78
 #define SYS_exit 93
 #define SYS_munmap 215
 #define SYS_mmap 222
@@ -68,9 +77,23 @@ typedef struct {
 #define MAP_FIXED 0x10
 #define MAP_ANONYMOUS 0x20
 
+/* The version this loader reports under DN_REDIRECT_DEBUG. */
+#define DN_VERSION "0.5.2"
+
 /* Space _start reserves between this function's frame and the original
  * stack, for the rebuilt argc/argv/envp/auxv. */
 #define RESERVE 0x10000
+
+/* Policy table caps. Bounded on purpose: a freestanding loader has no
+ * allocation, and a silently-unbounded config would be a footgun. Hitting a
+ * cap warns and keeps what fit (fail-open), never truncates a live string. */
+#define DN_PATH_MAX 4096
+#define DN_CFG_MAX 16384
+#define DN_ENV_MAX 2048
+#define MAX_LIB 8
+#define MAX_PRE 4
+#define MAX_ENV 16
+#define MAX_UNSET 16
 
 static i64 sys6(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f) {
   register i64 x8 __asm__("x8") = n, x0 __asm__("x0") = a, x1 __asm__("x1") = b,
@@ -90,9 +113,21 @@ static int has(const char *s, const char *p) {
   for (; *s; s++) if (starts(s, p)) return 1;
   return 0;
 }
+static int same(const char *a, const char *b) { while (*a && *b) if (*a++ != *b++) return 0; return *a == *b; }
+static int same_n(const char *a, const char *b, u64 n) {
+  for (u64 i = 0; i < n; i++) if (a[i] != b[i]) return 0;
+  return 1;
+}
+static int ends_with(const char *s, const char *suffix) {
+  u64 ls = slen(s), lf = slen(suffix);
+  return ls >= lf && same_n(s + (ls - lf), suffix, lf);
+}
 static void put(const char *s) { sys6(SYS_write, 2, (i64)s, (i64)slen(s), 0, 0, 0); }
-static void die(const char *what, const char *arg) {
+static void warn(const char *what, const char *arg) {
   put("ld-dn: "); put(what); if (arg) { put(": "); put(arg); } put("\n");
+}
+static void die(const char *what, const char *arg) {
+  warn(what, arg);
   sys6(SYS_exit, 127, 0, 0, 0, 0, 0);
   for (;;) {}
 }
@@ -103,9 +138,270 @@ static char *cat2(char *dst, u64 cap, const char *a, const char *b) {
   memcpy(dst, a, la); memcpy(dst + la, b, lb); dst[la + lb] = 0;
   return dst;
 }
+/* dst += s, NUL-terminated; dies if it does not fit. */
+static void app(char *dst, u64 cap, const char *s) {
+  u64 l = slen(dst), ls = slen(s);
+  if (l + ls + 1 > cap) die("value too long", s);
+  memcpy(dst + l, s, ls + 1);
+}
+static char g_dn[DN_PATH_MAX];
 
-static char g_dn[4096], g_ld[4096], g_env_pre[4200], g_env_inst[4200], g_env_bio[8300], g_env_lib[8300], g_env_cpath[4200];
+/* A "path inside the prefix": a leading / is the Debian path, anything else
+ * is relative; both join under $DN. */
+static void join_prefix(char *dst, u64 cap, const char *val) {
+  if (val[0] == '/') { cat2(dst, cap, g_dn, val); return; }
+  u64 a = slen(g_dn), v = slen(val);
+  if (a + 1 + v + 1 > cap) die("path too long", val);
+  memcpy(dst, g_dn, a); dst[a] = '/'; memcpy(dst + a + 1, val, v + 1);
+}
+/* Copy src into dst with the token "$DN" replaced by the prefix. */
+static void expand(char *dst, u64 cap, const char *src) {
+  u64 k = 0;
+  while (*src) {
+    if (src[0] == '$' && src[1] == 'D' && src[2] == 'N') {
+      u64 l = slen(g_dn);
+      if (k + l + 1 > cap) die("env too long", src);
+      memcpy(dst + k, g_dn, l); k += l; src += 3;
+    } else {
+      if (k + 1 >= cap) die("env too long", src);
+      dst[k++] = *src++;
+    }
+  }
+  dst[k] = 0;
+}
+static const char *findenv(char **envp, long nenv, const char *name) {
+  u64 n = slen(name);
+  for (long i = 0; i < nenv; i++)
+    if (same_n(envp[i], name, n) && envp[i][n] == '=') return envp[i] + n + 1;
+  return 0;
+}
+
+/* ---- policy --------------------------------------------------------- */
+
+static char cfg[DN_CFG_MAX];
+static char g_loader[DN_PATH_MAX], g_default_pre[DN_PATH_MAX], g_rprefix[DN_PATH_MAX];
+static char g_env_pre[8192], g_env_inst[4200], g_env_lib[8192], g_env_rprefix[4200], g_env_bio[8300];
+static char lib_buf[MAX_LIB][DN_PATH_MAX], pre_buf[MAX_PRE][DN_PATH_MAX];
+static char env_buf[MAX_ENV][DN_ENV_MAX], unset_buf[MAX_UNSET][64];
+static const char *libs[MAX_LIB]; static int nlib;
+static const char *pres[MAX_PRE]; static int npre;
+static const char *sets[MAX_ENV]; static int nset;
+static const char *unsets[MAX_UNSET]; static int nunset;
+static int default_pre = 1, has_rprefix = 0, g_new_bio = 0;
+static const char *g_extra_lib, *g_extra_preload;
+static char g_progexe[DN_PATH_MAX], g_progbase[256]; static int g_have_prog;
+
 static Phdr g_ph[32];
+
+static void add_lib(const char *val) {
+  if (nlib >= MAX_LIB) { warn("config: too many lib-add, ignored", val); return; }
+  join_prefix(lib_buf[nlib], DN_PATH_MAX, val); libs[nlib] = lib_buf[nlib]; nlib++;
+}
+static void add_pre(const char *val) {
+  if (npre >= MAX_PRE) { warn("config: too many preload, ignored", val); return; }
+  join_prefix(pre_buf[npre], DN_PATH_MAX, val); pres[npre] = pre_buf[npre]; npre++;
+}
+static void add_unset(const char *name) {
+  if (!*name) return;
+  for (int i = 0; i < nunset; i++) if (same(unsets[i], name)) return;
+  if (nunset >= MAX_UNSET) { warn("config: too many unset, ignored", name); return; }
+  u64 l = slen(name); if (l >= sizeof unset_buf[0]) l = sizeof unset_buf[0] - 1;
+  memcpy(unset_buf[nunset], name, l); unset_buf[nunset][l] = 0;
+  unsets[nunset] = unset_buf[nunset]; nunset++;
+}
+static void set_env(const char *k, const char *v) {
+  u64 kl = slen(k);
+  if (!kl) return;
+  int idx = -1;
+  for (int i = 0; i < nset; i++) if (same_n(sets[i], k, kl) && sets[i][kl] == '=') { idx = i; break; }
+  if (idx < 0) {
+    if (nset >= MAX_ENV) { warn("config: too many env, ignored", k); return; }
+    idx = nset++; sets[idx] = env_buf[idx];
+  }
+  if (kl + 1 >= DN_ENV_MAX) { warn("config: env key too long, ignored", k); return; }
+  char *d = env_buf[idx];
+  memcpy(d, k, kl); d[kl] = '=';
+  expand(d + kl + 1, DN_ENV_MAX - kl - 1, v);
+}
+static int env_is_set(const char *e, u64 n) {
+  for (int i = 0; i < nset; i++) if (same_n(sets[i], e, n) && sets[i][n] == '=') return 1;
+  return 0;
+}
+static int skip_env(const char *e) {
+  const char *eq = e; while (*eq && *eq != '=') eq++;
+  u64 n = (u64)(eq - e);
+  for (int i = 0; i < nunset; i++) if (slen(unsets[i]) == n && same_n(e, unsets[i], n)) return 1;
+  if (n == 10 && (same_n(e, "LD_PRELOAD", 10) || same_n(e, "DN_INSTDIR", 10))) return 1;
+  if (n == 15 && same_n(e, "LD_LIBRARY_PATH", 15)) return 1;
+  if (has_rprefix && n == 20 && same_n(e, "DN_REDIRECT_PREFIXES", 20)) return 1;
+  if (g_new_bio && n == 17 && same_n(e, "DN_BIONIC_PRELOAD", 17)) return 1;
+  return env_is_set(e, n);
+}
+
+static void policy_defaults(void) {
+  join_prefix(g_loader, DN_PATH_MAX, "/usr/lib/ld-linux-aarch64.so.1");
+  join_prefix(g_default_pre, DN_PATH_MAX, "/usr/lib/deb-native/path-redirect.so");
+  add_lib("/usr/lib/aarch64-linux-gnu");
+  add_lib("/usr/lib");
+  /* COMPILER_PATH: gcc's cc1/as/ld do not fall back to PATH (ld-dn.c
+   * history); one of the generic env entries now, so a config can replace
+   * it with `env COMPILER_PATH=...`. */
+  set_env("COMPILER_PATH", "$DN/usr/bin");
+  /* Replaced by ld-dn itself or rebuilt below; drop the caller's copy. */
+  add_unset("LD_PRELOAD"); add_unset("DN_INSTDIR");
+  add_unset("LD_LIBRARY_PATH"); add_unset("COMPILER_PATH");
+}
+
+/* ---- config parser -------------------------------------------------- */
+
+static char *skip_ws(char *s) { while (*s == ' ' || *s == '\t') s++; return s; }
+static void rtrim(char *s) {
+  u64 n = slen(s);
+  while (n && (s[n-1] == ' ' || s[n-1] == '\t' || s[n-1] == '\r')) s[--n] = 0;
+}
+static void do_unset(char *rest) {
+  char *p = rest;
+  while (*p) {
+    char *t = skip_ws(p);
+    if (!*t) break;
+    char *e = t; while (*e && *e != ' ' && *e != '\t') e++;
+    char save = *e; *e = 0;
+    add_unset(t);
+    p = save ? e + 1 : e;
+  }
+}
+static void do_shimprefix(char *rest) {
+  char *p = rest; int any = 0;
+  char build[DN_PATH_MAX]; build[0] = 0;
+  while (*p) {
+    char *t = skip_ws(p);
+    if (!*t) break;
+    char *e = t; while (*e && *e != ' ' && *e != '\t') e++;
+    char save = *e; *e = 0;
+    if (any) app(build, sizeof build, ":");
+    app(build, sizeof build, t);
+    any = 1;
+    p = save ? e + 1 : e;
+  }
+  if (any) { cat2(g_rprefix, sizeof g_rprefix, "", build); has_rprefix = 1; }
+}
+static void do_env(char *rest) {
+  char *eq = rest; while (*eq && *eq != '=') eq++;
+  if (!*eq) { warn("config: env needs KEY=VALUE", rest); return; }
+  *eq = 0;
+  set_env(rest, eq + 1);
+}
+static void dispatch(char *s) {
+  char *sp = s; while (*sp && *sp != ' ' && *sp != '\t') sp++;
+  char dir[32]; u64 dl = (u64)(sp - s);
+  if (dl >= sizeof dir) dl = sizeof dir - 1;
+  memcpy(dir, s, dl); dir[dl] = 0;
+  char *rest = skip_ws(sp);
+  if (same(dir, "loader")) {
+    if (*rest) join_prefix(g_loader, DN_PATH_MAX, rest);
+    else warn("config: loader needs a path", 0);
+  } else if (same(dir, "lib-add")) {
+    if (*rest) add_lib(rest); else warn("config: lib-add needs a path", 0);
+  } else if (same(dir, "no-default-lib")) {
+    nlib = 0;
+  } else if (same(dir, "preload")) {
+    if (*rest) add_pre(rest); else warn("config: preload needs a path", 0);
+  } else if (same(dir, "no-default-preload")) {
+    default_pre = 0;
+  } else if (same(dir, "env")) {
+    if (*rest) do_env(rest); else warn("config: env needs KEY=VALUE", 0);
+  } else if (same(dir, "unset")) {
+    do_unset(rest);
+  } else if (same(dir, "shim-prefix")) {
+    do_shimprefix(rest);
+  } else {
+    warn("config: unknown directive", dir);
+  }
+}
+static int match_prog(const char *name) {
+  if (name[0] == '/') return g_have_prog && ends_with(g_progexe, name);
+  return same(g_progbase, name);
+}
+static void parse_config(char *b) {
+  int in_prog = 0, active = 1;
+  char *line = b;
+  while (*line) {
+    char *nl = line; while (*nl && *nl != '\n') nl++;
+    char save = *nl; *nl = 0;
+    char *s = line;
+    for (char *c = s; *c; c++) if (*c == '#') { *c = 0; break; }
+    s = skip_ws(s); rtrim(s);
+    if (*s == '[') {
+      char *e = s + 1; while (*e && *e != ']') e++;
+      if (*e == ']') { *e = 0; in_prog = 1; active = match_prog(s + 1); }
+      else warn("config: unclosed program block", s);
+    } else if (*s && (!in_prog || active)) {
+      dispatch(s);
+    }
+    line = nl + (save ? 1 : 0);
+  }
+}
+static void program_name(char **argv) {
+  g_have_prog = 0;
+  i64 n = sys6(SYS_readlinkat, AT_FDCWD, (i64)"/proc/self/exe", (i64)g_progexe, DN_PATH_MAX - 1, 0, 0);
+  if (n > 0) { g_progexe[n] = 0; g_have_prog = 1; }
+  else if (argv && argv[0]) {
+    u64 l = slen(argv[0]); if (l >= DN_PATH_MAX) l = DN_PATH_MAX - 1;
+    memcpy(g_progexe, argv[0], l); g_progexe[l] = 0; g_have_prog = 1;
+  }
+  const char *b = g_progexe;
+  for (const char *p = g_progexe; *p; p++) if (*p == '/') b = p + 1;
+  u64 bl = slen(b); if (bl >= sizeof g_progbase) bl = sizeof g_progbase - 1;
+  memcpy(g_progbase, b, bl); g_progbase[bl] = 0;
+}
+static void load_config(const char *override) {
+  char path[DN_PATH_MAX];
+  if (override && *override) {
+    if (slen(override) + 1 > DN_PATH_MAX) { warn("DN_CONFIG too long, ignored", 0); return; }
+    memcpy(path, override, slen(override) + 1);
+  } else {
+    cat2(path, DN_PATH_MAX, g_dn, "/etc/deb-native/ld-dn.conf");
+  }
+  i64 fd = sys6(SYS_openat, AT_FDCWD, (i64)path, O_RDONLY | O_CLOEXEC, 0, 0, 0);
+  if (failed(fd)) return;   /* ENOENT: no config, defaults stand */
+  i64 n = sys6(SYS_read, fd, (i64)cfg, DN_CFG_MAX - 1, 0, 0, 0);
+  sys6(SYS_close, fd, 0, 0, 0, 0, 0);
+  if (n < 0) { warn("config: read failed", path); return; }
+  if (n >= DN_CFG_MAX - 1) { warn("config: too large, ignored", path); return; }
+  cfg[n] = 0;
+  parse_config(cfg);
+}
+
+/* ---- emit ----------------------------------------------------------- */
+
+static void build_env(void) {
+  cat2(g_env_pre, sizeof g_env_pre, "LD_PRELOAD=", "");
+  int first = 1;
+  if (default_pre) { app(g_env_pre, sizeof g_env_pre, g_default_pre); first = 0; }
+  for (int i = 0; i < npre; i++) { if (!first) app(g_env_pre, sizeof g_env_pre, ":"); app(g_env_pre, sizeof g_env_pre, pres[i]); first = 0; }
+  if (g_extra_preload && *g_extra_preload) { if (!first) app(g_env_pre, sizeof g_env_pre, ":"); app(g_env_pre, sizeof g_env_pre, g_extra_preload); }
+
+  cat2(g_env_inst, sizeof g_env_inst, "DN_INSTDIR=", g_dn);
+
+  cat2(g_env_lib, sizeof g_env_lib, "LD_LIBRARY_PATH=", "");
+  for (int i = 0; i < nlib; i++) { if (i) app(g_env_lib, sizeof g_env_lib, ":"); app(g_env_lib, sizeof g_env_lib, libs[i]); }
+  if (g_extra_lib && *g_extra_lib) { app(g_env_lib, sizeof g_env_lib, ":"); app(g_env_lib, sizeof g_env_lib, g_extra_lib); }
+
+  if (has_rprefix) cat2(g_env_rprefix, sizeof g_env_rprefix, "DN_REDIRECT_PREFIXES=", g_rprefix);
+}
+static void dump_policy(void) {
+  put("ld-dn " DN_VERSION "\n");
+  put("  prefix: "); put(g_dn); put("\n");
+  put("  loader: "); put(g_loader); put("\n");
+  for (int i = 0; i < nlib; i++) { put("  lib-add: "); put(libs[i]); put("\n"); }
+  put("  preload:"); put(default_pre ? " " : " (no-default)");
+  if (default_pre) put(g_default_pre);
+  for (int i = 0; i < npre; i++) { put(" "); put(pres[i]); }
+  put("\n");
+  for (int i = 0; i < nset; i++) { put("  env: "); put(sets[i]); put("\n"); }
+  put("  unset:"); for (int i = 0; i < nunset; i++) { put(" "); put(unsets[i]); } put("\n");
+  if (has_rprefix) { put("  shim-prefix: "); put(g_rprefix); put("\n"); }
+}
 
 struct ret { u64 sp, entry; };
 
@@ -137,86 +433,52 @@ struct ret ld_dn_main(u64 *sp) {
   if (li <= ls || li - ls >= sizeof g_dn || !starts(interp + li - ls, suffix)) die("not installed as $PREFIX/usr/lib/deb-native/ld-dn", interp);
   memcpy(g_dn, interp, li - ls); g_dn[li - ls] = 0;
 
-  /* 2. The environment. */
-  const char *inherited = 0;
-  const char *extra_lib = 0;
-  for (long i = 0; i < nenv; i++) {
-    if (starts(envp[i], "LD_PRELOAD=")) inherited = envp[i] + 11;
-    if (starts(envp[i], "DN_EXTRA_LIB_PATH=")) extra_lib = envp[i] + 18;
-  }
-  int new_bio = inherited && *inherited && !has(inherited, "path-redirect.so");
-  if (new_bio) cat2(g_env_bio, sizeof g_env_bio, "DN_BIONIC_PRELOAD=", inherited);
-  cat2(g_env_pre, sizeof g_env_pre, "LD_PRELOAD=", g_dn);
-  cat2(g_env_pre + slen(g_env_pre), sizeof g_env_pre - slen(g_env_pre), "", "/usr/lib/deb-native/path-redirect.so");
-  cat2(g_env_inst, sizeof g_env_inst, "DN_INSTDIR=", g_dn);
-  /* Every dynamic ELF's own library search, replacing per-file RUNPATH
-   * patching (dn-translate-deb.sh, dn-adopt.sh): RUNPATH is not inherited
-   * transitively (a library's own RUNPATH does not help *its* dependencies),
-   * so LD_LIBRARY_PATH set once here covers the whole load graph instead of
-   * needing every .so in a package rewritten. Also sidesteps patchelf
-   * corrupting the program header table on tightly-packed ET_EXEC binaries
-   * with no room to grow (found on gcc's cc1, 2026-09-30). */
-  cat2(g_env_lib, sizeof g_env_lib, "LD_LIBRARY_PATH=", g_dn);
-  cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", "/usr/lib/aarch64-linux-gnu:");
-  cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", g_dn);
-  cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", "/usr/lib");
-  /* DN_EXTRA_LIB_PATH: an escape hatch for a caller's own library
-   * directories (same spirit as DN_ID, path-redirect.c), since the fixed
-   * two dirs above are the whole search path and a caller-set
-   * LD_LIBRARY_PATH itself is stripped below -- without this, reaching a
-   * project's own .so needs installing it into the prefix's /usr/lib or
-   * an -rpath at link time (docs/guides/gcc-glibc-dev.md). Colon-separated,
-   * same convention as LD_LIBRARY_PATH itself; appended, not replacing the
-   * two fixed dirs. Left in envp afterward (not stripped) like DN_ID --
-   * harmless, and a child process may want to see it too. */
-  if (extra_lib && *extra_lib) {
-    cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", ":");
-    cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", extra_lib);
-  }
-  /* gcc's own subprogram search (cc1, as, ld) does not fall back to a plain
-   * PATH search the way a shell would -- it only tries its own compiled-in,
-   * target-triplet-shaped directories plus COMPILER_PATH. None of the
-   * former land on the prefix's plain usr/bin, so without this gcc finds
-   * Termux's own `ld` (a Bionic binary, not this prefix's binutils) instead
-   * of the prefix's -- harmless for every non-gcc program, so set
-   * unconditionally rather than special-casing gcc packages in
-   * dn-translate-deb.sh. Found 2026-09-30 building cc1's own test case. */
-  cat2(g_env_cpath, sizeof g_env_cpath, "COMPILER_PATH=", g_dn);
-  cat2(g_env_cpath + slen(g_env_cpath), sizeof g_env_cpath - slen(g_env_cpath), "", "/usr/bin");
+  /* 2. Policy: compiled defaults, config file, then one-shot overrides. */
+  const char *inherited = findenv(envp, nenv, "LD_PRELOAD");
+  const char *cfg_override = findenv(envp, nenv, "DN_CONFIG");
+  g_extra_lib = findenv(envp, nenv, "DN_EXTRA_LIB_PATH");
+  g_extra_preload = findenv(envp, nenv, "DN_PRELOAD");
+  g_new_bio = inherited && *inherited && !has(inherited, "path-redirect.so");
+  if (g_new_bio) cat2(g_env_bio, sizeof g_env_bio, "DN_BIONIC_PRELOAD=", inherited);
 
-  /* The new stack: argc, argv, envp (+5 of ours), auxv -- in the space
+  program_name(argv);
+  policy_defaults();
+  if (!findenv(envp, nenv, "DN_NO_CONFIG")) load_config(cfg_override);
+  build_env();
+  if (findenv(envp, nenv, "DN_REDIRECT_DEBUG")) dump_policy();
+
+  /* 3. The new stack: argc, argv, kept envp + ours, auxv -- in the space
    * _start reserved just below the original stack. */
-  u64 words = 1 + (u64)argc + 1 + (u64)nenv + 5 + 1 + 2 * ((u64)naux + 1);
+  long kept = 0;
+  for (long i = 0; i < nenv; i++) if (!skip_env(envp[i])) kept++;
+  long nextra = 3 + (has_rprefix ? 1 : 0) + nset + (g_new_bio ? 1 : 0);
+  u64 words = 1 + (u64)argc + 1 + (u64)kept + (u64)nextra + 1 + 2 * ((u64)naux + 1);
   if (words * 8 + 64 > RESERVE) die("environment too large", 0);
   u64 *ns = (u64 *)(((u64)sp - words * 8) & ~(u64)15);
   u64 k = 0;
   ns[k++] = (u64)argc;
   for (long i = 0; i < argc; i++) ns[k++] = (u64)argv[i];
   ns[k++] = 0;
-  for (long i = 0; i < nenv; i++) {
-    if (starts(envp[i], "LD_PRELOAD=") || starts(envp[i], "DN_INSTDIR=") || starts(envp[i], "LD_LIBRARY_PATH=") || starts(envp[i], "COMPILER_PATH=")) continue;
-    if (new_bio && starts(envp[i], "DN_BIONIC_PRELOAD=")) continue;
-    ns[k++] = (u64)envp[i];
-  }
+  for (long i = 0; i < nenv; i++) if (!skip_env(envp[i])) ns[k++] = (u64)envp[i];
   ns[k++] = (u64)g_env_pre;
   ns[k++] = (u64)g_env_inst;
   ns[k++] = (u64)g_env_lib;
-  ns[k++] = (u64)g_env_cpath;
-  if (new_bio) ns[k++] = (u64)g_env_bio;
+  if (has_rprefix) ns[k++] = (u64)g_env_rprefix;
+  for (int i = 0; i < nset; i++) ns[k++] = (u64)sets[i];
+  if (g_new_bio) ns[k++] = (u64)g_env_bio;
   ns[k++] = 0;
   u64 *nauxv = ns + k;
 
-  /* 3. Map glibc's real loader. */
-  cat2(g_ld, sizeof g_ld, g_dn, "/usr/lib/ld-linux-aarch64.so.1");
-  i64 fd = sys6(SYS_openat, AT_FDCWD, (i64)g_ld, O_RDONLY | O_CLOEXEC, 0, 0, 0);
-  if (failed(fd)) die("cannot open", g_ld);
+  /* 4. Map glibc's real loader. */
+  i64 fd = sys6(SYS_openat, AT_FDCWD, (i64)g_loader, O_RDONLY | O_CLOEXEC, 0, 0, 0);
+  if (failed(fd)) die("cannot open", g_loader);
   Ehdr eh;
   if (sys6(SYS_pread64, fd, (i64)&eh, sizeof eh, 0, 0, 0) != (i64)sizeof eh ||
       eh.e_ident[0] != 0x7f || eh.e_ident[1] != 'E' || eh.e_machine != 183 ||
       eh.e_phnum > sizeof g_ph / sizeof g_ph[0])
-    die("not an arm64 ELF loader", g_ld);
+    die("not an arm64 ELF loader", g_loader);
   if (sys6(SYS_pread64, fd, (i64)g_ph, eh.e_phnum * sizeof(Phdr), (i64)eh.e_phoff, 0, 0) != (i64)(eh.e_phnum * sizeof(Phdr)))
-    die("cannot read program headers", g_ld);
+    die("cannot read program headers", g_loader);
   u64 pm = pagesz - 1, lo = ~(u64)0, hi = 0;
   for (int i = 0; i < eh.e_phnum; i++) {
     if (g_ph[i].p_type != PT_LOAD) continue;
@@ -224,7 +486,7 @@ struct ret ld_dn_main(u64 *sp) {
     if (((g_ph[i].p_vaddr + g_ph[i].p_memsz + pm) & ~pm) > hi) hi = (g_ph[i].p_vaddr + g_ph[i].p_memsz + pm) & ~pm;
   }
   i64 area = sys6(SYS_mmap, 0, (i64)(hi - lo), PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (failed(area)) die("cannot reserve memory for", g_ld);
+  if (failed(area)) die("cannot reserve memory for", g_loader);
   u64 base = (u64)area - lo;
   for (int i = 0; i < eh.e_phnum; i++) {
     Phdr *s = &g_ph[i];
@@ -234,14 +496,14 @@ struct ret ld_dn_main(u64 *sp) {
     u64 mend = (s->p_vaddr + s->p_memsz + pm) & ~pm;
     if (s->p_filesz) {
       i64 r = sys6(SYS_mmap, (i64)(base + start), (i64)(fmapend - start), prot, MAP_PRIVATE | MAP_FIXED, fd, (i64)(s->p_offset & ~pm));
-      if (failed(r)) die("cannot map a segment of", g_ld);
+      if (failed(r)) die("cannot map a segment of", g_loader);
     }
     if (s->p_memsz > s->p_filesz) {
       if ((prot & PROT_WRITE) && fend < fmapend && s->p_filesz) memset((void *)(base + fend), 0, fmapend - fend);
       u64 zstart = s->p_filesz ? fmapend : start;
       if (mend > zstart) {
         i64 r = sys6(SYS_mmap, (i64)(base + zstart), (i64)(mend - zstart), prot, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-        if (failed(r)) die("cannot map the zeroed part of", g_ld);
+        if (failed(r)) die("cannot map the zeroed part of", g_loader);
       }
     }
   }
