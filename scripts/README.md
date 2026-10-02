@@ -18,6 +18,8 @@ level.
   apt hooks or directly.
 - [`runtime/`](runtime/README.md) — front end used after a prefix exists.
 - [`tools/`](tools/README.md) — standalone diagnostics.
+- [`integrate/`](integrate/README.md) — the half-fusion exposure layer
+  (skeleton; see [`../docs/spec/half-fusion.md`](../docs/spec/half-fusion.md)).
 - [`bench/`](bench/README.md) — benchmarking and syscall/symbol scanning,
   not part of any install path.
 - [`survey/`](survey/README.md) — compatibility surveys and the 0.1.x

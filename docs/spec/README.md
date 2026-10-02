@@ -43,6 +43,9 @@ changes.
   (`native/ld-dn.c`) so its policy (preloads, library dirs, env set/
   strip, loader, per-program overrides) comes from a prefix config file
   instead of C literals.
+- `half-fusion.md` — a third mode between `main`'s sealed prefix and
+  `naibed`'s true fusion: selective, reversible exposure of the Debian
+  prefix into Termux plus one shared `$HOME`. **Skeleton / idea only.**
 - `runtime-failures.md` — what goes wrong when *running* a program,
   grouped by cause.
 - `android-platform.md` — the Android enforcement-gate taxonomy (seccomp/
