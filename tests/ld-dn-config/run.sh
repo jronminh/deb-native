@@ -64,6 +64,14 @@ want "DN_INSTDIR=$T" "$OUT"
 want "LD_LIBRARY_PATH=$T/usr/lib/aarch64-linux-gnu:$T/usr/lib" "$OUT"
 want "COMPILER_PATH=$T/usr/bin" "$OUT"
 
+# 1b. The caller's LD_LIBRARY_PATH is honoured: merged after the fixed dirs,
+#     with entries already present deduplicated (so nested execs do not grow
+#     the list).
+OUT=$(LD_LIBRARY_PATH=/opt/custom "$T/usr/bin/probe" 2>&1)
+want "LD_LIBRARY_PATH=$T/usr/lib/aarch64-linux-gnu:$T/usr/lib:/opt/custom" "$OUT"
+OUT=$(LD_LIBRARY_PATH="$T/usr/lib:$T/usr/lib/aarch64-linux-gnu" "$T/usr/bin/probe" 2>&1)
+want "LD_LIBRARY_PATH=$T/usr/lib/aarch64-linux-gnu:$T/usr/lib" "$OUT"
+
 # 2. The shipped default config reproduces exactly the same policy.
 cp "$REPO/native/ld-dn.conf" "$T/etc/deb-native/ld-dn.conf"
 OUT=$(run)

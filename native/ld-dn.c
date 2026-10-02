@@ -8,8 +8,9 @@
  *   1. finds the prefix from the program's own PT_INTERP string
  *      ($DN/usr/lib/deb-native/ld-dn);
  *   2. builds a corrected environment from a compiled-in default policy,
- *      overlaid by $DN/etc/deb-native/ld-dn.conf (or $DN_CONFIG) and then by
- *      two one-shot env overrides (DN_EXTRA_LIB_PATH, DN_PRELOAD);
+ *      overlaid by $DN/etc/deb-native/ld-dn.conf (or $DN_CONFIG); the
+ *      caller's LD_LIBRARY_PATH is merged in after the fixed dirs and
+ *      DN_PRELOAD is appended to the preload list;
  *   3. maps glibc's real loader ($DN/usr/lib/ld-linux-aarch64.so.1, the
  *      libc6 stand-in's link into Termux's glibc) into this same process and
  *      jumps to it with the corrected stack, AT_BASE pointing at it.
@@ -78,7 +79,7 @@ typedef struct {
 #define MAP_ANONYMOUS 0x20
 
 /* The version this loader reports under DN_REDIRECT_DEBUG. */
-#define DN_VERSION "0.5.2"
+#define DN_VERSION "0.5.3"
 
 /* Space _start reserves between this function's frame and the original
  * stack, for the rebuilt argc/argv/envp/auxv. */
@@ -188,7 +189,7 @@ static const char *pres[MAX_PRE]; static int npre;
 static const char *sets[MAX_ENV]; static int nset;
 static const char *unsets[MAX_UNSET]; static int nunset;
 static int default_pre = 1, has_rprefix = 0, g_new_bio = 0;
-static const char *g_extra_lib, *g_extra_preload;
+static const char *g_inherited_lib, *g_extra_preload;
 static char g_progexe[DN_PATH_MAX], g_progbase[256]; static int g_have_prog;
 
 static Phdr g_ph[32];
@@ -374,6 +375,26 @@ static void load_config(const char *override) {
 
 /* ---- emit ----------------------------------------------------------- */
 
+/* Is tok (length tl) already one of the ':'-separated entries in val? */
+static int lib_has(const char *val, const char *tok, u64 tl) {
+  const char *p = val;
+  while (*p) {
+    const char *e = p; while (*e && *e != ':') e++;
+    u64 l = (u64)(e - p);
+    if (l == tl && same_n(p, tok, l)) return 1;
+    p = *e ? e + 1 : e;
+  }
+  return 0;
+}
+/* Append tok to the value of a "LD_LIBRARY_PATH=..." string, unless it is
+ * already there. */
+static void append_lib(char *dst, u64 cap, const char *tok, u64 tl) {
+  const char *val = dst + sizeof("LD_LIBRARY_PATH=") - 1;
+  if (lib_has(val, tok, tl)) return;
+  if (*val) app(dst, cap, ":");
+  app(dst, cap, tok);
+}
+
 static void build_env(void) {
   cat2(g_env_pre, sizeof g_env_pre, "LD_PRELOAD=", "");
   int first = 1;
@@ -383,9 +404,27 @@ static void build_env(void) {
 
   cat2(g_env_inst, sizeof g_env_inst, "DN_INSTDIR=", g_dn);
 
+  /* The standard glibc mechanism is honoured, not discarded: the fixed
+   * dirs first (so the prefix's own libraries always win), then the
+   * caller's LD_LIBRARY_PATH entries, deduplicated. That makes
+   * `LD_LIBRARY_PATH=... prog` behave the way a glibc developer expects,
+   * with no project-specific escape hatch (docs/guides/gcc-glibc-dev.md). */
   cat2(g_env_lib, sizeof g_env_lib, "LD_LIBRARY_PATH=", "");
-  for (int i = 0; i < nlib; i++) { if (i) app(g_env_lib, sizeof g_env_lib, ":"); app(g_env_lib, sizeof g_env_lib, libs[i]); }
-  if (g_extra_lib && *g_extra_lib) { app(g_env_lib, sizeof g_env_lib, ":"); app(g_env_lib, sizeof g_env_lib, g_extra_lib); }
+  for (int i = 0; i < nlib; i++) append_lib(g_env_lib, sizeof g_env_lib, libs[i], slen(libs[i]));
+  if (g_inherited_lib && *g_inherited_lib) {
+    const char *p = g_inherited_lib;
+    while (*p) {
+      const char *e = p;
+      while (*e && *e != ':') e++;
+      u64 l = (u64)(e - p);
+      if (l && l < DN_PATH_MAX) {
+        char tok[DN_PATH_MAX];
+        memcpy(tok, p, l); tok[l] = 0;
+        append_lib(g_env_lib, sizeof g_env_lib, tok, l);
+      }
+      p = *e ? e + 1 : e;
+    }
+  }
 
   if (has_rprefix) cat2(g_env_rprefix, sizeof g_env_rprefix, "DN_REDIRECT_PREFIXES=", g_rprefix);
 }
@@ -394,6 +433,7 @@ static void dump_policy(void) {
   put("  prefix: "); put(g_dn); put("\n");
   put("  loader: "); put(g_loader); put("\n");
   for (int i = 0; i < nlib; i++) { put("  lib-add: "); put(libs[i]); put("\n"); }
+  if (g_inherited_lib && *g_inherited_lib) { put("  lib-env: "); put(g_inherited_lib); put("\n"); }
   put("  preload:"); put(default_pre ? " " : " (no-default)");
   if (default_pre) put(g_default_pre);
   for (int i = 0; i < npre; i++) { put(" "); put(pres[i]); }
@@ -436,7 +476,7 @@ struct ret ld_dn_main(u64 *sp) {
   /* 2. Policy: compiled defaults, config file, then one-shot overrides. */
   const char *inherited = findenv(envp, nenv, "LD_PRELOAD");
   const char *cfg_override = findenv(envp, nenv, "DN_CONFIG");
-  g_extra_lib = findenv(envp, nenv, "DN_EXTRA_LIB_PATH");
+  g_inherited_lib = findenv(envp, nenv, "LD_LIBRARY_PATH");
   g_extra_preload = findenv(envp, nenv, "DN_PRELOAD");
   g_new_bio = inherited && *inherited && !has(inherited, "path-redirect.so");
   if (g_new_bio) cat2(g_env_bio, sizeof g_env_bio, "DN_BIONIC_PRELOAD=", inherited);

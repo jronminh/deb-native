@@ -17,6 +17,6 @@ How-to for a specific, one-off case — not a spec of the project itself.
   the `pip` launcher quirk (`python3 -m pip` workaround) and the
   `pytest`-needs-`dn-trace` gap.
 - `gcc-glibc-dev.md` — compile, link, and run C code with `apt install
-  gcc` inside the prefix: `make`, shared libraries, and the
-  `LD_LIBRARY_PATH`-is-ignored gotcha (`ld-dn` always overwrites it;
-  use `/usr/lib` or `-Wl,-rpath,'$ORIGIN'` instead).
+  gcc` inside the prefix: `make`, shared libraries, and the one
+  library-search convention, `LD_LIBRARY_PATH` (`ld-dn` sets it, prefix
+  dirs first, and merges the caller's entries after).

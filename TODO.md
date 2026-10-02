@@ -398,6 +398,25 @@ Design and as-built detail:
   today).
 - Globbing in `[program]` names, if a real case needs it.
 
+## 0.5.3: honour the caller's `LD_LIBRARY_PATH` (released)
+
+**Goal**: adding a project's own library directory follows the standard
+glibc mechanism, not a project-specific escape hatch -- and there is
+exactly one documented way to do it.
+
+**Status**: released 2026-10-02. `native/ld-dn.c` merges the caller's
+`LD_LIBRARY_PATH` after the two fixed prefix dirs, deduplicated, instead
+of discarding it; `DN_EXTRA_LIB_PATH` is removed. Both `docs/guides/`
+guides now document only `LD_LIBRARY_PATH`
+([`docs/guides/gcc-glibc-dev.md`](docs/guides/gcc-glibc-dev.md),
+[`docs/guides/python-venv.md`](docs/guides/python-venv.md)).
+`tests/ld-dn-config/run.sh` covers the merge and deduplication, and an
+on-prefix `gcc` shared-library build runs with `LD_LIBRARY_PATH=.` and
+fails without it. Design:
+[`docs/spec/ld-dn-config.md`](docs/spec/ld-dn-config.md).
+
+**Open**: none.
+
 ## Services, then sudo (after alpha)
 
 **Goal**: same scope as `sudo-less` — a service needs something to run it

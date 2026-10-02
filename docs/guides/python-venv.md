@@ -16,7 +16,7 @@ is the escape hatch for any Python project that needs a wheel Termux's
 own Bionic Python cannot install because there is no `manylinux`/
 `android` wheel and no feasible from-source build (Rust targeting
 `aarch64-linux-android` is the common failure). Status: working, three
-reproducible rough edges documented below, each with a workaround.
+reproducible rough edges documented below, each with its fix.
 
 ## Contents
 
@@ -151,8 +151,8 @@ The one case that *does* need help: code that calls
 `ctypes.CDLL("libfoo.so")` or `cffi`'s `dlopen` with a **bare name**
 (not an absolute path) for a library you built yourself, not installed
 via `apt`. `dlopen()` by bare name consults the process's
-`LD_LIBRARY_PATH` — which for anything launched through `ld-dn` is two
-fixed directories, discarding whatever the caller set
+`LD_LIBRARY_PATH`, which for anything launched through `ld-dn` is the
+two fixed prefix directories first, then the caller's entries merged in
 (`docs/guides/gcc-glibc-dev.md` has the full story, found building an
 unrelated project's CLI). Confirmed:
 
@@ -161,12 +161,11 @@ import ctypes
 ctypes.CDLL("libadd.so")  # OSError: cannot open shared object file
 ```
 
-**Fix**: set `DN_EXTRA_LIB_PATH` (added 2026-10-02,
-`docs/spec/design.md`) before launching Python, same as for a plain C
-program:
+**Fix**: set `LD_LIBRARY_PATH` before launching Python, the standard
+glibc way and the same one variable as for a plain C program:
 
 ```sh
-DN_EXTRA_LIB_PATH=/path/to/your/libs .venv-dn/bin/python3 your_script.py
+LD_LIBRARY_PATH=/path/to/your/libs .venv-dn/bin/python3 your_script.py
 ```
 
 Confirmed: the exact `ctypes.CDLL` call above succeeds with this set,

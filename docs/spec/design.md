@@ -198,17 +198,18 @@ What the aliasing above actually gives the user, in the interactive shell
   prefix: its interpreter becomes `ld-dn`. The file is changed in place;
   anything else (Termux's own programs, static ones, scripts) is left
   alone.
-- **`DN_EXTRA_LIB_PATH=dir[:dir...] CMD`** (added 2026-10-02) -- `ld-dn`
-  (`native/ld-dn.c`) always builds `LD_LIBRARY_PATH` itself, from exactly
-  two fixed prefix directories, discarding any caller-set value (one
-  `LD_LIBRARY_PATH` set once here covers a program's whole transitive
-  load graph, replacing a per-`.deb` `RUNPATH` patch -- see the comment
-  in `ld-dn.c` and `docs/log/findings/patchelf-et-exec-runpath.md` for
-  why). `DN_EXTRA_LIB_PATH` is the escape hatch: its value is appended
-  to those two fixed directories, read fresh on every launch, so a new
-  project's own library directory needs no `ld-dn` rebuild -- only
-  adding the mechanism itself, once, did. Worked example:
-  `docs/guides/gcc-glibc-dev.md`.
+- **`LD_LIBRARY_PATH`** -- `ld-dn` (`native/ld-dn.c`) sets it itself: the
+  two fixed prefix directories (`$DN/usr/lib/aarch64-linux-gnu`,
+  `$DN/usr/lib`) first, so the prefix's own libraries always win, then the
+  caller's entries merged in and deduplicated (one `LD_LIBRARY_PATH` set
+  once here covers a program's whole transitive load graph, replacing a
+  per-`.deb` `RUNPATH` patch -- see the comment in `ld-dn.c` and
+  `docs/log/findings/patchelf-et-exec-runpath.md` for why). Since 0.5.3 a
+  caller-set value is honoured rather than discarded, so the standard
+  `LD_LIBRARY_PATH=dir ./prog` works for a project's own libraries with no
+  escape hatch. The per-prefix policy file
+  (`docs/spec/ld-dn-config.md`) adds permanent directories with `lib-add`.
+  Worked example: `docs/guides/gcc-glibc-dev.md`.
 
 
 ## Fake root (0.3.0)

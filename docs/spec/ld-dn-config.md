@@ -12,19 +12,20 @@
 Spec for `native/ld-dn.c`'s runtime policy: the preload libraries,
 library search dirs, `COMPILER_PATH`, the env it sets and strips, the
 loader it jumps to, and per-program overrides come from a small config
-file read at exec time, not compiled into the binary. **Status:
-implemented (0.5.2-prealpha).** The loader reads
+file read at exec time, not compiled into the binary. **Status: the
+config layer landed in 0.5.2-prealpha; honouring the caller's
+`LD_LIBRARY_PATH` landed in 0.5.3-prealpha.** The loader reads
 `$DN/etc/deb-native/ld-dn.conf` (shipped as `native/ld-dn.conf`),
 compiled defaults reproduce the pre-config behaviour when the file is
 absent, and the shim reads `DN_REDIRECT_PREFIXES`. As-built specifics
-and deviations are in [Status (0.5.2-prealpha)](#status-052-prealpha).
+and deviations are in [Status](#status).
 [`path-shim.md`](path-shim.md) and [`design.md`](design.md) describe the
 surrounding mechanism.
 
 ## Contents
 
 - [Why: the policy is compiled in](#why-the-policy-is-compiled-in)
-- [What ld-dn does today](#what-ld-dn-does-today)
+- [What ld-dn does](#what-ld-dn-does)
 - [Constraints](#constraints)
 - [Design options](#design-options)
 - [Decision: a config file with compiled defaults](#decision-a-config-file-with-compiled-defaults)
@@ -36,7 +37,7 @@ surrounding mechanism.
 - [Failure modes and safety](#failure-modes-and-safety)
 - [Not configurable](#not-configurable)
 - [Rebuild plan](#rebuild-plan)
-- [Status (0.5.2-prealpha)](#status-052-prealpha)
+- [Status](#status)
 - [Open questions](#open-questions)
 
 ## Related docs
@@ -61,12 +62,11 @@ earliest point that knows the prefix — it derives `$DN` from its own
 path (`ld-dn.c:128-138`). That makes it the natural place to decide the
 whole runtime's environment for the glibc process tree.
 
-Today every one of those decisions is a C literal, so any change — one
-more `LD_PRELOAD` library, a new multiarch libdir, a package that needs
-its own env — requires editing `ld-dn.c` and recompiling it into every
-prefix (`scripts/install/setup-runtime.sh:72-77`). The only runtime knob
-is `DN_EXTRA_LIB_PATH` (`ld-dn.c:163-175`), added for exactly this
-reason; it is a single-purpose escape hatch, not a policy.
+Before 0.5.2 every one of those decisions was a C literal, so any change
+— one more `LD_PRELOAD` library, a new multiarch libdir, a package that
+needs its own env — meant editing `ld-dn.c` and recompiling it into every
+prefix (`scripts/install/setup-runtime.sh`); and a caller-set
+`LD_LIBRARY_PATH` was discarded rather than honoured.
 
 The goal is not "no binary at all" — ld-dn must stay a freestanding
 static ELF (it runs with no libc). The goal is that, after **one**
@@ -75,33 +75,30 @@ compile. This is the same shift `sudo-less` makes with its generated
 `00local-prefix` config rather than per-case wrappers
 ([`classic-design.md`](classic-design.md)).
 
-## What ld-dn does today
+## What ld-dn does
 
-Ordered by what it touches (all in `native/ld-dn.c`):
+On every start it: derives `$DN` from the program's `PT_INTERP` suffix
+`/usr/lib/deb-native/ld-dn`; reads the policy file if present; merges the
+caller's `LD_LIBRARY_PATH` into the fixed prefix dirs, deduplicated;
+rebuilds the stack with its own environment (`LD_PRELOAD`, `DN_INSTDIR`,
+`LD_LIBRARY_PATH`, `DN_REDIRECT_PREFIXES`, `COMPILER_PATH`, plus any
+`env` entries); then maps `$DN/usr/lib/ld-linux-aarch64.so.1` by hand and
+enters it with `AT_BASE`.
 
-| # | step | line |
-|---|---|---|
-| 1 | Derive `$DN` from the program's `PT_INTERP` suffix `/usr/lib/deb-native/ld-dn` | `128-138` |
-| 2 | Read `LD_PRELOAD` (Termux's `termux-exec`) → save as `DN_BIONIC_PRELOAD`; read `DN_EXTRA_LIB_PATH` | `141-148` |
-| 3 | Set `LD_PRELOAD` = `$DN/usr/lib/deb-native/path-redirect.so` | `149-150` |
-| 4 | Set `DN_INSTDIR` = `$DN` | `151` |
-| 5 | Set `LD_LIBRARY_PATH` = `$DN/usr/lib/aarch64-linux-gnu:$DN/usr/lib` + `DN_EXTRA_LIB_PATH` | `159-175` |
-| 6 | Set `COMPILER_PATH` = `$DN/usr/bin` | `184-185` |
-| 7 | Rebuild the stack, dropping `LD_PRELOAD`/`DN_INSTDIR`/`LD_LIBRARY_PATH`/`COMPILER_PATH`/`DN_BIONIC_PRELOAD` and appending the five above | `187-207` |
-| 8 | Map `$DN/usr/lib/ld-linux-aarch64.so.1` by hand and enter it with `AT_BASE` | `209-256` |
-
-Everything in steps 2–8 except `DN_INSTDIR` and the `PT_INTERP` suffix
-is policy a config could own. The stack-rebuild arithmetic (`ld-dn.c:189`,
-the `+5`) and the static string buffers (`ld-dn.c:107`) both assume the
-entry count is known at compile time; a config that adds env entries
-makes both dynamic.
+Only three things stay compiled-in: the `PT_INTERP` suffix that locates
+`$DN`, `DN_INSTDIR`, and the loader mapping. Everything else — the
+preload list, the library dirs, the env it sets and strips, the redirect
+roots, per-program overrides — is policy the config owns. The old fixed
+`+5` env-entry count is now computed from the policy, since a config can
+add entries.
 
 Fixed limits that interact with config growth: 64 KiB of stack reserved
-for the rebuilt vector (`RESERVE`, `ld-dn.c:73`, checked at `:190`) and
-the `g_env_*` buffers (largest `8300` bytes, `ld-dn.c:107`). The runtime
-audit (`TODO.md`, "Runtime component audit") measured roughly 8000 words
-of headroom against realistic arg/env sizes, so a few KB of extra config
-env is comfortably safe — but the caps must be stated, not assumed.
+for the rebuilt vector (`RESERVE`) and the static policy tables
+(`MAX_LIB`/`MAX_PRE`/`MAX_ENV`/`MAX_UNSET`, and a 16 KiB config file).
+The runtime audit (`TODO.md`, "Runtime component audit") measured roughly
+8000 words of headroom against realistic arg/env sizes, so a few KB of
+extra config env is comfortably safe — but the caps are stated, not
+assumed.
 
 ## Constraints
 
@@ -148,8 +145,9 @@ Chosen design:
 2. If a config file is present (and, recommended, announced by a
    `DN_CONFIG` env var the launchers set — see below), ld-dn reads it
    and **overlays** it on the defaults.
-3. `DN_EXTRA_LIB_PATH` (and a new `DN_PRELOAD`) remain **one-shot env
-   overrides** on top, for a single command or a test.
+3. `DN_PRELOAD` remains a **one-shot env override** on top, for a single
+   command or a test; a caller's `LD_LIBRARY_PATH` is merged, not a
+   project-specific escape hatch.
 
 The config file describes the *Debian view*; ld-dn, which already knows
 `$DN`, is the one that turns it into real host paths. That keeps the
@@ -231,16 +229,15 @@ it can be audited at a glance (see [`standard.md`](standard.md)).
 
 On entry, in order:
 
-1. Parse `envp`; find `DN_CONFIG` (path), `DN_EXTRA_LIB_PATH`,
-   `DN_PRELOAD`, and the Termux `LD_PRELOAD`. Derive `$DN` from
-   `PT_INTERP` as today (`ld-dn.c:128-138`) — this is unaffected by
-   config.
+1. Parse `envp`; find `DN_CONFIG` (path), `DN_NO_CONFIG`, `DN_PRELOAD`,
+   the caller's `LD_LIBRARY_PATH`, and the Termux `LD_PRELOAD`. Derive
+   `$DN` from `PT_INTERP` — this is unaffected by config.
 2. Seed a `policy` struct from the compiled defaults.
 3. If `DN_CONFIG` is set (or, if always-probe is chosen, unconditionally):
    `openat`+`read` the file into a static arena, parse, overlay. Any
    error is a warning to fd 2, not a `die`.
-4. Overlay env one-shots: `DN_EXTRA_LIB_PATH` appends to the lib list,
-   `DN_PRELOAD` appends to the preload list.
+4. Overlay env one-shots: the caller's `LD_LIBRARY_PATH` is merged into
+   the lib list (deduplicated), `DN_PRELOAD` appends to the preload list.
 5. Emit: build env strings into the arena, count entries, rebuild the
    stack (now `words` computed from the policy, not the constant `+5`),
    map the chosen `loader`, enter it.
@@ -256,7 +253,7 @@ points the loader at a different file; `DN_NO_CONFIG` skips the read
 entirely (the cost-free path for a benchmark or a minimal prefix). The
 gated alternative — only read when a launcher exported `DN_CONFIG` — was
 considered and rejected for reachability. The per-exec `openat` still
-wants a spawn-heavy benchmark (see the [Status](#status-052-prealpha)).
+wants a spawn-heavy benchmark (see the [Status](#status)).
 
 ## Per-program overrides
 
@@ -359,20 +356,27 @@ Suggested order matches [`bind-only.md`](bind-only.md)'s style: land the
 no-op refactor first, A/B the cost, only then let config drive the
 shim.
 
-## Status (0.5.2-prealpha)
+## Status
 
-Landed end to end. Evidence: `tests/ld-dn-config/run.sh` passes on-device
+Landed end to end — the config layer in 0.5.2, the `LD_LIBRARY_PATH`
+merge in 0.5.3. Evidence: `tests/ld-dn-config/run.sh` passes on-device
 (compiled defaults, the shipped default file, explicit overrides,
-per-program blocks, and a malformed config), and the live `~/.dn` prefix
-shows a translated Debian `env` with the same four entries before and
-after the rebuild. As built, against the plan above:
+per-program blocks, the caller's `LD_LIBRARY_PATH` merged and
+deduplicated, and a malformed config), and an on-prefix `gcc` build of a
+shared library runs with `LD_LIBRARY_PATH=.` and fails without it. As
+built, against the plan above:
 
 - **Implementation** — `native/ld-dn.c` splits into prefix discovery, a
   `policy` table (lib / preload / env / unset / shim-prefix), a
   freestanding reader (`openat` + `read` into a 16 KiB in-place buffer),
   and an emitter; the stack rebuild counts entries from the policy, not a
   literal `+5`. Defaults and `native/ld-dn.conf` reproduce the
-  pre-0.5.2 environment exactly.
+  pre-config environment exactly.
+- **`LD_LIBRARY_PATH`** (0.5.3) — the caller's value is merged after the
+  fixed prefix dirs, deduplicated, instead of discarded, and
+  `DN_EXTRA_LIB_PATH` was removed; the standard `LD_LIBRARY_PATH=dir
+  ./prog` is the one way to add a project's own libraries
+  (`docs/guides/gcc-glibc-dev.md`).
 - **Config file** — `native/ld-dn.conf`, installed once by
   `setup-runtime.sh` to `$INSTDIR/etc/deb-native/ld-dn.conf` (never
   overwritten, so a prefix's edits survive a reinstall).
@@ -386,20 +390,19 @@ after the rebuild. As built, against the plan above:
   fatal. `DN_NO_CONFIG` skips the read; `DN_CONFIG` relocates it.
 - **Not done** — the `DN_CONFIG`-gated fast path (always-probe chosen for
   reachability), globbing in `[program]` names, and pointing the tracer
-  at the same file (loader and shim only for now). `DN_EXTRA_LIB_PATH`
-  and `DN_PRELOAD` remain the one-shot env overrides.
+  at the same file (loader and shim only for now). `DN_PRELOAD` remains
+  the one-shot env override; a caller's `LD_LIBRARY_PATH` is merged.
 
 ## Open questions
 
-Resolved by the 0.5.2 implementation: always-probe (with `DN_NO_CONFIG`),
-`DN_EXTRA_LIB_PATH` + `DN_PRELOAD` kept minimal, additive `lib-add`,
-basename + path-suffix matching. Still open:
+Resolved by the 0.5.2/0.5.3 implementation: always-probe (with `DN_NO_CONFIG`),
+the caller's `LD_LIBRARY_PATH` merged, `DN_PRELOAD` kept minimal, additive
+`lib-add`, basename + path-suffix matching. Still open:
 
 - **Cost contract** — always-probe is correct but unmeasured; run a
   spawn-heavy benchmark and only gate it if the `openat` shows.
-- **Env override surface** — is `DN_EXTRA_LIB_PATH` + `DN_PRELOAD`
-  enough, or does a general `DN_SET_<NAME>` / `DN_UNSET_<NAME>` earn its
-  keep? Start minimal.
+- **Env override surface** — is `DN_PRELOAD` enough, or does a general
+  `DN_SET_<NAME>` / `DN_UNSET_<NAME>` earn its keep? Start minimal.
 - **Ordering vs. `no-default-lib`** — is a caller-defined full lib list
   ever needed, or is additive always right?
 - **Program matching** — basename + path-suffix sufficient, or does a

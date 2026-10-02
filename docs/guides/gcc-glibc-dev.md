@@ -14,16 +14,15 @@ not installing pre-built Debian packages, but using `apt install gcc` to
 build your own code. Covers plain `gcc`, `make`, and shared libraries.
 Status: all verified working end to end on-device
 (`dn-fix-gcc-specs.sh`'s `PT_INTERP` fix, `TODO.md`/
-`docs/log/findings/gcc-hello-pt-interp-gap.md`, 2026-10-01), one real
-gotcha around `LD_LIBRARY_PATH` documented below
-with two workarounds.
+`docs/log/findings/gcc-hello-pt-interp-gap.md`, 2026-10-01). Shared
+libraries use the standard `LD_LIBRARY_PATH`, documented below.
 
 ## Contents
 
 - [Setup](#setup)
 - [Compile, link, run](#compile-link-run)
 - [`make` works](#make-works)
-- [Shared libraries: `LD_LIBRARY_PATH` is ignored](#shared-libraries-ldlibrarypath-is-ignored)
+- [Shared libraries: use `LD_LIBRARY_PATH`](#shared-libraries-use-ldlibrarypath)
 - [Status](#status)
 
 ## Related docs
@@ -32,6 +31,8 @@ with two workarounds.
   and [`../log/findings/patchelf-et-exec-runpath.md`](../log/findings/patchelf-et-exec-runpath.md)
   — the engineering trail for the `PT_INTERP`/`gcc` fixes this guide
   relies on.
+- [`../spec/ld-dn-config.md`](../spec/ld-dn-config.md) — the loader whose
+  `LD_LIBRARY_PATH` policy this guide relies on.
 - [`python-venv.md`](python-venv.md) — the other guide in this directory,
   for a different language (Python) hitting a different wall (no
   `manylinux` wheel) with a different mechanism (a separate venv, not
@@ -96,86 +97,41 @@ hello: hello.c
 	$(CC) -o hello hello.c
 ```
 
-## Shared libraries: `LD_LIBRARY_PATH` is ignored
+## Shared libraries: use `LD_LIBRARY_PATH`
 
-Building a `.so` works normally:
+Building a `.so` works normally, and so does the standard glibc way of
+pointing a program at it:
 
 ```sh
 dn-shell -c "gcc -shared -fPIC -o libadd.so lib.c"
 dn-shell -c "gcc -o main main.c -L. -ladd"
+dn-shell -c "LD_LIBRARY_PATH=. ./main"     # works
 ```
 
-But running the result with a caller-set `LD_LIBRARY_PATH` pointing at
-the `.so`'s own directory **does not work**, even though it's the
-normal glibc way to do this:
+`native/ld-dn.c` — the interpreter every translated/adopted program's
+`PT_INTERP` points at, including a plain `gcc`-linked binary via the
+specs fix above — sets `LD_LIBRARY_PATH` itself, so the whole transitive
+load graph resolves inside the prefix (one variable set once, instead of
+patching every `.so`'s `RUNPATH`, which risked corrupting a tightly
+packed `ET_EXEC` binary's program headers:
+[`../log/findings/patchelf-et-exec-runpath.md`](../log/findings/patchelf-et-exec-runpath.md)).
+It puts the two fixed prefix directories
+(`$DN/usr/lib/aarch64-linux-gnu`, `$DN/usr/lib`) first, so the prefix's
+own libraries always win, then merges the caller's entries after them,
+deduplicated. Before 0.5.3 a caller-set `LD_LIBRARY_PATH` was discarded
+outright; since 0.5.3 it is honoured. **That one variable is the whole
+convention** — no `-rpath`, no copying the library into the prefix, no
+special launcher flag.
 
-```sh
-dn-shell -c "LD_LIBRARY_PATH=. ./main"
-# error while loading shared libraries: libadd.so: cannot open shared object file
-```
-
-**Why**: `native/ld-dn.c` — the interpreter every translated/adopted
-program's `PT_INTERP` points at, including a plain `gcc`-linked binary
-via the specs fix above — strips *any* inherited `LD_PRELOAD`,
-`DN_INSTDIR`, `LD_LIBRARY_PATH`, and `COMPILER_PATH` from the process's
-environment before `exec`-ing the real program, and replaces
-`LD_LIBRARY_PATH` unconditionally with exactly two fixed directories:
-`$DN/usr/lib/aarch64-linux-gnu` and `$DN/usr/lib` (the comment in
-`ld-dn.c` explains why: one `LD_LIBRARY_PATH` set once here covers the
-whole transitive load graph, replacing a per-`.deb` `RUNPATH` patch
-that risked corrupting a tightly-packed `ET_EXEC` binary's program
-headers — the same class of bug
-`docs/log/findings/patchelf-et-exec-runpath.md` describes). A user-set
-`LD_LIBRARY_PATH` is not
-merged with this; it is discarded outright, every time, for every
-program that goes through `ld-dn`.
-
-**Three real workarounds** (confirmed, pick whichever fits):
-
-1. **`DN_EXTRA_LIB_PATH`** (added 2026-10-02 specifically to close this
-   gap — `native/ld-dn.c`, same escape-hatch convention as `DN_ID`,
-   `docs/spec/design.md`): a colon-separated list of extra directories,
-   appended to the two fixed ones, read fresh on every launch — no
-   rebuild needed to use it for a new project:
-   ```sh
-   dn-shell -c "DN_EXTRA_LIB_PATH=/path/to/mylibs ./main"   # works
-   ```
-   Best for day-to-day development — point it at a project's own
-   build directory and it's visible to every binary launched with it
-   set, no install step, no relinking.
-
-2. **Install the `.so` where `ld-dn` already looks, unconditionally**:
-   ```sh
-   dn-shell -c "cp libadd.so /usr/lib/ && ./main"   # works
-   ```
-   (`/usr/lib` here is the prefix's own, via `dn-shell`'s path
-   redirection — not Termux's or Android's.) Fine for a library meant
-   to be shared system-wide inside the prefix; not great for a
-   project's own build artifacts, and needs no env var at the call
-   site (useful for something invoked by a script you don't control).
-
-3. **Rpath the binary at link time**, if you want it to work with no
-   environment setup at all, from anywhere:
-   ```sh
-   dn-shell -c "gcc -o main main.c -L. -ladd -Wl,-rpath,'\$ORIGIN'"
-   ```
-   `\$ORIGIN` (escaped so the shell doesn't expand it — `ld` expands
-   it itself, to the binary's own directory) makes the binary find a
-   `.so` sitting next to it, with no reliance on `ld-dn`'s fixed
-   search path or any env var.
-
-`/usr/local/lib` — the other conventional place a developer might
-expect to drop a library — does **not** work on its own; it's not one
-of `ld-dn`'s two fixed directories (though `DN_EXTRA_LIB_PATH=/usr/local/lib`
-would cover it).
+It covers every case the same way: a `gcc -o` output, a child process
+that inherits the variable, and a runtime `dlopen`/`ctypes.CDLL` by bare
+name ([`python-venv.md`](python-venv.md)).
 
 ## Status
 
 Working end to end: `gcc`/`make`/shared-library builds all compile,
-link, and run correctly inside the prefix. The `LD_LIBRARY_PATH`
-gotcha (silently discarded, by design) now has a proper fix,
-`DN_EXTRA_LIB_PATH`, in addition to the two existing workarounds —
-no rebuild needed for a new project to use it, only the one-time
-`ld-dn` rebuild that added the mechanism itself. `g++`/C++ untested
-(not installed on this device yet); `rustc`/`ghc` remain unresearched
-per `TODO.md`.
+link, and run correctly inside the prefix. Shared libraries use the
+standard `LD_LIBRARY_PATH`, which `ld-dn` sets (prefix directories
+first) and merges the caller's entries into — one convention for every
+case. `g++`/C++ untested (not installed on this device yet);
+`rustc`/`ghc` remain unresearched per `TODO.md`.
