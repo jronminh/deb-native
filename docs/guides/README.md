@@ -16,3 +16,7 @@ How-to for a specific, one-off case — not a spec of the project itself.
   `pydantic-core`) that Termux's Bionic Python can't install or build;
   the `pip` launcher quirk (`python3 -m pip` workaround) and the
   `pytest`-needs-`dn-trace` gap.
+- `gcc-glibc-dev.md` — compile, link, and run C code with `apt install
+  gcc` inside the prefix: `make`, shared libraries, and the
+  `LD_LIBRARY_PATH`-is-ignored gotcha (`ld-dn` always overwrites it;
+  use `/usr/lib` or `-Wl,-rpath,'$ORIGIN'` instead).

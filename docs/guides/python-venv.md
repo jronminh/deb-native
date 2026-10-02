@@ -15,7 +15,7 @@ compiled extensions (`pydantic-core`, `cffi`, …). Done and working: this
 is the escape hatch for any Python project that needs a wheel Termux's
 own Bionic Python cannot install because there is no `manylinux`/
 `android` wheel and no feasible from-source build (Rust targeting
-`aarch64-linux-android` is the common failure). Status: working, two
+`aarch64-linux-android` is the common failure). Status: working, three
 reproducible rough edges documented below, each with a workaround.
 
 ## Contents
@@ -24,6 +24,7 @@ reproducible rough edges documented below, each with a workaround.
 - [Setup](#setup)
 - [The `pip` launcher quirk](#the-pip-launcher-quirk)
 - [`pytest` needs `dn-trace`](#pytest-needs-dn-trace)
+- [`ctypes.CDLL`/`cffi` loading your own `.so` by bare name](#ctypescdllcffi-loading-your-own-so-by-bare-name)
 - [Status](#status)
 
 ## Related docs
@@ -136,10 +137,45 @@ revisiting once `pytest`'s exact offending syscall is identified — it
 may be a small, fixable shim/`fakesyscall.json` gap rather than
 something that needs the tracer for every run.
 
+## `ctypes.CDLL`/`cffi` loading your own `.so` by bare name
+
+Most PyPI wheels with compiled extensions (`pydantic-core`, `cffi`'s own
+`_cffi_backend`, …) need nothing special — they're self-contained,
+either linking only against libraries already on `ld-dn`'s fixed search
+path (`$DN/usr/lib`, `$DN/usr/lib/aarch64-linux-gnu`) or carrying their
+own bundled `.so` deps with an `-rpath $ORIGIN`-style reference baked in
+at build time (`auditwheel`'s doing, not this project's). Confirmed
+working with no extra steps in this guide's own test suite.
+
+The one case that *does* need help: code that calls
+`ctypes.CDLL("libfoo.so")` or `cffi`'s `dlopen` with a **bare name**
+(not an absolute path) for a library you built yourself, not installed
+via `apt`. `dlopen()` by bare name consults the process's
+`LD_LIBRARY_PATH` — which for anything launched through `ld-dn` is two
+fixed directories, discarding whatever the caller set
+(`docs/guides/gcc-glibc-dev.md` has the full story, found building an
+unrelated project's CLI). Confirmed:
+
+```python
+import ctypes
+ctypes.CDLL("libadd.so")  # OSError: cannot open shared object file
+```
+
+**Fix**: set `DN_EXTRA_LIB_PATH` (added 2026-10-02,
+`docs/spec/design.md`) before launching Python, same as for a plain C
+program:
+
+```sh
+DN_EXTRA_LIB_PATH=/path/to/your/libs .venv-dn/bin/python3 your_script.py
+```
+
+Confirmed: the exact `ctypes.CDLL` call above succeeds with this set,
+no code change needed.
+
 ## Status
 
 Working end to end: a `pydantic`/`fastapi`/`sqlalchemy`/`pynacl`-class
 dependency set installs cleanly via prebuilt wheels through this path,
-no Rust and no from-source build needed. The `pip` launcher quirk and
-the `pytest`/`dn-trace` requirement above are known, worked-around
-rough edges, not blockers.
+no Rust and no from-source build needed. The `pip` launcher quirk, the
+`pytest`/`dn-trace` requirement, and the `ctypes`/`cffi` bare-name case
+above are known, worked-around rough edges, not blockers.

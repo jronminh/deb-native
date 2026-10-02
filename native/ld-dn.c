@@ -139,7 +139,11 @@ struct ret ld_dn_main(u64 *sp) {
 
   /* 2. The environment. */
   const char *inherited = 0;
-  for (long i = 0; i < nenv; i++) if (starts(envp[i], "LD_PRELOAD=")) inherited = envp[i] + 11;
+  const char *extra_lib = 0;
+  for (long i = 0; i < nenv; i++) {
+    if (starts(envp[i], "LD_PRELOAD=")) inherited = envp[i] + 11;
+    if (starts(envp[i], "DN_EXTRA_LIB_PATH=")) extra_lib = envp[i] + 18;
+  }
   int new_bio = inherited && *inherited && !has(inherited, "path-redirect.so");
   if (new_bio) cat2(g_env_bio, sizeof g_env_bio, "DN_BIONIC_PRELOAD=", inherited);
   cat2(g_env_pre, sizeof g_env_pre, "LD_PRELOAD=", g_dn);
@@ -156,6 +160,19 @@ struct ret ld_dn_main(u64 *sp) {
   cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", "/usr/lib/aarch64-linux-gnu:");
   cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", g_dn);
   cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", "/usr/lib");
+  /* DN_EXTRA_LIB_PATH: an escape hatch for a caller's own library
+   * directories (same spirit as DN_ID, path-redirect.c), since the fixed
+   * two dirs above are the whole search path and a caller-set
+   * LD_LIBRARY_PATH itself is stripped below -- without this, reaching a
+   * project's own .so needs installing it into the prefix's /usr/lib or
+   * an -rpath at link time (docs/guides/gcc-glibc-dev.md). Colon-separated,
+   * same convention as LD_LIBRARY_PATH itself; appended, not replacing the
+   * two fixed dirs. Left in envp afterward (not stripped) like DN_ID --
+   * harmless, and a child process may want to see it too. */
+  if (extra_lib && *extra_lib) {
+    cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", ":");
+    cat2(g_env_lib + slen(g_env_lib), sizeof g_env_lib - slen(g_env_lib), "", extra_lib);
+  }
   /* gcc's own subprogram search (cc1, as, ld) does not fall back to a plain
    * PATH search the way a shell would -- it only tries its own compiled-in,
    * target-triplet-shaped directories plus COMPILER_PATH. None of the
