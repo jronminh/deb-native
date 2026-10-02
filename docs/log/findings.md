@@ -26,6 +26,7 @@ chronological order. (Merged from the former `findings-*.md`.)
 - [Platform sandbox limits, by direct probe (2026-09-26)](#platform-sandbox-limits-by-direct-probe-2026-09-26)
 - [Findings: finishing the libc-level shim, and closing the measured gaps (2026-09-26)](#findings-finishing-the-libc-level-shim-and-closing-the-measured-gaps-2026-09-26)
 - [Findings: patchelf corrupting an `ET_EXEC` binary's program headers, and moving RUNPATH to the loader (2026-09-30)](#findings-patchelf-corrupting-an-etexec-binarys-program-headers-and-moving-runpath-to-the-loader-2026-09-30)
+- [Findings: a real server stack (sockets, SQLite WAL, uvloop, Alembic) works unmodified — credit Termux's glibc, not 0.5.0 (2026-10-02)](#findings-a-real-server-stack-sockets-sqlite-wal-uvloop-alembic-works-unmodified-credit-termuxs-glibc-not-050-2026-10-02)
 
 ## Related docs
 
@@ -1286,4 +1287,49 @@ user rather than solved inline: fixing it means deciding how (a linker
 wrapper that passes `-dynamic-linker <real ld-dn path>`, a post-link
 `patchelf` step, or something else), which is an architecture call like
 the `/lib` one above, not a one-line follow-on.
+
+## Findings: a real server stack (sockets, SQLite WAL, uvloop, Alembic) works unmodified — credit Termux's glibc, not 0.5.0 (2026-10-02)
+
+Building `vdir` (an unrelated external project, a small signed-registry
+server) against the Debian-glibc Python venv from
+[`docs/guides/python-venv.md`](../guides/python-venv.md), stage 3 of its
+own roadmap needed three syscall-heavy things this project had never
+exercised before: a real TCP socket (`uvicorn`'s `bind`/`listen`/
+`accept`), SQLite in WAL mode (`mmap`, file locking, via both `sqlite3`
+and SQLAlchemy), and Alembic (file generation, its own subprocess-free
+CLI). Smoke-tested each directly (no `dn-trace`) before writing any
+real code for that project:
+
+- Raw `socket.bind`/`.listen` on `127.0.0.1` — fine.
+- `sqlite3` and SQLAlchemy, `PRAGMA journal_mode=WAL`, insert, commit,
+  select — fine.
+- A real `uvicorn.Server` (`FastAPI`, `httpx` client), including with
+  `loop="uvloop"` and `http="httptools"` explicitly (both pulled in by
+  `uvicorn[standard]`, both C extensions) — started, served a real HTTP
+  request, shut down clean. No `SIGSYS`.
+- `python3 -m alembic init` — generates its template tree without
+  issue.
+
+None of this needed `dn-trace`, unlike the `pytest` gap in
+`docs/guides/python-venv.md`. **Important attribution, not to overclaim
+this project's own work**: the prefix's active `libc6` today is still
+Termux's own glibc side-install (`glibc-packages`), a mature, widely-used
+package — not yet 0.5.0's own-built `libc6`, which per `TODO.md` is
+"written, forked, and validated... but not yet packaged as the prefix's
+real `libc6`". The `kernel-features.h.patch` note in
+[`../spec/android-platform.md`](../spec/android-platform.md) ("no
+separate `accept`/`recv`/`send` syscalls — needed for sockets to work at
+all") describes a fix already folded into *that* own-glibc patch set for
+when it eventually becomes the default; it says nothing about today's
+runtime, which was never missing it.
+
+So this is not a deb-native capability newly proven — it is the
+existing Termux glibc side-install doing what it has always done,
+confirmed under this project's shim/tracer layer via a real external
+project instead of a synthetic probe. Worth keeping as a **named
+baseline**: once 0.5.0's own `libc6` replaces the side-install as the
+prefix default, these four checks (socket, SQLite WAL, uvloop/httptools,
+Alembic) are a fast regression smoke test to confirm nothing those
+patches touch (syscall emulation, `fakesyscall.json` buckets) broke
+networking or `mmap`-backed I/O for an ordinary Python server stack.
 
