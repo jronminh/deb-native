@@ -11,3 +11,7 @@ How-to for a specific, one-off case — not a spec of the project itself.
 - `tailscale.md` — install Tailscale's Debian `arm64` package into a
   prefix and run it: the static-daemon goal (userspace networking),
   the project's target case for the tracer.
+- `python-venv.md` — install Debian's own `python3`/`pip` into a prefix
+  and use a venv from it to get real `manylinux` wheels (e.g.
+  `pydantic-core`) that Termux's Bionic Python can't install or build;
+  the `pip` launcher quirk and its `python3 -m pip` workaround.
