@@ -7,8 +7,9 @@
 # NEWPREFIX, and the prefix's apt reads only its own config.
 #
 # Every fresh prefix is dn-glibc, out of the box: the fused loader, not
-# ld-dn. DN_GLIBC_DEBS (required) is a directory holding this project's own
-# prebuilt libc6.deb, libc-bin.deb and fused path-redirect.so --
+# ld-dn. DN_GLIBC_DEBS (required) is a directory holding Debian's real
+# libc6.deb and libc-bin.deb, the fused path-redirect.so, and a files/
+# tree with the 10 patched glibc files (docs/spec/deploy.md) --
 # dn-install-glibc.sh's usage comment has the details; how those get built
 # and distributed is a separate, still-open question, not this script's.
 #
