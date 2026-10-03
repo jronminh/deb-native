@@ -57,6 +57,9 @@ changes.
 - `dn-glibc-prefix.md` — the next-gen prefix: glibc's own loader built for
   the prefix instead of `ld-dn`, and the packaging + GCC lifecycle that make
   it installable.
+- `deploy.md` — how a `dn-glibc` prefix is deployed: install Debian's real
+  `libc6`/`libc-bin`, then swap in the 10 patched files; the rest of the
+  bootstrap is unchanged.
 - `dl-mechanics.md` — reference catalog of glibc's dynamic-linker
   mechanisms (env, files, CLI, dynamic tags, tunables, audit), and how
   leaning on them keeps the `dn-glibc` loader patch small.
