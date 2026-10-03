@@ -99,8 +99,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-cache.c work/elf/
        /* We can handle three different cache file formats here:
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/dl-load.c
 --- pristine/p/elf/dl-load.c	2026-09-30 10:54:41.388190836 +0700
-+++ work/elf/dl-load.c	2026-10-03 22:14:23.293472064 +0700
-@@ -106,17 +106,72 @@
++++ work/elf/dl-load.c	2026-10-03 22:34:21.345471607 +0700
+@@ -106,17 +106,61 @@
     an array of concatenated strings to avoid relocations.  See
     gen-trusted-dirs.awk.  */
  #include "trusted-dirs.h"
@@ -126,31 +126,24 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
 -  SYSTEM_DIRS_LEN
 -};
 -#define nsystem_dirs_len array_length (system_dirs_len)
-+  const char *src;
++  static const char *const guest[] = {
++    "/usr/lib/aarch64-linux-gnu",
++    "/usr/lib",
++    NULL
++  };
 +  char *dst;
 +  char *end_buf;
++  size_t i;
 +  if (dn_system_dirs_ready)
 +    return;
-+  src = SYSTEM_DIRS;
 +  dst = dn_system_dirs;
 +  end_buf = dn_system_dirs + sizeof (dn_system_dirs) - 1;
 +  dn_nsystem_dirs_len = 0;
 +  dn_system_dirs_max_len = 0;
-+  while (*src != '\0' && dn_nsystem_dirs_len < DN_MAX_SYSDIRS)
++  for (i = 0; guest[i] != NULL && dn_nsystem_dirs_len < DN_MAX_SYSDIRS; ++i)
 +    {
-+      const char *sep = src;
-+      char seg[512];
-+      size_t seglen, rl;
-+      const char *red;
-+      while (*sep != '\0' && *sep != ':')
-+        ++sep;
-+      seglen = (size_t) (sep - src);
-+      if (seglen >= sizeof (seg))
-+        seglen = sizeof (seg) - 1;
-+      memcpy (seg, src, seglen);
-+      seg[seglen] = '\0';
-+      red = __dn_redirect (dst, (size_t) (end_buf - dst), seg);
-+      rl = strlen (red);
++      const char *red = __dn_redirect (dst, (size_t) (end_buf - dst), guest[i]);
++      size_t rl = strlen (red);
 +      if (red != dst)
 +        memcpy (dst, red, rl + 1);
 +      dst += rl;
@@ -158,14 +151,10 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
 +      if (rl > dn_system_dirs_max_len)
 +        dn_system_dirs_max_len = rl;
 +      ++dn_nsystem_dirs_len;
-+      if (*sep == ':')
-+        {
-+          *dst++ = ':';
-+          src = sep + 1;
-+        }
-+      else
-+        src = sep;
++      *dst++ = ':';
 +    }
++  if (dn_nsystem_dirs_len > 0)
++    --dst;
 +  *dst = '\0';
 +  dn_system_dirs_ready = 1;
 +}
@@ -178,7 +167,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
    if (len == 0)
      return false;
  
-@@ -155,16 +210,16 @@
+@@ -155,16 +199,16 @@
    if (wnp == npath || wnp[-1] != '/')
      *wnp++ = '/';
  
@@ -200,7 +189,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
      }
  
    return false;
-@@ -560,6 +615,8 @@
+@@ -560,6 +604,8 @@
    /* Initialize to please the compiler.  */
    const char *errstring = NULL;
  
@@ -209,7 +198,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
    /* First see whether we must forget the RUNPATH and RPATH from this
       object.  */
    if (__glibc_unlikely (GLRO(dl_inhibit_rpath) != NULL)
-@@ -678,6 +735,8 @@
+@@ -678,6 +724,8 @@
  		const char *glibc_hwcaps_prepend,
  		const char *glibc_hwcaps_mask)
  {
@@ -218,7 +207,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
    size_t idx;
    const char *strp;
    struct r_search_path_elem *pelem, **aelem;
-@@ -697,7 +756,7 @@
+@@ -697,7 +745,7 @@
  
    /* First set up the rest of the default search directory entries.  */
    aelem = __rtld_search_dirs.dirs = (struct r_search_path_elem **)
@@ -227,7 +216,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
    if (__rtld_search_dirs.dirs == NULL)
      {
        errstring = N_("cannot create search path array");
-@@ -710,7 +769,7 @@
+@@ -710,7 +758,7 @@
  		/ sizeof (struct r_search_path_elem));
  
    __rtld_search_dirs.dirs[0]
@@ -236,7 +225,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
  	      * sizeof (*__rtld_search_dirs.dirs[0]));
    if (__rtld_search_dirs.dirs[0] == NULL)
      {
-@@ -720,7 +779,7 @@
+@@ -720,7 +768,7 @@
  
    __rtld_search_dirs.malloced = 0;
    pelem = GL(dl_all_dirs) = __rtld_search_dirs.dirs[0];
@@ -245,7 +234,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
    idx = 0;
  
    do
-@@ -733,21 +792,21 @@
+@@ -733,21 +781,21 @@
        pelem->where = NULL;
  
        pelem->dirname = strp;
@@ -272,7 +261,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
    *aelem = NULL;
  
    /* This points to the map of the main object.  If there is no main
-@@ -2080,12 +2139,12 @@
+@@ -2080,12 +2128,12 @@
  		 use a cache entry from any of these directories.  */
  	      if (__glibc_unlikely (l->l_flags_1 & DF_1_NODEFLIB))
  		{
@@ -287,7 +276,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
  			{
  			  /* The prefix matches.  Don't use the entry.  */
  			  free (cached);
-@@ -2093,10 +2152,10 @@
+@@ -2093,10 +2141,10 @@
  			  break;
  			}
  
