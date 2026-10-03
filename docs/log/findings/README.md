@@ -96,7 +96,9 @@ below, oldest first, matching the original file's order.
   — proven on `fe2` (redirect works with `DN_INSTDIR` unset); full loader
   integration (own-glibc + rebuilt shim) deferred.
 - [`own-glibc-missing-libc-bin.md`](own-glibc-missing-libc-bin.md) —
-  2026-10-03, **Open gap**: own-glibc packaging covered only `libc6` (the
-  loader is in it, fine), but `ldconfig`/`ldd` are Debian's `libc-bin` and
-  were never repackaged — so the prefix lacks a prefix-targeted `ldconfig`
-  to build `ld.so.cache`. Fix: repackage `libc-bin` too.
+  2026-10-03, **Repo change**: own-glibc packaging covered only `libc6` (the
+  loader is in it, fine), but `ldconfig`/`ldd` are Debian's *path*-sensitive
+  `libc-bin` and were never repackaged. Now repackaged
+  (`dn-package-libc-bin.sh`); install/wiring pending. Also pins the fused
+  loader's fixed paths: cache/conf at `<prefix>/usr/etc/`, preload at
+  `<prefix>/etc/`.

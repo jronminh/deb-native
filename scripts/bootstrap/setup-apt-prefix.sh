@@ -96,10 +96,13 @@ EOF
 # and Debian's real packages install and work unmodified -- no reason to
 # fork them too, which would only cascade into their own dependencies
 # (confirmed hitting this trying to patch libc6-dev standalone first).
-# libc-bin/libc-l10n/locales stay pinned for now: same reasoning likely
-# applies (not yet tested) once libc6's version matches, but libc-bin's
-# ldconfig has its own known seccomp quirk (TODO.md, 0.5.0) worth checking
-# first rather than assuming.
+# libc-bin stays pinned deliberately: unlike libc6-dev/libc-dev-bin it is
+# *path*-sensitive (`ldconfig` is compiled against a sysconfdir and must be
+# this project's own build to write the prefix's ld.so.cache), so it gets
+# replaced by our own package (dn-package-libc-bin.sh) and the pin keeps
+# Debian's real one from sneaking back in on `apt upgrade` -- exactly like
+# libc6. libc-l10n/locales stay pinned too: the same exact-version-match
+# reasoning as libc6-dev likely applies, but is not yet tested.
 write_pins() {  # FILE
   PINNED="libc6:arm64 libc-bin:arm64 libc-l10n:arm64 locales:arm64 dpkg:arm64 apt:arm64 sudo:arm64 doas:arm64"
   for o in deb.debian.org security.debian.org; do

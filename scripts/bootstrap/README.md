@@ -14,5 +14,9 @@ Build the prefix itself, once. See [`../../docs/spec/design.md`](../../docs/spec
   (`libc6`, `dpkg`, `apt` under Debian's names, Termux's content).
 - `dn-package-glibc.sh` — packages this project's own-built glibc
   (0.5.0) as a real `libc6` `.deb`, instead of a Termux-glibc stand-in.
+- `dn-package-libc-bin.sh` — packages this build's own glibc *programs*
+  (`ldconfig`, `ldd`, `getconf`, `locale`, ...) as a real `libc-bin` `.deb`
+  — needed because `ldconfig` is path-sensitive (writes the prefix's
+  `ld.so.cache`), unlike `libc6-dev`/`libc-dev-bin`.
 - `build-path-redirect.sh` — cross-compiles `native/path-redirect.c`
   (the shim) into a glibc shared library with Termux's own clang.

@@ -9,12 +9,13 @@
 > investigation, or a new guide -- not just a long addition to what a doc
 > already covers.
 
-**Impact: Open gap.** Checking the 0.5.0 own-glibc packaging against what
+**Impact: Repo change.** Checking the 0.5.0 own-glibc packaging against what
 the `dn-glibc` fused loader needs: the loader itself is covered (`libc6`),
 but the prefix-targeted `ldconfig`/`ldd` -- which live in Debian's
 `libc-bin`, not `libc6` -- were built by own-glibc yet never repackaged.
 Env-free library search needs the prefix's `ld.so.cache`, so `libc-bin`
-has to be packaged too.
+has to be packaged too. A companion script now does that; installing and
+wiring it into the prefix is the remaining step.
 
 ## Contents
 
@@ -22,6 +23,7 @@ has to be packaged too.
 - [What the check found](#what-the-check-found)
 - [Why it matters](#why-it-matters)
 - [Fix](#fix)
+- [Path layout discovered](#path-layout-discovered)
 
 ## Related docs
 
@@ -63,10 +65,39 @@ no env-free way to find the prefix's libraries (the proof so far used
 
 ## Fix
 
-Repackage `libc-bin` the same way as `libc6`: take Debian's real `libc-bin`
-`.deb` as the template, replace its payload (`ldconfig`, `ldd`, `locale`,
-... -- whatever the package's manifest lists that own-glibc produced) from
-the own-glibc destdir, keep Debian's control metadata. Then a prefix install
-gets a prefix-targeted `ldconfig`, and `ldconfig` can write
-`<prefix>/etc/ld.so.cache`. Tracked in `TODO.md`, "Runtime overhaul";
-implementation follows this entry.
+`scripts/bootstrap/dn-package-libc-bin.sh` -- the companion to
+`dn-package-glibc.sh` -- repackages this build's glibc *programs* as a real
+`libc-bin` `.deb`: Debian's real `libc-bin` `.deb` as the template, its
+`usr/bin`/`usr/sbin` programs swapped for our build's, Debian's control
+metadata/config/man/doc kept. Built on `fe2` for
+`2.41-12+deb13u4` (`libc-bin-out.deb`); the packaged `ldconfig` is our
+4.76 MB build (Debian's is 860 KB) and carries the prefix baked in.
+Installing it into the prefix and wiring the cache is the remaining step
+(`TODO.md`, "Runtime overhaul").
+
+## Path layout discovered
+
+Reading the built binaries (`strings`) pins the fused loader's fixed paths,
+and they are *not* all under the guest `<prefix>/etc/`:
+
+| file | baked path | note |
+| --- | --- | --- |
+| `ld.so.cache` | `<prefix>/usr/etc/ld.so.cache` | loader reads, `ldconfig` writes |
+| `ld.so.conf` | `<prefix>/usr/etc/ld.so.conf` | `ldconfig` reads |
+| `ld.so.preload` | `<prefix>/etc/ld.so.preload` | loader reads |
+
+The split is because the build was configured `--prefix=<prefix>/usr`
+(`third_party/glibc-android-patches/README.md`), so glibc's `SYSCONFDIR` is
+`<prefix>/usr/etc`, while `set-dirs.patch` retargets the guest `/etc` to
+`<prefix>/etc` for `ld.so.preload`. Two consequences for wiring:
+
+- The prefix's `ld.so.cache`/`ld.so.conf` must live at `<prefix>/usr/etc/`,
+  not `<prefix>/etc/` where Debian's `libc-bin` installs them.
+- The loader's built-in default search dir is the flat `<prefix>/usr/lib/`
+  (this build is `--disable-multi-arch`), but `dn-package-glibc.sh` relocates
+  the libraries into `<prefix>/usr/lib/aarch64-linux-gnu/`; the cache is what
+  makes the multiarch dir searchable without `LD_LIBRARY_PATH`.
+
+The `ldconfig` SIGSYS in `android-seccomp-audit.md` is specific to
+`ldconfig -r` (the chroot/root-prefix mode); our prefix-relative `ldconfig`
+runs plain, so that path is not hit.

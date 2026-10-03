@@ -344,13 +344,25 @@ that point, splitting is also the natural moment to generalize the
 hardcoded path instead of carrying it over as-is.
 
 **Open**:
-- **`libc-bin`/`libc-l10n`/`locales`**: still pinned to -1 in
-  `setup-apt-prefix.sh` (unlike `libc6-dev`/`libc-dev-bin`, unpinned
-  2026-10-01). The same exact-version-match reasoning likely lets them
-  install unmodified too, once tried -- but `libc-bin` ships `ldconfig`,
-  which has its own known seccomp quirk (see the `dn-trace` Gate-A work
-  below), worth checking before assuming it's as simple as
-  `libc6-dev` turned out to be.
+- **`libc-bin`**: packaging done 2026-10-03 --
+  `scripts/bootstrap/dn-package-libc-bin.sh` repackages this build's own
+  `ldconfig`/`ldd`/`getconf`/... as a real `libc-bin` `.deb`. It is
+  *path*-sensitive (`ldconfig` writes the prefix's `ld.so.cache`), so
+  unlike `libc6-dev` Debian's real one cannot be reused
+  (`docs/log/findings/own-glibc-missing-libc-bin.md`). Stays pinned in
+  `setup-apt-prefix.sh` -- deliberately, like `libc6`, since it is now our
+  own package. **Open**: install it over the prefix and wire the fused
+  loader's cache. Discovered wiring: the loader and `ldconfig` read
+  `<prefix>/usr/etc/ld.so.cache` + `<prefix>/usr/etc/ld.so.conf` (glibc's
+  `SYSCONFDIR`, from `--prefix=<prefix>/usr`), *not* the guest
+  `<prefix>/etc/`; only `ld.so.preload` is at `<prefix>/etc/`. The loader's
+  built-in default is the flat `<prefix>/usr/lib/`, so the relocated
+  multiarch dir only becomes searchable via the cache. The `ldconfig`
+  SIGSYS is specific to `ldconfig -r` (chroot mode), which our
+  prefix-relative ldconfig does not use.
+- **`libc-l10n`/`locales`**: still pinned to -1 in
+  `setup-apt-prefix.sh`; the same exact-version-match reasoning as
+  `libc6-dev` likely lets them install unmodified (not yet tested).
 - **Build pipeline**: cross-build in CI (too slow on-device for a real
   release cadence) instead of the on-device build this used -- needed
   for a repeatable release process, not for this validation.

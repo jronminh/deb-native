@@ -34,10 +34,12 @@
 # libc6-dev's linker scripts hardcode /lib/aarch64-linux-gnu.
 #
 # Scope: libc6 only (the runtime shared libraries + NSS modules + gconv +
-# the dynamic linker). `libc6-dev`/`libc-dev-bin`/`locales`/`libc-bin`
-# need no equivalent script -- same reasoning as the no-version-bump
-# above, they install from Debian's archive as-is once libc6's version
-# matches exactly.
+# the dynamic linker). `libc6-dev`/`libc-dev-bin` need no equivalent script
+# -- same reasoning as the no-version-bump above, they install from Debian's
+# archive as-is once libc6's version matches exactly. `libc-bin` is the one
+# exception: it is *path*-sensitive, not just version-pinned (its `ldconfig`
+# is compiled against a sysconfdir), so it does need its own repackage --
+# `dn-package-libc-bin.sh`, this script's companion.
 #
 # Usage: dn-package-glibc.sh REAL_LIBC6_DEB DESTDIR OUT_DEB
 #   REAL_LIBC6_DEB  a real Debian libc6_<ver>_arm64.deb, same version the

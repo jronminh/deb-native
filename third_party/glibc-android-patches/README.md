@@ -219,7 +219,15 @@ stand-in (`dn-standins.sh`'s Termux-glibc symlinks), `ls -l` resolves
 real NSS identities, previously-installed packages (`tree`, `figlet`,
 ...) keep running, and the full regression battery from the runtime
 component audit (`find -exec test`, a fresh `apt-get install`) stays
-clean. Out of scope for this pass: `libc6-dev`/`libc-bin`/`locales` --
-this project's own build produces the material for all three
-(headers/static libs for `-dev`; `ldconfig`/`iconv`/`locale`/... for
-`-bin`) but packaging them is a separate, not-yet-done step.
+clean. **`libc-bin` packaged 2026-10-03**:
+[`scripts/bootstrap/dn-package-libc-bin.sh`](../../scripts/bootstrap/dn-package-libc-bin.sh)
+is the companion to `dn-package-glibc.sh` (below) -- it takes a real Debian
+`libc-bin_<ver>_arm64.deb` as a template and swaps in this build's own
+`usr/bin`/`usr/sbin` programs (`ldconfig`, `ldd`, `getconf`, `locale`, ...).
+Unlike `libc6-dev`/`libc-dev-bin` (version-only, install unmodified once
+`libc6`'s version matches -- `libc6-dev-gap-closed.md`), `libc-bin` is
+*path*-sensitive: its `ldconfig` is compiled against `SYSCONFDIR` and must be
+this build's to write `<prefix>/usr/etc/ld.so.cache`
+(`docs/log/findings/own-glibc-missing-libc-bin.md`). Remaining out of scope:
+`libc6-dev` (headers/static libs, no script needed) and
+`libc-l10n`/`locales` (still pinned, untested).
