@@ -55,6 +55,17 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/dirent/bug-readdir1.c wo
    if (dirp == NULL)
      {
        if (errno == ENOENT)
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/Versions work/elf/Versions
+--- pristine/p/elf/Versions	2025-01-29 00:31:33.000000000 +0700
++++ work/elf/Versions	2026-10-03 22:22:29.281471879 +0700
+@@ -64,6 +64,7 @@
+     _dl_rtld_di_serinfo; _dl_starting_up; _dl_fatal_printf;
+     _dl_audit_symbind_alt; _dl_audit_preinit;
+     _rtld_global; _rtld_global_ro;
++    __dn_prefix;
+ 
+     # Only here for gdb while a better method is developed.
+     _dl_debug_state;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-cache.c work/elf/dl-cache.c
 --- pristine/p/elf/dl-cache.c	2025-01-29 00:31:33.000000000 +0700
 +++ work/elf/dl-cache.c	2026-10-03 21:08:15.281473578 +0700
@@ -303,7 +314,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/ldconfig.c work/elf/
  /* Get libc version number.  */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld.c
 --- pristine/p/elf/rtld.c	2026-09-30 10:54:35.704190839 +0700
-+++ work/elf/rtld.c	2026-10-03 21:17:43.745473361 +0700
++++ work/elf/rtld.c	2026-10-03 22:19:36.073471945 +0700
 @@ -34,6 +34,7 @@
  #include <libc-lock.h>
  #include <unsecvars.h>
@@ -312,7 +323,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld
  #include <dl-osinfo.h>
  #include <dl-procinfo.h>
  #include <dl-prop.h>
-@@ -1352,6 +1353,14 @@
+@@ -1352,6 +1353,18 @@
  #endif
  }
  
@@ -324,10 +335,14 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld
 +  return _dl_rtld_map.l_name;
 +}
 +
++/* deb-native: the live prefix, published for libc's run-time redirects
++   (dn-prefix.h).  Filled in dl_main before anything is loaded.  */
++char __dn_prefix[DN_PREFIX_MAX];
++
  static void
  dl_main (const ElfW(Phdr) *phdr,
  	 ElfW(Word) phnum,
-@@ -1825,14 +1834,13 @@
+@@ -1825,14 +1838,26 @@
    struct link_map **preloads = NULL;
    unsigned int npreloads = 0;
  
@@ -346,10 +361,23 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld
 +     would otherwise abort every prefix program at startup.  --preload
 +     and the ld.so.preload file are unaffected.  */
 +  state.preloadlist = NULL;
++
++  /* deb-native: publish the live prefix for libc (dn-prefix.h).  */
++  {
++    const char *dn_p = __dn_pfx ();
++    if (dn_p != NULL)
++      {
++        size_t dn_n = strlen (dn_p);
++        if (dn_n >= sizeof (__dn_prefix))
++          dn_n = sizeof (__dn_prefix) - 1;
++        memcpy (__dn_prefix, dn_p, dn_n);
++        __dn_prefix[dn_n] = '\0';
++      }
++  }
  
    if (__glibc_unlikely (state.preloadarg != NULL))
      {
-@@ -1849,7 +1857,8 @@
+@@ -1849,7 +1874,8 @@
       open().  So we do this first.  If it succeeds we do almost twice
       the work but this does not matter, since it is not for production
       use.  */
@@ -2168,17 +2196,21 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dl-cache
  #ifndef add_system_dir
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- pristine/p/sysdeps/generic/dn-prefix.h	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/generic/dn-prefix.h	2026-10-03 21:17:43.741473361 +0700
-@@ -0,0 +1,169 @@
++++ work/sysdeps/generic/dn-prefix.h	2026-10-03 22:19:35.933471945 +0700
+@@ -0,0 +1,177 @@
 +/* deb-native: run-time prefix derivation
 +   (docs/spec/dn-glibc-prefix.md, "Runtime prefix self-derivation").
 +
-+   Every object derives the prefix from its own absolute path -- inside
-+   ld.so, from the loader's path recorded in _dl_rtld_map.l_name -- by
-+   cutting at the fixed layout suffix.  One build fits any prefix.
++   One build fits any prefix.  ld.so cuts the live prefix from its own
++   absolute path and publishes it in the global __dn_prefix (elf/rtld.c);
++   the rest of libc reads that global, so no component keeps the build
++   prefix.  The loader's own paths and every redirect in the open wrappers
++   go through __dn_redirect, which maps both the build-time prefix and bare
++   guest roots (/etc, /usr, ...) onto the live prefix.
 +
 +   Uses only primitives available in the minimal rtld (strlen/memcmp/memcpy);
-+   strstr/strncmp would pull libc objects into ld.so and break its link.  */
++   strstr/strncmp would pull libc objects into ld.so and break its link.
++   No dladdr: that would pull dl-addr.os into librtld.map and break it.  */
 +
 +#ifndef _DN_PREFIX_H
 +#define _DN_PREFIX_H 1
@@ -2191,34 +2223,16 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefi
 +# define DN_BUILT_PREFIX "@TERMUX_PREFIX@"
 +#endif
 +
++/* The live prefix (no trailing slash), published by ld.so at startup and
++   read here in libc.  Empty until ld.so fills it.  */
++#define DN_PREFIX_MAX 512
++extern char __dn_prefix[];
++
 +#if IS_IN (rtld)
 +/* Provided by elf/rtld.c.  Using a function (instead of _dl_rtld_map
 +   directly) keeps this header usable from libc sources compiled for rtld,
 +   which do not include ldsodefs.h.  */
 +extern const char *__dn_rtld_self_path (void) attribute_hidden;
-+static const char *
-+__dn_self_path (void)
-+{
-+  return __dn_rtld_self_path ();
-+}
-+#else
-+# include <dlfcn.h>
-+# include <stdint.h>
-+static const char *
-+__dn_self_path (void)
-+{
-+  static const char *cached;
-+  static int inited;
-+  if (!inited)
-+    {
-+      Dl_info info;
-+      if (dladdr ((void *) (uintptr_t) &__dn_self_path, &info) != 0
-+          && info.dli_fname != NULL)
-+        cached = info.dli_fname;
-+      inited = 1;
-+    }
-+  return cached;
-+}
 +#endif
 +
 +/* strstr-alike, rtld-safe.  */
@@ -2255,39 +2269,61 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefi
 +  return 1;
 +}
 +
-+static size_t
-+__dn_prefix_len (void)
++/* The live prefix, cached, or NULL if it cannot be determined yet.  In ld.so
++   it is cut from the loader's own path; in libc it is the value ld.so
++   published in __dn_prefix.  */
++#if IS_IN (rtld)
++static char __dn_pfx_buf[DN_PREFIX_MAX];
++static const char *
++__dn_pfx (void)
 +{
-+  static size_t cached;
++  static const char *cached;
 +  static int inited;
-+  if (!inited)
-+    {
-+      const char *p = __dn_self_path ();
-+      const char *t = NULL;
-+      if (p != NULL)
-+        {
-+          t = __dn_find (p, "/usr/lib/aarch64-linux-gnu/");
-+          if (t == NULL)
-+            t = __dn_find (p, "/usr/sbin/");
-+          if (t == NULL)
-+            t = __dn_find (p, "/usr/bin/");
-+        }
-+      if (t != NULL)
-+        cached = (size_t) (t - p);
-+      inited = 1;
-+    }
++  const char *p;
++  const char *t;
++  size_t n;
++  if (inited)
++    return cached;
++  inited = 1;
++  p = __dn_rtld_self_path ();
++  if (p == NULL)
++    return NULL;
++  t = __dn_find (p, "/usr/lib/aarch64-linux-gnu/");
++  if (t == NULL)
++    t = __dn_find (p, "/usr/lib/");
++  if (t == NULL)
++    t = __dn_find (p, "/usr/sbin/");
++  if (t == NULL)
++    t = __dn_find (p, "/usr/bin/");
++  if (t == NULL)
++    return NULL;
++  n = (size_t) (t - p);
++  if (n >= sizeof (__dn_pfx_buf))
++    n = sizeof (__dn_pfx_buf) - 1;
++  memcpy (__dn_pfx_buf, p, n);
++  __dn_pfx_buf[n] = '\0';
++  cached = __dn_pfx_buf;
 +  return cached;
 +}
++#else
++static const char *
++__dn_pfx (void)
++{
++  return __dn_prefix[0] != '\0' ? __dn_prefix : NULL;
++}
++#endif
 +
++/* Build "<live prefix><suffix>" into dst.  */
 +static char *
 +__dn_build (char *dst, size_t dstsz, const char *suffix)
 +{
-+  const char *p = __dn_self_path ();
-+  size_t pl = __dn_prefix_len ();
++  const char *p = __dn_pfx ();
++  size_t pl = (p != NULL) ? strlen (p) : 0;
 +  size_t sl = strlen (suffix);
 +  if (p == NULL || pl + sl + 1 > dstsz)
 +    {
-+      dst[0] = '\0';
++      if (dstsz > 0)
++        dst[0] = '\0';
 +      return dst;
 +    }
 +  memcpy (dst, p, pl);
@@ -2305,8 +2341,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefi
 +    "/lib/", "/bin/", "/sbin/", NULL
 +  };
 +  static const char built[] = DN_BUILT_PREFIX;
-+  const char *pfx = __dn_self_path ();
-+  size_t pl = __dn_prefix_len ();
++  const char *pfx = __dn_pfx ();
++  size_t pl = (pfx != NULL) ? strlen (pfx) : 0;
 +  size_t bl = sizeof (built) - 1;
 +  size_t i;
 +  if (pfx == NULL || pl == 0 || path == NULL || path[0] != '/')
@@ -3792,6 +3828,69 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #else
    return SYSCALL_CANCEL (ipc, IPCOP_msgsnd, msqid, msgsz, msgflg,
  			 msgp);
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/open.c work/sysdeps/unix/sysv/linux/open.c
+--- pristine/p/sysdeps/unix/sysv/linux/open.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/open.c	2026-10-03 22:19:35.945471945 +0700
+@@ -20,6 +20,7 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <stdarg.h>
++#include <dn-prefix.h>
+ 
+ #include <sysdep-cancel.h>
+ 
+@@ -40,6 +41,9 @@
+       va_end (arg);
+     }
+ 
++  char dn_path[512];
++  file = __dn_redirect (dn_path, sizeof dn_path, file);
++
+   return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag, mode);
+ }
+ libc_hidden_def (__libc_open)
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/open64.c work/sysdeps/unix/sysv/linux/open64.c
+--- pristine/p/sysdeps/unix/sysv/linux/open64.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/open64.c	2026-10-03 22:19:35.953471945 +0700
+@@ -20,6 +20,7 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <stdarg.h>
++#include <dn-prefix.h>
+ #include <sysdep-cancel.h>
+ #include <shlib-compat.h>
+ 
+@@ -38,6 +39,9 @@
+       va_end (arg);
+     }
+ 
++  char dn_path[512];
++  file = __dn_redirect (dn_path, sizeof dn_path, file);
++
+   return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag | O_LARGEFILE,
+ 			 mode);
+ }
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/open64_nocancel.c work/sysdeps/unix/sysv/linux/open64_nocancel.c
+--- pristine/p/sysdeps/unix/sysv/linux/open64_nocancel.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/open64_nocancel.c	2026-10-03 22:19:35.961471945 +0700
+@@ -20,6 +20,7 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <stdarg.h>
++#include <dn-prefix.h>
+ 
+ #include <not-cancel.h>
+ 
+@@ -36,6 +37,9 @@
+       va_end (arg);
+     }
+ 
++  char dn_path[512];
++  file = __dn_redirect (dn_path, sizeof dn_path, file);
++
+   return INLINE_SYSCALL_CALL (openat, AT_FDCWD, file, oflag | O_LARGEFILE,
+ 			      mode);
+ }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/open_by_handle_at.c work/sysdeps/unix/sysv/linux/open_by_handle_at.c
 --- pristine/p/sysdeps/unix/sysv/linux/open_by_handle_at.c	2025-01-29 00:31:33.000000000 +0700
 +++ work/sysdeps/unix/sysv/linux/open_by_handle_at.c	2026-09-30 17:16:04.450193557 +0700
@@ -3807,6 +3906,111 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 -  return SYSCALL_CANCEL (open_by_handle_at, mount_fd, handle, flags);
 +  return syscall (__NR_open_by_handle_at, mount_fd, handle, flags);
  }
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/open_nocancel.c work/sysdeps/unix/sysv/linux/open_nocancel.c
+--- pristine/p/sysdeps/unix/sysv/linux/open_nocancel.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/open_nocancel.c	2026-10-03 22:19:35.973471945 +0700
+@@ -20,6 +20,7 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <stdarg.h>
++#include <dn-prefix.h>
+ 
+ #include <sysdep-cancel.h>
+ #include <not-cancel.h>
+@@ -39,6 +40,9 @@
+       va_end (arg);
+     }
+ 
++  char dn_path[512];
++  file = __dn_redirect (dn_path, sizeof dn_path, file);
++
+   return INLINE_SYSCALL_CALL (openat, AT_FDCWD, file, oflag, mode);
+ }
+ hidden_def (__open_nocancel)
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/openat.c work/sysdeps/unix/sysv/linux/openat.c
+--- pristine/p/sysdeps/unix/sysv/linux/openat.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/openat.c	2026-10-03 22:19:35.985471945 +0700
+@@ -20,6 +20,7 @@
+ #include <stdarg.h>
+ 
+ #include <sysdep-cancel.h>
++#include <dn-prefix.h>
+ 
+ #ifndef __OFF_T_MATCHES_OFF64_T
+ 
+@@ -38,6 +39,9 @@
+       va_end (arg);
+     }
+ 
++  char dn_path[512];
++  file = __dn_redirect (dn_path, sizeof dn_path, file);
++
+   return SYSCALL_CANCEL (openat, fd, file, oflag, mode);
+ }
+ weak_alias (__libc_openat, __openat)
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/openat64.c work/sysdeps/unix/sysv/linux/openat64.c
+--- pristine/p/sysdeps/unix/sysv/linux/openat64.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/openat64.c	2026-10-03 22:19:35.993471945 +0700
+@@ -20,6 +20,7 @@
+ #include <stdarg.h>
+ 
+ #include <sysdep-cancel.h>
++#include <dn-prefix.h>
+ 
+ /* Open FILE with access OFLAG.  Interpret relative paths relative to
+    the directory associated with FD.  If OFLAG includes O_CREAT or
+@@ -36,6 +37,9 @@
+       va_end (arg);
+     }
+ 
++  char dn_path[512];
++  file = __dn_redirect (dn_path, sizeof dn_path, file);
++
+   return SYSCALL_CANCEL (openat, fd, file, oflag | O_LARGEFILE, mode);
+ }
+ 
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/openat64_nocancel.c work/sysdeps/unix/sysv/linux/openat64_nocancel.c
+--- pristine/p/sysdeps/unix/sysv/linux/openat64_nocancel.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/openat64_nocancel.c	2026-10-03 22:19:36.001471945 +0700
+@@ -21,6 +21,7 @@
+ 
+ #include <sysdep-cancel.h>
+ #include <not-cancel.h>
++#include <dn-prefix.h>
+ 
+ int
+ __openat64_nocancel (int fd, const char *file, int oflag, ...)
+@@ -34,6 +35,9 @@
+       va_end (arg);
+     }
+ 
++  char dn_path[512];
++  file = __dn_redirect (dn_path, sizeof dn_path, file);
++
+   return INLINE_SYSCALL_CALL (openat, fd, file, oflag | O_LARGEFILE,
+ 			      mode);
+ }
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/openat_nocancel.c work/sysdeps/unix/sysv/linux/openat_nocancel.c
+--- pristine/p/sysdeps/unix/sysv/linux/openat_nocancel.c	2025-01-29 00:31:33.000000000 +0700
++++ work/sysdeps/unix/sysv/linux/openat_nocancel.c	2026-10-03 22:19:36.013471945 +0700
+@@ -21,6 +21,7 @@
+ 
+ #include <sysdep-cancel.h>
+ #include <not-cancel.h>
++#include <dn-prefix.h>
+ 
+ #ifndef __OFF_T_MATCHES_OFF64_T
+ 
+@@ -36,6 +37,9 @@
+       va_end (arg);
+     }
+ 
++  char dn_path[512];
++  file = __dn_redirect (dn_path, sizeof dn_path, file);
++
+   return INLINE_SYSCALL_CALL (openat, fd, file, oflag, mode);
+ }
+ hidden_def (__openat_nocancel)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/paths.h work/sysdeps/unix/sysv/linux/paths.h
 --- pristine/p/sysdeps/unix/sysv/linux/paths.h	2026-09-30 10:54:40.560190837 +0700
 +++ work/sysdeps/unix/sysv/linux/paths.h	2026-09-30 10:31:53.584506943 +0700
