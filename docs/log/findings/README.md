@@ -90,3 +90,8 @@ below, oldest first, matching the original file's order.
   to Termux's existing glibc side-install, not a new deb-native
   capability, kept as a regression baseline for when 0.5.0's own
   `libc6` becomes the default.
+- [`fused-shim-self-derives-prefix.md`](fused-shim-self-derives-prefix.md) —
+  2026-10-03, **Repo change**: for the `dn-glibc` fused loader, the shim now
+  derives its prefix from its own load path (`dladdr`) with no injected env
+  — proven on `fe2` (redirect works with `DN_INSTDIR` unset); full loader
+  integration (own-glibc + rebuilt shim) deferred.
