@@ -661,7 +661,10 @@ same class of misnomer.
 
 **Status**: decided 2026-10-03 (rename `ld-dn` -> `dn-interp`), not started.
 `native/README.md` and `ld-dn.c`'s own header call it a "program loader
-stub", the same ambiguity in prose.
+stub", the same ambiguity in prose. The `patchelf` replacement now has its
+exact spec written down -- `docs/spec/elf-interp-patch.md`'s `dn-elf`
+section (`get-interp`/`set-interp`, the two `PT_INTERP` fields touched, the
+append-when-longer rule); the tool itself is not built yet.
 
 **Open**:
 
@@ -676,11 +679,15 @@ stub", the same ambiguity in prose.
 - Same pass: any other runtime name that no longer describes its mechanism
   (`dn-run`'s "launch classifier", "loader stub", ...); fold findings into
   the "Runtime component audit" above.
-- Replace `patchelf` with a self-brewed tool: its only remaining use is
-  reading/setting `PT_INTERP` in `dn-translate-deb.sh` -- one
-  program-header field (append the new interpreter string, repoint the
-  `PT_INTERP` phdr) -- so a small purpose-built tool drops the dependency
-  and its failure modes.
+- Build the self-brewed replacement (`dn-elf`) per
+  `docs/spec/elf-interp-patch.md`: read/set the one `PT_INTERP` field in
+  `dn-translate-deb.sh` (its only call site), dropping `patchelf` and its
+  failure modes.
+- Consider fusing `ld-dn` into the loader itself, so the kernel loads a
+  patched `ld-linux` directly and the trampoline disappears -- plan,
+  pros/cons, and the trigger to revisit in `docs/spec/ld-dn-runtime.md`'s
+  "Alternative: fuse into the loader". Only worthwhile once the own-glibc
+  fork (0.5.0) is the default.
 
 ## Quick wins
 

@@ -50,6 +50,10 @@ changes.
   (`native/ld-dn.c`) so its policy (preloads, library dirs, env set/
   strip, loader, per-program overrides) comes from a prefix config file
   instead of C literals.
+- `ld-dn-runtime.md` — what the interpreter trampoline
+  (`native/ld-dn.c`) actually does at runtime: its execution phases,
+  prepare-vs-commit, and the `AT_BASE` handoff. Companion to
+  `ld-dn-config.md`.
 - `runtime-failures.md` — what goes wrong when *running* a program,
   grouped by cause.
 - `android-platform.md` — the Android enforcement-gate taxonomy (seccomp/
