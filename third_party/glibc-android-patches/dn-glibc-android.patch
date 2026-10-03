@@ -1,6 +1,6 @@
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/bits/syslog-path.h work/bits/syslog-path.h
 --- pristine/p/bits/syslog-path.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/bits/syslog-path.h	2026-09-30 10:31:29.716506952 +0700
++++ work/bits/syslog-path.h	2026-09-30 21:16:02.110188065 +0700
 @@ -23,6 +23,6 @@
  #ifndef _BITS_SYSLOG_PATH_H
  #define _BITS_SYSLOG_PATH_H 1
@@ -11,7 +11,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/bits/syslog-path.h work/
  #endif /* bits/syslog-path.h */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/catgets/gencat.c work/catgets/gencat.c
 --- pristine/p/catgets/gencat.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/catgets/gencat.c	2026-09-30 17:16:46.530193541 +0700
++++ work/catgets/gencat.c	2026-09-30 21:16:02.110188065 +0700
 @@ -276,7 +276,7 @@
    wchar_t escape_char = L'\\';
    char *codeset = NULL;
@@ -45,7 +45,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/catgets/gencat.c work/ca
  	{
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/dirent/bug-readdir1.c work/dirent/bug-readdir1.c
 --- pristine/p/dirent/bug-readdir1.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/dirent/bug-readdir1.c	2026-09-30 10:31:52.964506943 +0700
++++ work/dirent/bug-readdir1.c	2026-09-30 21:16:02.110188065 +0700
 @@ -14,7 +14,7 @@
    struct dirent* ent;
  
@@ -55,40 +55,9 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/dirent/bug-readdir1.c wo
    if (dirp == NULL)
      {
        if (errno == ENOENT)
-diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-cache.c work/elf/dl-cache.c
---- pristine/p/elf/dl-cache.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/elf/dl-cache.c	2026-10-03 21:08:15.281473578 +0700
-@@ -21,6 +21,7 @@
- #include <ldsodefs.h>
- #include <sys/mman.h>
- #include <dl-cache.h>
-+#include <dn-prefix.h>
- #include <dl-procinfo.h>
- #include <stdint.h>
- #include <_itoa.h>
-@@ -385,14 +386,17 @@
- char *
- _dl_load_cache_lookup (const char *name)
- {
-+  char dn_cache[512];
-+  __dn_build (dn_cache, sizeof dn_cache, "/usr/etc/ld.so.cache");
-+
-   /* Print a message if the loading of libs is traced.  */
-   if (__glibc_unlikely (GLRO(dl_debug_mask) & DL_DEBUG_LIBS))
--    _dl_debug_printf (" search cache=%s\n", LD_SO_CACHE);
-+    _dl_debug_printf (" search cache=%s\n", dn_cache);
- 
-   if (cache == NULL)
-     {
-       /* Read the contents of the file.  */
--      void *file = _dl_sysdep_read_whole_file (LD_SO_CACHE, &cachesize,
-+      void *file = _dl_sysdep_read_whole_file (dn_cache, &cachesize,
- 					       PROT_READ);
- 
-       /* We can handle three different cache file formats here:
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/ldconfig.c work/elf/ldconfig.c
 --- pristine/p/elf/ldconfig.c	2026-09-30 10:54:41.488190836 +0700
-+++ work/elf/ldconfig.c	2026-09-30 10:31:29.716506952 +0700
++++ work/elf/ldconfig.c	2026-09-30 21:16:02.114188065 +0700
 @@ -48,7 +48,7 @@
  #include <dl-procinfo.h>
  
@@ -100,31 +69,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/ldconfig.c work/elf/
  /* Get libc version number.  */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld.c
 --- pristine/p/elf/rtld.c	2026-09-30 10:54:35.704190839 +0700
-+++ work/elf/rtld.c	2026-10-03 21:17:43.745473361 +0700
-@@ -34,6 +34,7 @@
- #include <libc-lock.h>
- #include <unsecvars.h>
- #include <dl-cache.h>
-+#include <dn-prefix.h>
- #include <dl-osinfo.h>
- #include <dl-procinfo.h>
- #include <dl-prop.h>
-@@ -1352,6 +1353,14 @@
- #endif
- }
- 
-+/* deb-native: the loader's own absolute path (from the main program's
-+   PT_INTERP), for run-time prefix derivation.  */
-+const char *
-+__dn_rtld_self_path (void)
-+{
-+  return _dl_rtld_map.l_name;
-+}
-+
- static void
- dl_main (const ElfW(Phdr) *phdr,
- 	 ElfW(Word) phnum,
-@@ -1825,14 +1834,13 @@
++++ work/elf/rtld.c	2026-10-03 17:44:40.821478237 +0700
+@@ -1825,14 +1825,13 @@
    struct link_map **preloads = NULL;
    unsigned int npreloads = 0;
  
@@ -146,19 +92,18 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld
  
    if (__glibc_unlikely (state.preloadarg != NULL))
      {
-@@ -1849,7 +1857,8 @@
+@@ -1849,7 +1848,7 @@
       open().  So we do this first.  If it succeeds we do almost twice
       the work but this does not matter, since it is not for production
       use.  */
 -  static const char preload_file[] = "/etc/ld.so.preload";
-+  char preload_file[512];
-+  __dn_build (preload_file, sizeof preload_file, "/etc/ld.so.preload");
++  static const char preload_file[] = "@TERMUX_PREFIX@/etc/ld.so.preload";
    if (__glibc_unlikely (__access (preload_file, R_OK) == 0))
      {
        /* Read the contents of the file.  */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/sprof.c work/elf/sprof.c
 --- pristine/p/elf/sprof.c	2026-09-30 10:54:35.704190839 +0700
-+++ work/elf/sprof.c	2026-09-30 10:31:52.992506943 +0700
++++ work/elf/sprof.c	2026-09-30 21:16:02.114188065 +0700
 @@ -646,7 +646,7 @@
        *++cp = '\0';
  
@@ -181,7 +126,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/sprof.c work/elf/spr
        fd = open (ext_name, O_RDONLY);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/static-stubs.c work/elf/static-stubs.c
 --- pristine/p/elf/static-stubs.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/elf/static-stubs.c	2026-09-30 17:14:36.734193590 +0700
++++ work/elf/static-stubs.c	2026-09-30 21:16:02.114188065 +0700
 @@ -21,6 +21,9 @@
     sysdeps/unix/sysv/linux/libc_fatal.c.  */
  #include <sysdeps/posix/libc_fatal.c>
@@ -194,7 +139,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/static-stubs.c work/
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/hesiod/hesiod.c work/hesiod/hesiod.c
 --- pristine/p/hesiod/hesiod.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/hesiod/hesiod.c	2026-09-30 10:31:53.008506943 +0700
++++ work/hesiod/hesiod.c	2026-09-30 21:16:02.114188065 +0700
 @@ -60,7 +60,7 @@
  #include "hesiod.h"
  #include "hesiod_p.h"
@@ -206,7 +151,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/hesiod/hesiod.c work/hes
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/include/shm-directory.h work/include/shm-directory.h
 --- pristine/p/include/shm-directory.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/include/shm-directory.h	2026-09-30 10:31:53.164506943 +0700
++++ work/include/shm-directory.h	2026-09-30 21:16:02.114188065 +0700
 @@ -23,7 +23,7 @@
  #include <stdbool.h>
  
@@ -218,7 +163,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/include/shm-directory.h 
  {
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/io/bug-ftw3.c work/io/bug-ftw3.c
 --- pristine/p/io/bug-ftw3.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/io/bug-ftw3.c	2026-09-30 10:31:53.104506943 +0700
++++ work/io/bug-ftw3.c	2026-09-30 21:16:02.118188065 +0700
 @@ -18,8 +18,8 @@
  int
  main (void)
@@ -232,7 +177,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/io/bug-ftw3.c work/io/bu
    int r;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/io/bug-ftw4.c work/io/bug-ftw4.c
 --- pristine/p/io/bug-ftw4.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/io/bug-ftw4.c	2026-09-30 10:31:53.112506943 +0700
++++ work/io/bug-ftw4.c	2026-09-30 21:16:02.118188065 +0700
 @@ -35,7 +35,7 @@
  int
  main (void)
@@ -244,7 +189,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/io/bug-ftw4.c work/io/bu
    if (mkdtemp (name) == NULL)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/libio/oldiopopen.c work/libio/oldiopopen.c
 --- pristine/p/libio/oldiopopen.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/libio/oldiopopen.c	2026-09-30 10:31:53.128506943 +0700
++++ work/libio/oldiopopen.c	2026-09-30 21:16:02.118188065 +0700
 @@ -106,7 +106,7 @@
        for (p = old_proc_file_chain; p; p = p->next)
  	__close (_IO_fileno ((FILE *) p));
@@ -256,7 +201,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/libio/oldiopopen.c work/
    __close (child_end);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/libio/stdio.h work/libio/stdio.h
 --- pristine/p/libio/stdio.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/libio/stdio.h	2026-09-30 10:31:53.048506943 +0700
++++ work/libio/stdio.h	2026-09-30 21:16:02.118188065 +0700
 @@ -118,7 +118,7 @@
  
  #if defined __USE_MISC || defined __USE_XOPEN
@@ -268,7 +213,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/libio/stdio.h work/libio
  #define L_tmpnam 20
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/locale/programs/linereader.c work/locale/programs/linereader.c
 --- pristine/p/locale/programs/linereader.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/locale/programs/linereader.c	2026-09-30 17:16:45.942193541 +0700
++++ work/locale/programs/linereader.c	2026-09-30 21:16:02.118188065 +0700
 @@ -51,7 +51,7 @@
    FILE *fp;
  
@@ -280,7 +225,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/locale/programs/lineread
      {
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/locale/programs/localedef.c work/locale/programs/localedef.c
 --- pristine/p/locale/programs/localedef.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/locale/programs/localedef.c	2026-09-30 17:16:45.922193541 +0700
++++ work/locale/programs/localedef.c	2026-09-30 21:16:02.118188065 +0700
 @@ -254,7 +254,7 @@
  
    /* Add the first entry in the locale list.  */
@@ -292,7 +237,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/locale/programs/localede
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/localedata/show-ucs-data.c work/localedata/show-ucs-data.c
 --- pristine/p/localedata/show-ucs-data.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/localedata/show-ucs-data.c	2026-09-30 17:16:45.898193541 +0700
++++ work/localedata/show-ucs-data.c	2026-09-30 21:16:02.118188065 +0700
 @@ -12,7 +12,7 @@
  
    if (argc == 1)
@@ -304,7 +249,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/localedata/show-ucs-data
      }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/Makefile work/misc/Makefile
 --- pristine/p/misc/Makefile	2025-01-29 00:31:33.000000000 +0700
-+++ work/misc/Makefile	2026-09-30 17:15:26.146193572 +0700
++++ work/misc/Makefile	2026-09-30 21:16:02.118188065 +0700
 @@ -192,6 +192,7 @@
    swapon \
    sync \
@@ -315,7 +260,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/Makefile work/misc/
    truncate \
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/Versions work/misc/Versions
 --- pristine/p/misc/Versions	2025-01-29 00:31:33.000000000 +0700
-+++ work/misc/Versions	2026-09-30 17:15:26.166193572 +0700
++++ work/misc/Versions	2026-09-30 21:16:02.118188065 +0700
 @@ -71,7 +71,7 @@
      # s*
      sbrk; select; setdomainname; setfsent; sethostent; sethostid; sethostname;
@@ -327,7 +272,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/Versions work/misc/
      tdelete; tfind; truncate; tsearch; ttyslot; twalk;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/fstab.h work/misc/fstab.h
 --- pristine/p/misc/fstab.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/misc/fstab.h	2026-09-30 10:31:53.436506943 +0700
++++ work/misc/fstab.h	2026-09-30 21:16:02.122188065 +0700
 @@ -45,8 +45,8 @@
   * if type is "rq", then use concatenation of fs_file and "quotas" to locate
   * quota file.
@@ -341,7 +286,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/fstab.h work/misc/f
  #define	FSTAB_RQ	"rq"		/* read/write with quotas */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/tst-error1.c work/misc/tst-error1.c
 --- pristine/p/misc/tst-error1.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/misc/tst-error1.c	2026-09-30 17:16:46.558193541 +0700
++++ work/misc/tst-error1.c	2026-09-30 21:16:02.122188065 +0700
 @@ -11,7 +11,7 @@
  do_test (int argc, char *argv[])
  {
@@ -353,7 +298,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/tst-error1.c work/m
    char buf[20000];
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/ttyent.h work/misc/ttyent.h
 --- pristine/p/misc/ttyent.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/misc/ttyent.h	2026-09-30 10:31:53.420506943 +0700
++++ work/misc/ttyent.h	2026-09-30 21:16:02.122188065 +0700
 @@ -34,7 +34,7 @@
  
  #include <features.h>
@@ -365,7 +310,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/ttyent.h work/misc/
  #define	_TTYS_ON	"on"
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/nis_call.c work/nis/nis_call.c
 --- pristine/p/nis/nis_call.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nis/nis_call.c	2026-09-30 10:31:53.372506943 +0700
++++ work/nis/nis_call.c	2026-09-30 21:16:02.122188065 +0700
 @@ -592,7 +592,7 @@
    struct stat64 st;
  
@@ -377,7 +322,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/nis_call.c work/nis/
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/nis_file.c work/nis/nis_file.c
 --- pristine/p/nis/nis_file.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nis/nis_file.c	2026-09-30 10:31:53.428506943 +0700
++++ work/nis/nis_file.c	2026-09-30 21:16:02.122188065 +0700
 @@ -72,7 +72,7 @@
  }
  
@@ -389,7 +334,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/nis_file.c work/nis/
  readColdStartFile (void)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/ypclnt.c work/nis/ypclnt.c
 --- pristine/p/nis/ypclnt.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nis/ypclnt.c	2026-09-30 10:31:53.136506943 +0700
++++ work/nis/ypclnt.c	2026-09-30 21:16:02.122188065 +0700
 @@ -33,7 +33,7 @@
  
  /* This should only be defined on systems with a BSD compatible ypbind */
@@ -401,7 +346,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/ypclnt.c work/nis/yp
  struct dom_binding
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nptl/pthread_create.c work/nptl/pthread_create.c
 --- pristine/p/nptl/pthread_create.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nptl/pthread_create.c	2026-09-30 17:14:22.426193596 +0700
++++ work/nptl/pthread_create.c	2026-09-30 21:16:02.122188065 +0700
 @@ -380,16 +380,6 @@
        __libc_fatal ("Fatal glibc error: rseq registration failed\n");
    }
@@ -421,7 +366,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nptl/pthread_create.c wo
    struct pthread_unwind_buf unwind_buf;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/getgrgid_r.c work/nscd/getgrgid_r.c
 --- pristine/p/nscd/getgrgid_r.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nscd/getgrgid_r.c	2026-09-30 17:16:59.894193536 +0700
++++ work/nscd/getgrgid_r.c	2026-09-30 21:16:02.122188065 +0700
 @@ -27,6 +27,7 @@
  
  #define DEEPCOPY_FN	__copy_grp
@@ -432,7 +377,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/getgrgid_r.c work/n
  #undef	USE_NSCD
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/getgrnam_r.c work/nscd/getgrnam_r.c
 --- pristine/p/nscd/getgrnam_r.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nscd/getgrnam_r.c	2026-09-30 17:16:59.918193536 +0700
++++ work/nscd/getgrnam_r.c	2026-09-30 21:16:02.122188065 +0700
 @@ -23,6 +23,7 @@
  #define DATABASE_NAME	group
  #define ADD_PARAMS	const char *name
@@ -443,7 +388,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/getgrnam_r.c work/n
  #define MERGE_FN	__merge_grp
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/getpwnam_r.c work/nscd/getpwnam_r.c
 --- pristine/p/nscd/getpwnam_r.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nscd/getpwnam_r.c	2026-09-30 17:16:59.942193536 +0700
++++ work/nscd/getpwnam_r.c	2026-09-30 21:16:02.122188065 +0700
 @@ -23,6 +23,7 @@
  #define ADD_PARAMS	const char *name
  #define ADD_VARIABLES	name
@@ -454,7 +399,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/getpwnam_r.c work/n
  #undef	USE_NSCD
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/getpwuid_r.c work/nscd/getpwuid_r.c
 --- pristine/p/nscd/getpwuid_r.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nscd/getpwuid_r.c	2026-09-30 17:16:59.966193536 +0700
++++ work/nscd/getpwuid_r.c	2026-09-30 21:16:02.122188065 +0700
 @@ -23,6 +23,7 @@
  #define ADD_PARAMS	uid_t uid
  #define ADD_VARIABLES	uid
@@ -465,7 +410,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/getpwuid_r.c work/n
  #undef	USE_NSCD
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/nscd-client.h work/nscd/nscd-client.h
 --- pristine/p/nscd/nscd-client.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/nscd/nscd-client.h	2026-09-30 10:31:53.244506943 +0700
++++ work/nscd/nscd-client.h	2026-09-30 21:16:02.122188065 +0700
 @@ -35,13 +35,13 @@
  #define NSCD_VERSION 2
  
@@ -485,7 +430,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/nscd-client.h work/
  #define MAXKEYLEN 1024
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/nscd.h work/nscd/nscd.h
 --- pristine/p/nscd/nscd.h	2026-09-30 10:54:40.620190837 +0700
-+++ work/nscd/nscd.h	2026-09-30 10:31:53.448506943 +0700
++++ work/nscd/nscd.h	2026-09-30 21:16:02.122188065 +0700
 @@ -160,14 +160,14 @@
  
  
@@ -509,7 +454,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/nscd.h work/nscd/ns
  #define BLOCK_ALIGN_LOG 3
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/Makefile work/nss/Makefile
 --- pristine/p/nss/Makefile	2026-09-30 10:54:41.236190836 +0700
-+++ work/nss/Makefile	2026-09-30 17:15:26.190193572 +0700
++++ work/nss/Makefile	2026-09-30 21:16:02.122188065 +0700
 @@ -53,6 +53,7 @@
    rewrite_field \
    valid_field \
@@ -520,7 +465,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/Makefile work/nss/Ma
  # alias routines:
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/android_ids.h work/nss/android_ids.h
 --- pristine/p/nss/android_ids.h	1970-01-01 08:00:00.000000000 +0800
-+++ work/nss/android_ids.h	2026-09-30 17:13:49.994193608 +0700
++++ work/nss/android_ids.h	2026-09-30 21:16:02.122188065 +0700
 @@ -0,0 +1,173 @@
 +#ifndef _ANDROID_IDS
 +#define _ANDROID_IDS
@@ -697,7 +642,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/android_ids.h work/n
 +#endif // _ANDROID_IDS
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/android_passwd_group.c work/nss/android_passwd_group.c
 --- pristine/p/nss/android_passwd_group.c	1970-01-01 08:00:00.000000000 +0800
-+++ work/nss/android_passwd_group.c	2026-09-30 17:13:35.994193614 +0700
++++ work/nss/android_passwd_group.c	2026-09-30 21:16:02.122188065 +0700
 @@ -0,0 +1,279 @@
 +/* This script stores functions similar to those from
 +   the bionic library, thanks to which passwd/group
@@ -980,7 +925,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/android_passwd_group
 +}
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/android_passwd_group.h work/nss/android_passwd_group.h
 --- pristine/p/nss/android_passwd_group.h	1970-01-01 08:00:00.000000000 +0800
-+++ work/nss/android_passwd_group.h	2026-09-30 17:13:35.998193614 +0700
++++ work/nss/android_passwd_group.h	2026-09-30 21:16:02.122188065 +0700
 @@ -0,0 +1,22 @@
 +#ifndef _ANDROID_PASSWD_GROUP_H
 +#define _ANDROID_PASSWD_GROUP_H
@@ -1006,7 +951,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/android_passwd_group
 +#endif // _ANDROID_PASSWD_GROUP_H
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/android_system_user_ids.h work/nss/android_system_user_ids.h
 --- pristine/p/nss/android_system_user_ids.h	1970-01-01 08:00:00.000000000 +0800
-+++ work/nss/android_system_user_ids.h	2026-09-30 17:13:35.998193614 +0700
++++ work/nss/android_system_user_ids.h	2026-09-30 21:16:02.126188065 +0700
 @@ -0,0 +1,114 @@
 +#define AID_ROOT 0 /* traditional unix root user */
 +#define AID_DAEMON 1 /* Traditional unix daemon owner. */
@@ -1124,7 +1069,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/android_system_user_
 +#define AID_NOBODY 9999
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/bug-erange.c work/nss/bug-erange.c
 --- pristine/p/nss/bug-erange.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/bug-erange.c	2026-09-30 10:31:53.148506943 +0700
++++ work/nss/bug-erange.c	2026-09-30 21:16:02.126188065 +0700
 @@ -37,7 +37,7 @@
      {
        printf ("gethostbyname_r failed: %s (errno: %m)\n", strerror (res));
@@ -1136,7 +1081,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/bug-erange.c work/ns
  	  return 0;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss/db-Makefile
 --- pristine/p/nss/db-Makefile	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/db-Makefile	2026-09-30 10:31:53.380506943 +0700
++++ work/nss/db-Makefile	2026-09-30 21:16:02.126188065 +0700
 @@ -17,11 +17,11 @@
  # License along with the GNU C Library; if not, see
  # <https://www.gnu.org/licenses/>.
@@ -1236,7 +1181,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
  		 /^[ \t]*$$/ { next } \
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getXXbyYY.c work/nss/getXXbyYY.c
 --- pristine/p/nss/getXXbyYY.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/getXXbyYY.c	2026-09-30 17:16:59.850193536 +0700
++++ work/nss/getXXbyYY.c	2026-09-30 21:16:02.126188065 +0700
 @@ -53,6 +53,10 @@
  # include <resolv/resolv_context.h>
  #endif
@@ -1262,7 +1207,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getXXbyYY.c work/nss
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getXXbyYY_r.c work/nss/getXXbyYY_r.c
 --- pristine/p/nss/getXXbyYY_r.c	2026-09-30 10:54:35.724190839 +0700
-+++ work/nss/getXXbyYY_r.c	2026-09-30 17:16:59.870193536 +0700
++++ work/nss/getXXbyYY_r.c	2026-09-30 21:16:02.126188065 +0700
 @@ -27,6 +27,9 @@
  #ifdef NEED__RES
  # include <resolv/resolv_context.h>
@@ -1291,7 +1236,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getXXbyYY_r.c work/n
    if (status == NSS_STATUS_UNAVAIL && !any_service && errno != ENOENT)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getaddrinfo.c work/nss/getaddrinfo.c
 --- pristine/p/nss/getaddrinfo.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/getaddrinfo.c	2026-09-30 10:31:53.256506943 +0700
++++ work/nss/getaddrinfo.c	2026-09-30 21:16:02.126188065 +0700
 @@ -1726,7 +1726,7 @@
  
  
@@ -1303,7 +1248,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getaddrinfo.c work/n
  /* Non-zero if we are supposed to reload the config file automatically
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getgrgid.c work/nss/getgrgid.c
 --- pristine/p/nss/getgrgid.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/getgrgid.c	2026-09-30 17:16:59.894193536 +0700
++++ work/nss/getgrgid.c	2026-09-30 21:16:02.126188065 +0700
 @@ -24,5 +24,6 @@
  #define ADD_PARAMS	gid_t gid
  #define ADD_VARIABLES	gid
@@ -1313,7 +1258,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getgrgid.c work/nss/
  #include "../nss/getXXbyYY.c"
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getgrgid_r.c work/nss/getgrgid_r.c
 --- pristine/p/nss/getgrgid_r.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/getgrgid_r.c	2026-09-30 17:16:59.894193536 +0700
++++ work/nss/getgrgid_r.c	2026-09-30 21:16:02.126188065 +0700
 @@ -27,5 +27,6 @@
  #define BUFLEN		NSS_BUFLEN_GROUP
  #define DEEPCOPY_FN	__copy_grp
@@ -1323,7 +1268,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getgrgid_r.c work/ns
  #include <nss/getXXbyYY_r.c>
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getgrnam.c work/nss/getgrnam.c
 --- pristine/p/nss/getgrnam.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/getgrnam.c	2026-09-30 17:16:59.918193536 +0700
++++ work/nss/getgrnam.c	2026-09-30 21:16:02.126188065 +0700
 @@ -24,5 +24,6 @@
  #define ADD_PARAMS	const char *name
  #define ADD_VARIABLES	name
@@ -1333,7 +1278,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getgrnam.c work/nss/
  #include "../nss/getXXbyYY.c"
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getgrnam_r.c work/nss/getgrnam_r.c
 --- pristine/p/nss/getgrnam_r.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/getgrnam_r.c	2026-09-30 17:16:59.918193536 +0700
++++ work/nss/getgrnam_r.c	2026-09-30 21:16:02.126188065 +0700
 @@ -24,6 +24,7 @@
  #define DATABASE_NAME	group
  #define ADD_PARAMS	const char *name
@@ -1344,7 +1289,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getgrnam_r.c work/ns
  #define MERGE_FN	__merge_grp
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getpwnam.c work/nss/getpwnam.c
 --- pristine/p/nss/getpwnam.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/getpwnam.c	2026-09-30 17:16:59.938193536 +0700
++++ work/nss/getpwnam.c	2026-09-30 21:16:02.126188065 +0700
 @@ -24,5 +24,6 @@
  #define ADD_PARAMS	const char *name
  #define ADD_VARIABLES	name
@@ -1354,7 +1299,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getpwnam.c work/nss/
  #include "../nss/getXXbyYY.c"
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getpwnam_r.c work/nss/getpwnam_r.c
 --- pristine/p/nss/getpwnam_r.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/getpwnam_r.c	2026-09-30 17:16:59.938193536 +0700
++++ work/nss/getpwnam_r.c	2026-09-30 21:16:02.126188065 +0700
 @@ -24,5 +24,6 @@
  #define ADD_PARAMS	const char *name
  #define ADD_VARIABLES	name
@@ -1364,7 +1309,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getpwnam_r.c work/ns
  #include <nss/getXXbyYY_r.c>
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getpwuid.c work/nss/getpwuid.c
 --- pristine/p/nss/getpwuid.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/getpwuid.c	2026-09-30 17:16:59.962193536 +0700
++++ work/nss/getpwuid.c	2026-09-30 21:16:02.126188065 +0700
 @@ -24,5 +24,6 @@
  #define ADD_PARAMS	uid_t uid
  #define ADD_VARIABLES	uid
@@ -1374,7 +1319,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getpwuid.c work/nss/
  #include "../nss/getXXbyYY.c"
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getpwuid_r.c work/nss/getpwuid_r.c
 --- pristine/p/nss/getpwuid_r.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/getpwuid_r.c	2026-09-30 17:16:59.962193536 +0700
++++ work/nss/getpwuid_r.c	2026-09-30 21:16:02.126188065 +0700
 @@ -24,5 +24,6 @@
  #define ADD_PARAMS	uid_t uid
  #define ADD_VARIABLES	uid
@@ -1384,7 +1329,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getpwuid_r.c work/ns
  #include <nss/getXXbyYY_r.c>
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/lckpwdf.c work/nss/lckpwdf.c
 --- pristine/p/nss/lckpwdf.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/lckpwdf.c	2026-09-30 10:31:53.156506943 +0700
++++ work/nss/lckpwdf.c	2026-09-30 21:16:02.126188065 +0700
 @@ -29,7 +29,7 @@
  
  
@@ -1396,7 +1341,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/lckpwdf.c work/nss/l
     error.  */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/makedb.c work/nss/makedb.c
 --- pristine/p/nss/makedb.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/makedb.c	2026-09-30 17:16:46.578193541 +0700
++++ work/nss/makedb.c	2026-09-30 21:16:02.126188065 +0700
 @@ -237,7 +237,7 @@
      }
  
@@ -1417,7 +1362,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/makedb.c work/nss/ma
      error (EXIT_FAILURE, errno, gettext ("cannot create temporary file name"));
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-grp.c work/nss/nss_compat/compat-grp.c
 --- pristine/p/nss/nss_compat/compat-grp.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/nss_compat/compat-grp.c	2026-09-30 10:31:53.464506943 +0700
++++ work/nss/nss_compat/compat-grp.c	2026-09-30 21:16:02.126188065 +0700
 @@ -108,7 +108,7 @@
  
    if (ent->stream == NULL)
@@ -1429,7 +1374,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-gr
  	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-initgroups.c work/nss/nss_compat/compat-initgroups.c
 --- pristine/p/nss/nss_compat/compat-initgroups.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/nss_compat/compat-initgroups.c	2026-09-30 10:31:53.180506943 +0700
++++ work/nss/nss_compat/compat-initgroups.c	2026-09-30 21:16:02.126188065 +0700
 @@ -122,7 +122,7 @@
    else
      ent->blacklist.current = 0;
@@ -1441,7 +1386,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-in
      status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-pwd.c work/nss/nss_compat/compat-pwd.c
 --- pristine/p/nss/nss_compat/compat-pwd.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/nss_compat/compat-pwd.c	2026-09-30 10:31:53.188506943 +0700
++++ work/nss/nss_compat/compat-pwd.c	2026-09-30 21:16:02.130188065 +0700
 @@ -223,7 +223,7 @@
  
    if (ent->stream == NULL)
@@ -1453,7 +1398,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-pw
  	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-spwd.c work/nss/nss_compat/compat-spwd.c
 --- pristine/p/nss/nss_compat/compat-spwd.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/nss_compat/compat-spwd.c	2026-09-30 10:31:53.396506943 +0700
++++ work/nss/nss_compat/compat-spwd.c	2026-09-30 21:16:02.130188065 +0700
 @@ -178,7 +178,7 @@
  
    if (ent->stream == NULL)
@@ -1465,7 +1410,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-sp
  	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-XXX.c work/nss/nss_files/files-XXX.c
 --- pristine/p/nss/nss_files/files-XXX.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/nss_files/files-XXX.c	2026-09-30 10:31:53.472506943 +0700
++++ work/nss/nss_files/files-XXX.c	2026-09-30 21:16:02.130188065 +0700
 @@ -39,7 +39,7 @@
  
  #define ENTNAME_r	CONCAT(ENTNAME,_r)
@@ -1477,7 +1422,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-XXX.
  # include <netdb.h>
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-alias.c work/nss/nss_files/files-alias.c
 --- pristine/p/nss/nss_files/files-alias.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/nss_files/files-alias.c	2026-09-30 10:31:53.196506943 +0700
++++ work/nss/nss_files/files-alias.c	2026-09-30 21:16:02.130188065 +0700
 @@ -42,7 +42,7 @@
  
    if (*stream == NULL)
@@ -1507,7 +1452,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-alia
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-init.c work/nss/nss_files/files-init.c
 --- pristine/p/nss/nss_files/files-init.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/nss_files/files-init.c	2026-09-30 10:31:53.456506943 +0700
++++ work/nss/nss_files/files-init.c	2026-09-30 21:16:02.130188065 +0700
 @@ -41,12 +41,12 @@
  void
  _nss_files_init (void (*cb) (size_t, struct traced_file *))
@@ -1529,7 +1474,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-init
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-initgroups.c work/nss/nss_files/files-initgroups.c
 --- pristine/p/nss/nss_files/files-initgroups.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/nss_files/files-initgroups.c	2026-09-30 10:31:53.496506943 +0700
++++ work/nss/nss_files/files-initgroups.c	2026-09-30 21:16:02.130188065 +0700
 @@ -33,7 +33,7 @@
  			   long int *size, gid_t **groupsp, long int limit,
  			   int *errnop)
@@ -1541,7 +1486,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-init
        *errnop = errno;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-netgrp.c work/nss/nss_files/files-netgrp.c
 --- pristine/p/nss/nss_files/files-netgrp.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/nss/nss_files/files-netgrp.c	2026-09-30 10:31:53.208506943 +0700
++++ work/nss/nss_files/files-netgrp.c	2026-09-30 21:16:02.130188065 +0700
 @@ -27,7 +27,7 @@
  #include "netgroup.h"
  #include <nss_files.h>
@@ -1553,7 +1498,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-netg
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/Makefile work/posix/Makefile
 --- pristine/p/posix/Makefile	2026-09-30 10:54:35.724190839 +0700
-+++ work/posix/Makefile	2026-09-30 17:15:26.210193572 +0700
++++ work/posix/Makefile	2026-09-30 21:16:02.130188065 +0700
 @@ -752,12 +752,17 @@
  	$(common-objpfx)malloc/mtrace $(objpfx)tst-glob-tilde.mtrace > $@; \
  	$(evaluate-test)
@@ -1575,7 +1520,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/Makefile work/posi
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/annexc.c work/posix/annexc.c
 --- pristine/p/posix/annexc.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/posix/annexc.c	2026-09-30 10:31:53.312506943 +0700
++++ work/posix/annexc.c	2026-09-30 21:16:02.130188065 +0700
 @@ -26,7 +26,7 @@
  
  #define HEADER_MAX          256
@@ -1587,7 +1532,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/annexc.c work/posi
  static const char *const aio_syms[] =
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt1.c work/posix/bug-getopt1.c
 --- pristine/p/posix/bug-getopt1.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/posix/bug-getopt1.c	2026-09-30 10:31:53.324506943 +0700
++++ work/posix/bug-getopt1.c	2026-09-30 21:16:02.130188065 +0700
 @@ -40,7 +40,7 @@
  static int
  do_test (void)
@@ -1599,7 +1544,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt1.c work
      {
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt2.c work/posix/bug-getopt2.c
 --- pristine/p/posix/bug-getopt2.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/posix/bug-getopt2.c	2026-09-30 10:31:53.400506943 +0700
++++ work/posix/bug-getopt2.c	2026-09-30 21:16:02.130188065 +0700
 @@ -38,7 +38,7 @@
  static int
  do_test (void)
@@ -1611,7 +1556,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt2.c work
      {
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt3.c work/posix/bug-getopt3.c
 --- pristine/p/posix/bug-getopt3.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/posix/bug-getopt3.c	2026-09-30 10:31:53.488506943 +0700
++++ work/posix/bug-getopt3.c	2026-09-30 21:16:02.130188065 +0700
 @@ -49,7 +49,7 @@
  static int
  do_test (void)
@@ -1623,7 +1568,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt3.c work
      {
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt4.c work/posix/bug-getopt4.c
 --- pristine/p/posix/bug-getopt4.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/posix/bug-getopt4.c	2026-09-30 10:31:53.216506943 +0700
++++ work/posix/bug-getopt4.c	2026-09-30 21:16:02.130188065 +0700
 @@ -53,7 +53,7 @@
  static int
  do_test (void)
@@ -1635,7 +1580,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt4.c work
      {
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt5.c work/posix/bug-getopt5.c
 --- pristine/p/posix/bug-getopt5.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/posix/bug-getopt5.c	2026-09-30 10:31:53.332506943 +0700
++++ work/posix/bug-getopt5.c	2026-09-30 21:16:02.130188065 +0700
 @@ -48,7 +48,7 @@
  static int
  do_test (void)
@@ -1647,7 +1592,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt5.c work
      {
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-regex9.c work/posix/bug-regex9.c
 --- pristine/p/posix/bug-regex9.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/posix/bug-regex9.c	2026-09-30 10:31:53.504506943 +0700
++++ work/posix/bug-regex9.c	2026-09-30 21:16:02.130188065 +0700
 @@ -23,7 +23,7 @@
  #include <stdlib.h>
  
@@ -1659,7 +1604,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-regex9.c work/
  main (void)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/unistd.h work/posix/unistd.h
 --- pristine/p/posix/unistd.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/posix/unistd.h	2026-09-30 17:14:22.402193596 +0700
++++ work/posix/unistd.h	2026-09-30 21:16:02.130188065 +0700
 @@ -1088,6 +1088,7 @@
  
     In Mach, all system calls take normal arguments and always return an
@@ -1670,7 +1615,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/unistd.h work/posi
  #endif	/* Use misc.  */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/netdb.h work/resolv/netdb.h
 --- pristine/p/resolv/netdb.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/resolv/netdb.h	2026-09-30 10:31:53.232506943 +0700
++++ work/resolv/netdb.h	2026-09-30 21:16:02.130188065 +0700
 @@ -40,12 +40,12 @@
  #include <bits/netdb.h>
  
@@ -1692,7 +1637,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/netdb.h work/reso
  __BEGIN_DECLS
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/res_hconf.c work/resolv/res_hconf.c
 --- pristine/p/resolv/res_hconf.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/resolv/res_hconf.c	2026-09-30 10:31:53.408506943 +0700
++++ work/resolv/res_hconf.c	2026-09-30 21:16:02.130188065 +0700
 @@ -48,7 +48,7 @@
  # define fgets_unlocked __fgets_unlocked
  #endif
@@ -1704,7 +1649,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/res_hconf.c work/
  #define ENV_HOSTCONF	"RESOLV_HOST_CONF"
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/resolv.h work/resolv/resolv.h
 --- pristine/p/resolv/resolv.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/resolv/resolv.h	2026-09-30 10:31:53.416506943 +0700
++++ work/resolv/resolv.h	2026-09-30 21:16:02.134188065 +0700
 @@ -91,7 +91,7 @@
   */
  
@@ -1716,7 +1661,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/resolv.h work/res
  struct res_sym {
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/bug7.c work/stdio-common/bug7.c
 --- pristine/p/stdio-common/bug7.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdio-common/bug7.c	2026-09-30 10:31:53.172506943 +0700
++++ work/stdio-common/bug7.c	2026-09-30 21:16:02.134188065 +0700
 @@ -8,7 +8,7 @@
  main (int argc, char *argv[])
  {
@@ -1739,7 +1684,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/bug7.c work
      int fd1 = mkstemp (filename1);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf14.c work/stdio-common/scanf14.c
 --- pristine/p/stdio-common/scanf14.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdio-common/scanf14.c	2026-09-30 10:31:53.480506943 +0700
++++ work/stdio-common/scanf14.c	2026-09-30 21:16:02.134188065 +0700
 @@ -82,7 +82,7 @@
  
    const char *tmpdir = getenv ("TMPDIR");
@@ -1751,7 +1696,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf14.c w
    sprintf (fname, "%s/tst-scanf14.XXXXXX", tmpdir);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf15.c work/stdio-common/scanf15.c
 --- pristine/p/stdio-common/scanf15.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdio-common/scanf15.c	2026-09-30 10:31:53.516506943 +0700
++++ work/stdio-common/scanf15.c	2026-09-30 21:16:02.134188065 +0700
 @@ -65,7 +65,7 @@
  
    const char *tmpdir = getenv ("TMPDIR");
@@ -1763,7 +1708,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf15.c w
    sprintf (fname, "%s/tst-scanf15.XXXXXX", tmpdir);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf16.c work/stdio-common/scanf16.c
 --- pristine/p/stdio-common/scanf16.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdio-common/scanf16.c	2026-09-30 10:31:53.536506943 +0700
++++ work/stdio-common/scanf16.c	2026-09-30 21:16:02.134188065 +0700
 @@ -113,7 +113,7 @@
  
    const char *tmpdir = getenv ("TMPDIR");
@@ -1775,7 +1720,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf16.c w
    sprintf (fname, "%s/tst-scanf16.XXXXXX", tmpdir);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf17.c work/stdio-common/scanf17.c
 --- pristine/p/stdio-common/scanf17.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdio-common/scanf17.c	2026-09-30 10:31:53.508506943 +0700
++++ work/stdio-common/scanf17.c	2026-09-30 21:16:02.134188065 +0700
 @@ -96,7 +96,7 @@
  
    const char *tmpdir = getenv ("TMPDIR");
@@ -1787,7 +1732,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf17.c w
    sprintf (fname, "%s/tst-scanf17.XXXXXX", tmpdir);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf18.c work/stdio-common/scanf18.c
 --- pristine/p/stdio-common/scanf18.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdio-common/scanf18.c	2026-09-30 10:31:53.272506943 +0700
++++ work/stdio-common/scanf18.c	2026-09-30 21:16:02.134188065 +0700
 @@ -88,7 +88,7 @@
  
    const char *tmpdir = getenv ("TMPDIR");
@@ -1799,7 +1744,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf18.c w
    sprintf (fname, "%s/tst-scanf14.XXXXXX", tmpdir);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf19.c work/stdio-common/scanf19.c
 --- pristine/p/stdio-common/scanf19.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdio-common/scanf19.c	2026-09-30 10:31:53.340506943 +0700
++++ work/stdio-common/scanf19.c	2026-09-30 21:16:02.134188065 +0700
 @@ -118,7 +118,7 @@
  
    const char *tmpdir = getenv ("TMPDIR");
@@ -1811,7 +1756,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf19.c w
    sprintf (fname, "%s/tst-scanf16.XXXXXX", tmpdir);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/tmpdir.c work/stdio-common/tmpdir.c
 --- pristine/p/stdio-common/tmpdir.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdio-common/tmpdir.c	2026-09-30 10:31:53.284506943 +0700
++++ work/stdio-common/tmpdir.c	2026-09-30 21:16:02.134188065 +0700
 @@ -34,7 +34,7 @@
  # ifdef _P_tmpdir /* native Windows */
  #  define P_tmpdir _P_tmpdir
@@ -1834,7 +1779,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/tmpdir.c wo
            __set_errno (ENOENT);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/tstscanf.c work/stdio-common/tstscanf.c
 --- pristine/p/stdio-common/tstscanf.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdio-common/tstscanf.c	2026-09-30 10:31:53.224506943 +0700
++++ work/stdio-common/tstscanf.c	2026-09-30 21:16:02.134188065 +0700
 @@ -62,7 +62,7 @@
  
    if (argc == 2 && !strcmp (argv[1], "-opipe"))
@@ -1855,7 +1800,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/tstscanf.c 
  	{
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/xbug.c work/stdio-common/xbug.c
 --- pristine/p/stdio-common/xbug.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdio-common/xbug.c	2026-09-30 10:31:53.524506943 +0700
++++ work/stdio-common/xbug.c	2026-09-30 21:16:02.134188065 +0700
 @@ -60,7 +60,7 @@
  
    unsetenv ("LD_LIBRARY_PATH");
@@ -1867,7 +1812,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/xbug.c work
    ReadFile(&buffer, input);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdlib/isomac.c work/stdlib/isomac.c
 --- pristine/p/stdlib/isomac.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/stdlib/isomac.c	2026-09-30 10:31:53.528506943 +0700
++++ work/stdlib/isomac.c	2026-09-30 21:16:02.134188065 +0700
 @@ -74,7 +74,7 @@
  
  #define HEADER_MAX          256
@@ -1879,7 +1824,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdlib/isomac.c work/std
  static char *header[] =
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sunrpc/key_call.c work/sunrpc/key_call.c
 --- pristine/p/sunrpc/key_call.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sunrpc/key_call.c	2026-09-30 10:31:53.544506943 +0700
++++ work/sunrpc/key_call.c	2026-09-30 21:16:02.134188065 +0700
 @@ -318,7 +318,7 @@
    int success;
    uid_t ruid;
@@ -1900,7 +1845,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sunrpc/key_call.c work/s
      return (CLIENT *) NULL;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_capture_subprocess.c work/support/support_capture_subprocess.c
 --- pristine/p/support/support_capture_subprocess.c	2026-09-30 10:54:35.732190839 +0700
-+++ work/support/support_capture_subprocess.c	2026-09-30 10:31:53.552506943 +0700
++++ work/support/support_capture_subprocess.c	2026-09-30 21:16:02.134188065 +0700
 @@ -161,7 +161,7 @@
  {
    /* Do not use getgrname_r because it does not work in statically
@@ -1912,7 +1857,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_capture_
    __fsetlocking (fp, FSETLOCKING_BYCALLER);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_fuse.c work/support/support_fuse.c
 --- pristine/p/support/support_fuse.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/support/support_fuse.c	2026-09-30 10:31:53.348506943 +0700
++++ work/support/support_fuse.c	2026-09-30 21:16:02.134188065 +0700
 @@ -671,7 +671,7 @@
    /* The test_dir test driver variable is not yet set at this point.  */
    const char *tmpdir = getenv ("TMPDIR");
@@ -1924,7 +1869,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_fuse.c w
    support_fuse_mountpoints = support_fuse_mkdir (prefix);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_test_main.c work/support/support_test_main.c
 --- pristine/p/support/support_test_main.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/support/support_test_main.c	2026-09-30 10:31:53.556506943 +0700
++++ work/support/support_test_main.c	2026-09-30 21:16:02.134188065 +0700
 @@ -351,7 +351,7 @@
      {
        test_dir = getenv ("TMPDIR");
@@ -1936,7 +1881,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_test_mai
      support_set_test_dir (test_dir);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/arm/unwind-resume.c work/sysdeps/arm/unwind-resume.c
 --- pristine/p/sysdeps/arm/unwind-resume.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/arm/unwind-resume.c	2026-09-30 17:14:36.734193590 +0700
++++ work/sysdeps/arm/unwind-resume.c	2026-09-30 21:16:02.134188065 +0700
 @@ -21,5 +21,5 @@
  void *
  __unwind_link_get_resume (void)
@@ -1946,7 +1891,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/arm/unwind-resum
  }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dl-cache.h work/sysdeps/generic/dl-cache.h
 --- pristine/p/sysdeps/generic/dl-cache.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/generic/dl-cache.h	2026-09-30 10:31:29.736506952 +0700
++++ work/sysdeps/generic/dl-cache.h	2026-09-30 21:16:02.134188065 +0700
 @@ -34,8 +34,14 @@
    ((flags) == 1 || (flags) == _DL_CACHE_DEFAULT_ID)
  #endif
@@ -1963,182 +1908,9 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dl-cache
  #endif
  
  #ifndef add_system_dir
-diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
---- pristine/p/sysdeps/generic/dn-prefix.h	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/generic/dn-prefix.h	2026-10-03 21:17:43.741473361 +0700
-@@ -0,0 +1,169 @@
-+/* deb-native: run-time prefix derivation
-+   (docs/spec/dn-glibc-prefix.md, "Runtime prefix self-derivation").
-+
-+   Every object derives the prefix from its own absolute path -- inside
-+   ld.so, from the loader's path recorded in _dl_rtld_map.l_name -- by
-+   cutting at the fixed layout suffix.  One build fits any prefix.
-+
-+   Uses only primitives available in the minimal rtld (strlen/memcmp/memcpy);
-+   strstr/strncmp would pull libc objects into ld.so and break its link.  */
-+
-+#ifndef _DN_PREFIX_H
-+#define _DN_PREFIX_H 1
-+
-+#include <string.h>
-+
-+/* The prefix this build baked at compile time; substituted when the patch
-+   is applied.  Paths that still carry it are rewritten at run time.  */
-+#ifndef DN_BUILT_PREFIX
-+# define DN_BUILT_PREFIX "@TERMUX_PREFIX@"
-+#endif
-+
-+#if IS_IN (rtld)
-+/* Provided by elf/rtld.c.  Using a function (instead of _dl_rtld_map
-+   directly) keeps this header usable from libc sources compiled for rtld,
-+   which do not include ldsodefs.h.  */
-+extern const char *__dn_rtld_self_path (void) attribute_hidden;
-+static const char *
-+__dn_self_path (void)
-+{
-+  return __dn_rtld_self_path ();
-+}
-+#else
-+# include <dlfcn.h>
-+# include <stdint.h>
-+static const char *
-+__dn_self_path (void)
-+{
-+  static const char *cached;
-+  static int inited;
-+  if (!inited)
-+    {
-+      Dl_info info;
-+      if (dladdr ((void *) (uintptr_t) &__dn_self_path, &info) != 0
-+          && info.dli_fname != NULL)
-+        cached = info.dli_fname;
-+      inited = 1;
-+    }
-+  return cached;
-+}
-+#endif
-+
-+/* strstr-alike, rtld-safe.  */
-+static const char *
-+__dn_find (const char *hay, const char *needle)
-+{
-+  size_t hl = strlen (hay);
-+  size_t nl = strlen (needle);
-+  size_t i;
-+  if (nl == 0 || hl < nl)
-+    return NULL;
-+  for (i = 0; i + nl <= hl; ++i)
-+    if (memcmp (hay + i, needle, nl) == 0)
-+      return hay + i;
-+  return NULL;
-+}
-+
-+static int
-+__dn_starts (const char *s, const char *pre)
-+{
-+  while (*pre != '\0')
-+    if (*s++ != *pre++)
-+      return 0;
-+  return 1;
-+}
-+
-+static int
-+__dn_starts_n (const char *s, const char *pre, size_t n)
-+{
-+  size_t i;
-+  for (i = 0; i < n; ++i)
-+    if (s[i] == '\0' || s[i] != pre[i])
-+      return 0;
-+  return 1;
-+}
-+
-+static size_t
-+__dn_prefix_len (void)
-+{
-+  static size_t cached;
-+  static int inited;
-+  if (!inited)
-+    {
-+      const char *p = __dn_self_path ();
-+      const char *t = NULL;
-+      if (p != NULL)
-+        {
-+          t = __dn_find (p, "/usr/lib/aarch64-linux-gnu/");
-+          if (t == NULL)
-+            t = __dn_find (p, "/usr/sbin/");
-+          if (t == NULL)
-+            t = __dn_find (p, "/usr/bin/");
-+        }
-+      if (t != NULL)
-+        cached = (size_t) (t - p);
-+      inited = 1;
-+    }
-+  return cached;
-+}
-+
-+static char *
-+__dn_build (char *dst, size_t dstsz, const char *suffix)
-+{
-+  const char *p = __dn_self_path ();
-+  size_t pl = __dn_prefix_len ();
-+  size_t sl = strlen (suffix);
-+  if (p == NULL || pl + sl + 1 > dstsz)
-+    {
-+      dst[0] = '\0';
-+      return dst;
-+    }
-+  memcpy (dst, p, pl);
-+  memcpy (dst + pl, suffix, sl + 1);
-+  return dst;
-+}
-+
-+/* Rewrite a guest path onto the live prefix.  Handles a path still carrying
-+   the build-time prefix and a bare absolute guest path (/etc/...).  */
-+static const char *
-+__dn_redirect (char *buf, size_t bufsz, const char *path)
-+{
-+  static const char *const roots[] = {
-+    "/etc/", "/usr/", "/var/", "/opt/", "/root/",
-+    "/lib/", "/bin/", "/sbin/", NULL
-+  };
-+  static const char built[] = DN_BUILT_PREFIX;
-+  const char *pfx = __dn_self_path ();
-+  size_t pl = __dn_prefix_len ();
-+  size_t bl = sizeof (built) - 1;
-+  size_t i;
-+  if (pfx == NULL || pl == 0 || path == NULL || path[0] != '/')
-+    return path;
-+
-+  if (bl > 0 && __dn_starts (path, built))
-+    {
-+      size_t rest = strlen (path + bl);
-+      if (pl + rest + 1 > bufsz)
-+        return path;
-+      memcpy (buf, pfx, pl);
-+      memcpy (buf + pl, path + bl, rest + 1);
-+      return buf;
-+    }
-+
-+  if (__dn_starts_n (path, pfx, pl))
-+    return path;
-+
-+  for (i = 0; roots[i] != NULL; ++i)
-+    if (__dn_starts (path, roots[i]))
-+      {
-+        size_t sl = strlen (path);
-+        if (pl + sl + 1 > bufsz)
-+          return path;
-+        memcpy (buf, pfx, pl);
-+        memcpy (buf + pl, path, sl + 1);
-+        return buf;
-+      }
-+  return path;
-+}
-+
-+#endif /* _DN_PREFIX_H */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/ldconfig.h work/sysdeps/generic/ldconfig.h
 --- pristine/p/sysdeps/generic/ldconfig.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/generic/ldconfig.h	2026-09-30 10:31:53.300506943 +0700
++++ work/sysdeps/generic/ldconfig.h	2026-09-30 21:16:02.134188065 +0700
 @@ -48,7 +48,12 @@
  #define FLAG_LARCH_FLOAT_ABI_DOUBLE	0x1200
  
@@ -2155,7 +1927,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/ldconfig
  extern void print_cache (const char *cache_name);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/paths.h work/sysdeps/generic/paths.h
 --- pristine/p/sysdeps/generic/paths.h	2026-09-30 10:54:40.560190837 +0700
-+++ work/sysdeps/generic/paths.h	2026-09-30 10:31:53.564506943 +0700
++++ work/sysdeps/generic/paths.h	2026-09-30 21:16:02.134188065 +0700
 @@ -33,43 +33,43 @@
  #define	_PATHS_H_
  
@@ -2227,7 +1999,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/paths.h 
  #endif /* !_PATHS_H_ */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/unwind-resume.c work/sysdeps/generic/unwind-resume.c
 --- pristine/p/sysdeps/generic/unwind-resume.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/generic/unwind-resume.c	2026-09-30 17:15:01.414193581 +0700
++++ work/sysdeps/generic/unwind-resume.c	2026-09-30 21:16:02.138188065 +0700
 @@ -21,8 +21,19 @@
  #include <sysdep.h>
  #include <unwind-resume.h>
@@ -2286,7 +2058,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/unwind-r
  }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/nptl/_Fork.c work/sysdeps/nptl/_Fork.c
 --- pristine/p/sysdeps/nptl/_Fork.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/nptl/_Fork.c	2026-09-30 17:14:22.426193596 +0700
++++ work/sysdeps/nptl/_Fork.c	2026-09-30 21:16:02.138188065 +0700
 @@ -49,8 +49,6 @@
        self->robust_prev = &self->robust_head;
  #endif
@@ -2298,7 +2070,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/nptl/_Fork.c wor
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/nptl/dl-tls_init_tp.c work/sysdeps/nptl/dl-tls_init_tp.c
 --- pristine/p/sysdeps/nptl/dl-tls_init_tp.c	2026-09-30 10:54:35.748190839 +0700
-+++ work/sysdeps/nptl/dl-tls_init_tp.c	2026-09-30 17:14:22.426193596 +0700
++++ work/sysdeps/nptl/dl-tls_init_tp.c	2026-09-30 21:16:02.138188065 +0700
 @@ -91,14 +91,9 @@
      pd->robust_head.futex_offset = (offsetof (pthread_mutex_t, __data.__lock)
                                      - offsetof (pthread_mutex_t,
@@ -2317,7 +2089,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/nptl/dl-tls_init
    {
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/posix/system.c work/sysdeps/posix/system.c
 --- pristine/p/sysdeps/posix/system.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/posix/system.c	2026-09-30 10:31:53.356506943 +0700
++++ work/sysdeps/posix/system.c	2026-09-30 21:16:02.138188065 +0700
 @@ -31,7 +31,7 @@
  #include <not-cancel.h>
  #include <internal-signals.h>
@@ -2329,7 +2101,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/posix/system.c w
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/pthread/sem_open.c work/sysdeps/pthread/sem_open.c
 --- pristine/p/sysdeps/pthread/sem_open.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/pthread/sem_open.c	2026-09-30 17:14:22.374193596 +0700
++++ work/sysdeps/pthread/sem_open.c	2026-09-30 21:16:02.138188065 +0700
 @@ -167,7 +167,7 @@
  					 fd, 0)) != MAP_FAILED)
  	{
@@ -2341,13 +2113,13 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/pthread/sem_open
  	      __munmap (result, sizeof (sem_t));
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/confstr.h work/sysdeps/unix/confstr.h
 --- pristine/p/sysdeps/unix/confstr.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/confstr.h	2026-09-30 10:31:53.364506943 +0700
++++ work/sysdeps/unix/confstr.h	2026-09-30 21:16:02.138188065 +0700
 @@ -1 +1 @@
 -#define	CS_PATH	"/bin:/usr/bin"
 +#define	CS_PATH	"@TERMUX_PREFIX@/bin:@TERMUX_PREFIX@/bin:/system/bin"
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/aarch64/arch-syscall.h work/sysdeps/unix/sysv/linux/aarch64/arch-syscall.h
 --- pristine/p/sysdeps/unix/sysv/linux/aarch64/arch-syscall.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/aarch64/arch-syscall.h	2026-09-30 17:16:28.354193548 +0700
++++ work/sysdeps/unix/sysv/linux/aarch64/arch-syscall.h	2026-09-30 21:16:02.138188065 +0700
 @@ -1,5 +1,4 @@
  /* AUTOGENERATED by update-syscall-lists.py.  */
 -#define __NR_accept 202
@@ -2603,7 +2375,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 -libc_hidden_def (__clone3)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/aarch64/disabled-syscall.h work/sysdeps/unix/sysv/linux/aarch64/disabled-syscall.h
 --- pristine/p/sysdeps/unix/sysv/linux/aarch64/disabled-syscall.h	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/unix/sysv/linux/aarch64/disabled-syscall.h	2026-09-30 17:16:29.814193547 +0700
++++ work/sysdeps/unix/sysv/linux/aarch64/disabled-syscall.h	2026-09-30 21:16:02.138188065 +0700
 @@ -0,0 +1,87 @@
 +#define __NR_accept 202
 +#define __NR_faccessat2 439
@@ -2742,7 +2514,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 -PSEUDO_END (syscall)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/aarch64/syscallS.S work/sysdeps/unix/sysv/linux/aarch64/syscallS.S
 --- pristine/p/sysdeps/unix/sysv/linux/aarch64/syscallS.S	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/unix/sysv/linux/aarch64/syscallS.S	2026-09-30 17:14:22.470193596 +0700
++++ work/sysdeps/unix/sysv/linux/aarch64/syscallS.S	2026-09-30 21:16:02.138188065 +0700
 @@ -0,0 +1,44 @@
 +/* Copyright (C) 2005-2025 Free Software Foundation, Inc.
 +
@@ -2790,7 +2562,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 +PSEUDO_END (syscallS)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/arm/kernel-features.h work/sysdeps/unix/sysv/linux/arm/kernel-features.h
 --- pristine/p/sysdeps/unix/sysv/linux/arm/kernel-features.h	2026-09-30 10:54:37.376190838 +0700
-+++ work/sysdeps/unix/sysv/linux/arm/kernel-features.h	2026-09-30 17:14:22.354193596 +0700
++++ work/sysdeps/unix/sysv/linux/arm/kernel-features.h	2026-09-30 21:16:02.138188065 +0700
 @@ -38,9 +38,6 @@
     non-standard name.  */
  #define __NR_fadvise64_64 __NR_arm_fadvise64_64
@@ -2803,7 +2575,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
     present in 32-bit kernels from 4.4 and 4.5 respectively.  */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/arm/sigrestorer.S work/sysdeps/unix/sysv/linux/arm/sigrestorer.S
 --- pristine/p/sysdeps/unix/sysv/linux/arm/sigrestorer.S	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/arm/sigrestorer.S	2026-09-30 17:14:22.446193596 +0700
++++ work/sysdeps/unix/sysv/linux/arm/sigrestorer.S	2026-09-30 21:16:02.138188065 +0700
 @@ -16,6 +16,7 @@
     <https://www.gnu.org/licenses/>.  */
  
@@ -2866,7 +2638,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 -PSEUDO_END (syscall)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/arm/syscallS.S work/sysdeps/unix/sysv/linux/arm/syscallS.S
 --- pristine/p/sysdeps/unix/sysv/linux/arm/syscallS.S	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/unix/sysv/linux/arm/syscallS.S	2026-09-30 17:14:22.470193596 +0700
++++ work/sysdeps/unix/sysv/linux/arm/syscallS.S	2026-09-30 21:16:02.138188065 +0700
 @@ -0,0 +1,48 @@
 +/* Copyright (C) 2005-2025 Free Software Foundation, Inc.
 +   This file is part of the GNU C Library.
@@ -2918,7 +2690,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 +PSEUDO_END (syscallS)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/clock_gettime.c work/sysdeps/unix/sysv/linux/clock_gettime.c
 --- pristine/p/sysdeps/unix/sysv/linux/clock_gettime.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/clock_gettime.c	2026-09-30 17:14:22.242193596 +0700
++++ work/sysdeps/unix/sysv/linux/clock_gettime.c	2026-09-30 21:16:02.138188065 +0700
 @@ -30,10 +30,6 @@
  {
    int r;
@@ -2954,7 +2726,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/clone-internal.c work/sysdeps/unix/sysv/linux/clone-internal.c
 --- pristine/p/sysdeps/unix/sysv/linux/clone-internal.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/clone-internal.c	2026-09-30 10:26:20.634171562 +0700
++++ work/sysdeps/unix/sysv/linux/clone-internal.c	2026-09-30 21:16:02.138188065 +0700
 @@ -72,21 +72,6 @@
  __clone3_internal (struct clone_args *cl_args, int (*func) (void *args),
  		   void *arg)
@@ -2997,7 +2769,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/dl-execstack.c work/sysdeps/unix/sysv/linux/dl-execstack.c
 --- pristine/p/sysdeps/unix/sysv/linux/dl-execstack.c	2026-09-30 10:54:35.756190839 +0700
-+++ work/sysdeps/unix/sysv/linux/dl-execstack.c	2026-09-30 17:14:22.266193596 +0700
++++ work/sysdeps/unix/sysv/linux/dl-execstack.c	2026-09-30 21:16:02.138188065 +0700
 @@ -26,7 +26,7 @@
  		    & -(intptr_t) GLRO(dl_pagesize));
  
@@ -3009,7 +2781,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #elif _STACK_GROWS_UP
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/epoll_pwait2.c work/sysdeps/unix/sysv/linux/epoll_pwait2.c
 --- pristine/p/sysdeps/unix/sysv/linux/epoll_pwait2.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/epoll_pwait2.c	2026-09-30 17:16:04.446193557 +0700
++++ work/sysdeps/unix/sysv/linux/epoll_pwait2.c	2026-09-30 21:16:02.138188065 +0700
 @@ -18,13 +18,14 @@
  
  #include <sys/epoll.h>
@@ -3028,7 +2800,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  libc_hidden_def (__epoll_pwait2_time64)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/faccessat.c work/sysdeps/unix/sysv/linux/faccessat.c
 --- pristine/p/sysdeps/unix/sysv/linux/faccessat.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/faccessat.c	2026-09-30 17:14:22.290193596 +0700
++++ work/sysdeps/unix/sysv/linux/faccessat.c	2026-09-30 21:16:02.138188065 +0700
 @@ -26,16 +26,6 @@
  int
  __faccessat (int fd, const char *file, int mode, int flag)
@@ -3055,7 +2827,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  weak_alias (__faccessat, faccessat)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/fake_epoll_pwait2.c work/sysdeps/unix/sysv/linux/fake_epoll_pwait2.c
 --- pristine/p/sysdeps/unix/sysv/linux/fake_epoll_pwait2.c	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/unix/sysv/linux/fake_epoll_pwait2.c	2026-09-30 17:13:35.970193614 +0700
++++ work/sysdeps/unix/sysv/linux/fake_epoll_pwait2.c	2026-09-30 21:16:02.138188065 +0700
 @@ -0,0 +1,20 @@
 +#include <stddef.h>
 +#include <sys/types.h>
@@ -3079,7 +2851,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 +}
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/fakesyscall-base.h work/sysdeps/unix/sysv/linux/fakesyscall-base.h
 --- pristine/p/sysdeps/unix/sysv/linux/fakesyscall-base.h	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/unix/sysv/linux/fakesyscall-base.h	2026-09-30 17:13:35.966193614 +0700
++++ work/sysdeps/unix/sysv/linux/fakesyscall-base.h	2026-09-30 21:16:02.142188065 +0700
 @@ -0,0 +1,40 @@
 +#ifndef _FAKE_SYSCALL_BASE
 +#define _FAKE_SYSCALL_BASE
@@ -3123,7 +2895,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 +#endif //_FAKE_SYSCALL_BASE
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/fakesyscall.h work/sysdeps/unix/sysv/linux/fakesyscall.h
 --- pristine/p/sysdeps/unix/sysv/linux/fakesyscall.h	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/unix/sysv/linux/fakesyscall.h	2026-09-30 17:13:35.966193614 +0700
++++ work/sysdeps/unix/sysv/linux/fakesyscall.h	2026-09-30 21:16:02.142188065 +0700
 @@ -0,0 +1,12 @@
 +#ifndef _FAKE_SYSCALL
 +#define _FAKE_SYSCALL
@@ -3139,7 +2911,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 +#endif //_FAKE_SYSCALL
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/fchmodat.c work/sysdeps/unix/sysv/linux/fchmodat.c
 --- pristine/p/sysdeps/unix/sysv/linux/fchmodat.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/fchmodat.c	2026-09-30 17:14:22.310193596 +0700
++++ work/sysdeps/unix/sysv/linux/fchmodat.c	2026-09-30 21:16:02.142188065 +0700
 @@ -26,7 +26,6 @@
  #include <sysdep.h>
  #include <unistd.h>
@@ -3173,7 +2945,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  libc_hidden_def (fchmodat)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/fstatat64.c work/sysdeps/unix/sysv/linux/fstatat64.c
 --- pristine/p/sysdeps/unix/sysv/linux/fstatat64.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/fstatat64.c	2026-09-30 17:14:22.334193596 +0700
++++ work/sysdeps/unix/sysv/linux/fstatat64.c	2026-09-30 21:16:02.142188065 +0700
 @@ -38,46 +38,8 @@
                  "__blkcnt_t and __blkcnt64_t must match");
  #endif
@@ -3249,7 +3021,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  	 : 0;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/gentempfd.c work/sysdeps/unix/sysv/linux/gentempfd.c
 --- pristine/p/sysdeps/unix/sysv/linux/gentempfd.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/gentempfd.c	2026-09-30 10:31:53.572506943 +0700
++++ work/sysdeps/unix/sysv/linux/gentempfd.c	2026-09-30 21:16:02.142188065 +0700
 @@ -26,8 +26,8 @@
  {
    int fd = __open (P_tmpdir, O_RDWR | O_TMPFILE | O_EXCL | flags,
@@ -3263,7 +3035,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
    return fd;
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/gethostid.c work/sysdeps/unix/sysv/linux/gethostid.c
 --- pristine/p/sysdeps/unix/sysv/linux/gethostid.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/gethostid.c	2026-09-30 10:31:53.576506943 +0700
++++ work/sysdeps/unix/sysv/linux/gethostid.c	2026-09-30 21:16:02.142188065 +0700
 @@ -22,7 +22,7 @@
  #include <not-cancel.h>
  #include <stdbool.h>
@@ -3275,7 +3047,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  int
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/i386/libc_sigaction.c work/sysdeps/unix/sysv/linux/i386/libc_sigaction.c
 --- pristine/p/sysdeps/unix/sysv/linux/i386/libc_sigaction.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/i386/libc_sigaction.c	2026-09-30 17:14:22.450193596 +0700
++++ work/sysdeps/unix/sysv/linux/i386/libc_sigaction.c	2026-09-30 21:16:02.142188065 +0700
 @@ -18,6 +18,7 @@
  
  #include <signal.h>
@@ -3325,7 +3097,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 -PSEUDO_END (syscall)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/i386/syscallS.S work/sysdeps/unix/sysv/linux/i386/syscallS.S
 --- pristine/p/sysdeps/unix/sysv/linux/i386/syscallS.S	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/unix/sysv/linux/i386/syscallS.S	2026-09-30 17:14:22.470193596 +0700
++++ work/sysdeps/unix/sysv/linux/i386/syscallS.S	2026-09-30 21:16:02.142188065 +0700
 @@ -0,0 +1,35 @@
 +/* Copyright (C) 1995-2025 Free Software Foundation, Inc.
 +   This file is part of the GNU C Library.
@@ -3364,7 +3136,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 +PSEUDO_END (syscallS)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/kernel-features.h work/sysdeps/unix/sysv/linux/kernel-features.h
 --- pristine/p/sysdeps/unix/sysv/linux/kernel-features.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/kernel-features.h	2026-09-30 17:14:22.354193596 +0700
++++ work/sysdeps/unix/sysv/linux/kernel-features.h	2026-09-30 21:16:02.142188065 +0700
 @@ -70,7 +70,6 @@
     separate syscalls were only added later.  */
  #define __ASSUME_SENDMSG_SYSCALL	1
@@ -3375,7 +3147,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #define __ASSUME_SENDTO_SYSCALL		1
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/mprotect.c work/sysdeps/unix/sysv/linux/mprotect.c
 --- pristine/p/sysdeps/unix/sysv/linux/mprotect.c	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/unix/sysv/linux/mprotect.c	2026-09-30 17:13:35.966193614 +0700
++++ work/sysdeps/unix/sysv/linux/mprotect.c	2026-09-30 21:16:02.142188065 +0700
 @@ -0,0 +1,106 @@
 +/* - Fix for Termux
 +   If you run mprotect with the PROT_EXEC flag,
@@ -3485,7 +3257,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 +weak_alias(__mprotect, mprotect)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/mq_open.c work/sysdeps/unix/sysv/linux/mq_open.c
 --- pristine/p/sysdeps/unix/sysv/linux/mq_open.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/mq_open.c	2026-09-30 17:16:04.450193557 +0700
++++ work/sysdeps/unix/sysv/linux/mq_open.c	2026-09-30 21:16:02.142188065 +0700
 @@ -22,6 +22,7 @@
  #include <stdio.h>
  #include <sysdep.h>
@@ -3505,7 +3277,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #if OTHER_SHLIB_COMPAT (librt, GLIBC_2_3_4, GLIBC_2_34)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/msgctl.c work/sysdeps/unix/sysv/linux/msgctl.c
 --- pristine/p/sysdeps/unix/sysv/linux/msgctl.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/msgctl.c	2026-09-30 17:16:04.450193557 +0700
++++ work/sysdeps/unix/sysv/linux/msgctl.c	2026-09-30 21:16:02.142188065 +0700
 @@ -21,6 +21,7 @@
  #include <shlib-compat.h>
  #include <errno.h>
@@ -3534,7 +3306,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #endif
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/msgget.c work/sysdeps/unix/sysv/linux/msgget.c
 --- pristine/p/sysdeps/unix/sysv/linux/msgget.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/msgget.c	2026-09-30 17:16:04.450193557 +0700
++++ work/sysdeps/unix/sysv/linux/msgget.c	2026-09-30 21:16:02.142188065 +0700
 @@ -18,6 +18,7 @@
  #include <ipc_priv.h>
  #include <sysdep.h>
@@ -3554,7 +3326,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #endif
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/msgrcv.c work/sysdeps/unix/sysv/linux/msgrcv.c
 --- pristine/p/sysdeps/unix/sysv/linux/msgrcv.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/msgrcv.c	2026-09-30 17:16:04.450193557 +0700
++++ work/sysdeps/unix/sysv/linux/msgrcv.c	2026-09-30 21:16:02.142188065 +0700
 @@ -17,13 +17,14 @@
  
  #include <ipc_priv.h>
@@ -3573,7 +3345,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  			 MSGRCV_ARGS (msgp, msgtyp));
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/msgsnd.c work/sysdeps/unix/sysv/linux/msgsnd.c
 --- pristine/p/sysdeps/unix/sysv/linux/msgsnd.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/msgsnd.c	2026-09-30 17:16:04.450193557 +0700
++++ work/sysdeps/unix/sysv/linux/msgsnd.c	2026-09-30 21:16:02.142188065 +0700
 @@ -17,12 +17,13 @@
  
  #include <ipc_priv.h>
@@ -3589,72 +3361,9 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #else
    return SYSCALL_CANCEL (ipc, IPCOP_msgsnd, msqid, msgsz, msgflg,
  			 msgp);
-diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/open.c work/sysdeps/unix/sysv/linux/open.c
---- pristine/p/sysdeps/unix/sysv/linux/open.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/open.c	2026-10-03 21:08:15.317473578 +0700
-@@ -20,6 +20,7 @@
- #include <sys/stat.h>
- #include <fcntl.h>
- #include <stdarg.h>
-+#include <dn-prefix.h>
- 
- #include <sysdep-cancel.h>
- 
-@@ -40,6 +41,9 @@
-       va_end (arg);
-     }
- 
-+  char dn_path[512];
-+  file = __dn_redirect (dn_path, sizeof dn_path, file);
-+
-   return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag, mode);
- }
- libc_hidden_def (__libc_open)
-diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/open64.c work/sysdeps/unix/sysv/linux/open64.c
---- pristine/p/sysdeps/unix/sysv/linux/open64.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/open64.c	2026-10-03 21:08:15.325473578 +0700
-@@ -20,6 +20,7 @@
- #include <sys/stat.h>
- #include <fcntl.h>
- #include <stdarg.h>
-+#include <dn-prefix.h>
- #include <sysdep-cancel.h>
- #include <shlib-compat.h>
- 
-@@ -38,6 +39,9 @@
-       va_end (arg);
-     }
- 
-+  char dn_path[512];
-+  file = __dn_redirect (dn_path, sizeof dn_path, file);
-+
-   return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag | O_LARGEFILE,
- 			 mode);
- }
-diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/open64_nocancel.c work/sysdeps/unix/sysv/linux/open64_nocancel.c
---- pristine/p/sysdeps/unix/sysv/linux/open64_nocancel.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/open64_nocancel.c	2026-10-03 21:08:15.293473578 +0700
-@@ -20,6 +20,7 @@
- #include <sys/stat.h>
- #include <fcntl.h>
- #include <stdarg.h>
-+#include <dn-prefix.h>
- 
- #include <not-cancel.h>
- 
-@@ -36,6 +37,9 @@
-       va_end (arg);
-     }
- 
-+  char dn_path[512];
-+  file = __dn_redirect (dn_path, sizeof dn_path, file);
-+
-   return INLINE_SYSCALL_CALL (openat, AT_FDCWD, file, oflag | O_LARGEFILE,
- 			      mode);
- }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/open_by_handle_at.c work/sysdeps/unix/sysv/linux/open_by_handle_at.c
 --- pristine/p/sysdeps/unix/sysv/linux/open_by_handle_at.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/open_by_handle_at.c	2026-09-30 17:16:04.450193557 +0700
++++ work/sysdeps/unix/sysv/linux/open_by_handle_at.c	2026-09-30 21:16:02.142188065 +0700
 @@ -20,9 +20,10 @@
  #include <sys/types.h>
  #include <sys/stat.h>
@@ -3667,114 +3376,9 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 -  return SYSCALL_CANCEL (open_by_handle_at, mount_fd, handle, flags);
 +  return syscall (__NR_open_by_handle_at, mount_fd, handle, flags);
  }
-diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/open_nocancel.c work/sysdeps/unix/sysv/linux/open_nocancel.c
---- pristine/p/sysdeps/unix/sysv/linux/open_nocancel.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/open_nocancel.c	2026-10-03 21:08:15.305473578 +0700
-@@ -20,6 +20,7 @@
- #include <sys/stat.h>
- #include <fcntl.h>
- #include <stdarg.h>
-+#include <dn-prefix.h>
- 
- #include <sysdep-cancel.h>
- #include <not-cancel.h>
-@@ -39,6 +40,9 @@
-       va_end (arg);
-     }
- 
-+  char dn_path[512];
-+  file = __dn_redirect (dn_path, sizeof dn_path, file);
-+
-   return INLINE_SYSCALL_CALL (openat, AT_FDCWD, file, oflag, mode);
- }
- hidden_def (__open_nocancel)
-diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/openat.c work/sysdeps/unix/sysv/linux/openat.c
---- pristine/p/sysdeps/unix/sysv/linux/openat.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/openat.c	2026-10-03 21:08:15.333473578 +0700
-@@ -20,6 +20,7 @@
- #include <stdarg.h>
- 
- #include <sysdep-cancel.h>
-+#include <dn-prefix.h>
- 
- #ifndef __OFF_T_MATCHES_OFF64_T
- 
-@@ -38,6 +39,9 @@
-       va_end (arg);
-     }
- 
-+  char dn_path[512];
-+  file = __dn_redirect (dn_path, sizeof dn_path, file);
-+
-   return SYSCALL_CANCEL (openat, fd, file, oflag, mode);
- }
- weak_alias (__libc_openat, __openat)
-diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/openat64.c work/sysdeps/unix/sysv/linux/openat64.c
---- pristine/p/sysdeps/unix/sysv/linux/openat64.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/openat64.c	2026-10-03 21:08:15.337473578 +0700
-@@ -20,6 +20,7 @@
- #include <stdarg.h>
- 
- #include <sysdep-cancel.h>
-+#include <dn-prefix.h>
- 
- /* Open FILE with access OFLAG.  Interpret relative paths relative to
-    the directory associated with FD.  If OFLAG includes O_CREAT or
-@@ -36,6 +37,9 @@
-       va_end (arg);
-     }
- 
-+  char dn_path[512];
-+  file = __dn_redirect (dn_path, sizeof dn_path, file);
-+
-   return SYSCALL_CANCEL (openat, fd, file, oflag | O_LARGEFILE, mode);
- }
- 
-diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/openat64_nocancel.c work/sysdeps/unix/sysv/linux/openat64_nocancel.c
---- pristine/p/sysdeps/unix/sysv/linux/openat64_nocancel.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/openat64_nocancel.c	2026-10-03 21:08:15.353473578 +0700
-@@ -21,6 +21,7 @@
- 
- #include <sysdep-cancel.h>
- #include <not-cancel.h>
-+#include <dn-prefix.h>
- 
- int
- __openat64_nocancel (int fd, const char *file, int oflag, ...)
-@@ -34,6 +35,9 @@
-       va_end (arg);
-     }
- 
-+  char dn_path[512];
-+  file = __dn_redirect (dn_path, sizeof dn_path, file);
-+
-   return INLINE_SYSCALL_CALL (openat, fd, file, oflag | O_LARGEFILE,
- 			      mode);
- }
-diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/openat_nocancel.c work/sysdeps/unix/sysv/linux/openat_nocancel.c
---- pristine/p/sysdeps/unix/sysv/linux/openat_nocancel.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/openat_nocancel.c	2026-10-03 21:08:15.345473578 +0700
-@@ -21,6 +21,7 @@
- 
- #include <sysdep-cancel.h>
- #include <not-cancel.h>
-+#include <dn-prefix.h>
- 
- #ifndef __OFF_T_MATCHES_OFF64_T
- 
-@@ -36,6 +37,9 @@
-       va_end (arg);
-     }
- 
-+  char dn_path[512];
-+  file = __dn_redirect (dn_path, sizeof dn_path, file);
-+
-   return INLINE_SYSCALL_CALL (openat, fd, file, oflag, mode);
- }
- hidden_def (__openat_nocancel)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/paths.h work/sysdeps/unix/sysv/linux/paths.h
 --- pristine/p/sysdeps/unix/sysv/linux/paths.h	2026-09-30 10:54:40.560190837 +0700
-+++ work/sysdeps/unix/sysv/linux/paths.h	2026-09-30 10:31:53.584506943 +0700
++++ work/sysdeps/unix/sysv/linux/paths.h	2026-09-30 21:16:02.142188065 +0700
 @@ -33,43 +33,43 @@
  #define	_PATHS_H_
  
@@ -3845,7 +3449,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #endif /* !_PATHS_H_ */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/riscv/dl-cache.h work/sysdeps/unix/sysv/linux/riscv/dl-cache.h
 --- pristine/p/sysdeps/unix/sysv/linux/riscv/dl-cache.h	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/riscv/dl-cache.h	2026-09-30 10:31:53.388506943 +0700
++++ work/sysdeps/unix/sysv/linux/riscv/dl-cache.h	2026-09-30 21:16:02.142188065 +0700
 @@ -58,7 +58,7 @@
  	"/lib32/ilp32",							\
  	NULL,								\
@@ -3857,7 +3461,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
        const char **ptr;							\
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/rseq-internal.h work/sysdeps/unix/sysv/linux/rseq-internal.h
 --- pristine/p/sysdeps/unix/sysv/linux/rseq-internal.h	2026-09-30 10:54:35.756190839 +0700
-+++ work/sysdeps/unix/sysv/linux/rseq-internal.h	2026-09-30 17:14:22.426193596 +0700
++++ work/sysdeps/unix/sysv/linux/rseq-internal.h	2026-09-30 21:16:02.142188065 +0700
 @@ -93,44 +93,11 @@
    return (struct rseq_area *) ((char *) __thread_pointer () + __rseq_offset);
  }
@@ -3905,7 +3509,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #endif /* rseq-internal.h */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/semctl.c work/sysdeps/unix/sysv/linux/semctl.c
 --- pristine/p/sysdeps/unix/sysv/linux/semctl.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/semctl.c	2026-09-30 17:16:04.450193557 +0700
++++ work/sysdeps/unix/sysv/linux/semctl.c	2026-09-30 21:16:02.146188065 +0700
 @@ -21,6 +21,7 @@
  #include <sysdep.h>
  #include <shlib-compat.h>
@@ -3934,7 +3538,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  			      SEMCTL_ARG_ADDRESS (arg));
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/semget.c work/sysdeps/unix/sysv/linux/semget.c
 --- pristine/p/sysdeps/unix/sysv/linux/semget.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/semget.c	2026-09-30 17:16:04.450193557 +0700
++++ work/sysdeps/unix/sysv/linux/semget.c	2026-09-30 21:16:02.146188065 +0700
 @@ -19,6 +19,7 @@
  #include <ipc_priv.h>
  #include <sysdep.h>
@@ -3954,7 +3558,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #endif
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/semtimedop.c work/sysdeps/unix/sysv/linux/semtimedop.c
 --- pristine/p/sysdeps/unix/sysv/linux/semtimedop.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/semtimedop.c	2026-09-30 17:16:04.454193557 +0700
++++ work/sysdeps/unix/sysv/linux/semtimedop.c	2026-09-30 21:16:02.146188065 +0700
 @@ -19,15 +19,16 @@
  #include <ipc_priv.h>
  #include <sysdep.h>
@@ -3985,7 +3589,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  			      SEMTIMEDOP_IPC_ARGS (nsops, sops, pts32));
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/shmat.c work/sysdeps/unix/sysv/linux/shmat.c
 --- pristine/p/sysdeps/unix/sysv/linux/shmat.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/shmat.c	2026-09-30 17:13:35.958193614 +0700
++++ work/sysdeps/unix/sysv/linux/shmat.c	2026-09-30 21:16:02.146188065 +0700
 @@ -1,42 +1,40 @@
 -/* Copyright (C) 1995-2025 Free Software Foundation, Inc.
 -   This file is part of the GNU C Library.
@@ -4064,7 +3668,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/shmctl.c work/sysdeps/unix/sysv/linux/shmctl.c
 --- pristine/p/sysdeps/unix/sysv/linux/shmctl.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/shmctl.c	2026-09-30 17:13:35.962193614 +0700
++++ work/sysdeps/unix/sysv/linux/shmctl.c	2026-09-30 21:16:02.146188065 +0700
 @@ -1,238 +1,120 @@
 -/* Copyright (C) 1995-2025 Free Software Foundation, Inc.
 -   This file is part of the GNU C Library.
@@ -4460,7 +4064,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 +versioned_symbol(libc, __shmctl, shmctl, DEFAULT_VERSION);
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/shmdt.c work/sysdeps/unix/sysv/linux/shmdt.c
 --- pristine/p/sysdeps/unix/sysv/linux/shmdt.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/shmdt.c	2026-09-30 17:13:35.962193614 +0700
++++ work/sysdeps/unix/sysv/linux/shmdt.c	2026-09-30 21:16:02.146188065 +0700
 @@ -1,33 +1,31 @@
 -/* Copyright (C) 1995-2025 Free Software Foundation, Inc.
 -   This file is part of the GNU C Library.
@@ -4523,7 +4127,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/shmget.c work/sysdeps/unix/sysv/linux/shmget.c
 --- pristine/p/sysdeps/unix/sysv/linux/shmget.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/shmget.c	2026-09-30 17:13:35.962193614 +0700
++++ work/sysdeps/unix/sysv/linux/shmget.c	2026-09-30 21:16:02.146188065 +0700
 @@ -1,34 +1,149 @@
 -/* Copyright (C) 1995-2025 Free Software Foundation, Inc.
 -   This file is part of the GNU C Library.
@@ -4703,7 +4307,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/spawni.c work/sysdeps/unix/sysv/linux/spawni.c
 --- pristine/p/sysdeps/unix/sysv/linux/spawni.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/spawni.c	2026-09-30 17:16:04.454193557 +0700
++++ work/sysdeps/unix/sysv/linux/spawni.c	2026-09-30 21:16:02.146188065 +0700
 @@ -27,6 +27,7 @@
  #include <sysdep.h>
  #include <sys/resource.h>
@@ -4737,7 +4341,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
        if (!set_cgroup)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/statx.c work/sysdeps/unix/sysv/linux/statx.c
 --- pristine/p/sysdeps/unix/sysv/linux/statx.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/statx.c	2026-09-30 17:16:04.454193557 +0700
++++ work/sysdeps/unix/sysv/linux/statx.c	2026-09-30 21:16:02.146188065 +0700
 @@ -19,20 +19,11 @@
  #include <errno.h>
  #include <sys/stat.h>
@@ -4763,7 +4367,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/syscall.c work/sysdeps/unix/sysv/linux/syscall.c
 --- pristine/p/sysdeps/unix/sysv/linux/syscall.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/syscall.c	2026-09-30 17:13:35.966193614 +0700
++++ work/sysdeps/unix/sysv/linux/syscall.c	2026-09-30 21:16:02.146188065 +0700
 @@ -1,29 +1,14 @@
 -/* Indirect system call.  Linux generic implementation.
 -   Copyright (C) 1997-2025 Free Software Foundation, Inc.
@@ -4823,7 +4427,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  }
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/x86_64/libc_sigaction.c work/sysdeps/unix/sysv/linux/x86_64/libc_sigaction.c
 --- pristine/p/sysdeps/unix/sysv/linux/x86_64/libc_sigaction.c	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysdeps/unix/sysv/linux/x86_64/libc_sigaction.c	2026-09-30 17:14:22.450193596 +0700
++++ work/sysdeps/unix/sysv/linux/x86_64/libc_sigaction.c	2026-09-30 21:16:02.146188065 +0700
 @@ -17,6 +17,7 @@
     <https://www.gnu.org/licenses/>.  */
  
@@ -4880,7 +4484,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 -PSEUDO_END (syscall)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/x86_64/syscallS.S work/sysdeps/unix/sysv/linux/x86_64/syscallS.S
 --- pristine/p/sysdeps/unix/sysv/linux/x86_64/syscallS.S	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/unix/sysv/linux/x86_64/syscallS.S	2026-09-30 17:14:22.470193596 +0700
++++ work/sysdeps/unix/sysv/linux/x86_64/syscallS.S	2026-09-30 21:16:02.146188065 +0700
 @@ -0,0 +1,42 @@
 +/* Copyright (C) 2001-2025 Free Software Foundation, Inc.
 +   This file is part of the GNU C Library.
@@ -4926,7 +4530,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 +PSEUDO_END (syscallS)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysvipc/Makefile work/sysvipc/Makefile
 --- pristine/p/sysvipc/Makefile	2025-01-29 00:31:33.000000000 +0700
-+++ work/sysvipc/Makefile	2026-09-30 17:15:26.234193572 +0700
++++ work/sysvipc/Makefile	2026-09-30 21:16:02.146188065 +0700
 @@ -28,6 +28,7 @@
  routines := ftok \
  	    msgsnd msgrcv msgget msgctl \
@@ -4937,7 +4541,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysvipc/Makefile work/sy
  tests    := test-sysvmsg test-sysvsem test-sysvshm
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysvipc/shmem-android.c work/sysvipc/shmem-android.c
 --- pristine/p/sysvipc/shmem-android.c	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysvipc/shmem-android.c	2026-09-30 17:13:36.026193614 +0700
++++ work/sysvipc/shmem-android.c	2026-09-30 21:16:02.146188065 +0700
 @@ -0,0 +1,248 @@
 +/* <shmem-android.{h,c}> - dependencies (values ​​and commands) for system V shared
 + * memory emulation on Android using ashmem. Needed in the following files:
@@ -5189,7 +4793,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysvipc/shmem-android.c 
 +}
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysvipc/shmem-android.h work/sysvipc/shmem-android.h
 --- pristine/p/sysvipc/shmem-android.h	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysvipc/shmem-android.h	2026-09-30 17:13:36.030193614 +0700
++++ work/sysvipc/shmem-android.h	2026-09-30 21:16:02.150188065 +0700
 @@ -0,0 +1,85 @@
 +#ifndef __SHMEM_ANDROID
 +#define __SHMEM_ANDROID
