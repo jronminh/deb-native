@@ -646,6 +646,37 @@ full `apt-get install` of several previously-uninstalled packages
 twice (always clean on retry) — noted under "Shim & tracer hardening",
 not chased down.
 
+## Runtime overhaul
+
+**Goal**: the runtime pieces were named and built as the design evolved, and
+some names now misdescribe what the code actually does. `native/ld-dn.c` is
+the clearest case: the name reads as "deb-native's ld-linux" (a loader), but
+it is an **interpreter trampoline** in the `PT_INTERP` slot -- it prepares
+the environment and does the kernel-side handoff (rebuilds
+`argc`/`argv`/`envp`/`auxv`, maps glibc's real `ld-linux-aarch64.so.1`,
+sets `AT_BASE`, jumps to its entry), then steps aside; the actual dynamic
+linking is still done by glibc's loader. Rename it **`dn-interp`** (the name
+that matches the slot it fills) and re-read the rest of the runtime for the
+same class of misnomer.
+
+**Status**: decided 2026-10-03 (rename `ld-dn` -> `dn-interp`), not started.
+`native/README.md` and `ld-dn.c`'s own header call it a "program loader
+stub", the same ambiguity in prose.
+
+**Open**:
+
+- Rename `ld-dn` -> `dn-interp` across the tree (~40 files: `native/ld-dn.c`,
+  `native/ld-dn.conf`, `setup-runtime.sh`, `dn-translate-deb.sh`,
+  `dn-adopt.sh`, `make-launchers.sh`, `dn-fix-gcc-specs.sh`,
+  `tests/ld-dn-config/`, docs). The install path is baked into every
+  translated ELF's `PT_INTERP` and self-matched in `ld-dn.c` (the
+  `/usr/lib/deb-native/ld-dn` suffix it strips to find the prefix), so keep
+  a compat symlink `ld-dn -> dn-interp` or force a re-bootstrap (pre-alpha,
+  so a re-bootstrap is acceptable).
+- Same pass: any other runtime name that no longer describes its mechanism
+  (`dn-run`'s "launch classifier", "loader stub", ...); fold findings into
+  the "Runtime component audit" above.
+
 ## Quick wins
 
 - [x] ~~Forked Bionic `sed`/`find` in some postinsts can't see prefix
