@@ -30,6 +30,9 @@ changes.
 - `standard.md` — package scope: what "supported" means and how a claim
   about a package is written down and proved.
 - `install-flow.md` — the bootstrap/install order, end to end.
+- `package-lifecycle.md` — one package's lifecycle, stage by stage, mapped to
+  the hook/script/layer that handles each (`install-flow.md` is the
+  one-time bootstrap instead).
 - `multiarch-mechanics.md` — dpkg multi-arch mechanics, shared with the
   `naibed` branch.
 - `path-shim.md` is the mechanism; the boundary around it:
