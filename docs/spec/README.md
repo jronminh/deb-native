@@ -54,6 +54,9 @@ changes.
   (`native/ld-dn.c`) actually does at runtime: its execution phases,
   prepare-vs-commit, and the `AT_BASE` handoff. Companion to
   `ld-dn-config.md`.
+- `dn-glibc-prefix.md` — the next-gen prefix: glibc's own loader built for
+  the prefix instead of `ld-dn`, and the packaging + GCC lifecycle that make
+  it installable.
 - `dl-mechanics.md` — reference catalog of glibc's dynamic-linker
   mechanisms (env, files, CLI, dynamic tags, tunables, audit), and how
   leaning on them keeps the `dn-glibc` loader patch small.

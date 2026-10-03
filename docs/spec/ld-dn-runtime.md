@@ -40,6 +40,8 @@ Living doc: tracks the shipped code, not a proposal.
   injects into the environment it builds.
 - [`design.md`](design.md) -- scope and the three path mechanisms; this
   doc is the deepest look at the runtime one.
+- [`dn-glibc-prefix.md`](dn-glibc-prefix.md) -- the next-gen prefix that
+  replaces this trampoline with glibc's own prefix-built loader.
 - `native/README.md` -- the other `native/` C programs.
 
 ## What it is
@@ -173,11 +175,13 @@ Make it concrete: `tests/ld-dn-config/` exercises the config/override path;
 
 ## Alternative: fuse into the loader
 
-Considered, not decided (`TODO.md`, "Runtime overhaul"). Instead of a
-separate `ld-dn` that the kernel runs first, fold its two jobs -- derive the
-prefix and set up the shim/library path -- into glibc's own dynamic loader,
-and point `PT_INTERP` straight at that patched loader. Then the kernel does
-the loading again and `ld-dn` disappears.
+**Chosen**, being built out in [`dn-glibc-prefix.md`](dn-glibc-prefix.md)
+(`TODO.md`, "Runtime overhaul"). Instead of a separate `ld-dn` the kernel
+runs first, point `PT_INTERP` straight at glibc's own loader, built for the
+prefix, which supplies the shim (`ld.so.preload`) and the library path
+(`ld.so.cache`). Then the kernel does the loading again and `ld-dn`
+disappears. The sketch and pros/cons below are kept as the record that led
+to the decision; `dn-glibc-prefix.md` is the live design.
 
 **Plan sketch.**
 

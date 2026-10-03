@@ -7,7 +7,7 @@
 #      (normalize-symlinks.sh): the kernel follows a link by itself, never
 #      re-entering the shim, so /etc/x would resolve against Android's root;
 #   3. launchers regenerated (make-launchers.sh);
-#   4. gcc's own default dynamic-linker pointed at ld-dn
+#   4. gcc's own default dynamic-linker pointed at the prefix's glibc loader
 #      (dn-fix-gcc-specs.sh), so a plain `gcc -o prog prog.c` produces a
 #      binary that actually runs, not just one that links.
 # ELFs were already repointed in the package (dn-translate-deb.sh), so the

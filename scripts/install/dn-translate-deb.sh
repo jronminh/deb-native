@@ -6,17 +6,19 @@
 #   - "Architecture: all" -> "arm64", the same rule dn-debian-index.sh
 #     applied to the index apt planned from, so apt and dpkg agree;
 #   - custom/<package>.sh, if any: per-package fixes;
-#   - glibc programs' interpreter set to ld-dn ($DN/usr/lib/deb-native/ld-dn,
-#     native/ld-dn.c): the kernel runs it first however the program is
-#     started, and it sets up the shim and hands over to glibc's real
-#     loader, the libc6 stand-in's, with LD_LIBRARY_PATH pointing at
-#     $DN/usr/lib/aarch64-linux-gnu and $DN/usr/lib (ld-dn.c, not a
-#     per-file RUNPATH rewrite here -- RUNPATH is not inherited
-#     transitively, and rewriting it on a tightly-packed ET_EXEC binary can
-#     corrupt its program headers, see
-#     docs/log/findings/patchelf-et-exec-runpath.md). Done here, not
+#   - glibc programs' interpreter set to the prefix's own glibc loader
+#     (default $DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1, from
+#     this project's packaged libc6): the kernel loads it directly, and it
+#     reads the shim from $DN/etc/ld.so.preload and the prefix's library
+#     dirs from $DN/usr/etc/ld.so.cache -- the dn-glibc runtime
+#     (docs/spec/dn-glibc-prefix.md), no ld-dn trampoline. Done here, not
 #     after install, so it is right before any maintainer script runs the
-#     binary;
+#     binary. Library search is the loader's cache rather than a per-file
+#     RUNPATH rewrite: RUNPATH is not inherited transitively, and rewriting
+#     it on a tightly-packed ET_EXEC binary can corrupt its program headers
+#     (docs/log/findings/patchelf-et-exec-runpath.md). Overridable via
+#     DN_INTERP: the bootstrap points it back at ld-dn until the fused
+#     loader is installed;
 #   - program scripts' "#!" line pointed into the prefix: sh/dash ->
 #     $DN/usr/bin/dash, bash -> $DN/usr/bin/bash (both real, apt-installed
 #     packages with ld-dn as their own interpreter -- the kernel following
@@ -42,7 +44,11 @@ DN=${2:?usage: dn-translate-deb.sh DEB_FILE PREFIX}
 case "$DEB" in /*) ;; *) DEB="$PWD/$DEB" ;; esac
 case "$DN" in /*) ;; *) DN="$PWD/$DN" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-LD="$DN/usr/lib/deb-native/ld-dn"
+# Runtime interpreter: the prefix's own glibc loader (dn-glibc-prefix.md).
+# DN_INTERP lets the bootstrap/transition point this back at the ld-dn
+# trampoline ($DN/usr/lib/deb-native/ld-dn) until the fused loader is in
+# place.
+LD="${DN_INTERP:-$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1}"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -78,14 +84,13 @@ find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print | while IFS= 
   case "$interp" in
     */ld-linux-aarch64.so.1|*/ld-dn) [ "$interp" = "$LD" ] || patchelf --set-interpreter "$LD" "$f" ;;
   esac
-  # Library search (Termux's own default library dirs plus the ELF's own
-  # RUNPATH entries) is ld-dn's job now, via LD_LIBRARY_PATH set once per
-  # process (native/ld-dn.c) -- not a per-file RUNPATH rewrite here.
+  # Library search is the fused loader's ld.so.cache now
+  # ($DN/usr/etc/ld.so.cache, built by our libc-bin's ldconfig), which
+  # covers the whole load graph -- not a per-file RUNPATH rewrite here.
   # RUNPATH is not inherited transitively anyway (a library's own RUNPATH
-  # does not help its own dependencies), so the per-file rewrite this used
-  # to do was needed for every .so in a package, not just the executable;
-  # LD_LIBRARY_PATH covers the whole load graph in one place. Also avoids
-  # patchelf corrupting the program header table of a tightly-packed
+  # does not help its own dependencies), so a per-file rewrite would be
+  # needed for every .so in a package, not just the executable. It also
+  # avoids patchelf corrupting the program header table of a tightly-packed
   # ET_EXEC binary with no room to grow (found on gcc's cc1,
   # docs/log/findings/patchelf-et-exec-runpath.md).
 done
