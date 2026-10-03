@@ -2203,8 +2203,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dl-cache
  #ifndef add_system_dir
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- pristine/p/sysdeps/generic/dn-prefix.h	1970-01-01 08:00:00.000000000 +0800
-+++ work/sysdeps/generic/dn-prefix.h	2026-10-03 22:27:47.553471757 +0700
-@@ -0,0 +1,150 @@
++++ work/sysdeps/generic/dn-prefix.h	2026-10-03 22:41:34.145471442 +0700
+@@ -0,0 +1,152 @@
 +/* deb-native: run-time prefix derivation
 +   (docs/spec/dn-glibc-prefix.md, "Runtime prefix self-derivation").
 +
@@ -2328,7 +2328,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefi
 +  if (pfx == NULL || pl == 0 || path == NULL || path[0] != '/')
 +    return path;
 +
-+  if (bl > 0 && __dn_starts (path, built))
++  if (bl > 0 && __dn_starts (path, built)
++      && (path[bl] == '\0' || path[bl] == '/'))
 +    {
 +      size_t rest = strlen (path + bl);
 +      if (pl + rest + 1 > bufsz)
@@ -2338,7 +2339,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefi
 +      return buf;
 +    }
 +
-+  if (__dn_starts_n (path, pfx, pl))
++  if (__dn_starts_n (path, pfx, pl)
++      && (path[pl] == '\0' || path[pl] == '/'))
 +    return path;
 +
 +  for (i = 0; roots[i] != NULL; ++i)
