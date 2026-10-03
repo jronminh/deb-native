@@ -127,6 +127,8 @@ static void dn_init(void) {
   }
   g_rootlen = g_root ? strlen(g_root) : 0;
   g_debug = getenv("DN_REDIRECT_DEBUG") != NULL;
+  if (g_debug)
+    fprintf(stderr, "[path-redirect] root=%s\n", g_root ? g_root : "(null)");
   g_bionic_preload = getenv("DN_BIONIC_PRELOAD");
   const char *rp = getenv("DN_REDIRECT_PREFIXES");
   if (rp && *rp) {
