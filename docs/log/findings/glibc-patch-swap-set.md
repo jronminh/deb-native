@@ -1,4 +1,4 @@
-# Findings: the exact overlay set for Debian `libc6`/`libc-bin` (2026-10-03)
+# Findings: the exact swap set for Debian `libc6`/`libc-bin` (2026-10-03)
 
 > Template: [`templates/docs.template.md`](../../../templates/docs.template.md)
 > (fix the relative path to match this file's depth). Read a doc's
@@ -10,9 +10,9 @@
 > already covers.
 
 **Impact: Isolated.** An alternative deployment for the `dn-glibc` prefix is
-to install Debian's own `libc6`/`libc-bin` `.deb`s unchanged and overlay only
+to install Debian's own `libc6`/`libc-bin` `.deb`s unchanged and swap in only
 the files our Android patch actually changes, instead of shipping a full
-rebuilt glibc. This entry pins that overlay set exactly: **10 files**, found
+rebuilt glibc. This entry pins that swap set exactly: **10 files**, found
 from the glibc source plus the debug info in our own build. Most of the
 patch's effect is already inside `libc.so.6`; the rest of the 283 files that
 differ from Debian differ only because of build config/toolchain, not the
@@ -32,7 +32,7 @@ patch. No code changed -- this is the analysis a deployment plan needs.
 ## Related docs
 
 - [`../../spec/dn-glibc-prefix.md`](../../spec/dn-glibc-prefix.md) -- the
-  next-gen prefix this overlay would deploy.
+  next-gen prefix this swap would deploy.
 - [`../../spec/shim-coverage.md`](../../spec/shim-coverage.md) -- documents
   the NSS stubs and why NSS reads are not shimmable.
 - [`own-glibc-missing-libc-bin.md`](own-glibc-missing-libc-bin.md) -- why
@@ -46,7 +46,7 @@ Deploying `dn-glibc` could install Debian's real `libc6` and `libc-bin`
 packages as-is (real, held packages) and then overwrite only the handful of
 files the Android patch changes. That avoids maintaining a full forked glibc
 `.deb`, and shrinks the per-prefix rebuild to those few files. Its
-correctness depends entirely on knowing the overlay set exactly.
+correctness depends entirely on knowing the swap set exactly.
 
 ## Why a binary comparison fails
 
@@ -81,7 +81,7 @@ Counts: **103** changed code sources, **24** changed headers.
 
 ## The swap set
 
-The overlay is these **10 files** (paths relative to the prefix; all under
+The swap is these **10 files** (paths relative to the prefix; all under
 `usr/lib/aarch64-linux-gnu/` for the libraries):
 
 | # | file | why |
@@ -118,7 +118,7 @@ Debian glibc is identical. The full account is in
 [`../../spec/shim-coverage.md`](../../spec/shim-coverage.md) ("NSS lookups --
 confirmed out of the shim's reach"); the patch's `nss/nss_files/files-*.c`
 edits therefore land in `libc.so.6`, which is already file 1 above. The two
-stubs are correctly *not* in the overlay set.
+stubs are correctly *not* in the swap set.
 
 ## Limits
 
@@ -130,7 +130,7 @@ stubs are correctly *not* in the overlay set.
   asm-level change) would still need a patched-vs-unpatched build to settle.
   A pristine build with the same configure is the definitive check if doubt
   remains.
-- Any overlay must be built for the **target prefix**: paths such as the
+- Any swap must be built for the **target prefix**: paths such as the
   loader's cache file, `ldconfig`'s sysconfdir and the `paths.h` macros are
   baked at compile time, so a `.dn` build cannot be dropped into another
   prefix. See `own-glibc-missing-libc-bin.md`.
