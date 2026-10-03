@@ -91,8 +91,7 @@ mkdir -p "$DN/usr/etc/ld.so.conf.d"
 printf 'include %s/usr/etc/ld.so.conf.d/*.conf\n' "$DN" > "$DN/usr/etc/ld.so.conf"
 printf '%s/usr/lib/aarch64-linux-gnu\n%s/usr/lib\n' "$DN" "$DN" > "$DN/usr/etc/ld.so.conf.d/dn.conf"
 
-# ldconfig's SYSCONFDIR is still baked to the build prefix, so steer -f/-C at
-# this prefix explicitly (its writer path is an open item -- the loader's
-# reader path, by contrast, is already derived).
+# ldconfig now derives its own cache/conf/aux paths from the live prefix
+# (elf/ldconfig.c, dn-prefix.h), so no -C/-f steering is needed.
 echo "Running the prefix's own ldconfig ..."
-"$DN/usr/sbin/ldconfig" -f "$DN/usr/etc/ld.so.conf" -C "$DN/usr/etc/ld.so.cache"
+"$DN/usr/sbin/ldconfig"

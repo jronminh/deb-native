@@ -45,7 +45,16 @@ umask 022
 NEWPREFIX=${1:?usage: setup-apt-prefix.sh NEWPREFIX [suite]}
 case "$NEWPREFIX" in /*) ;; *) NEWPREFIX="$PWD/$NEWPREFIX" ;; esac
 SUITE=${2:-stable}
-DN_GLIBC_DEBS=${DN_GLIBC_DEBS:?DN_GLIBC_DEBS must point at a dir with libc6.deb, libc-bin.deb, path-redirect.so (dn-install-glibc.sh)}
+# The glibc bundle (DN_GLIBC_DEBS): a dir with libc6.deb, libc-bin.deb,
+# path-redirect.so and files/ (dn-install-glibc.sh).  When unset, fetch the
+# rolling bundle published by .github/workflows/build-glibc.yml.
+if [ -z "${DN_GLIBC_DEBS:-}" ]; then
+  DN_BUNDLE_TMP=$(mktemp -d)
+  echo "Fetching the glibc bundle from GitHub ..."
+  curl -fsSL "${DN_GLIBC_BUNDLE_URL:-https://github.com/jronminh/deb-native/releases/download/glibc-bundle/dn-glibc-bundle.tar.gz}" \
+    | tar xz -C "$DN_BUNDLE_TMP"
+  DN_GLIBC_DEBS="$DN_BUNDLE_TMP"
+fi
 case "$DN_GLIBC_DEBS" in /*) ;; *) DN_GLIBC_DEBS="$PWD/$DN_GLIBC_DEBS" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 INSTALL="$HERE/../install"
