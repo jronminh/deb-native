@@ -139,7 +139,12 @@ put "$CACHE/dn-shell" "$BINDIR/dn-perl"
 # and no boot, so a package that merely ships one (nethack-common's save
 # recovery, survey 2026-09-27) installs, and the service is not run. Running services is the planned runit translation
 # (TODO.md), not this.
-for n in chown chgrp dpkg-statoverride update-rc.d invoke-rc.d deb-systemd-helper deb-systemd-invoke; do
+# ldconfig: libc-bin's own postinst/trigger calls `ldconfig -r "$DPKG_ROOT/"`
+# unconditionally (Debian's chroot-style cache rebuild) -- root-only like
+# chown/chgrp above, chroot(2) always fails unprivileged. The real,
+# SYSCONFDIR-targeted rebuild (no -r) is dn-install-glibc.sh's own job, run
+# by full path, never through this name on PATH.
+for n in chown chgrp dpkg-statoverride update-rc.d invoke-rc.d deb-systemd-helper deb-systemd-invoke ldconfig; do
   printf '#!/system/bin/sh\nexit 0\n' > "$PRIV/$n"
   chmod 755 "$PRIV/$n"
   # 0.1.x put them in usr/bin, where a Debian package's real one would land.

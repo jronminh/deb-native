@@ -1,9 +1,16 @@
 #!/bin/sh
 # Bootstrap a self-contained prefix (docs/spec/design.md): a small, complete
 # Debian root of its own -- its own apt/dpkg (Termux's, through stand-in
-# launchers), database, libc6 and Debian base -- so installing into it is
+# launchers), this project's own libc6/libc-bin (the dn-glibc fused loader,
+# docs/spec/dn-glibc-prefix.md) and Debian base -- so installing into it is
 # plain apt, as on Debian. Termux is never touched: everything lives under
 # NEWPREFIX, and the prefix's apt reads only its own config.
+#
+# Every fresh prefix is dn-glibc, out of the box: the fused loader, not
+# ld-dn. DN_GLIBC_DEBS (required) is a directory holding this project's own
+# prebuilt libc6.deb, libc-bin.deb and fused path-redirect.so --
+# dn-install-glibc.sh's usage comment has the details; how those get built
+# and distributed is a separate, still-open question, not this script's.
 #
 # Built the way debootstrap builds a root: the base first, apt last.
 #
@@ -11,8 +18,9 @@
 #     1. directories, an empty dpkg database (arm64 foreign), the runtime
 #        (shim, dn-shell, dn-run, privilege layer), $NEWPREFIX/root ->
 #        Termux's home -- all needed before any package script runs
-#     2. a throwaway apt config in a temp dir: Debian index, then the
-#        stand-ins libc6/dpkg/apt (dn-standins.sh) straight into the prefix
+#     2. a throwaway apt config in a temp dir: Debian index, then this
+#        project's own libc6/libc-bin (dn-install-glibc.sh) and the
+#        dpkg/apt stand-ins (dn-standins.sh) straight into the prefix
 #     3. download the base and its dependencies (apt --download-only)
 #     4. translate every .deb in Termux's environment (dn-translate-deb.sh:
 #        one unpack/repack each, maintainer scripts included), as a batch
@@ -36,6 +44,8 @@ umask 022
 NEWPREFIX=${1:?usage: setup-apt-prefix.sh NEWPREFIX [suite]}
 case "$NEWPREFIX" in /*) ;; *) NEWPREFIX="$PWD/$NEWPREFIX" ;; esac
 SUITE=${2:-stable}
+DN_GLIBC_DEBS=${DN_GLIBC_DEBS:?DN_GLIBC_DEBS must point at a dir with libc6.deb, libc-bin.deb, path-redirect.so (dn-install-glibc.sh)}
+case "$DN_GLIBC_DEBS" in /*) ;; *) DN_GLIBC_DEBS="$PWD/$DN_GLIBC_DEBS" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 INSTALL="$HERE/../install"
 RUNTIME="$HERE/../runtime"
@@ -96,15 +106,18 @@ EOF
 # and Debian's real packages install and work unmodified -- no reason to
 # fork them too, which would only cascade into their own dependencies
 # (confirmed hitting this trying to patch libc6-dev standalone first).
-# libc-bin stays pinned deliberately: unlike libc6-dev/libc-dev-bin it is
-# *path*-sensitive (`ldconfig` is compiled against a sysconfdir and must be
-# this project's own build to write the prefix's ld.so.cache), so it gets
-# replaced by our own package (dn-package-libc-bin.sh) and the pin keeps
-# Debian's real one from sneaking back in on `apt upgrade` -- exactly like
-# libc6. libc-l10n/locales stay pinned too: the same exact-version-match
-# reasoning as libc6-dev likely applies, but is not yet tested.
+# libc6/libc-bin are NOT in this pin: docs/log/findings/libc6-dev-gap-closed.md
+# hit the exact same solver breakage one package over (libc6-dev pinned -1 ->
+# apt refuses it as a candidate at all, "no installation candidate", even
+# for its own already-installed version) and the fix there was removing the
+# pin. Here dpkg hold (dn-install-glibc.sh's install_held) already does the
+# "keep apt upgrade from swapping in Debian's real build" job -- unlike
+# libc6-dev at the time of that finding, so there is no need for the
+# solver-breaking -1 on top. libc-l10n/locales stay pinned: the same
+# exact-version-match reasoning as libc6-dev likely applies, but is not yet
+# tested, and neither has a dpkg hold of its own.
 write_pins() {  # FILE
-  PINNED="libc6:arm64 libc-bin:arm64 libc-l10n:arm64 locales:arm64 dpkg:arm64 apt:arm64 sudo:arm64 doas:arm64"
+  PINNED="libc-l10n:arm64 locales:arm64 dpkg:arm64 apt:arm64 sudo:arm64 doas:arm64"
   for o in deb.debian.org security.debian.org; do
     printf 'Package: %s\nPin: origin %s\nPin-Priority: -1\n\n' "$PINNED" "$o"
   done > "$1"
@@ -208,15 +221,35 @@ $TAPT update
 # Rewrite Architecture: all -> arm64 once; stage 1 reuses these verified,
 # rewritten lists instead of downloading and rewriting them again.
 "$INSTALL/dn-debian-index.sh" "$T/lists"
-mark stage "installing the stand-ins libc6, dpkg, apt"
+mark stage "installing this project's own libc6/libc-bin (dn-glibc)"
+"$HERE/dn-install-glibc.sh" "$DN" "$DN_GLIBC_DEBS"
+mark stage "installing the stand-ins dpkg, apt"
 DN_APT_CONFIG="$T/apt.conf" "$HERE/dn-standins.sh" "$DN"
 
 # 3. Download the base and its dependencies.
+#
+# Don't trust apt's own solver to *add* packages at this stage: the status
+# file has almost nothing in it yet (libc6/libc-bin just forced in ahead of
+# their own Depends, docs/spec/dn-glibc-prefix.md "Bootstrap note" --
+# dpkg --force-depends configures them, but apt still correctly sees
+# libgcc-s1 as genuinely missing), and in that state a plain
+# `apt-get install $BASE` refuses to auto-add even a plain, satisfiable
+# Depends one level down (confirmed on fe2: `apt-get install libgcc-s1`
+# alone reports its own Depends: gcc-14-base "not going to be installed",
+# while naming both explicitly resolves fine). So compute the full
+# transitive closure ourselves with `apt-cache depends --recurse` (the
+# debootstrap technique) and hand apt the complete, explicit list -- it
+# only needs to download then, not decide what's needed.
+mark stage "resolving the base's full dependency closure"
+BASE_CLOSURE=$(APT_CONFIG="$T/apt.conf" apt-cache depends --recurse \
+  --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces \
+  --no-enhances -i $BASE $KEYRING 2>/dev/null \
+  | grep -v '^ ' | grep -v '^<' | sort -u)
 mark stage "downloading the base"
 # The total comes from apt's own "N newly installed" line (install.sh reads
 # it), not from a separate dry run over the whole index.
 mark count Get: auto packages
-$TAPT install -y --download-only $BASE $KEYRING
+$TAPT install -y --download-only $BASE_CLOSURE
 
 # 4. Translate, in Termux's environment (no apt hooks involved), several
 # packages at once (DN_JOBS, default: the CPU count): each is independent

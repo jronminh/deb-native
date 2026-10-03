@@ -1,23 +1,22 @@
 #!/bin/sh
 # Build and install the prefix's stand-in packages (docs/spec/design.md):
 # real packages in the prefix's own dpkg database, under Debian's names,
-# whose content is Termux's. Idempotent; re-run after Termux upgrades glibc,
-# dpkg or apt to track their versions.
+# whose content is Termux's. Idempotent; re-run after Termux upgrades dpkg
+# or apt to track their versions.
 #
-#   libc6  links at Debian's libc6 paths into Termux's glibc. Debian's own
-#          libc6 is killed at startup by Android's seccomp filter
-#          (set_robust_list -> SIGSYS); Termux's glibc is the same library
-#          patched for Android at source level. File list taken from
-#          Debian's real libc6 .deb, matched by soname. (From naibed's
-#          dn-base-env.sh, nested paths.)
 #   dpkg   the prefix's dpkg, dpkg-query, dpkg-deb, dpkg-split: launchers
 #          running Termux's own with the prefix's admindir/instdir.
 #   apt    the prefix's apt, apt-get, apt-cache, apt-mark, apt-config:
 #          launchers running Termux's own with the prefix's APT_CONFIG.
 #
+# libc6 is no longer a stand-in here: the dn-glibc prefix installs this
+# project's own-built, prefix-targeted glibc instead (dn-install-glibc.sh,
+# docs/spec/dn-glibc-prefix.md), a real package, not a Termux link-through.
+#
 # Versions are Termux's real ones ("<termux version>-0dn1"), so a Debian
-# "Depends: libc6 (>= X)" still tells the truth. Debian's own libc6, dpkg
-# and apt are pinned to -1 in the prefix (setup-apt-prefix.sh).
+# "Depends: dpkg (>= X)" still tells the truth. Debian's own dpkg and apt
+# are pinned to -1 in the prefix (setup-apt-prefix.sh); libc6 is pinned too,
+# for dn-install-glibc.sh's own build instead.
 #
 # Usage: dn-standins.sh PREFIX
 set -eu
@@ -25,7 +24,6 @@ umask 022
 DN=${1:?usage: dn-standins.sh PREFIX}
 case "$DN" in /*) ;; *) DN="$PWD/$DN" ;; esac
 TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
-GLIBC_LIB="$TP/glibc/lib"
 MIRROR=${DN_DEBIAN_MIRROR:-https://deb.debian.org/debian}
 DPKG="$TP/bin/dpkg --admindir=$DN/var/lib/dpkg --instdir=$DN --force-not-root --force-script-chrootless"
 
@@ -89,27 +87,6 @@ launcher() {  # PKGDIR NAME COMMAND...
     "$DN" "$DN" "$*" > "$WORK/$d/usr/bin/$n"
   chmod 755 "$WORK/$d/usr/bin/$n"
 }
-
-# --- libc6 -------------------------------------------------------------
-V=$(ver glibc)
-if installed libc6 "$V"; then echo "libc6:arm64 is already the newest version ($V)."; else
-  # The bootstrap has no prefix apt config yet: it passes its temporary one.
-  debian_deb libc6 "$WORK/libc6-debian.deb"
-  control libc6 "$V" same "Termux glibc presented as Debian's libc6"
-  L="$WORK/libc6/usr/lib/aarch64-linux-gnu"
-  mkdir -p "$L"
-  missing=""
-  for f in $(dpkg-deb -c "$WORK/libc6-debian.deb" | awk '{print $6}' | grep '^\./usr/lib/aarch64-linux-gnu/[^/]*[^/]$'); do
-    so=${f##*/}
-    if [ -e "$GLIBC_LIB/$so" ]; then ln -s "$GLIBC_LIB/$so" "$L/$so"; else missing="$missing $so"; fi
-  done
-  [ -d "$GLIBC_LIB/gconv" ] && ln -s "$GLIBC_LIB/gconv" "$L/gconv"
-  ln -s aarch64-linux-gnu/ld-linux-aarch64.so.1 "$WORK/libc6/usr/lib/ld-linux-aarch64.so.1"
-  [ -L "$L/libc.so.6" ] && [ -L "$L/ld-linux-aarch64.so.1" ] \
-    || { echo "E: Termux's glibc lacks libc.so.6 or its loader; is glibc installed?" >&2; exit 1; }
-  install_pkg libc6 "$V"
-  [ -z "$missing" ] || echo "W: Termux's glibc lacks these libc6 sonames (not linked):$missing"
-fi
 
 # --- dpkg --------------------------------------------------------------
 V=$(ver dpkg 3)

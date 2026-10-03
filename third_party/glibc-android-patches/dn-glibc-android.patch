@@ -51,7 +51,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/dirent/bug-readdir1.c wo
  
    /* open a dir stream */
 -  dirp = opendir ("/tmp");
-+  dirp = opendir ("/data/data/com.termux/files/home/.dn/tmp");
++  dirp = opendir ("@TERMUX_PREFIX@/tmp");
    if (dirp == NULL)
      {
        if (errno == ENOENT)
@@ -97,7 +97,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld
       the work but this does not matter, since it is not for production
       use.  */
 -  static const char preload_file[] = "/etc/ld.so.preload";
-+  static const char preload_file[] = "/data/data/com.termux/files/home/.dn/etc/ld.so.preload";
++  static const char preload_file[] = "@TERMUX_PREFIX@/etc/ld.so.preload";
    if (__glibc_unlikely (__access (preload_file, R_OK) == 0))
      {
        /* Read the contents of the file.  */
@@ -109,7 +109,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/sprof.c work/elf/spr
  
        /* First add the debuginfo file name only.  */
 -      static const char usrlibdebug[]= "/usr/lib/debug/";
-+      static const char usrlibdebug[]= "/data/data/com.termux/files/home/.dn/lib/debug/";
++      static const char usrlibdebug[]= "@TERMUX_PREFIX@/lib/debug/";
        char *workbuf = (char *) alloca (sizeof (usrlibdebug)
  				       + (cp - realname)
  				       + strlen (debuginfo_fname));
@@ -119,8 +119,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/sprof.c work/elf/spr
  	 files are created.  */
 -      ext_name = (char *) alloca (strlen (name) + sizeof "/var/tmp/");
 -      stpcpy (stpcpy (ext_name, "/var/tmp/"), name);
-+      ext_name = (char *) alloca (strlen (name) + sizeof "/data/data/com.termux/files/home/.dn/var/tmp/");
-+      stpcpy (stpcpy (ext_name, "/data/data/com.termux/files/home/.dn/var/tmp/"), name);
++      ext_name = (char *) alloca (strlen (name) + sizeof "@TERMUX_PREFIX@/var/tmp/");
++      stpcpy (stpcpy (ext_name, "@TERMUX_PREFIX@/var/tmp/"), name);
        name = ext_name;
  
        fd = open (ext_name, O_RDONLY);
@@ -145,7 +145,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/hesiod/hesiod.c work/hes
  #include "hesiod_p.h"
  
 -#define _PATH_HESIOD_CONF "/etc/hesiod.conf"
-+#define _PATH_HESIOD_CONF "/data/data/com.termux/files/home/.dn/etc/hesiod.conf"
++#define _PATH_HESIOD_CONF "@TERMUX_PREFIX@/etc/hesiod.conf"
  
  /* Forward */
  
@@ -157,7 +157,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/include/shm-directory.h 
  
  /* The directory that contains shared POSIX objects.  */
 -#define SHMDIR _PATH_DEV "shm/"
-+#define SHMDIR "/data/data/com.termux/files/home/.dn/tmp/"
++#define SHMDIR "@TERMUX_PREFIX@/tmp/"
  
  struct shmdir_name
  {
@@ -170,8 +170,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/io/bug-ftw3.c work/io/bu
  {
 -  char tmp[] = "/tmp/ftwXXXXXX";
 -  char tmp2[] = "/tmp/ftwXXXXXX/ftwXXXXXX";
-+  char tmp[] = "/data/data/com.termux/files/home/.dn/tmp/ftwXXXXXX";
-+  char tmp2[] = "/data/data/com.termux/files/home/.dn/tmp/ftwXXXXXX/ftwXXXXXX";
++  char tmp[] = "@TERMUX_PREFIX@/tmp/ftwXXXXXX";
++  char tmp2[] = "@TERMUX_PREFIX@/tmp/ftwXXXXXX/ftwXXXXXX";
    char *dname;
    char *dname2;
    int r;
@@ -183,7 +183,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/io/bug-ftw4.c work/io/bu
  main (void)
  {
 -  char name[32] = "/tmp/ftwXXXXXX", *p;
-+  char name[32] = "/data/data/com.termux/files/home/.dn/tmp/ftwXXXXXX", *p;
++  char name[32] = "@TERMUX_PREFIX@/tmp/ftwXXXXXX", *p;
    int ret, i, result = 0, fd, fd1, fd2;
  
    if (mkdtemp (name) == NULL)
@@ -195,7 +195,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/libio/oldiopopen.c work/
  	__close (_IO_fileno ((FILE *) p));
  
 -      execl ("/bin/sh", "sh", "-c", command, (char *) 0);
-+      execl ("/data/data/com.termux/files/home/.dn/bin/sh", "sh", "-c", command, (char *) 0);
++      execl ("@TERMUX_PREFIX@/bin/sh", "sh", "-c", command, (char *) 0);
        _exit (127);
      }
    __close (child_end);
@@ -207,7 +207,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/libio/stdio.h work/libio
  #if defined __USE_MISC || defined __USE_XOPEN
  /* Default path prefix for `tempnam' and `tmpnam'.  */
 -# define P_tmpdir	"/tmp"
-+# define P_tmpdir	"/data/data/com.termux/files/home/.dn/tmp"
++# define P_tmpdir	"@TERMUX_PREFIX@/tmp"
  #endif
  
  #define L_tmpnam 20
@@ -279,8 +279,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/fstab.h work/misc/f
   */
 -#define	_PATH_FSTAB	"/etc/fstab"
 -#define	FSTAB		"/etc/fstab"	/* deprecated */
-+#define	_PATH_FSTAB	"/data/data/com.termux/files/home/.dn/etc/fstab"
-+#define	FSTAB		"/data/data/com.termux/files/home/.dn/etc/fstab"	/* deprecated */
++#define	_PATH_FSTAB	"@TERMUX_PREFIX@/etc/fstab"
++#define	FSTAB		"@TERMUX_PREFIX@/etc/fstab"	/* deprecated */
  
  #define	FSTAB_RW	"rw"		/* read/write device */
  #define	FSTAB_RQ	"rq"		/* read/write with quotas */
@@ -304,7 +304,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/misc/ttyent.h work/misc/
  #include <features.h>
  
 -#define	_PATH_TTYS	"/etc/ttys"
-+#define	_PATH_TTYS	"/data/data/com.termux/files/home/.dn/etc/ttys"
++#define	_PATH_TTYS	"@TERMUX_PREFIX@/etc/ttys"
  
  #define	_TTYS_OFF	"off"
  #define	_TTYS_ON	"on"
@@ -316,7 +316,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/nis_call.c work/nis/
  
    int saved_errno = errno;
 -  if (stat64 ("/var/nis/NIS_COLD_START", &st) < 0)
-+  if (stat64 ("/data/data/com.termux/files/home/.dn/var/nis/NIS_COLD_START", &st) < 0)
++  if (stat64 ("@TERMUX_PREFIX@/var/nis/NIS_COLD_START", &st) < 0)
      st.st_mtime = nis_cold_start_mtime + 1;
    __set_errno (saved_errno);
  
@@ -328,7 +328,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/nis_file.c work/nis/
  
  
 -static const char cold_start_file[] = "/var/nis/NIS_COLD_START";
-+static const char cold_start_file[] = "/data/data/com.termux/files/home/.dn/var/nis/NIS_COLD_START";
++static const char cold_start_file[] = "@TERMUX_PREFIX@/var/nis/NIS_COLD_START";
  
  directory_obj *
  readColdStartFile (void)
@@ -340,7 +340,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nis/ypclnt.c work/nis/yp
  /* This should only be defined on systems with a BSD compatible ypbind */
  #ifndef BINDINGDIR
 -# define BINDINGDIR "/var/yp/binding"
-+# define BINDINGDIR "/data/data/com.termux/files/home/.dn/var/yp/binding"
++# define BINDINGDIR "@TERMUX_PREFIX@/var/yp/binding"
  #endif
  
  struct dom_binding
@@ -416,15 +416,15 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/nscd-client.h work/
  
  /* Path of the file where the PID of the running system is stored.  */
 -#define _PATH_NSCDPID	 "/var/run/nscd/nscd.pid"
-+#define _PATH_NSCDPID	 "/data/data/com.termux/files/home/.dn/var/run/nscd/nscd.pid"
++#define _PATH_NSCDPID	 "@TERMUX_PREFIX@/var/run/nscd/nscd.pid"
  
  /* Path for the Unix domain socket.  */
 -#define _PATH_NSCDSOCKET "/var/run/nscd/socket"
-+#define _PATH_NSCDSOCKET "/data/data/com.termux/files/home/.dn/var/run/nscd/socket"
++#define _PATH_NSCDSOCKET "@TERMUX_PREFIX@/var/run/nscd/socket"
  
  /* Path for the configuration file.  */
 -#define _PATH_NSCDCONF	 "/etc/nscd.conf"
-+#define _PATH_NSCDCONF	 "/data/data/com.termux/files/home/.dn/etc/nscd.conf"
++#define _PATH_NSCDCONF	 "@TERMUX_PREFIX@/etc/nscd.conf"
  
  /* Maximum allowed length for the key.  */
  #define MAXKEYLEN 1024
@@ -440,15 +440,15 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nscd/nscd.h work/nscd/ns
 -#define _PATH_NSCD_HOSTS_DB	"/var/cache/nscd/hosts"
 -#define _PATH_NSCD_SERVICES_DB	"/var/cache/nscd/services"
 -#define _PATH_NSCD_NETGROUP_DB	"/var/cache/nscd/netgroup"
-+#define _PATH_NSCD_PASSWD_DB	"/data/data/com.termux/files/home/.dn/var/cache/nscd/passwd"
-+#define _PATH_NSCD_GROUP_DB	"/data/data/com.termux/files/home/.dn/var/cache/nscd/group"
-+#define _PATH_NSCD_HOSTS_DB	"/data/data/com.termux/files/home/.dn/var/cache/nscd/hosts"
-+#define _PATH_NSCD_SERVICES_DB	"/data/data/com.termux/files/home/.dn/var/cache/nscd/services"
-+#define _PATH_NSCD_NETGROUP_DB	"/data/data/com.termux/files/home/.dn/var/cache/nscd/netgroup"
++#define _PATH_NSCD_PASSWD_DB	"@TERMUX_PREFIX@/var/cache/nscd/passwd"
++#define _PATH_NSCD_GROUP_DB	"@TERMUX_PREFIX@/var/cache/nscd/group"
++#define _PATH_NSCD_HOSTS_DB	"@TERMUX_PREFIX@/var/cache/nscd/hosts"
++#define _PATH_NSCD_SERVICES_DB	"@TERMUX_PREFIX@/var/cache/nscd/services"
++#define _PATH_NSCD_NETGROUP_DB	"@TERMUX_PREFIX@/var/cache/nscd/netgroup"
  
  /* Path used when not using persistent storage.  */
 -#define _PATH_NSCD_XYZ_DB_TMP	"/var/run/nscd/dbXXXXXX"
-+#define _PATH_NSCD_XYZ_DB_TMP	"/data/data/com.termux/files/home/.dn/var/run/nscd/dbXXXXXX"
++#define _PATH_NSCD_XYZ_DB_TMP	"@TERMUX_PREFIX@/var/run/nscd/dbXXXXXX"
  
  /* Maximum alignment requirement we will encounter.  */
  #define BLOCK_ALIGN_LOG 3
@@ -1075,7 +1075,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/bug-erange.c work/ns
        printf ("gethostbyname_r failed: %s (errno: %m)\n", strerror (res));
  
 -      if (access ("/etc/resolv.conf", R_OK))
-+      if (access ("/data/data/com.termux/files/home/.dn/etc/resolv.conf", R_OK))
++      if (access ("@TERMUX_PREFIX@/etc/resolv.conf", R_OK))
  	{
  	  puts ("DNS probably not set up");
  	  return 0;
@@ -1089,12 +1089,12 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
 -DATABASES = $(wildcard /etc/passwd /etc/group /etc/ethers /etc/protocols \
 -		       /etc/rpc /etc/services /etc/shadow /etc/gshadow \
 -		       /etc/netgroup)
-+DATABASES = $(wildcard /data/data/com.termux/files/home/.dn/etc/passwd /data/data/com.termux/files/home/.dn/etc/group /data/data/com.termux/files/home/.dn/etc/ethers /data/data/com.termux/files/home/.dn/etc/protocols \
-+		       /data/data/com.termux/files/home/.dn/etc/rpc /data/data/com.termux/files/home/.dn/etc/services /data/data/com.termux/files/home/.dn/etc/shadow /data/data/com.termux/files/home/.dn/etc/gshadow \
-+		       /data/data/com.termux/files/home/.dn/etc/netgroup)
++DATABASES = $(wildcard @TERMUX_PREFIX@/etc/passwd @TERMUX_PREFIX@/etc/group @TERMUX_PREFIX@/etc/ethers @TERMUX_PREFIX@/etc/protocols \
++		       @TERMUX_PREFIX@/etc/rpc @TERMUX_PREFIX@/etc/services @TERMUX_PREFIX@/etc/shadow @TERMUX_PREFIX@/etc/gshadow \
++		       @TERMUX_PREFIX@/etc/netgroup)
  
 -VAR_DB = /var/db
-+VAR_DB = /data/data/com.termux/files/home/.dn/var/db
++VAR_DB = @TERMUX_PREFIX@/var/db
  
  AWK = awk
  MAKEDB = makedb --quiet
@@ -1103,7 +1103,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
  
  
 -$(VAR_DB)/passwd.db: /etc/passwd
-+$(VAR_DB)/passwd.db: /data/data/com.termux/files/home/.dn/etc/passwd
++$(VAR_DB)/passwd.db: @TERMUX_PREFIX@/etc/passwd
  	@printf %s "$(patsubst %.db,%,$(@F))... "
  	@$(AWK) 'BEGIN { FS=":"; OFS=":" } \
  		 /^[ \t]*$$/ { next } \
@@ -1112,7 +1112,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
  	@echo "done."
  
 -$(VAR_DB)/group.db: /etc/group
-+$(VAR_DB)/group.db: /data/data/com.termux/files/home/.dn/etc/group
++$(VAR_DB)/group.db: @TERMUX_PREFIX@/etc/group
  	@printf %s "$(patsubst %.db,%,$(@F))... "
  	@$(AWK) 'BEGIN { FS=":"; OFS=":" } \
  		 /^[ \t]*$$/ { next } \
@@ -1121,7 +1121,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
  	@echo "done."
  
 -$(VAR_DB)/ethers.db: /etc/ethers
-+$(VAR_DB)/ethers.db: /data/data/com.termux/files/home/.dn/etc/ethers
++$(VAR_DB)/ethers.db: @TERMUX_PREFIX@/etc/ethers
  	@printf %s "$(patsubst %.db,%,$(@F))... "
  	@$(AWK) '/^[ \t]*$$/ { next } \
  		 /^[ \t]*#/ { next } \
@@ -1130,7 +1130,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
  	@echo "done."
  
 -$(VAR_DB)/protocols.db: /etc/protocols
-+$(VAR_DB)/protocols.db: /data/data/com.termux/files/home/.dn/etc/protocols
++$(VAR_DB)/protocols.db: @TERMUX_PREFIX@/etc/protocols
  	@printf %s "$(patsubst %.db,%,$(@F))... "
  	@$(AWK) '/^[ \t]*$$/ { next } \
  		 /^[ \t]*#/ { next } \
@@ -1139,7 +1139,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
  	@echo "done."
  
 -$(VAR_DB)/rpc.db: /etc/rpc
-+$(VAR_DB)/rpc.db: /data/data/com.termux/files/home/.dn/etc/rpc
++$(VAR_DB)/rpc.db: @TERMUX_PREFIX@/etc/rpc
  	@printf %s "$(patsubst %.db,%,$(@F))... "
  	@$(AWK) '/^[ \t]*$$/ { next } \
  		 /^[ \t]*#/ { next } \
@@ -1148,7 +1148,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
  	@echo "done."
  
 -$(VAR_DB)/services.db: /etc/services
-+$(VAR_DB)/services.db: /data/data/com.termux/files/home/.dn/etc/services
++$(VAR_DB)/services.db: @TERMUX_PREFIX@/etc/services
  	@printf %s "$(patsubst %.db,%,$(@F))... "
  	@$(AWK) 'BEGIN { FS="[ \t/]+" } \
  		 /^[ \t]*$$/ { next } \
@@ -1157,7 +1157,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
  	@echo "done."
  
 -$(VAR_DB)/shadow.db: /etc/shadow
-+$(VAR_DB)/shadow.db: /data/data/com.termux/files/home/.dn/etc/shadow
++$(VAR_DB)/shadow.db: @TERMUX_PREFIX@/etc/shadow
  	@printf %s "$(patsubst %.db,%,$(@F))... "
  	@$(AWK) 'BEGIN { FS=":"; OFS=":" } \
  		 /^[ \t]*$$/ { next } \
@@ -1166,7 +1166,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
  	fi
  
 -$(VAR_DB)/gshadow.db: /etc/gshadow
-+$(VAR_DB)/gshadow.db: /data/data/com.termux/files/home/.dn/etc/gshadow
++$(VAR_DB)/gshadow.db: @TERMUX_PREFIX@/etc/gshadow
  	@printf %s "$(patsubst %.db,%,$(@F))... "
  	@$(AWK) 'BEGIN { FS=":"; OFS=":" } \
  		 /^[ \t]*$$/ { next } \
@@ -1175,7 +1175,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/db-Makefile work/nss
  	fi
  
 -$(VAR_DB)/netgroup.db: /etc/netgroup
-+$(VAR_DB)/netgroup.db: /data/data/com.termux/files/home/.dn/etc/netgroup
++$(VAR_DB)/netgroup.db: @TERMUX_PREFIX@/etc/netgroup
  	@printf %s "$(patsubst %.db,%,$(@F))... "
  	@$(AWK) 'BEGIN { ini=1 } \
  		 /^[ \t]*$$/ { next } \
@@ -1242,7 +1242,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/getaddrinfo.c work/n
  
  /* Name of the config file for RFC 3484 sorting (for now).  */
 -#define GAICONF_FNAME "/etc/gai.conf"
-+#define GAICONF_FNAME "/data/data/com.termux/files/home/.dn/etc/gai.conf"
++#define GAICONF_FNAME "@TERMUX_PREFIX@/etc/gai.conf"
  
  
  /* Non-zero if we are supposed to reload the config file automatically
@@ -1335,7 +1335,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/lckpwdf.c work/nss/l
  
  /* Name of the lock file.  */
 -#define PWD_LOCKFILE "/etc/.pwd.lock"
-+#define PWD_LOCKFILE "/data/data/com.termux/files/home/.dn/etc/.pwd.lock"
++#define PWD_LOCKFILE "@TERMUX_PREFIX@/etc/.pwd.lock"
  
  /* How long to wait for getting the lock before returning with an
     error.  */
@@ -1368,7 +1368,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-gr
    if (ent->stream == NULL)
      {
 -      ent->stream = __nss_files_fopen ("/etc/group");
-+      ent->stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/group");
++      ent->stream = __nss_files_fopen ("@TERMUX_PREFIX@/etc/group");
  
        if (ent->stream == NULL)
  	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
@@ -1380,7 +1380,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-in
      ent->blacklist.current = 0;
  
 -  ent->stream = __nss_files_fopen ("/etc/group");
-+  ent->stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/group");
++  ent->stream = __nss_files_fopen ("@TERMUX_PREFIX@/etc/group");
  
    if (ent->stream == NULL)
      status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
@@ -1392,7 +1392,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-pw
    if (ent->stream == NULL)
      {
 -      ent->stream = __nss_files_fopen ("/etc/passwd");
-+      ent->stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/passwd");
++      ent->stream = __nss_files_fopen ("@TERMUX_PREFIX@/etc/passwd");
  
        if (ent->stream == NULL)
  	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
@@ -1404,7 +1404,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_compat/compat-sp
    if (ent->stream == NULL)
      {
 -      ent->stream = __nss_files_fopen ("/etc/shadow");
-+      ent->stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/shadow");
++      ent->stream = __nss_files_fopen ("@TERMUX_PREFIX@/etc/shadow");
  
        if (ent->stream == NULL)
  	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
@@ -1416,7 +1416,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-XXX.
  #define ENTNAME_r	CONCAT(ENTNAME,_r)
  
 -#define DATAFILE	"/etc/" DATABASE
-+#define DATAFILE	"/data/data/com.termux/files/home/.dn/etc/" DATABASE
++#define DATAFILE	"@TERMUX_PREFIX@/etc/" DATABASE
  
  #ifdef NEED_H_ERRNO
  # include <netdb.h>
@@ -1428,7 +1428,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-alia
    if (*stream == NULL)
      {
 -      *stream = __nss_files_fopen ("/etc/aliases");
-+      *stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/aliases");
++      *stream = __nss_files_fopen ("@TERMUX_PREFIX@/etc/aliases");
  
        if (*stream == NULL)
  	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
@@ -1437,7 +1437,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-alia
  _nss_files_setaliasent (void)
  {
 -  return __nss_files_data_setent (nss_file_aliasent, "/etc/aliases");
-+  return __nss_files_data_setent (nss_file_aliasent, "/data/data/com.termux/files/home/.dn/etc/aliases");
++  return __nss_files_data_setent (nss_file_aliasent, "@TERMUX_PREFIX@/etc/aliases");
  }
  libc_hidden_def (_nss_files_setaliasent)
  
@@ -1446,7 +1446,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-alia
    struct nss_files_per_file_data *data;
    enum nss_status status = __nss_files_data_open (&data, nss_file_aliasent,
 -						  "/etc/aliases", errnop, NULL);
-+						  "/data/data/com.termux/files/home/.dn/etc/aliases", errnop, NULL);
++						  "@TERMUX_PREFIX@/etc/aliases", errnop, NULL);
    if (status != NSS_STATUS_SUCCESS)
      return status;
  
@@ -1463,12 +1463,12 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-init
 -  register_file (cb, hstdb, "/etc/resolv.conf", 1);
 -  register_file (cb, servdb, "/etc/services", 0);
 -  register_file (cb, netgrdb, "/etc/netgroup", 0);
-+  register_file (cb, pwddb, "/data/data/com.termux/files/home/.dn/etc/passwd", 0);
-+  register_file (cb, grpdb, "/data/data/com.termux/files/home/.dn/etc/group", 0);
++  register_file (cb, pwddb, "@TERMUX_PREFIX@/etc/passwd", 0);
++  register_file (cb, grpdb, "@TERMUX_PREFIX@/etc/group", 0);
 +  register_file (cb, hstdb, "/system/etc/hosts", 0);
-+  register_file (cb, hstdb, "/data/data/com.termux/files/home/.dn/etc/resolv.conf", 1);
-+  register_file (cb, servdb, "/data/data/com.termux/files/home/.dn/etc/services", 0);
-+  register_file (cb, netgrdb, "/data/data/com.termux/files/home/.dn/etc/netgroup", 0);
++  register_file (cb, hstdb, "@TERMUX_PREFIX@/etc/resolv.conf", 1);
++  register_file (cb, servdb, "@TERMUX_PREFIX@/etc/services", 0);
++  register_file (cb, netgrdb, "@TERMUX_PREFIX@/etc/netgroup", 0);
  }
  libc_hidden_def (_nss_files_init)
  
@@ -1480,7 +1480,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-init
  			   int *errnop)
  {
 -  FILE *stream = __nss_files_fopen ("/etc/group");
-+  FILE *stream = __nss_files_fopen ("/data/data/com.termux/files/home/.dn/etc/group");
++  FILE *stream = __nss_files_fopen ("@TERMUX_PREFIX@/etc/group");
    if (stream == NULL)
      {
        *errnop = errno;
@@ -1492,7 +1492,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/nss/nss_files/files-netg
  #include <nss_files.h>
  
 -#define DATAFILE	"/etc/netgroup"
-+#define DATAFILE	"/data/data/com.termux/files/home/.dn/etc/netgroup"
++#define DATAFILE	"@TERMUX_PREFIX@/etc/netgroup"
  
  libc_hidden_proto (_nss_files_endnetgrent)
  
@@ -1526,7 +1526,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/annexc.c work/posi
  #define HEADER_MAX          256
  
 -static char macrofile[] = "/tmp/annexc.XXXXXX";
-+static char macrofile[] = "/data/data/com.termux/files/home/.dn/tmp/annexc.XXXXXX";
++static char macrofile[] = "@TERMUX_PREFIX@/tmp/annexc.XXXXXX";
  
  /* <aio.h>.  */
  static const char *const aio_syms[] =
@@ -1538,7 +1538,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt1.c work
  do_test (void)
  {
 -  char fname[] = "/tmp/bug-getopt1.XXXXXX";
-+  char fname[] = "/data/data/com.termux/files/home/.dn/tmp/bug-getopt1.XXXXXX";
++  char fname[] = "@TERMUX_PREFIX@/tmp/bug-getopt1.XXXXXX";
    int fd = mkstemp (fname);
    if (fd == -1)
      {
@@ -1550,7 +1550,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt2.c work
  do_test (void)
  {
 -  char fname[] = "/tmp/bug-getopt2.XXXXXX";
-+  char fname[] = "/data/data/com.termux/files/home/.dn/tmp/bug-getopt2.XXXXXX";
++  char fname[] = "@TERMUX_PREFIX@/tmp/bug-getopt2.XXXXXX";
    int fd = mkstemp (fname);
    if (fd == -1)
      {
@@ -1562,7 +1562,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt3.c work
  do_test (void)
  {
 -  char fname[] = "/tmp/bug-getopt3.XXXXXX";
-+  char fname[] = "/data/data/com.termux/files/home/.dn/tmp/bug-getopt3.XXXXXX";
++  char fname[] = "@TERMUX_PREFIX@/tmp/bug-getopt3.XXXXXX";
    int fd = mkstemp (fname);
    if (fd == -1)
      {
@@ -1574,7 +1574,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt4.c work
  do_test (void)
  {
 -  char fname[] = "/tmp/bug-getopt4.XXXXXX";
-+  char fname[] = "/data/data/com.termux/files/home/.dn/tmp/bug-getopt4.XXXXXX";
++  char fname[] = "@TERMUX_PREFIX@/tmp/bug-getopt4.XXXXXX";
    int fd = mkstemp (fname);
    if (fd == -1)
      {
@@ -1586,7 +1586,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-getopt5.c work
  do_test (void)
  {
 -  char fname[] = "/tmp/bug-getopt5.XXXXXX";
-+  char fname[] = "/data/data/com.termux/files/home/.dn/tmp/bug-getopt5.XXXXXX";
++  char fname[] = "@TERMUX_PREFIX@/tmp/bug-getopt5.XXXXXX";
    int fd = mkstemp (fname);
    if (fd == -1)
      {
@@ -1598,7 +1598,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/posix/bug-regex9.c work/
  
  
 -static const char text[] = "#! /bin/sh";
-+static const char text[] = "#! /data/data/com.termux/files/home/.dn/bin/sh";
++static const char text[] = "#! @TERMUX_PREFIX@/bin/sh";
  
  int
  main (void)
@@ -1626,12 +1626,12 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/netdb.h work/reso
 -#define	_PATH_NSSWITCH_CONF	"/etc/nsswitch.conf"
 -#define	_PATH_PROTOCOLS		"/etc/protocols"
 -#define	_PATH_SERVICES		"/etc/services"
-+#define	_PATH_HEQUIV		"/data/data/com.termux/files/home/.dn/etc/hosts.equiv"
-+#define	_PATH_HOSTS		"/data/data/com.termux/files/home/.dn/etc/hosts"
-+#define	_PATH_NETWORKS		"/data/data/com.termux/files/home/.dn/etc/networks"
-+#define	_PATH_NSSWITCH_CONF	"/data/data/com.termux/files/home/.dn/etc/nsswitch.conf"
-+#define	_PATH_PROTOCOLS		"/data/data/com.termux/files/home/.dn/etc/protocols"
-+#define	_PATH_SERVICES		"/data/data/com.termux/files/home/.dn/etc/services"
++#define	_PATH_HEQUIV		"@TERMUX_PREFIX@/etc/hosts.equiv"
++#define	_PATH_HOSTS		"@TERMUX_PREFIX@/etc/hosts"
++#define	_PATH_NETWORKS		"@TERMUX_PREFIX@/etc/networks"
++#define	_PATH_NSSWITCH_CONF	"@TERMUX_PREFIX@/etc/nsswitch.conf"
++#define	_PATH_PROTOCOLS		"@TERMUX_PREFIX@/etc/protocols"
++#define	_PATH_SERVICES		"@TERMUX_PREFIX@/etc/services"
  
  
  __BEGIN_DECLS
@@ -1643,7 +1643,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/res_hconf.c work/
  #endif
  
 -#define _PATH_HOSTCONF	"/etc/host.conf"
-+#define _PATH_HOSTCONF	"/data/data/com.termux/files/home/.dn/etc/host.conf"
++#define _PATH_HOSTCONF	"@TERMUX_PREFIX@/etc/host.conf"
  
  /* Environment vars that all user to override default behavior:  */
  #define ENV_HOSTCONF	"RESOLV_HOST_CONF"
@@ -1655,7 +1655,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/resolv/resolv.h work/res
  
  #ifndef _PATH_RESCONF
 -#define _PATH_RESCONF        "/etc/resolv.conf"
-+#define _PATH_RESCONF        "/data/data/com.termux/files/home/.dn/etc/resolv.conf"
++#define _PATH_RESCONF        "@TERMUX_PREFIX@/etc/resolv.conf"
  #endif
  
  struct res_sym {
@@ -1667,7 +1667,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/bug7.c work
  {
    int lose = 0;
 -  char filename[] = "/tmp/bug7.XXXXXX";
-+  char filename[] = "/data/data/com.termux/files/home/.dn/tmp/bug7.XXXXXX";
++  char filename[] = "@TERMUX_PREFIX@/tmp/bug7.XXXXXX";
    FILE *fp;
  
    int fd = mkstemp (filename);
@@ -1677,8 +1677,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/bug7.c work
      FILE *file2;
 -    char filename1[] = "/tmp/bug7.XXXXXX";
 -    char filename2[] = "/tmp/bug7.XXXXXX";
-+    char filename1[] = "/data/data/com.termux/files/home/.dn/tmp/bug7.XXXXXX";
-+    char filename2[] = "/data/data/com.termux/files/home/.dn/tmp/bug7.XXXXXX";
++    char filename1[] = "@TERMUX_PREFIX@/tmp/bug7.XXXXXX";
++    char filename2[] = "@TERMUX_PREFIX@/tmp/bug7.XXXXXX";
      int ch;
  
      int fd1 = mkstemp (filename1);
@@ -1690,7 +1690,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf14.c w
    const char *tmpdir = getenv ("TMPDIR");
    if (tmpdir == NULL || tmpdir[0] == '\0')
 -    tmpdir = "/tmp";
-+    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
++    tmpdir = "@TERMUX_PREFIX@/tmp";
  
    char fname[strlen (tmpdir) + sizeof "/tst-scanf14.XXXXXX"];
    sprintf (fname, "%s/tst-scanf14.XXXXXX", tmpdir);
@@ -1702,7 +1702,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf15.c w
    const char *tmpdir = getenv ("TMPDIR");
    if (tmpdir == NULL || tmpdir[0] == '\0')
 -    tmpdir = "/tmp";
-+    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
++    tmpdir = "@TERMUX_PREFIX@/tmp";
  
    char fname[strlen (tmpdir) + sizeof "/tst-scanf15.XXXXXX"];
    sprintf (fname, "%s/tst-scanf15.XXXXXX", tmpdir);
@@ -1714,7 +1714,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf16.c w
    const char *tmpdir = getenv ("TMPDIR");
    if (tmpdir == NULL || tmpdir[0] == '\0')
 -    tmpdir = "/tmp";
-+    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
++    tmpdir = "@TERMUX_PREFIX@/tmp";
  
    char fname[strlen (tmpdir) + sizeof "/tst-scanf16.XXXXXX"];
    sprintf (fname, "%s/tst-scanf16.XXXXXX", tmpdir);
@@ -1726,7 +1726,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf17.c w
    const char *tmpdir = getenv ("TMPDIR");
    if (tmpdir == NULL || tmpdir[0] == '\0')
 -    tmpdir = "/tmp";
-+    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
++    tmpdir = "@TERMUX_PREFIX@/tmp";
  
    char fname[strlen (tmpdir) + sizeof "/tst-scanf17.XXXXXX"];
    sprintf (fname, "%s/tst-scanf17.XXXXXX", tmpdir);
@@ -1738,7 +1738,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf18.c w
    const char *tmpdir = getenv ("TMPDIR");
    if (tmpdir == NULL || tmpdir[0] == '\0')
 -    tmpdir = "/tmp";
-+    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
++    tmpdir = "@TERMUX_PREFIX@/tmp";
  
    char fname[strlen (tmpdir) + sizeof "/tst-scanf14.XXXXXX"];
    sprintf (fname, "%s/tst-scanf14.XXXXXX", tmpdir);
@@ -1750,7 +1750,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/scanf19.c w
    const char *tmpdir = getenv ("TMPDIR");
    if (tmpdir == NULL || tmpdir[0] == '\0')
 -    tmpdir = "/tmp";
-+    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
++    tmpdir = "@TERMUX_PREFIX@/tmp";
  
    char fname[strlen (tmpdir) + sizeof "/tst-scanf16.XXXXXX"];
    sprintf (fname, "%s/tst-scanf16.XXXXXX", tmpdir);
@@ -1762,7 +1762,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/tmpdir.c wo
  #  define P_tmpdir _P_tmpdir
  # else
 -#  define P_tmpdir "/tmp"
-+#  define P_tmpdir "/data/data/com.termux/files/home/.dn/tmp"
++#  define P_tmpdir "@TERMUX_PREFIX@/tmp"
  # endif
  #endif
  
@@ -1772,8 +1772,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/tmpdir.c wo
          dir = P_tmpdir;
 -      else if (strcmp (P_tmpdir, "/tmp") != 0 && direxists ("/tmp"))
 -        dir = "/tmp";
-+      else if (strcmp (P_tmpdir, "/data/data/com.termux/files/home/.dn/tmp") != 0 && direxists ("/data/data/com.termux/files/home/.dn/tmp"))
-+        dir = "/data/data/com.termux/files/home/.dn/tmp";
++      else if (strcmp (P_tmpdir, "@TERMUX_PREFIX@/tmp") != 0 && direxists ("@TERMUX_PREFIX@/tmp"))
++        dir = "@TERMUX_PREFIX@/tmp";
        else
          {
            __set_errno (ENOENT);
@@ -1785,7 +1785,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/tstscanf.c 
    if (argc == 2 && !strcmp (argv[1], "-opipe"))
      {
 -      out = popen ("/bin/cat", "w");
-+      out = popen ("/data/data/com.termux/files/home/.dn/bin/cat", "w");
++      out = popen ("@TERMUX_PREFIX@/bin/cat", "w");
        if (out == NULL)
  	{
  	  perror ("popen: /bin/cat");
@@ -1794,7 +1794,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/tstscanf.c 
    else if (argc == 3 && !strcmp (argv[1], "-ipipe"))
      {
 -      sprintf (buf, "/bin/cat %s", argv[2]);
-+      sprintf (buf, "/data/data/com.termux/files/home/.dn/bin/cat %s", argv[2]);
++      sprintf (buf, "@TERMUX_PREFIX@/bin/cat %s", argv[2]);
        in = popen (buf, "r");
        if (in == NULL)
  	{
@@ -1806,7 +1806,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdio-common/xbug.c work
    unsetenv ("LD_LIBRARY_PATH");
  
 -  if (!(input = popen("/bin/cat", "r")))
-+  if (!(input = popen("/data/data/com.termux/files/home/.dn/bin/cat", "r")))
++  if (!(input = popen("@TERMUX_PREFIX@/bin/cat", "r")))
      fprintf(stderr, "cannot run \n");
  
    ReadFile(&buffer, input);
@@ -1818,7 +1818,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/stdlib/isomac.c work/std
  #define HEADER_MAX          256
  
 -static char macrofile[] = "/tmp/isomac.XXXXXX";
-+static char macrofile[] = "/data/data/com.termux/files/home/.dn/tmp/isomac.XXXXXX";
++static char macrofile[] = "@TERMUX_PREFIX@/tmp/isomac.XXXXXX";
  
  /* ISO C header names including Amendment 1 (without ".h" suffix).  */
  static char *header[] =
@@ -1830,7 +1830,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sunrpc/key_call.c work/s
    uid_t ruid;
    uid_t euid;
 -  static const char MESSENGER[] = "/usr/etc/keyenvoy";
-+  static const char MESSENGER[] = "/data/data/com.termux/files/home/.dn/etc/keyenvoy";
++  static const char MESSENGER[] = "@TERMUX_PREFIX@/etc/keyenvoy";
  
    success = 1;
    sigemptyset (&mask);
@@ -1839,7 +1839,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sunrpc/key_call.c work/s
    if ((kcp->client == (CLIENT *) NULL))
      /* Use the AF_UNIX transport */
 -    kcp->client = clnt_create ("/var/run/keyservsock", KEY_PROG, vers, "unix");
-+    kcp->client = clnt_create ("/data/data/com.termux/files/home/.dn/var/run/keyservsock", KEY_PROG, vers, "unix");
++    kcp->client = clnt_create ("@TERMUX_PREFIX@/var/run/keyservsock", KEY_PROG, vers, "unix");
  
    if (kcp->client == (CLIENT *) NULL)
      return (CLIENT *) NULL;
@@ -1851,7 +1851,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_capture_
    /* Do not use getgrname_r because it does not work in statically
       linked binaries if the system libc is different.  */
 -  FILE *fp = fopen ("/etc/group", "rce");
-+  FILE *fp = fopen ("/data/data/com.termux/files/home/.dn/etc/group", "rce");
++  FILE *fp = fopen ("@TERMUX_PREFIX@/etc/group", "rce");
    if (fp == NULL)
      return false;
    __fsetlocking (fp, FSETLOCKING_BYCALLER);
@@ -1863,7 +1863,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_fuse.c w
    const char *tmpdir = getenv ("TMPDIR");
    if (tmpdir == NULL || tmpdir[0] == '\0')
 -    tmpdir = "/tmp";
-+    tmpdir = "/data/data/com.termux/files/home/.dn/tmp";
++    tmpdir = "@TERMUX_PREFIX@/tmp";
  
    char *prefix = xasprintf ("%s/glibc-tst-fuse.", tmpdir);
    support_fuse_mountpoints = support_fuse_mkdir (prefix);
@@ -1875,7 +1875,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/support/support_test_mai
        test_dir = getenv ("TMPDIR");
        if (test_dir == NULL || test_dir[0] == '\0')
 -        test_dir = "/tmp";
-+        test_dir = "/data/data/com.termux/files/home/.dn/tmp";
++        test_dir = "@TERMUX_PREFIX@/tmp";
      }
    if (support_set_test_dir != NULL)
      support_set_test_dir (test_dir);
@@ -1921,7 +1921,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/ldconfig
 +#else
 +# define _LDCONFIG_NAME "ldconfig"
 +#endif
-+#define _PATH_LDCONFIG_AUX_CACHE "/data/data/com.termux/files/home/.dn/var/cache/" _LDCONFIG_NAME "/aux-cache"
++#define _PATH_LDCONFIG_AUX_CACHE "@TERMUX_PREFIX@/var/cache/" _LDCONFIG_NAME "/aux-cache"
  
  /* Declared in cache.c.  */
  extern void print_cache (const char *cache_name);
@@ -1933,30 +1933,30 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/paths.h 
  
  /* Default search path. */
 -#define	_PATH_DEFPATH	"/usr/bin:/bin"
-+#define	_PATH_DEFPATH	"/data/data/com.termux/files/home/.dn/bin:/data/data/com.termux/files/home/.dn/bin:/system/bin"
++#define	_PATH_DEFPATH	"@TERMUX_PREFIX@/bin:@TERMUX_PREFIX@/bin:/system/bin"
  /* All standard utilities path. */
  #define	_PATH_STDPATH \
 -	"/usr/bin:/bin:/usr/sbin:/sbin"
-+	"/data/data/com.termux/files/home/.dn/bin:/data/data/com.termux/files/home/.dn/bin:/system/bin"
++	"@TERMUX_PREFIX@/bin:@TERMUX_PREFIX@/bin:/system/bin"
  
 -#define	_PATH_BSHELL	"/bin/sh"
-+#define	_PATH_BSHELL	"/data/data/com.termux/files/home/.dn/bin/sh"
++#define	_PATH_BSHELL	"@TERMUX_PREFIX@/bin/sh"
  #define	_PATH_CONSOLE	"/dev/console"
 -#define	_PATH_CSHELL	"/bin/csh"
 -#define	_PATH_DEVDB	"/var/run/dev.db"
-+#define	_PATH_CSHELL	"/data/data/com.termux/files/home/.dn/bin/csh"
-+#define	_PATH_DEVDB	"/data/data/com.termux/files/home/.dn/var/run/dev.db"
++#define	_PATH_CSHELL	"@TERMUX_PREFIX@/bin/csh"
++#define	_PATH_DEVDB	"@TERMUX_PREFIX@/var/run/dev.db"
  #define	_PATH_DEVNULL	"/dev/null"
  #define	_PATH_DRUM	"/dev/drum"
 -#define	_PATH_GSHADOW	"/etc/gshadow"
-+#define	_PATH_GSHADOW	"/data/data/com.termux/files/home/.dn/etc/gshadow"
++#define	_PATH_GSHADOW	"@TERMUX_PREFIX@/etc/gshadow"
  #define	_PATH_KMEM	"/dev/kmem"
 -#define	_PATH_LASTLOG	"/var/log/lastlog"
 -#define	_PATH_MAILDIR	"/var/mail"
 -#define	_PATH_MAN	"/usr/share/man"
-+#define	_PATH_LASTLOG	"/data/data/com.termux/files/home/.dn/var/log/lastlog"
-+#define	_PATH_MAILDIR	"/data/data/com.termux/files/home/.dn/var/mail"
-+#define	_PATH_MAN	"/data/data/com.termux/files/home/.dn/share/man"
++#define	_PATH_LASTLOG	"@TERMUX_PREFIX@/var/log/lastlog"
++#define	_PATH_MAILDIR	"@TERMUX_PREFIX@/var/mail"
++#define	_PATH_MAN	"@TERMUX_PREFIX@/share/man"
  #define	_PATH_MEM	"/dev/mem"
 -#define	_PATH_MNTTAB	"/etc/fstab"
 -#define	_PATH_MOUNTED	"/etc/mtab"
@@ -1966,24 +1966,24 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/paths.h 
 -#define	_PATH_SENDMAIL	"/usr/sbin/sendmail"
 -#define	_PATH_SHADOW	"/etc/shadow"
 -#define	_PATH_SHELLS	"/etc/shells"
-+#define	_PATH_MNTTAB	"/data/data/com.termux/files/home/.dn/etc/fstab"
-+#define	_PATH_MOUNTED	"/data/data/com.termux/files/home/.dn/etc/mtab"
-+#define	_PATH_NOLOGIN	"/data/data/com.termux/files/home/.dn/etc/nologin"
-+#define	_PATH_PRESERVE	"/data/data/com.termux/files/home/.dn/var/lib"
-+#define	_PATH_RWHODIR	"/data/data/com.termux/files/home/.dn/var/spool/rwho"
-+#define	_PATH_SENDMAIL	"/data/data/com.termux/files/home/.dn/bin/sendmail"
-+#define	_PATH_SHADOW	"/data/data/com.termux/files/home/.dn/etc/shadow"
-+#define	_PATH_SHELLS	"/data/data/com.termux/files/home/.dn/etc/shells"
++#define	_PATH_MNTTAB	"@TERMUX_PREFIX@/etc/fstab"
++#define	_PATH_MOUNTED	"@TERMUX_PREFIX@/etc/mtab"
++#define	_PATH_NOLOGIN	"@TERMUX_PREFIX@/etc/nologin"
++#define	_PATH_PRESERVE	"@TERMUX_PREFIX@/var/lib"
++#define	_PATH_RWHODIR	"@TERMUX_PREFIX@/var/spool/rwho"
++#define	_PATH_SENDMAIL	"@TERMUX_PREFIX@/bin/sendmail"
++#define	_PATH_SHADOW	"@TERMUX_PREFIX@/etc/shadow"
++#define	_PATH_SHELLS	"@TERMUX_PREFIX@/etc/shells"
  #define	_PATH_TTY	"/dev/tty"
  #define	_PATH_UNIX	"/vmunix"
 -#define	_PATH_UTMP	"/var/run/utmp"
 -#define	_PATH_UTMP_DB	"/var/run/utmp.db"
 -#define	_PATH_VI	"/usr/bin/vi"
 -#define	_PATH_WTMP	"/var/log/wtmp"
-+#define	_PATH_UTMP	"/data/data/com.termux/files/home/.dn/var/run/utmp"
-+#define	_PATH_UTMP_DB	"/data/data/com.termux/files/home/.dn/var/run/utmp.db"
-+#define	_PATH_VI	"/data/data/com.termux/files/home/.dn/bin/vi"
-+#define	_PATH_WTMP	"/data/data/com.termux/files/home/.dn/var/log/wtmp"
++#define	_PATH_UTMP	"@TERMUX_PREFIX@/var/run/utmp"
++#define	_PATH_UTMP_DB	"@TERMUX_PREFIX@/var/run/utmp.db"
++#define	_PATH_VI	"@TERMUX_PREFIX@/bin/vi"
++#define	_PATH_WTMP	"@TERMUX_PREFIX@/var/log/wtmp"
  
  /* Provide trailing slash, since mostly used for building pathnames. */
  #define	_PATH_DEV	"/dev/"
@@ -1991,10 +1991,10 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/paths.h 
 -#define	_PATH_VARDB	"/var/lib/misc/"
 -#define	_PATH_VARRUN	"/var/run/"
 -#define	_PATH_VARTMP	"/var/tmp/"
-+#define	_PATH_TMP	"/data/data/com.termux/files/home/.dn/tmp/"
-+#define	_PATH_VARDB	"/data/data/com.termux/files/home/.dn/var/lib/misc/"
-+#define	_PATH_VARRUN	"/data/data/com.termux/files/home/.dn/var/run/"
-+#define	_PATH_VARTMP	"/data/data/com.termux/files/home/.dn/var/tmp/"
++#define	_PATH_TMP	"@TERMUX_PREFIX@/tmp/"
++#define	_PATH_VARDB	"@TERMUX_PREFIX@/var/lib/misc/"
++#define	_PATH_VARRUN	"@TERMUX_PREFIX@/var/run/"
++#define	_PATH_VARTMP	"@TERMUX_PREFIX@/var/tmp/"
  
  #endif /* !_PATHS_H_ */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/unwind-resume.c work/sysdeps/generic/unwind-resume.c
@@ -2095,7 +2095,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/posix/system.c w
  #include <internal-signals.h>
  
 -#define	SHELL_PATH	"/bin/sh"	/* Path of the shell.  */
-+#define	SHELL_PATH	"/data/data/com.termux/files/home/.dn/bin/sh"	/* Path of the shell.  */
++#define	SHELL_PATH	"@TERMUX_PREFIX@/bin/sh"	/* Path of the shell.  */
  #define	SHELL_NAME	"sh"		/* Name to give it.  */
  
  
@@ -2116,7 +2116,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/confstr.h w
 +++ work/sysdeps/unix/confstr.h	2026-09-30 21:16:02.138188065 +0700
 @@ -1 +1 @@
 -#define	CS_PATH	"/bin:/usr/bin"
-+#define	CS_PATH	"/data/data/com.termux/files/home/.dn/bin:/data/data/com.termux/files/home/.dn/bin:/system/bin"
++#define	CS_PATH	"@TERMUX_PREFIX@/bin:@TERMUX_PREFIX@/bin:/system/bin"
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/aarch64/arch-syscall.h work/sysdeps/unix/sysv/linux/aarch64/arch-syscall.h
 --- pristine/p/sysdeps/unix/sysv/linux/aarch64/arch-syscall.h	2025-01-29 00:31:33.000000000 +0700
 +++ work/sysdeps/unix/sysv/linux/aarch64/arch-syscall.h	2026-09-30 21:16:02.138188065 +0700
@@ -3028,8 +3028,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  		   S_IRUSR | S_IWUSR);
 -  if (fd < 0 && errno == ENOENT && strcmp (P_tmpdir, "/tmp") != 0)
 -    fd = __open ("/tmp", O_RDWR | O_TMPFILE | O_EXCL | flags,
-+  if (fd < 0 && errno == ENOENT && strcmp (P_tmpdir, "/data/data/com.termux/files/home/.dn/tmp") != 0)
-+    fd = __open ("/data/data/com.termux/files/home/.dn/tmp", O_RDWR | O_TMPFILE | O_EXCL | flags,
++  if (fd < 0 && errno == ENOENT && strcmp (P_tmpdir, "@TERMUX_PREFIX@/tmp") != 0)
++    fd = __open ("@TERMUX_PREFIX@/tmp", O_RDWR | O_TMPFILE | O_EXCL | flags,
  		 S_IRUSR | S_IWUSR);
  
    return fd;
@@ -3041,7 +3041,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  #include <stdbool.h>
  
 -#define HOSTIDFILE "/etc/hostid"
-+#define HOSTIDFILE "/data/data/com.termux/files/home/.dn/etc/hostid"
++#define HOSTIDFILE "@TERMUX_PREFIX@/etc/hostid"
  
  #ifdef SET_PROCEDURE
  int
@@ -3384,31 +3384,31 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  
  /* Default search path. */
 -#define	_PATH_DEFPATH	"/usr/bin:/bin"
-+#define	_PATH_DEFPATH	"/data/data/com.termux/files/home/.dn/bin:/data/data/com.termux/files/home/.dn/bin:/system/bin"
++#define	_PATH_DEFPATH	"@TERMUX_PREFIX@/bin:@TERMUX_PREFIX@/bin:/system/bin"
  /* All standard utilities path. */
  #define	_PATH_STDPATH \
 -	"/usr/bin:/bin:/usr/sbin:/sbin"
-+	"/data/data/com.termux/files/home/.dn/bin:/data/data/com.termux/files/home/.dn/bin:/system/bin"
++	"@TERMUX_PREFIX@/bin:@TERMUX_PREFIX@/bin:/system/bin"
  
 -#define	_PATH_BSHELL	"/bin/sh"
-+#define	_PATH_BSHELL	"/data/data/com.termux/files/home/.dn/bin/sh"
++#define	_PATH_BSHELL	"@TERMUX_PREFIX@/bin/sh"
  #define	_PATH_CONSOLE	"/dev/console"
 -#define	_PATH_CSHELL	"/bin/csh"
 -#define	_PATH_DEVDB	"/var/run/dev.db"
-+#define	_PATH_CSHELL	"/data/data/com.termux/files/home/.dn/bin/csh"
-+#define	_PATH_DEVDB	"/data/data/com.termux/files/home/.dn/var/run/dev.db"
++#define	_PATH_CSHELL	"@TERMUX_PREFIX@/bin/csh"
++#define	_PATH_DEVDB	"@TERMUX_PREFIX@/var/run/dev.db"
  #define	_PATH_DEVNULL	"/dev/null"
  #define	_PATH_DRUM	"/dev/drum"
 -#define	_PATH_GSHADOW	"/etc/gshadow"
-+#define	_PATH_GSHADOW	"/data/data/com.termux/files/home/.dn/etc/gshadow"
++#define	_PATH_GSHADOW	"@TERMUX_PREFIX@/etc/gshadow"
  #define	_PATH_KLOG	"/proc/kmsg"
  #define	_PATH_KMEM	"/dev/kmem"
 -#define	_PATH_LASTLOG	"/var/log/lastlog"
 -#define	_PATH_MAILDIR	"/var/mail"
 -#define	_PATH_MAN	"/usr/share/man"
-+#define	_PATH_LASTLOG	"/data/data/com.termux/files/home/.dn/var/log/lastlog"
-+#define	_PATH_MAILDIR	"/data/data/com.termux/files/home/.dn/var/mail"
-+#define	_PATH_MAN	"/data/data/com.termux/files/home/.dn/share/man"
++#define	_PATH_LASTLOG	"@TERMUX_PREFIX@/var/log/lastlog"
++#define	_PATH_MAILDIR	"@TERMUX_PREFIX@/var/mail"
++#define	_PATH_MAN	"@TERMUX_PREFIX@/share/man"
  #define	_PATH_MEM	"/dev/mem"
 -#define	_PATH_MNTTAB	"/etc/fstab"
 -#define	_PATH_MOUNTED	"/etc/mtab"
@@ -3418,22 +3418,22 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 -#define	_PATH_SENDMAIL	"/usr/sbin/sendmail"
 -#define	_PATH_SHADOW	"/etc/shadow"
 -#define	_PATH_SHELLS	"/etc/shells"
-+#define	_PATH_MNTTAB	"/data/data/com.termux/files/home/.dn/etc/fstab"
-+#define	_PATH_MOUNTED	"/data/data/com.termux/files/home/.dn/etc/mtab"
-+#define	_PATH_NOLOGIN	"/data/data/com.termux/files/home/.dn/etc/nologin"
-+#define	_PATH_PRESERVE	"/data/data/com.termux/files/home/.dn/var/lib"
-+#define	_PATH_RWHODIR	"/data/data/com.termux/files/home/.dn/var/spool/rwho"
-+#define	_PATH_SENDMAIL	"/data/data/com.termux/files/home/.dn/bin/sendmail"
-+#define	_PATH_SHADOW	"/data/data/com.termux/files/home/.dn/etc/shadow"
-+#define	_PATH_SHELLS	"/data/data/com.termux/files/home/.dn/etc/shells"
++#define	_PATH_MNTTAB	"@TERMUX_PREFIX@/etc/fstab"
++#define	_PATH_MOUNTED	"@TERMUX_PREFIX@/etc/mtab"
++#define	_PATH_NOLOGIN	"@TERMUX_PREFIX@/etc/nologin"
++#define	_PATH_PRESERVE	"@TERMUX_PREFIX@/var/lib"
++#define	_PATH_RWHODIR	"@TERMUX_PREFIX@/var/spool/rwho"
++#define	_PATH_SENDMAIL	"@TERMUX_PREFIX@/bin/sendmail"
++#define	_PATH_SHADOW	"@TERMUX_PREFIX@/etc/shadow"
++#define	_PATH_SHELLS	"@TERMUX_PREFIX@/etc/shells"
  #define	_PATH_TTY	"/dev/tty"
  #define	_PATH_UNIX	"/boot/vmlinux"
 -#define	_PATH_UTMP	"/var/run/utmp"
 -#define	_PATH_VI	"/usr/bin/vi"
 -#define	_PATH_WTMP	"/var/log/wtmp"
-+#define	_PATH_UTMP	"/data/data/com.termux/files/home/.dn/var/run/utmp"
-+#define	_PATH_VI	"/data/data/com.termux/files/home/.dn/bin/vi"
-+#define	_PATH_WTMP	"/data/data/com.termux/files/home/.dn/var/log/wtmp"
++#define	_PATH_UTMP	"@TERMUX_PREFIX@/var/run/utmp"
++#define	_PATH_VI	"@TERMUX_PREFIX@/bin/vi"
++#define	_PATH_WTMP	"@TERMUX_PREFIX@/var/log/wtmp"
  
  /* Provide trailing slash, since mostly used for building pathnames. */
  #define	_PATH_DEV	"/dev/"
@@ -3441,10 +3441,10 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
 -#define	_PATH_VARDB	"/var/lib/misc/"
 -#define	_PATH_VARRUN	"/var/run/"
 -#define	_PATH_VARTMP	"/var/tmp/"
-+#define	_PATH_TMP	"/data/data/com.termux/files/home/.dn/tmp/"
-+#define	_PATH_VARDB	"/data/data/com.termux/files/home/.dn/var/lib/misc/"
-+#define	_PATH_VARRUN	"/data/data/com.termux/files/home/.dn/var/run/"
-+#define	_PATH_VARTMP	"/data/data/com.termux/files/home/.dn/var/tmp/"
++#define	_PATH_TMP	"@TERMUX_PREFIX@/tmp/"
++#define	_PATH_VARDB	"@TERMUX_PREFIX@/var/lib/misc/"
++#define	_PATH_VARRUN	"@TERMUX_PREFIX@/var/run/"
++#define	_PATH_VARTMP	"@TERMUX_PREFIX@/var/tmp/"
  
  #endif /* !_PATHS_H_ */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/riscv/dl-cache.h work/sysdeps/unix/sysv/linux/riscv/dl-cache.h
@@ -3455,7 +3455,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/unix/sysv/linux/
  	NULL,								\
        };								\
 -      const size_t lib_len = sizeof ("/lib") - 1;			\
-+      const size_t lib_len = sizeof ("/data/data/com.termux/files/home/.dn/lib") - 1;			\
++      const size_t lib_len = sizeof ("@TERMUX_PREFIX@/lib") - 1;			\
        size_t len = strlen (dir);					\
        char path[len + 10];						\
        const char **ptr;							\

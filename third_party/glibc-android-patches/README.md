@@ -28,13 +28,17 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
   verdict for all 54 loose files there is in `docs/spec/android-platform.md`,
   "Per-file verdict, everything in `gpkg/glibc/`" — this patch carries every file marked
   "fork" there. Highlights:
-  - `set-dirs.patch`: `@TERMUX_PREFIX@`/`@TERMUX_PREFIX_CLASSICAL@`
-    retargeted to this project's single fixed prefix,
-    `/data/data/com.termux/files/home/.dn` (deb-native has one prefix, not
-    Termux's dual-prefix concept); a handful of the ~66 touched files
-    hand-fixed where Debian's own patch series had already changed the
-    surrounding context from what `termux-pacman`'s patch (based on a
-    different, non-Debian glibc baseline) expected.
+  - `set-dirs.patch`: `@TERMUX_PREFIX_CLASSICAL@` resolved to the same
+    thing as `@TERMUX_PREFIX@` (deb-native has one prefix, not Termux's
+    dual-prefix concept); `@TERMUX_PREFIX@` itself is kept as a literal
+    placeholder in this checked-in patch, substituted for a real,
+    absolute prefix only when applying
+    (`dn-apply-glibc-patch.sh`, "Applying this patch" below) -- not baked
+    in, so the same patch can target a throwaway test prefix instead of
+    `/data/data/com.termux/files/home/.dn`. A handful of the ~66 touched
+    files were hand-fixed where Debian's own patch series had already
+    changed the surrounding context from what `termux-pacman`'s patch
+    (based on a different, non-Debian glibc baseline) expected.
   - `elf/rtld.c`: ignore the inherited `LD_PRELOAD` (skip the
     `state.preloadlist` source in `dl_main`; `--preload` and the
     `ld.so.preload` file are kept). deb-native's own addition, not Termux's:
@@ -107,6 +111,13 @@ own env-building job).
 
 ## Applying this patch
 
+The patch itself names no prefix: every path this build must know at
+compile time (`ld.so.preload`, the guest `/etc`, ...) is the placeholder
+`@TERMUX_PREFIX@`, substituted for a real, absolute, no-trailing-slash
+prefix only when applying -- so the same patch targets `.dn` (production)
+or a throwaway test prefix (`docs/spec/dn-glibc-prefix.md`, "Install
+order") without being hand-edited or re-generated.
+
 ```sh
 # 1. Base + Debian's own patches
 curl -sLO https://deb.debian.org/debian/pool/main/g/glibc/glibc_2.41.orig.tar.xz
@@ -116,34 +127,43 @@ tar xf glibc_2.41-12+deb13u4.debian.tar.xz -C pristine
 ( cd pristine && QUILT_PATCHES=debian/patches quilt push -a )
 cp -r pristine work
 
-# 2. Apply this patch -- new files (the fakesyscall.json substitutes,
-# android_passwd_group.c, shmem-android.c, the generated
-# disabled-syscall.h, ...) are part of the diff (as new-file hunks
-# against /dev/null) and land automatically; nothing to copy in by hand.
-patch -p1 -d work < dn-glibc-android.patch
+# 2. Apply this patch, substituting the target prefix for @TERMUX_PREFIX@
+# (../../scripts/bootstrap/dn-apply-glibc-patch.sh) -- new files (the
+# fakesyscall.json substitutes, android_passwd_group.c, shmem-android.c,
+# the generated disabled-syscall.h, ...) are part of the diff (as new-file
+# hunks against /dev/null) and land automatically; nothing to copy in by
+# hand.
+../../scripts/bootstrap/dn-apply-glibc-patch.sh work /data/data/com.termux/files/home/.dn
 ```
 
-`work/` is then ready for `configure`. This is exactly what
-`.github/workflows/build-glibc.yml` does.
+`work/` is then ready for `configure --prefix=<the same prefix>/usr`. This
+is exactly what `.github/workflows/build-glibc.yml` does.
 
 ## Regenerating this patch (e.g. against a newer glibc/Termux-patch version)
 
 This patch is `diff -ruN` between an unmodified `pristine/` (step 1 above,
 kept around) and a `work/` with every change applied — not maintained as a
-quilt series. To regenerate after touching `work/` further:
+quilt series. `work/` has a real prefix baked in (whatever
+`dn-apply-glibc-patch.sh` substituted), so regenerating must turn that back
+into the placeholder before it is trusted as the checked-in patch:
 
 ```sh
-diff -ruN --exclude='.pc' --exclude='debian' pristine work > dn-glibc-android.patch
+diff -ruN --exclude='.pc' --exclude='debian' pristine work \
+  | sed "s|/data/data/com.termux/files/home/.dn|@TERMUX_PREFIX@|g" \
+  > dn-glibc-android.patch
 ```
 
+(replace `/data/data/com.termux/files/home/.dn` with whatever prefix that
+`work/` was actually built for, if not `.dn`.)
+
 Round-trip-verify before trusting a regenerated patch (copy `pristine`
-fresh, apply the new patch, diff the result against `work` — should be
-empty):
+fresh, apply the new patch for the same prefix, diff the result against
+`work` — should be empty):
 
 ```sh
-cp -r pristine /tmp/roundtrip && cd /tmp/roundtrip
-patch -p1 --batch -i ../dn-glibc-android.patch
-diff -rq --exclude='.pc' --exclude='debian' . ../work   # expect nothing
+cp -r pristine /tmp/roundtrip
+../../scripts/bootstrap/dn-apply-glibc-patch.sh /tmp/roundtrip /data/data/com.termux/files/home/.dn
+diff -rq --exclude='.pc' --exclude='debian' /tmp/roundtrip work   # expect nothing
 ```
 
 Files sourced from `termux-pacman/glibc-packages` (`gpkg/glibc/`) that are
