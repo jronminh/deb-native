@@ -25,6 +25,16 @@ own-glibc patch is written, forked, and validated (clean-room rebuild,
 `hello` + NSS working) but not yet packaged as the prefix's real `libc6`
 by default (`install.sh` still defaults to `dn-standins.sh`'s stand-in).
 
+**0.6.0+s.1 (released, 2026-10-03)**: a fresh prefix is `dn-glibc` by
+default -- it fetches the glibc bundle, installs Debian's real
+`libc6`/`libc-bin`, then swaps in this project's own-built, Android-patched
+glibc (the fused loader + the 10 files) and the shim via
+`etc/ld.so.preload`; `ld-dn` is no longer the interpreter. Known open item:
+the static `ldconfig` writer has no run-time prefix derivation yet, so the
+bootstrap bypasses it (tracer + explicit `-C`/`-f`, non-fatal) until it gets
+its own -- `docs/spec/deploy.md` "Open items", and `tests/glibc-swap` is the
+acceptance test for this deploy.
+
 **Compilers: done, 2026-10-01.** `apt install gcc` installs and configures
 cleanly (`gcc`/`cpp`/`binutils` and their whole dependency chain);
 `libc6-dev` installs unmodified from Debian's real archive (no custom

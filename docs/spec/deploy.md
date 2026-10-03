@@ -110,5 +110,10 @@ acquisition step changes.
   above), then regenerate the patch and validate on CI.
 - **`ldconfig` writer**: its cache path (`LD_SO_CACHE`/`LD_SO_CONF`) is
   still baked; it needs the same run-time derivation as the loader.
+  Until then the bootstrap **bypasses** it: `dn-install-glibc.sh` runs the
+  static `ldconfig` under the tracer with explicit `-C`/`-f` (bare guest
+  paths bound into the prefix) and ignores its exit status, because a
+  static link leaves `__dn_prefix_get` NULL and `__dn_build` yields empty
+  paths (`Renaming of ~ to  failed`).
 - **Artifact distribution**: how the 10 files are shipped (release asset
   vs. `deb-native-repo`) is still open.

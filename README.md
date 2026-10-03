@@ -36,14 +36,14 @@ Without them those programs run untranslated.
 
 ```sh
 # pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.5.4-prealpha/install.sh | DEB_NATIVE_REF=v0.5.4-prealpha sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.6.0+s.1-prealpha/install.sh | DEB_NATIVE_REF=v0.6.0+s.1-prealpha sh
 
 # then restart Termux (or: . ~/.bashrc)
 apt install figlet # the prefix's apt: Debian's packages
 figlet hi          # an installed program, run by name
 ```
 
-Or the rolling edge: replace both `v0.5.4-prealpha` occurrences with `main`.
+Or the rolling edge: replace both `v0.6.0+s.1-prealpha` occurrences with `main`.
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 

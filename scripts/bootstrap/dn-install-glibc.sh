@@ -91,7 +91,19 @@ mkdir -p "$DN/usr/etc/ld.so.conf.d"
 printf 'include %s/usr/etc/ld.so.conf.d/*.conf\n' "$DN" > "$DN/usr/etc/ld.so.conf"
 printf '%s/usr/lib/aarch64-linux-gnu\n%s/usr/lib\n' "$DN" "$DN" > "$DN/usr/etc/ld.so.conf.d/dn.conf"
 
-# ldconfig now derives its own cache/conf/aux paths from the live prefix
-# (elf/ldconfig.c, dn-prefix.h), so no -C/-f steering is needed.
-echo "Running the prefix's own ldconfig ..."
-"$DN/usr/sbin/ldconfig"
+# ldconfig is a *static* binary: __dn_prefix_get is NULL in a static link, so
+# __dn_build yields empty cache/conf/aux paths and ldconfig aborts with
+# "Renaming of ~ to  failed" (docs/spec/deploy.md "Open items"). Bypass until
+# the writer gets its own run-time derivation: run it under the tracer, with
+# explicit -C/-f, so the bare guest paths are bound into the prefix, and never
+# abort the bootstrap on it. A missing ld.so.cache is not fatal (programs still
+# run), but a non-zero ldconfig under `set -e` would be.
+mkdir -p "$DN/var/cache/ldconfig"
+if [ -x "$DN/usr/lib/deb-native/dn-run" ] && [ -x "$DN/usr/lib/deb-native/dn-trace" ]; then
+  echo "Running the prefix's own ldconfig (via dn-trace) ..."
+  "$DN/usr/lib/deb-native/dn-run" --trace "$DN/usr/sbin/ldconfig" \
+    -C /usr/etc/ld.so.cache -f /usr/etc/ld.so.conf || true
+else
+  echo "Running the prefix's own ldconfig (untraced) ..."
+  "$DN/usr/sbin/ldconfig" || true
+fi
