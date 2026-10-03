@@ -86,6 +86,209 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-cache.c work/elf/
  					       PROT_READ);
  
        /* We can handle three different cache file formats here:
+diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/dl-load.c
+--- pristine/p/elf/dl-load.c	2026-09-30 10:54:41.388190836 +0700
++++ work/elf/dl-load.c	2026-10-03 22:14:23.293472064 +0700
+@@ -106,17 +106,72 @@
+    an array of concatenated strings to avoid relocations.  See
+    gen-trusted-dirs.awk.  */
+ #include "trusted-dirs.h"
++#include <dn-prefix.h>
+ 
+-static const char system_dirs[] = SYSTEM_DIRS;
+-static const size_t system_dirs_len[] =
++/* deb-native: the system search dirs come from the run-time prefix, not
++   the build-time SYSTEM_DIRS (which bakes the build prefix).  Each entry is
++   run through the same guest->prefix redirect as everything else, so the
++   loader follows the guest model -- it sees /usr/lib and the live prefix is
++   substituted at run time (docs/spec/dn-glibc-prefix.md).  */
++#define DN_MAX_SYSDIRS 16
++static char dn_system_dirs[1024];
++static size_t dn_system_dirs_len[DN_MAX_SYSDIRS];
++static size_t dn_nsystem_dirs_len;
++static size_t dn_system_dirs_max_len;
++static int dn_system_dirs_ready;
++
++static void
++dn_init_system_dirs (void)
+ {
+-  SYSTEM_DIRS_LEN
+-};
+-#define nsystem_dirs_len array_length (system_dirs_len)
++  const char *src;
++  char *dst;
++  char *end_buf;
++  if (dn_system_dirs_ready)
++    return;
++  src = SYSTEM_DIRS;
++  dst = dn_system_dirs;
++  end_buf = dn_system_dirs + sizeof (dn_system_dirs) - 1;
++  dn_nsystem_dirs_len = 0;
++  dn_system_dirs_max_len = 0;
++  while (*src != '\0' && dn_nsystem_dirs_len < DN_MAX_SYSDIRS)
++    {
++      const char *sep = src;
++      char seg[512];
++      size_t seglen, rl;
++      const char *red;
++      while (*sep != '\0' && *sep != ':')
++        ++sep;
++      seglen = (size_t) (sep - src);
++      if (seglen >= sizeof (seg))
++        seglen = sizeof (seg) - 1;
++      memcpy (seg, src, seglen);
++      seg[seglen] = '\0';
++      red = __dn_redirect (dst, (size_t) (end_buf - dst), seg);
++      rl = strlen (red);
++      if (red != dst)
++        memcpy (dst, red, rl + 1);
++      dst += rl;
++      dn_system_dirs_len[dn_nsystem_dirs_len] = rl;
++      if (rl > dn_system_dirs_max_len)
++        dn_system_dirs_max_len = rl;
++      ++dn_nsystem_dirs_len;
++      if (*sep == ':')
++        {
++          *dst++ = ':';
++          src = sep + 1;
++        }
++      else
++        src = sep;
++    }
++  *dst = '\0';
++  dn_system_dirs_ready = 1;
++}
+ 
+ static bool
+ is_trusted_path_normalize (const char *path, size_t len)
+ {
++  dn_init_system_dirs ();
++
+   if (len == 0)
+     return false;
+ 
+@@ -155,16 +210,16 @@
+   if (wnp == npath || wnp[-1] != '/')
+     *wnp++ = '/';
+ 
+-  const char *trun = system_dirs;
++  const char *trun = dn_system_dirs;
+ 
+-  for (size_t idx = 0; idx < nsystem_dirs_len; ++idx)
++  for (size_t idx = 0; idx < dn_nsystem_dirs_len; ++idx)
+     {
+-      if (wnp - npath >= system_dirs_len[idx]
+-	  && memcmp (trun, npath, system_dirs_len[idx]) == 0)
++      if (wnp - npath >= dn_system_dirs_len[idx]
++	  && memcmp (trun, npath, dn_system_dirs_len[idx]) == 0)
+ 	/* Found it.  */
+ 	return true;
+ 
+-      trun += system_dirs_len[idx] + 1;
++      trun += dn_system_dirs_len[idx] + 1;
+     }
+ 
+   return false;
+@@ -560,6 +615,8 @@
+   /* Initialize to please the compiler.  */
+   const char *errstring = NULL;
+ 
++  dn_init_system_dirs ();
++
+   /* First see whether we must forget the RUNPATH and RPATH from this
+      object.  */
+   if (__glibc_unlikely (GLRO(dl_inhibit_rpath) != NULL)
+@@ -678,6 +735,8 @@
+ 		const char *glibc_hwcaps_prepend,
+ 		const char *glibc_hwcaps_mask)
+ {
++  dn_init_system_dirs ();
++
+   size_t idx;
+   const char *strp;
+   struct r_search_path_elem *pelem, **aelem;
+@@ -697,7 +756,7 @@
+ 
+   /* First set up the rest of the default search directory entries.  */
+   aelem = __rtld_search_dirs.dirs = (struct r_search_path_elem **)
+-    malloc ((nsystem_dirs_len + 1) * sizeof (struct r_search_path_elem *));
++    malloc ((dn_nsystem_dirs_len + 1) * sizeof (struct r_search_path_elem *));
+   if (__rtld_search_dirs.dirs == NULL)
+     {
+       errstring = N_("cannot create search path array");
+@@ -710,7 +769,7 @@
+ 		/ sizeof (struct r_search_path_elem));
+ 
+   __rtld_search_dirs.dirs[0]
+-    = malloc (nsystem_dirs_len * round_size
++    = malloc (dn_nsystem_dirs_len * round_size
+ 	      * sizeof (*__rtld_search_dirs.dirs[0]));
+   if (__rtld_search_dirs.dirs[0] == NULL)
+     {
+@@ -720,7 +779,7 @@
+ 
+   __rtld_search_dirs.malloced = 0;
+   pelem = GL(dl_all_dirs) = __rtld_search_dirs.dirs[0];
+-  strp = system_dirs;
++  strp = dn_system_dirs;
+   idx = 0;
+ 
+   do
+@@ -733,21 +792,21 @@
+       pelem->where = NULL;
+ 
+       pelem->dirname = strp;
+-      pelem->dirnamelen = system_dirs_len[idx];
+-      strp += system_dirs_len[idx] + 1;
++      pelem->dirnamelen = dn_system_dirs_len[idx];
++      strp += dn_system_dirs_len[idx] + 1;
+ 
+       /* System paths must be absolute.  */
+       assert (pelem->dirname[0] == '/');
+       for (cnt = 0; cnt < ncapstr; ++cnt)
+ 	pelem->status[cnt] = unknown;
+ 
+-      pelem->next = (++idx == nsystem_dirs_len ? NULL : (pelem + round_size));
++      pelem->next = (++idx == dn_nsystem_dirs_len ? NULL : (pelem + round_size));
+ 
+       pelem += round_size;
+     }
+-  while (idx < nsystem_dirs_len);
++  while (idx < dn_nsystem_dirs_len);
+ 
+-  max_dirnamelen = SYSTEM_DIRS_MAX_LEN;
++  max_dirnamelen = dn_system_dirs_max_len;
+   *aelem = NULL;
+ 
+   /* This points to the map of the main object.  If there is no main
+@@ -2080,12 +2139,12 @@
+ 		 use a cache entry from any of these directories.  */
+ 	      if (__glibc_unlikely (l->l_flags_1 & DF_1_NODEFLIB))
+ 		{
+-		  const char *dirp = system_dirs;
++		  dn_init_system_dirs (); const char *dirp = dn_system_dirs;
+ 		  unsigned int cnt = 0;
+ 
+ 		  do
+ 		    {
+-		      if (memcmp (cached, dirp, system_dirs_len[cnt]) == 0)
++		      if (memcmp (cached, dirp, dn_system_dirs_len[cnt]) == 0)
+ 			{
+ 			  /* The prefix matches.  Don't use the entry.  */
+ 			  free (cached);
+@@ -2093,10 +2152,10 @@
+ 			  break;
+ 			}
+ 
+-		      dirp += system_dirs_len[cnt] + 1;
++		      dirp += dn_system_dirs_len[cnt] + 1;
+ 		      ++cnt;
+ 		    }
+-		  while (cnt < nsystem_dirs_len);
++		  while (cnt < dn_nsystem_dirs_len);
+ 		}
+ 
+ 	      if (cached != NULL)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/ldconfig.c work/elf/ldconfig.c
 --- pristine/p/elf/ldconfig.c	2026-09-30 10:54:41.488190836 +0700
 +++ work/elf/ldconfig.c	2026-09-30 10:31:29.716506952 +0700
