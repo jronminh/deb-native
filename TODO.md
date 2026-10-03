@@ -676,6 +676,11 @@ stub", the same ambiguity in prose.
 - Same pass: any other runtime name that no longer describes its mechanism
   (`dn-run`'s "launch classifier", "loader stub", ...); fold findings into
   the "Runtime component audit" above.
+- Replace `patchelf` with a self-brewed tool: its only remaining use is
+  reading/setting `PT_INTERP` in `dn-translate-deb.sh` -- one
+  program-header field (append the new interpreter string, repoint the
+  `PT_INTERP` phdr) -- so a small purpose-built tool drops the dependency
+  and its failure modes.
 
 ## Quick wins
 
