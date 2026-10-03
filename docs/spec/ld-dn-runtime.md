@@ -57,6 +57,18 @@ dynamic loader with a stack it built itself. The header comment
 The phases below are execution stages, not the file's layout. Line numbers
 are for `native/ld-dn.c` as of the commit that added this doc.
 
+**Fidelity is an assumption, not a proven fact.** The phase walkthrough
+below describes `ld-dn` as reproducing the kernel's interpreter handoff
+exactly. That is the design's central bet, and only parts of it have been
+checked: the stack-rebuild math was sanity-checked against one large
+`argv`/`envp` case (`TODO.md`, "Runtime component audit"), and the
+end-to-end runs and tests exercise the common paths. Nobody has verified,
+byte for byte, that the rebuilt stack/auxv and the manual loader mapping
+match what the kernel produces across the full range of Debian binaries.
+Whether glibc is fooled in every case is therefore the design's main
+unproven risk -- and the reason this file, not the shim or the tracer, is
+the one to re-audit the moment a new class of binary misbehaves.
+
 **Phase A -- before it runs (kernel side).** The kernel `execve()`s the
 original program, reads its `PT_INTERP` (the field `elf-interp-patch.md`
 describes), loads *this* file as the interpreter, and transfers control to
