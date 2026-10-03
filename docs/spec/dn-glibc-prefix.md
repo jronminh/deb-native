@@ -18,13 +18,15 @@ runtime it replaces: [`ld-dn-runtime.md`](ld-dn-runtime.md) and its
 
 Status: design + partial proof (2026-10-03). The mechanism is proven on the
 phone (`fused-shim-self-derives-prefix.md`); the packaging and install order
-below are what this branch is landing.
+below are what this branch is landing. [Runtime prefix
+self-derivation](#runtime-prefix-self-derivation) is design only.
 
 ## Contents
 
 - [What changes, and what does not](#what-changes-and-what-does-not)
 - [One small loader patch](#one-small-loader-patch)
 - [Fixed paths](#fixed-paths)
+- [Runtime prefix self-derivation](#runtime-prefix-self-derivation)
 - [The package set](#the-package-set)
 - [Install order](#install-order)
 - [The two interpreter targets](#the-two-interpreter-targets)
@@ -45,6 +47,9 @@ below are what this branch is landing.
   -- the proof this builds on.
 - [`../../docs/log/findings/own-glibc-missing-libc-bin.md`](../log/findings/own-glibc-missing-libc-bin.md)
   -- why `libc-bin` is a custom package here, and the fixed paths below.
+- [`../../docs/log/findings/glibc-patch-swap-set.md`](../log/findings/glibc-patch-swap-set.md)
+  -- the exact 10 files the patch affects; the set [Runtime prefix
+  self-derivation](#runtime-prefix-self-derivation) makes prefix-agnostic.
 
 ## What changes, and what does not
 
@@ -93,8 +98,10 @@ so dropping `LD_PRELOAD` costs nothing and restores `ld-dn`'s sanitization.
 `native/dn-run.c` was updated to match: it no longer injects the shim via
 `LD_PRELOAD`, only drops the inherited host preload.
 
-The one thing the loader still cannot do is derive the prefix at runtime; it
-does not need to, because the prefix is fixed.
+This fixed-prefix build needs no runtime derivation: every path is
+compile-time, and the shim arrives via `ld.so.preload`. The self-deriving
+variant that would make one build fit every prefix is a separate step --
+[Runtime prefix self-derivation](#runtime-prefix-self-derivation).
 
 ## Fixed paths
 
@@ -113,6 +120,80 @@ The `etc` vs `usr/etc` split is the one non-obvious wiring point: glibc's
 while `set-dirs.patch` retargets the guest `/etc` for `ld.so.preload`. Debian's
 own `libc-bin` installs `ld.so.conf` to the guest `etc`, so the conf must be
 placed at `<prefix>/usr/etc/` for our `ldconfig` to read it.
+
+## Runtime prefix self-derivation
+
+Everything above assumes a **fixed** prefix: glibc is configured
+`--prefix=<prefix>/usr`, so `<prefix>` is baked into the binaries. The Android
+patch touches only **10 files** (`../log/findings/glibc-patch-swap-set.md`),
+but a prebuilt set still fits exactly one prefix -- moving it, or installing
+under a different one, needs a rebuild. This section designs the fix: make
+those files **derive the prefix at run time**, so one prebuilt set works under
+any prefix, and a Debian base update never forces a glibc rebuild.
+
+Status: design only (2026-10-03). No code changed yet.
+
+### Each file knows its own path
+
+The shim already proves the pattern (`fused-shim-self-derives-prefix.md`):
+`dladdr` on one of its own symbols returns its own absolute load path, and
+stripping the shim's fixed suffix (`/usr/lib/deb-native/path-redirect.so`)
+yields the prefix. Every patched file can do the same -- self-contained, no
+cross-file coupling. glibc's own `$ORIGIN` (`elf/dl-origin.c`,
+`elf/dl-load.c`) is the same idea for DSOs.
+
+The loader is the one exception: it runs before the link maps (and libc)
+exist, so it cannot call `dladdr`. It does not need to -- it already holds its
+own path, taken from the main executable's `PT_INTERP`, in
+`_dl_rtld_map.l_name`:
+
+- `elf/rtld.c:1139-1149` -- `_dl_rtld_libname.name = main_map->l_addr + PT_INTERP`.
+- `elf/rtld.c:1703-1706` -- `_dl_rtld_map.l_name = _dl_rtld_libname->name`.
+
+`ld.so.preload` is read later (`elf/rtld.c:1825`), and the cache only on first
+lookup, so the loader path is available before either is used. So the loader
+is still "self", just through its own mechanism rather than `dladdr`.
+
+### Rule and per-file mechanism
+
+One rule everywhere: **prefix = this file's own absolute path minus its own
+fixed suffix.** All ten compute the same prefix because they share one layout.
+
+| file(s) | own path from | suffix stripped |
+| --- | --- | --- |
+| `ld-linux-aarch64.so.1` | `_dl_rtld_map.l_name` | `/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1` |
+| `libc.so.6`, `libresolv.so.2`, `libnsl.so.1`, `libnss_compat.so.2`, `libnss_hesiod.so.2`, `librt.so.1` | `dladdr` on a local symbol | `/usr/lib/aarch64-linux-gnu/<own name>` |
+| `ldconfig`, `localedef`, `iconv` | `dladdr`, or `readlink("/proc/self/exe")` | `/usr/sbin/ldconfig`, `/usr/bin/<own name>` |
+
+An alternative -- anchor every file to the *loader's* path (via
+`dl_iterate_phdr`, the interpreter's entry) -- is more robust if a library is
+relocated out of the layout, but couples every file to the loader and is
+inconsistent with the shim. Use it only as a fallback.
+
+### Patch shape
+
+1. A small `dn_prefix()` helper per file, computed once and cached.
+2. Replace the baked `"@TERMUX_PREFIX@/..."` literals with strings built at
+   run time from `dn_prefix()`.
+3. In the loader, `preload_file` (`elf/rtld.c:1825`) and `LD_SO_CACHE`
+   (`elf/dl-cache.c:390,395`) become run-time paths, computed after
+   `_dl_rtld_map.l_name` is set (line 1706) and before first use (line 1825).
+4. `@TERMUX_PREFIX@` stays as the build-time default/fallback; derivation
+   overrides it.
+
+### Caveats
+
+- **Sites that cannot be dynamic.** Where a `_PATH_*` macro is used in
+  `sizeof`, a static initializer, or a compile-time array, the site must be
+  rewritten individually -- a blanket text replacement will not compile.
+- **Ordering.** A few loader paths are needed very early; the derivation must
+  complete before the first use (safe at the 1706 mark).
+- **Writer/reader must agree.** `ldconfig` must derive the same prefix and
+  write `<prefix>/usr/etc/ld.so.cache`; the loader reads exactly there.
+- **Fallback.** When self-derivation yields nothing (`dladdr` fails, or the
+  loader's `l_name` is empty because it was run directly as a command), fall
+  back to the interpreter's path via `dl_iterate_phdr`, then to the compiled
+  default, rather than failing.
 
 ## The package set
 

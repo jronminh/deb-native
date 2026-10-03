@@ -102,3 +102,9 @@ below, oldest first, matching the original file's order.
   (`dn-package-libc-bin.sh`); install/wiring pending. Also pins the fused
   loader's fixed paths: cache/conf at `<prefix>/usr/etc/`, preload at
   `<prefix>/etc/`.
+- [`glibc-patch-swap-set.md`](glibc-patch-swap-set.md) — 2026-10-03,
+  **Isolated**: the exact overlay set for deploying Debian's own
+  `libc6`/`libc-bin` plus only the patched files — **10 files**, derived from
+  the glibc source + our build's DWARF (a binary diff flags 283 and is
+  meaningless: build config differs). `libnss_files`/`libnss_dns` stubs
+  confirmed upstream design, correctly excluded.
