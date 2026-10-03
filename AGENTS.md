@@ -28,6 +28,22 @@ Three path mechanisms:
 mount-namespace "view"; the view is impossible here, so these mechanisms
 replace the view's path-resolution job.
 
+## Priority: ship the idea fast, don't study every failure
+
+The owner's time is the scarce resource. When he has an idea, the goal is to
+get it built and testable the **fastest possible way** — optimize for the
+idea shipping soonest, not for understanding every failure.
+
+- Don't deep-dive a broken attempt across many branches. Try the shortest
+  path to a working result first; dig into the cause only when that path is
+  actually blocked.
+- Choose the approach that directly exercises the idea. Cost hours once:
+  building on CI with the hardcoded `.dn` prefix when the idea needed a
+  **dynamic prefix** — the build passed but could never test the idea.
+- **Verify the patch builds** (clean tree, CI) before trusting or shipping
+  it. Using a patch that was never build-checked is what turned one idea
+  into a multi-hour detour.
+
 ## Repository layout: read the directory's own README.md first
 
 `scripts/` and `docs/` each have a `README.md` at every level
