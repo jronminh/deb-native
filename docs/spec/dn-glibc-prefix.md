@@ -23,7 +23,7 @@ below are what this branch is landing.
 ## Contents
 
 - [What changes, and what does not](#what-changes-and-what-does-not)
-- [The loader needs no code patch](#the-loader-needs-no-code-patch)
+- [One small loader patch](#one-small-loader-patch)
 - [Fixed paths](#fixed-paths)
 - [The package set](#the-package-set)
 - [Install order](#install-order)
@@ -66,23 +66,35 @@ still rewrites `PT_INTERP` and maintainer-script shebangs, `dn-hook-post.sh`
 still fixes alternatives/symlinks/launchers, and the `.deb` template crafts
 (`dn-package-glibc.sh`, `dn-package-libc-bin.sh`) stay as they are.
 
-## The loader needs no code patch
+## One small loader patch
 
 The plan sketch in `ld-dn-runtime.md` imagined patching `elf/rtld.c` /
 `elf/dl-load.c` to derive the prefix and inject the preload. For a
-**fixed-prefix** build that is unnecessary: configuring glibc
+**fixed-prefix** build that is mostly unnecessary: configuring glibc
 `--prefix=$DN/usr` already bakes every path the runtime needs
-(`elf/rtld.c:1852` reads `SYSCONFDIR "/ld.so.preload"`, the cache/conf come
-from `SYSCONFDIR`, and the default search dir is the compiled `libdir`). The
-only glibc patches are the ones that already exist for this project:
-`set-dirs.patch` (retarget the guest `/etc` etc.) and the Android/seccomp
-patch. So "fusing" is a *configuration* plus two standard files, not a fork
-of the loader's control flow -- which is what makes it low-risk.
+(`elf/rtld.c` reads `SYSCONFDIR "/ld.so.preload"`, the cache/conf come from
+`SYSCONFDIR`, and the default search dir is the compiled `libdir`), so the
+prefix-derivation and preload-injection patches are not needed, and the shim
+derives the prefix itself (`dladdr`, `fused-shim-self-derives-prefix.md`).
+"Fusing" is therefore mostly *configuration* plus two standard files, not a
+fork of the loader's control flow.
 
-The one thing the loader cannot do is derive the prefix at runtime; it does
-not need to, because the prefix is fixed. (The shim, which must also know the
-prefix, derives it from its own load path with `dladdr` --
-`fused-shim-self-derives-prefix.md`.)
+**The one exception (2026-10-03):** the loader must **ignore the inherited
+`LD_PRELOAD`**. `ld-dn` used to sanitize the environment for every binary --
+it replaced `LD_PRELOAD` with its own shim -- so a host `LD_PRELOAD`
+(Termux's `libtermux-exec-ld-preload.so`, set in every Termux shell) never
+reached a prefix program. The fused loader does not sanitize, and that host
+library is built for another glibc, so it aborts every prefix program at
+startup (found migrating `.dn`). The fix is a small `elf/rtld.c` hunk (part
+of `dn-glibc-android.patch`): skip the `state.preloadlist` (`LD_PRELOAD`)
+source in `dl_main`, keeping `--preload` and the `ld.so.preload` file. Why
+this is safe: the prefix's shim is delivered by `ld.so.preload`, not the env,
+so dropping `LD_PRELOAD` costs nothing and restores `ld-dn`'s sanitization.
+`native/dn-run.c` was updated to match: it no longer injects the shim via
+`LD_PRELOAD`, only drops the inherited host preload.
+
+The one thing the loader still cannot do is derive the prefix at runtime; it
+does not need to, because the prefix is fixed.
 
 ## Fixed paths
 

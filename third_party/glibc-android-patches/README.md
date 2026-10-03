@@ -35,6 +35,14 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
     hand-fixed where Debian's own patch series had already changed the
     surrounding context from what `termux-pacman`'s patch (based on a
     different, non-Debian glibc baseline) expected.
+  - `elf/rtld.c`: ignore the inherited `LD_PRELOAD` (skip the
+    `state.preloadlist` source in `dl_main`; `--preload` and the
+    `ld.so.preload` file are kept). deb-native's own addition, not Termux's:
+    the fused loader delivers the path-redirect shim via `ld.so.preload`
+    instead of the env, and a host `LD_PRELOAD` (Termux's
+    `libtermux-exec-ld-preload.so`) is built for another glibc and would
+    otherwise abort every prefix program at startup
+    (`docs/spec/dn-glibc-prefix.md`).
   - `fakesyscall.json`'s mechanism (`syscall.c`, `fakesyscall.h`,
     `fakesyscall-base.h`, `syscall.S.patch`, the generated
     `sysdeps/unix/sysv/linux/aarch64/disabled-syscall.h`): only the

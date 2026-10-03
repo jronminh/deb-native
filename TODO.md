@@ -344,22 +344,22 @@ that point, splitting is also the natural moment to generalize the
 hardcoded path instead of carrying it over as-is.
 
 **Open**:
-- **`libc-bin`**: packaging done 2026-10-03 --
+- **`libc-bin` / fused-loader migration**: packaging done 2026-10-03 --
   `scripts/bootstrap/dn-package-libc-bin.sh` repackages this build's own
   `ldconfig`/`ldd`/`getconf`/... as a real `libc-bin` `.deb`. It is
   *path*-sensitive (`ldconfig` writes the prefix's `ld.so.cache`), so
   unlike `libc6-dev` Debian's real one cannot be reused
-  (`docs/log/findings/own-glibc-missing-libc-bin.md`). Stays pinned in
-  `setup-apt-prefix.sh` -- deliberately, like `libc6`, since it is now our
-  own package. **Open**: install it over the prefix and wire the fused
-  loader's cache. Discovered wiring: the loader and `ldconfig` read
-  `<prefix>/usr/etc/ld.so.cache` + `<prefix>/usr/etc/ld.so.conf` (glibc's
-  `SYSCONFDIR`, from `--prefix=<prefix>/usr`), *not* the guest
-  `<prefix>/etc/`; only `ld.so.preload` is at `<prefix>/etc/`. The loader's
-  built-in default is the flat `<prefix>/usr/lib/`, so the relocated
-  multiarch dir only becomes searchable via the cache. The `ldconfig`
-  SIGSYS is specific to `ldconfig -r` (chroot mode), which our
-  prefix-relative ldconfig does not use.
+  (`docs/log/findings/own-glibc-missing-libc-bin.md`); it stays pinned in
+  `setup-apt-prefix.sh`, deliberately, like `libc6`. **The live `.dn` is
+  migrated to the fused loader** (`docs/spec/dn-glibc-prefix.md`):
+  `ld.so.preload`/`ld.so.conf` wired, cache built at
+  `<prefix>/usr/etc/ld.so.cache`, and 189 ELFs repointed `ld-dn` ->
+  `usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`. One loader patch was
+  needed after all: `elf/rtld.c` ignores the inherited `LD_PRELOAD`
+  (`dn-glibc-android.patch`) because `ld-dn` used to sanitize the env and a
+  host preload (Termux's termux-exec) aborts a fused program;
+  `native/dn-run.c` updated to match. Still open: register `libc-bin` with
+  `dpkg` (currently unpacked by hand) and retire `ld-dn` once verified.
 - **`libc-l10n`/`locales`**: still pinned to -1 in
   `setup-apt-prefix.sh`; the same exact-version-match reasoning as
   `libc6-dev` likely lets them install unmodified (not yet tested).

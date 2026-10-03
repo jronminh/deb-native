@@ -157,15 +157,16 @@ static void die(const char *what) {
 }
 
 static void launch_glibc(char **args) {
-  /* Preserve whatever preload we inherited (on Termux, termux-exec) so the
-   * shim can hand it back to a Bionic child it execs; never stash our own
-   * shim. Capture before overwriting LD_PRELOAD. */
+  /* Fused loader (dn-glibc): the path-redirect shim is delivered by
+   * <prefix>/etc/ld.so.preload and the loader ignores LD_PRELOAD
+   * (docs/spec/dn-glibc-prefix.md), so do not inject it here -- just drop the
+   * inherited host preload (on Termux, termux-exec, built for another glibc).
+   * Preserve it for a Bionic child the shim may exec: capture before
+   * unsetting. */
   const char *inh = getenv("LD_PRELOAD");
   if (inh && *inh && !strstr(inh, "path-redirect.so"))
     setenv("DN_BIONIC_PRELOAD", inh, 1);
-  char shim[4096];
-  snprintf(shim, sizeof shim, "%s/usr/lib/deb-native/path-redirect.so", instdir);
-  setenv("LD_PRELOAD", shim, 1);
+  unsetenv("LD_PRELOAD");
   setenv("DN_INSTDIR", instdir, 1);
   set_path();
   execv(args[0], args);

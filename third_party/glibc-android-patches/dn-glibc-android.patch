@@ -69,8 +69,30 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/ldconfig.c work/elf/
  /* Get libc version number.  */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld.c
 --- pristine/p/elf/rtld.c	2026-09-30 10:54:35.704190839 +0700
-+++ work/elf/rtld.c	2026-09-30 21:16:02.114188065 +0700
-@@ -1849,7 +1849,7 @@
++++ work/elf/rtld.c	2026-10-03 17:44:40.821478237 +0700
+@@ -1825,14 +1825,13 @@
+   struct link_map **preloads = NULL;
+   unsigned int npreloads = 0;
+ 
+-  if (__glibc_unlikely (state.preloadlist != NULL))
+-    {
+-      RTLD_TIMING_VAR (start);
+-      rtld_timer_start (&start);
+-      npreloads += handle_preload_list (state.preloadlist, main_map,
+-					"LD_PRELOAD");
+-      rtld_timer_accum (&load_time, start);
+-    }
++  /* deb-native: ignore any inherited LD_PRELOAD.  The prefix's shim is
++     delivered by <prefix>/etc/ld.so.preload (fused-loader design,
++     docs/spec/dn-glibc-prefix.md); a host LD_PRELOAD (Termux's
++     libtermux-exec-ld-preload.so) is built for a different glibc and
++     would otherwise abort every prefix program at startup.  --preload
++     and the ld.so.preload file are unaffected.  */
++  state.preloadlist = NULL;
+ 
+   if (__glibc_unlikely (state.preloadarg != NULL))
+     {
+@@ -1849,7 +1848,7 @@
       open().  So we do this first.  If it succeeds we do almost twice
       the work but this does not matter, since it is not for production
       use.  */
