@@ -42,6 +42,10 @@ changes.
   - `direct-usage.md` — living investigation into what bypasses the shim.
   - `bind-only.md` — the tracer's bind-only path fast path.
   - `tracer.md` — the syscall tracer (`dn-trace`) itself.
+- `elf-interp-patch.md` — the one on-disk ELF edit deb-native makes
+  (`PT_INTERP`): exact fields touched, why the string usually has to
+  move, what `patchelf` does, and a sketch for a self-brewed
+  replacement (`dn-elf`).
 - `ld-dn-config.md` — proposal to rebuild the loader stub
   (`native/ld-dn.c`) so its policy (preloads, library dirs, env set/
   strip, loader, per-program overrides) comes from a prefix config file
