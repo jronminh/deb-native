@@ -291,9 +291,12 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-load.c work/elf/d
  	      if (cached != NULL)
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/ldconfig.c work/elf/ldconfig.c
 --- pristine/p/elf/ldconfig.c	2026-09-30 10:54:41.488190836 +0700
-+++ work/elf/ldconfig.c	2026-09-30 10:31:29.716506952 +0700
-@@ -48,7 +48,7 @@
++++ work/elf/ldconfig.c	2026-10-03 23:14:48.089470681 +0700
+@@ -46,9 +46,10 @@
+ #include <dl-is_dso.h>
+ 
  #include <dl-procinfo.h>
++#include <dn-prefix.h>
  
  #ifndef LD_SO_CONF
 -# define LD_SO_CONF SYSCONFDIR "/ld.so.conf"
@@ -301,6 +304,68 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/ldconfig.c work/elf/
  #endif
  
  /* Get libc version number.  */
+@@ -1266,12 +1267,19 @@
+ 
+   if (cache_file == NULL)
+     {
+-      cache_file = alloca (strlen (LD_SO_CACHE) + 1);
+-      strcpy (cache_file, LD_SO_CACHE);
++      /* deb-native: the cache path comes from the live prefix, not the
++	 baked build prefix (dn-prefix.h).  */
++      char *dn = alloca (DN_PREFIX_MAX + 64);
++      __dn_build (dn, DN_PREFIX_MAX + 64, "/usr/etc/ld.so.cache");
++      cache_file = dn;
+     }
+ 
+   if (config_file == NULL)
+-    config_file = LD_SO_CONF;
++    {
++      char *dn = alloca (DN_PREFIX_MAX + 64);
++      __dn_build (dn, DN_PREFIX_MAX + 64, "/usr/etc/ld.so.conf");
++      config_file = dn;
++    }
+ 
+   if (opt_print_cache)
+     {
+@@ -1329,22 +1337,24 @@
+ 
+   if (!opt_only_cline)
+     {
+-      const char *strp = system_dirs;
+-      size_t idx = 0;
+-
+       parse_conf (config_file, true);
+ 
+-      /* Always add the standard search paths.  */
+-      do
+-        {
+-          add_system_dir (strp);
+-          strp += system_dirs_len[idx] + 1;
+-          idx++;
+-        }
+-      while (idx < nsystem_dirs_len);
+-    }
+-
+-  const char *aux_cache_file = _PATH_LDCONFIG_AUX_CACHE;
++      /* Always add the standard search paths (derived from the live
++	 prefix, not the baked build prefix).  */
++      {
++	char *dn_slib = alloca (DN_PREFIX_MAX + 64);
++	char *dn_lib = alloca (DN_PREFIX_MAX + 64);
++	__dn_build (dn_slib, DN_PREFIX_MAX + 64, "/usr/lib/aarch64-linux-gnu");
++	__dn_build (dn_lib, DN_PREFIX_MAX + 64, "/usr/lib");
++	add_system_dir (dn_slib);
++	if (strcmp (dn_slib, dn_lib))
++	  add_system_dir (dn_lib);
++      }
++    }
++
++  char *dn_aux = alloca (DN_PREFIX_MAX + 64);
++  __dn_build (dn_aux, DN_PREFIX_MAX + 64, "/var/cache/ldconfig/aux-cache");
++  const char *aux_cache_file = dn_aux;
+   if (opt_chroot != NULL)
+     aux_cache_file = chroot_canon (opt_chroot, aux_cache_file);
+ 
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld.c
 --- pristine/p/elf/rtld.c	2026-09-30 10:54:35.704190839 +0700
 +++ work/elf/rtld.c	2026-10-03 22:50:32.817471236 +0700
