@@ -303,7 +303,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/ldconfig.c work/elf/
  /* Get libc version number.  */
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld.c
 --- pristine/p/elf/rtld.c	2026-09-30 10:54:35.704190839 +0700
-+++ work/elf/rtld.c	2026-10-03 22:27:47.637471757 +0700
++++ work/elf/rtld.c	2026-10-03 22:50:32.817471236 +0700
 @@ -34,6 +34,7 @@
  #include <libc-lock.h>
  #include <unsecvars.h>
@@ -312,7 +312,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld
  #include <dl-osinfo.h>
  #include <dl-procinfo.h>
  #include <dl-prop.h>
-@@ -1352,6 +1353,49 @@
+@@ -1352,6 +1353,58 @@
  #endif
  }
  
@@ -321,26 +321,30 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld
 +const char *
 +__dn_rtld_self_path (void)
 +{
-+  return _dl_rtld_map.l_name;
++  if (_dl_rtld_map.l_name != NULL)
++    return _dl_rtld_map.l_name;
++  if (_dl_rtld_map.l_libname != NULL)
++    return _dl_rtld_map.l_libname->name;
++  return NULL;
 +}
 +
-+/* deb-native: the live prefix, cut from the loader's own path and exported
-+   for libc's run-time redirects (dn-prefix.h).  */
-+const char *
-+__dn_prefix_get (void)
++/* deb-native: the live prefix, computed once from the loader's own path and
++   exported for libc's run-time redirects (dn-prefix.h).  Global, not
++   on-demand: __dn_prefix_init runs before the search paths are built.  */
++static char __dn_prefix_buf[DN_PREFIX_MAX];
++static int __dn_prefix_ready;
++
++static void
++__dn_prefix_init (void)
 +{
-+  static char buf[DN_PREFIX_MAX];
-+  static const char *cached;
-+  static int inited;
 +  const char *p;
 +  const char *t;
 +  size_t n;
-+  if (inited)
-+    return cached;
-+  inited = 1;
++  if (__dn_prefix_ready)
++    return;
 +  p = __dn_rtld_self_path ();
 +  if (p == NULL)
-+    return NULL;
++    return;
 +  t = __dn_find (p, "/usr/lib/aarch64-linux-gnu/");
 +  if (t == NULL)
 +    t = __dn_find (p, "/usr/lib/");
@@ -349,20 +353,36 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld
 +  if (t == NULL)
 +    t = __dn_find (p, "/usr/bin/");
 +  if (t == NULL)
-+    return NULL;
++    return;
 +  n = (size_t) (t - p);
-+  if (n >= sizeof (buf))
-+    n = sizeof (buf) - 1;
-+  memcpy (buf, p, n);
-+  buf[n] = '\0';
-+  cached = buf;
-+  return cached;
++  if (n >= sizeof (__dn_prefix_buf))
++    n = sizeof (__dn_prefix_buf) - 1;
++  memcpy (__dn_prefix_buf, p, n);
++  __dn_prefix_buf[n] = '\0';
++  __dn_prefix_ready = 1;
++}
++
++const char *
++__dn_prefix_get (void)
++{
++  return __dn_prefix_ready ? __dn_prefix_buf : NULL;
 +}
 +
  static void
  dl_main (const ElfW(Phdr) *phdr,
  	 ElfW(Word) phnum,
-@@ -1825,14 +1869,13 @@
+@@ -1742,6 +1795,10 @@
+   /* With vDSO setup we can initialize the function pointers.  */
+   setup_vdso_pointers ();
+ 
++  /* deb-native: compute the live prefix once, here, before the search
++     paths are built (dn-prefix.h).  Global, not on-demand.  */
++  __dn_prefix_init ();
++
+   /* Initialize the data structures for the search paths for shared
+      objects.  */
+   call_init_paths (&state);
+@@ -1825,14 +1882,13 @@
    struct link_map **preloads = NULL;
    unsigned int npreloads = 0;
  
@@ -384,7 +404,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/rtld.c work/elf/rtld
  
    if (__glibc_unlikely (state.preloadarg != NULL))
      {
-@@ -1849,7 +1892,8 @@
+@@ -1849,7 +1905,8 @@
       open().  So we do this first.  If it succeeds we do almost twice
       the work but this does not matter, since it is not for production
       use.  */
