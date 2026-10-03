@@ -54,6 +54,9 @@ changes.
   (`native/ld-dn.c`) actually does at runtime: its execution phases,
   prepare-vs-commit, and the `AT_BASE` handoff. Companion to
   `ld-dn-config.md`.
+- `dl-mechanics.md` — reference catalog of glibc's dynamic-linker
+  mechanisms (env, files, CLI, dynamic tags, tunables, audit), and how
+  leaning on them keeps the `dn-glibc` loader patch small.
 - `runtime-failures.md` — what goes wrong when *running* a program,
   grouped by cause.
 - `android-platform.md` — the Android enforcement-gate taxonomy (seccomp/

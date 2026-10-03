@@ -683,11 +683,11 @@ append-when-longer rule); the tool itself is not built yet.
   `docs/spec/elf-interp-patch.md`: read/set the one `PT_INTERP` field in
   `dn-translate-deb.sh` (its only call site), dropping `patchelf` and its
   failure modes.
-- Consider fusing `ld-dn` into the loader itself, so the kernel loads a
+- Fuse `ld-dn` into the loader (**`dn-glibc`**): the kernel loads the
   patched `ld-linux` directly and the trampoline disappears -- plan,
-  pros/cons, and the trigger to revisit in `docs/spec/ld-dn-runtime.md`'s
-  "Alternative: fuse into the loader". Only worthwhile once the own-glibc
-  fork (0.5.0) is the default.
+  pros/cons, and the trigger in `docs/spec/ld-dn-runtime.md`'s
+  "Alternative: fuse into the loader". Name locked 2026-10-03; develop and
+  validate the hook on amd64 first, arm64 on-device after.
 
 ## Quick wins
 
