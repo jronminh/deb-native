@@ -20,3 +20,8 @@ How-to for a specific, one-off case — not a spec of the project itself.
   gcc` inside the prefix: `make`, shared libraries, and the one
   library-search convention, `LD_LIBRARY_PATH` (`ld-dn` sets it, prefix
   dirs first, and merges the caller's entries after).
+- `fixing-runtime-edge-cases.md` — a runtime problem hits the prefix (a
+  path outside it, a library not found, a call past the shim): the decision
+  table from symptom to the cheapest layer (shim, `ld.so.preload`/
+  `ld.so.conf`+`ldconfig`, dynamic tags, launchers, tracer) and the two
+  cases that force a glibc rebuild.
