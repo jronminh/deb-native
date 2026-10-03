@@ -62,7 +62,8 @@
  * open/stat/exec call, so it must not call getenv()/strlen() per call or
  * snprintf() to build the result -- a plain branch + memcpy is enough and
  * measurably faster (see docs/log/findings.md). The env is
- * fixed before exec by the launchers, so caching at construction is safe. */
+ * fixed before exec by the launchers, or derived from the shim's own load
+ * path when nothing injects env (fused loader); caching is safe either way. */
 static const char *g_root;
 static size_t g_rootlen;
 static int g_debug;
@@ -106,6 +107,24 @@ static void fake_env(const char *name, char *entry) {
 
 static void dn_init(void) {
   g_root = getenv("DN_INSTDIR");
+  if (g_root && !*g_root) g_root = NULL;
+  if (!g_root) {
+    /* Nothing injected DN_INSTDIR (fused-loader mode): derive the prefix
+     * from this shim's own load path, which is
+     * <prefix>/usr/lib/deb-native/path-redirect.so wherever it is listed
+     * (ld.so.preload / LD_PRELOAD). dladdr() reports that path. */
+    static const char suffix[] = "/usr/lib/deb-native/path-redirect.so";
+    static char rootbuf[4096];
+    Dl_info info;
+    if (dladdr((void *)&dn_init, &info) && info.dli_fname) {
+      size_t lp = strlen(info.dli_fname), ls = sizeof suffix - 1;
+      if (lp > ls && memcmp(info.dli_fname + lp - ls, suffix, ls) == 0) {
+        memcpy(rootbuf, info.dli_fname, lp - ls);
+        rootbuf[lp - ls] = 0;
+        g_root = rootbuf;
+      }
+    }
+  }
   g_rootlen = g_root ? strlen(g_root) : 0;
   g_debug = getenv("DN_REDIRECT_DEBUG") != NULL;
   g_bionic_preload = getenv("DN_BIONIC_PRELOAD");
