@@ -23,6 +23,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -114,3 +116,41 @@ jobs:
           name: dn-glibc-android
           path: dn-glibc-android-${{ github.sha }}.tar.gz
           retention-days: 14
+
+      # The install bundle (DN_GLIBC_DEBS): the 10 patched files laid out
+      # relative to a prefix, Debian's own libc6/libc-bin to install first,
+      # and the shim built against this build's glibc.  setup-apt-prefix.sh
+      # downloads it from the rolling release when DN_GLIBC_DEBS is unset.
+      - name: Assemble the install bundle
+        run: |
+          set -eu
+          P="$GITHUB_WORKSPACE/destdir${DN_PREFIX}"
+          B="$GITHUB_WORKSPACE/bundle"
+          rm -rf "$B"
+          mkdir -p "$B/files/usr/lib/aarch64-linux-gnu" "$B/files/usr/sbin" "$B/files/usr/bin"
+          for f in libc.so.6 ld-linux-aarch64.so.1 libresolv.so.2 libnsl.so.1 \
+                   libnss_compat.so.2 libnss_hesiod.so.2 librt.so.1; do
+            cp -a "$P/usr/lib/$f" "$B/files/usr/lib/aarch64-linux-gnu/$f"
+          done
+          cp -a "$P/usr/sbin/ldconfig" "$B/files/usr/sbin/"
+          cp -a "$P/usr/bin/localedef" "$P/usr/bin/iconv" "$B/files/usr/bin/"
+          cd "$B"
+          curl -sLO "https://deb.debian.org/debian/pool/main/g/glibc/libc6_${GLIBC_DEB_VERSION}_arm64.deb"
+          curl -sLO "https://deb.debian.org/debian/pool/main/g/glibc/libc-bin_${GLIBC_DEB_VERSION}_arm64.deb"
+          mv libc6_*.deb libc6.deb
+          mv libc-bin_*.deb libc-bin.deb
+          gcc -O2 -fPIC -shared -nostartfiles -nodefaultlibs --sysroot=/ \
+            -I "$P/usr/include" -L "$P/usr/lib" \
+            -Wl,-dynamic-linker,"$P/usr/lib/ld-linux-aarch64.so.1" \
+            -o path-redirect.so "$GITHUB_WORKSPACE/native/path-redirect.c" -lc -ldl
+          tar -C "$B" -czf "$GITHUB_WORKSPACE/dn-glibc-bundle.tar.gz" .
+
+      - name: Publish the bundle to the rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view glibc-bundle >/dev/null 2>&1 || \
+            gh release create glibc-bundle --prerelease \
+              --title "dn-glibc install bundle (rolling)" \
+              --notes "Rolling bundle for setup-apt-prefix.sh: the 10 patched glibc files, Debian's libc6/libc-bin, and the shim. Built by .github/workflows/build-glibc.yml."
+          gh release upload glibc-bundle dn-glibc-bundle.tar.gz --clobber
