@@ -27,6 +27,7 @@
 #include <elf.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <errno.h>
 
 static char instdir[4096];
@@ -96,7 +97,7 @@ static int has_nss_import(int fd) {
   return found;
 }
 
-static int classify(const char *path, int *nss) {
+static int classify(const char *path, int *nss, char *interp, size_t isz) {
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0) return C_NOTELF;
   Elf64_Ehdr eh;
@@ -116,6 +117,7 @@ static int classify(const char *path, int *nss) {
     char in[512];
     if (pread(fd, in, ph.p_filesz, ph.p_offset) != (ssize_t)ph.p_filesz) continue;
     in[ph.p_filesz] = '\0';
+    if (interp && isz) snprintf(interp, isz, "%s", in);
     /* Every binary this project translates has PT_INTERP rewritten to the
      * prefix's own fused glibc loader (dn-translate-deb.sh,
      * patchelf --set-interpreter), an "ld-linux" path -- caught by the
@@ -166,6 +168,32 @@ static void set_path(void) {
 static void die(const char *what) {
   fprintf(stderr, "dn-run: %s: %s\n", what, strerror(errno));
   _exit(127);
+}
+
+/* Lazy adopt for a glibc binary whose PT_INTERP is a loader that is not on
+ * this device (/lib/ld-linux-aarch64.so.1): rewrite the interpreter once to
+ * the prefix's fused loader, so the kernel can start it and /proc/self/exe
+ * stays the program (Bun/Node SEA safe). Runs the prefix's own patchelf.
+ * Returns 0 on success, -1 if patchelf is unavailable or the rewrite failed
+ * (read-only file, patchelf refusing the layout) -- the caller then falls
+ * back to the tracer. */
+static int try_adopt(const char *path) {
+  char pc[4096], ld[4096];
+  snprintf(pc, sizeof pc, "%s/usr/bin/patchelf", instdir);
+  if (access(pc, X_OK) != 0) return -1;
+  snprintf(ld, sizeof ld,
+           "%s/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1", instdir);
+  set_path();
+  setenv("DN_INSTDIR", instdir, 1);
+  pid_t pid = fork();
+  if (pid < 0) return -1;
+  if (pid == 0) {
+    execl(pc, pc, "--set-interpreter", ld, path, (char *)NULL);
+    _exit(127);
+  }
+  int st = 0;
+  if (waitpid(pid, &st, 0) < 0) return -1;
+  return (WIFEXITED(st) && WEXITSTATUS(st) == 0) ? 0 : -1;
 }
 
 static void launch_glibc(char **args) {
@@ -278,11 +306,30 @@ int main(int argc, char **argv) {
 
   char **args = &argv[argi];
   int nss = 0;
-  int cls = classify(args[0], &nss);
+  char in[512] = {0};
+  int cls = classify(args[0], &nss, in, sizeof in);
   g_glibc = (cls == C_GLIBC);
 
   if (force_trace)
     launch_trace(args, nss);
+
+  /* Lazy adopt: a glibc binary whose interpreter is not on this device was
+   * installed outside apt (a vendor installer, a tarball, ...) and never
+   * translated. Rewrite it once to the prefix's fused loader and run it
+   * natively; if that is impossible (no patchelf, read-only), fall through
+   * to the tracer route. Foreign binaries become case N of the same door. */
+  if (cls == C_GLIBC && in[0] && access(in, X_OK) != 0) {
+    if (try_adopt(args[0]) == 0) {
+      fprintf(stderr,
+              "dn-run: adopted %s (interpreter %s -> prefix loader)\n",
+              args[0], in);
+    } else {
+      fprintf(stderr,
+              "dn-run: %s: interpreter %s missing and adoption failed; "
+              "using the tracer\n", args[0], in);
+      launch_trace(args, nss);
+    }
+  }
 
   switch (cls) {
     case C_GLIBC:

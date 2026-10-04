@@ -177,3 +177,11 @@ below, oldest first, matching the original file's order.
   `dn-translate-deb.sh` (fail loud) and `setup-apt-prefix.sh` (require the
   host patchelf). Verified: with a runnable patchelf, `apt-get install
   --reinstall htop` repoints it and htop runs.
+- [`lazy-adopt-foreign-binaries.md`](lazy-adopt-foreign-binaries.md) —
+  2026-10-04, **Repo change**: closes the non-dpkg gap. The shim's `do_exec`
+  now detects a glibc binary whose interpreter is absent (a foreign binary) and
+  hands the exec to `dn-run`, which adopts it once (`patchelf` -> fused loader)
+  and runs it natively -- falling back to the tracer if adoption fails. Lazy,
+  per-binary, no session tracing. A device-level trap: inside the shim a bare
+  `access()` is itself rewired, so the check uses `dlsym(RTLD_NEXT,"access")`.
+  Verified on a foreign `fastfetch`.

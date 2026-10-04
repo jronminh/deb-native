@@ -344,6 +344,36 @@ static int elf_glibc_interp(int fd, const unsigned char *hdr, ssize_t n) {
   return 0;
 }
 
+/* Fills interp[] with the ELF's PT_INTERP path; returns 1 if present. Same
+ * read as elf_glibc_interp, but exposes the loader path so a caller can tell a
+ * translated binary (interpreter = the prefix's fused loader, present) from a
+ * foreign/untranslated one (interpreter = /lib/ld-linux-aarch64.so.1, absent). */
+static int elf_interp_path(const char *path, char *interp, size_t isz) {
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0) return 0;
+  unsigned char hdr[1024];
+  ssize_t n = read(fd, hdr, sizeof hdr);
+  int found = 0;
+  if (n >= (ssize_t)sizeof(Elf64_Ehdr)) {
+    const Elf64_Ehdr *eh = (const Elf64_Ehdr *)hdr;
+    if (eh->e_phentsize == sizeof(Elf64_Phdr)) {
+      for (int i = 0; i < eh->e_phnum; i++) {
+        Elf64_Phdr ph;
+        off_t off = (off_t)eh->e_phoff + (off_t)i * sizeof ph;
+        if (pread(fd, &ph, sizeof ph, off) != (ssize_t)sizeof ph) break;
+        if (ph.p_type != PT_INTERP || ph.p_filesz == 0 || ph.p_filesz >= isz) continue;
+        ssize_t r = pread(fd, interp, ph.p_filesz, ph.p_offset);
+        if (r <= 0) break;
+        interp[(r < (ssize_t)isz) ? r : (ssize_t)isz - 1] = '\0';
+        found = 1;
+        break;
+      }
+    }
+  }
+  close(fd);
+  return found;
+}
+
 static int target_is_glibc(const char *path) {
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0) return 0;
@@ -1000,6 +1030,17 @@ ssize_t readlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz) {
 
 typedef int (*execve_t)(const char *, char *const[], char *const[]);
 
+/* Real access(2), bypassing our own interposed access(): a bare access() call
+ * inside this .so binds to the shim's override, which would rewrite /lib to
+ * $DN/lib and make a missing loader look present. do_exec needs the true
+ * answer to tell a translated binary (interpreter is the prefix's fused
+ * loader, present) from a foreign one (/lib/ld-linux-aarch64.so.1, absent). */
+static int real_access_ok(const char *path) {
+  static int (*ra)(const char *, int);
+  if (!ra) ra = (int (*)(const char *, int))dlsym(RTLD_NEXT, "access");
+  return ra && ra(path, X_OK) == 0;
+}
+
 static int do_exec(execve_t real, const char *rp, char *const argv[],
                    char *const envp[]) {
   char interp[256], sarg[256];
@@ -1027,6 +1068,28 @@ static int do_exec(execve_t real, const char *rp, char *const argv[],
     return real(rp, argv, bionic_env(envp));
   }
   if (target_is_glibc(rp)) {
+    char ip[512];
+    if (elf_interp_path(rp, ip, sizeof ip) && ip[0] && !real_access_ok(ip)) {
+      /* Foreign/untranslated glibc binary: its interpreter is not on this
+       * device. Hand it to dn-run, which adopts it into the prefix once
+       * (fused loader, /proc/self/exe preserved) and runs it, or falls back
+       * to the tracer. This is the lazy-adopt trigger for anything installed
+       * outside apt, reached whenever a shimmed process execs it. */
+      char dnrun[4096];
+      snprintf(dnrun, sizeof dnrun, "%s/usr/lib/deb-native/dn-run",
+               g_root ? g_root : "");
+      if (g_root && access(dnrun, X_OK) == 0) {
+        static char *na[1024];
+        int ac = 0;
+        while (argv && argv[ac]) ac++;
+        int idx = 0;
+        na[idx++] = dnrun;
+        na[idx++] = (char *)rp;
+        for (int i = 1; i < ac && idx < 1022; i++) na[idx++] = argv[i];
+        na[idx] = NULL;
+        return real(dnrun, na, bionic_env(envp));
+      }
+    }
     if (g_debug) fprintf(stderr, "[path-redirect] do_exec: glibc branch (LD_PRELOAD kept), rp=%s\n", rp);
     return real(rp, argv, envp);
   }
