@@ -74,9 +74,12 @@ DPKG="$TP/bin/dpkg --admindir=$DN/var/lib/dpkg --instdir=$DN --force-not-root --
 # apt.postinst creates its `_apt` user with `adduser ... || true`, so the
 # user-management/PAM stack is not needed). debconf here has no perl
 # dependency; perl is only needed once a perl script actually is.
+# file + patchelf are what the run-time translate hook (dn-hook-pre.sh ->
+# dn-translate-deb.sh) needs when the prefix's own apt installs a package;
+# without them a runtime install is not translated (0.7.0).
 TOOLS="mawk coreutils sed grep findutils"
 SYSTEM="base-files base-passwd dash bash debianutils diffutils gzip tar"
-APT="apt dpkg libapt-pkg7.0 gpgv sqv xz-utils ca-certificates debconf"
+APT="apt dpkg libapt-pkg7.0 gpgv sqv xz-utils ca-certificates debconf file patchelf"
 BASE="$TOOLS $SYSTEM $APT"
 # Not held: new Debian releases bring new keys through it.
 KEYRING="debian-archive-keyring"
@@ -399,6 +402,11 @@ DPkg::Tools::Options::$INSTALL/dn-hook-pre.sh "";
 DPkg::Tools::Options::$INSTALL/dn-hook-pre.sh::Version "3";
 DPkg::Post-Invoke { "$INSTALL/dn-hook-post.sh $DN"; };
 EOF
+# Debian apt reads its main config from Dir::Etc plus "apt.conf" (i.e.
+# /etc/apt/apt.conf -> $DN/etc/apt/apt.conf), NOT from /etc/apt.conf. Expose
+# the file there so the prefix's own apt picks up the sandbox/Dir/hook
+# settings with no APT_CONFIG in the environment (0.7.0).
+ln -sfn ../apt.conf "$DN/etc/apt/apt.conf"
 # The index: stage 0's lists, verified and already rewritten -- no second
 # download or rewrite. The prefix's next `apt update` refreshes them.
 mkdir -p "$DN/var/lib/apt/lists/partial"
