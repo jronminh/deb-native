@@ -75,6 +75,8 @@ STATE="$HOME_DIR/.local/state/deb-native"
 mkdir -p "$STATE" 2>/dev/null
 LAST=""
 [ -r "$STATE/last" ] && LAST=$(cat "$STATE/last" 2>/dev/null)
+EXPLICIT=""
+[ -r "$STATE/default" ] && EXPLICIT=$(cat "$STATE/default" 2>/dev/null)
 
 choose=0
 [ "${1:-}" = "--choose" ] && { choose=1; shift; }
@@ -126,9 +128,9 @@ if [ "$choose" = 1 ]; then
   host "$@"
 fi
 
-# Bare app start: open the default -- last used, else this generated prefix,
-# else the first -- with no prompt.
-for want in "$LAST" "$DEFAULT"; do
+# Bare app start: open the default -- the explicit `dn-default`, else last
+# used, else this generated prefix, else the first -- with no prompt.
+for want in "$EXPLICIT" "$LAST" "$DEFAULT"; do
   [ -n "$want" ] || continue
   while IFS="$(printf '\t')" read -r n p; do
     [ "$p" = "$want" ] && enter "$p" "$@"
@@ -186,6 +188,39 @@ gen "$HOME_DIR/.local/bin/dn-switch" <<'SWITCH'
 # deb-native dn-switch (generated; do not edit): pick another userland.
 exec "${DN_HOME:-$HOME}/.dn-login" --choose "$@"
 SWITCH
+
+# dn-default: set/clear the userland the app boots into (the bare-start
+# default). Argument is a registry name or a prefix path; no argument prints
+# the current default and the available userlands.
+gen "$HOME_DIR/.local/bin/dn-default" <<'DEF'
+#!/system/bin/sh
+# deb-native dn-default (generated; do not edit): the app's default userland.
+HOME_DIR="${DN_HOME:-$HOME}"
+REG="$HOME_DIR/.config/deb-native/prefixes"
+STATE="$HOME_DIR/.local/state/deb-native"
+mkdir -p "$STATE" 2>/dev/null
+set -- "$@"
+if [ "$#" -eq 0 ]; then
+  [ -r "$STATE/default" ] && printf 'default: %s\n' "$(cat "$STATE/default")" \
+    || printf 'default: (last used / generated prefix)\n'
+  printf 'userlands:\n'
+  [ -r "$REG" ] && while IFS="$(printf '\t')" read -r n p; do printf '  %-16s %s\n' "$n" "$p"; done < "$REG"
+  exit 0
+fi
+arg=$1
+p=""
+if [ -x "$arg/usr/bin/dn-shell" ]; then
+  p=$arg
+elif [ -r "$REG" ]; then
+  while IFS="$(printf '\t')" read -r n path; do
+    [ "$n" = "$arg" ] && p=$path
+  done < "$REG"
+fi
+[ -n "$p" ] && [ -x "$p/usr/bin/dn-shell" ] \
+  || { echo "dn-default: no such userland: $arg (see dn-default with no args)" >&2; exit 1; }
+printf '%s\n' "$p" > "$STATE/default"
+echo "default userland: $p"
+DEF
 
 # The welcome. Termux's login runs ~/.termux/motd.sh in place of its own
 # static /etc/motd.

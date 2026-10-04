@@ -576,18 +576,18 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   `$HOME` shared but never touch Termux's dotfiles. Done when nothing of
   ours writes into `$PREFIX` and deleting `$DN` leaves Termux's login
   working.
-- **Real login (multi-userland selector)** (done): `~/.termux/shell` points at
-  a host-layer login wrapper that chooses among the machine's existing
-  prefixes, not a fixed one. It reads a registry
-  (`$HOME/.config/deb-native/prefixes`, written by `install.sh`; fallback:
-  scan `$(dirname "$PREFIX")/*` for `usr/bin/dn-shell`), shows a menu when
-  more than one exists (default = last used; auto-pick on a non-TTY), and
-  `exec`s the chosen `$DN/usr/bin/dn-shell`; adds `dn-list`/`dn-switch`
-  in-session and records the last prefix so the app boots straight back into
-  it. Login here means picking the prefix -- each prefix *is* a user; there
-  is no account or password layer, and the fake-root identity inside a
-  prefix is unchanged. Degrades to today's single wrapper (and the Termux
-  fallback) with no registry.
+- **Real login (per-prefix default + switch)** (done): `~/.termux/shell`
+  points at a host-layer login wrapper in `$HOME` (independent of any prefix)
+  that boots the DEFAULT userland with no prompt -- the one set by
+  `dn-default`, else the last used, else the prefix it was generated for.
+  Each prefix is a "user"; no account layer; fake-root inside a prefix is
+  unchanged. The registry (`$HOME/.config/deb-native/prefixes`, written by
+  install.sh; fallback: scan `$(dirname "$PREFIX")/*`) feeds the helpers, all
+  in `$HOME/.local/bin` (host-layer, prefix-independent): `dn-list` (list),
+  `dn-default [name|path]` (set/clear the app's boot default), `dn-switch`
+  (re-run the login with `--choose` to pick interactively). A standalone
+  interactive chooser shell was considered and dropped -- a bare app start
+  must open the default, not a menu.
 - **M4 Acceptance and release**: a CI job that simulates the broken prefix
   and runs the by-name/apt/DNS/toolchain/git suite; tag `v0.7.0-prealpha`.
 - **Dedup the redirect set**: `/usr /etc /var /opt /bin /sbin` is spelled
