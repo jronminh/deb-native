@@ -549,12 +549,18 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   `$HOME` shared but never touch Termux's dotfiles. Done when nothing of
   ours writes into `$PREFIX` and deleting `$DN` leaves Termux's login
   working.
+- **Real login (multi-userland selector)**: `~/.termux/shell` points at a
+  host-layer `dn-login` (outside `$PREFIX`, per M3) that chooses among the
+  machine's existing prefixes, not a fixed one. It reads a registry
+  (`$HOME/.config/deb-native/prefixes`, written by `install.sh`; fallback:
+  scan `$(dirname "$PREFIX")/*` for `usr/bin/dn-shell`), shows a menu when
+  more than one exists (default = last used; auto-pick on a non-TTY), and
+  `exec`s the chosen `$DN/usr/bin/dn-shell`; adds `dn-list`/`dn-switch`
+  in-session and records the last prefix so the app boots straight back into
+  it. Degrades to today's single wrapper (and the Termux fallback) with no
+  registry.
 - **M4 Acceptance and release**: a CI job that simulates the broken prefix
   and runs the by-name/apt/DNS/toolchain/git suite; tag `v0.7.0-prealpha`.
-- **Multi-userland**: with N supported, add naming/selection (which userland
-  a `dn-shell` enters, which one the login default points at) and make the
-  prefix copyable between locations; touches `make-shell-interface.sh`,
-  `~/.dn-login` and `$PREFIX/bin/dn-shell`.
 - **Dedup the redirect set**: `/usr /etc /var /opt /bin /sbin` is spelled
   in four places that must agree -- `native/path-redirect.c:200-212`,
   `native/dn-run.c:221`, `scripts/install/normalize-symlinks.sh:16` and the
