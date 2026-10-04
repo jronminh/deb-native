@@ -126,21 +126,6 @@ works inside the prefix (fake identity, `DN_ID`, the tracer's cost):
 [`docs/spec/design.md`](docs/spec/design.md) — "Day-to-day commands" and
 "Fake root".
 
-## Experimental: true fusion branch
-
-The [`naibed`](https://github.com/jronminh/deb-native/tree/naibed)
-branch builds on this project's core to go one step further: it
-transforms Termux's own `$PREFIX` into a Debian `arm64` system -- Debian
-as apt's only source, packages installed straight into Termux's prefix
-and dpkg database, Termux reduced to the packages it runs on. It is
-**one-way and far less safe than `main`**: a bad package can break Termux
-itself, not just a Debian program, and there is no switch back. See its
-[`docs/true-fusion.md`](https://github.com/jronminh/deb-native/blob/naibed/docs/true-fusion.md)
-before touching it. `main`'s separate prefix stays the recommended path.
-**Frozen until `main` reaches alpha**: it predates 0.2.x (`ld-dn`,
-`dn-trace`, the survey) and gets no new work until it is rebuilt on
-`main`'s core.
-
 ## Documentation
 
 Full map in [`docs/README.md`](docs/README.md): specs (`docs/spec/` — the

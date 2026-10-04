@@ -78,8 +78,7 @@ kept as the record of the proposal, with the divergence noted; the rest —
 the self-contained-prefix idea itself, the stand-in packages, the launcher
 wrappers — is what got built (`scripts/bootstrap/setup-apt-prefix.sh`).
 
-This is the principle `sudo-less` uses on Debian and the
-[`naibed`](https://github.com/jronminh/deb-native/tree/naibed) branch
+This is the principle `sudo-less` uses on Debian and the `naibed` branch
 proved on Termux: **apt and dpkg own their root.** When the place packages
 live is apt/dpkg's own `/`, dpkg's normal rules (dependencies, Pre-Depends
 order, alternatives, diversions, upgrades) just work, and the glue between
