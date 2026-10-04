@@ -46,19 +46,39 @@ while [ "$changed" -eq 1 ] && [ "$pass" -lt 5 ]; do
         target=$(readlink "$link") || continue
 
         # Only absolute targets can escape the prefix.
-        case "$target" in /*) ;; *) continue ;; esac
+        case "$target" in
+        /*)
+          # Only targets that land in a bound directory matter.
+          rest=${target#/}
+          first=${rest%%/*}
+          case " $BOUND " in *" $first "*) ;; *) continue ;; esac
 
-        # Only targets that land in a bound directory matter.
-        rest=${target#/}
-        first=${rest%%/*}
-        case " $BOUND " in *" $first "*) ;; *) continue ;; esac
+          host_target="$ROOT$target"
+          rel=$(relpath "$(dirname "$link")" "$host_target")
+          [ "$rel" = "$target" ] && continue
 
-        host_target="$ROOT$target"
-        rel=$(relpath "$(dirname "$link")" "$host_target")
-        [ "$rel" = "$target" ] && continue
-
-        ln -sfn "$rel" "$link"
-        changed=1
+          ln -sfn "$rel" "$link"
+          changed=1
+          ;;
+        *)
+          # A RELATIVE target that does not resolve: a package (or
+          # update-alternatives) may compute it against a logical dir that is
+          # a merged-usr symlink in the prefix. e.g. /bin/nc ->
+          # ../etc/alternatives/nc is right from /bin, but the prefix's
+          # bin -> usr/bin, so the link physically lives in usr/bin and ../etc
+          # resolves to usr/etc, which does not exist (netcat-openbsd). If the
+          # logical interpretation lands on a real file, rewrite the link
+          # relative to its physical directory.
+          [ -e "$link" ] && continue
+          case "$link" in "$ROOT/usr/bin/"*|"$ROOT/usr/sbin/"*) ;; *) continue ;; esac
+          case "$target" in ../*) ;; *) continue ;; esac
+          cand="$ROOT/${target#../}"
+          [ -e "$cand" ] || continue
+          rel=$(relpath "$(dirname "$link")" "$cand")
+          ln -sfn "$rel" "$link"
+          changed=1
+          ;;
+        esac
     done < "$tmp"
 done
 

@@ -192,3 +192,12 @@ below, oldest first, matching the original file's order.
   `make-launchers.sh`, `scan-direct-syscalls.py`, `custom/`) into the prefix and
   `setup-apt-prefix.sh` points `apt.conf` at the prefix copies; `install.sh`
   refresh re-copies. Prefixes bootstrapped before need a one-time re-point.
+- [`merged-usr-alternative-links.md`](merged-usr-alternative-links.md) —
+  2026-10-04, **Repo change**: an extended capability sweep found `nc`/`netcat`
+  unrunnable by name. `netcat-openbsd` writes `/bin/nc ->
+  ../etc/alternatives/nc` (correct from a real `/bin`), but the prefix's
+  `bin -> usr/bin` (merged-usr) makes it resolve to `usr/etc`, which is
+  missing; `normalize-symlinks.sh` only handled absolute targets.
+  Now it also repairs a dangling relative link under `usr/bin`/`usr/sbin`.
+  The rest of the sweep (jq/tree/ncdu/zstd/curl/git/sqlite3/tmux/rsync/socat/
+  lua/nodejs/python3+venv/redis/imagemagick/gcc) passed.
