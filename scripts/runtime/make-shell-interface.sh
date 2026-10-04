@@ -244,6 +244,7 @@ cat __INSTDIR__/etc/motd 2>/dev/null
 printf '\n%s is running inside a deb-native prefix.\n\n' "${PRETTY_NAME:-Debian GNU/Linux}"
 printf '  prefix  %s\n' "__DN_DISP__"
 printf '  source  %s\n' "https://github.com/jronminh/deb-native"
+printf '\n'
 MOTD
 
 # pkg is Termux's; inside the userland it must not run (its PATH and
