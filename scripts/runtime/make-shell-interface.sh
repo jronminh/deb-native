@@ -233,23 +233,21 @@ DEF
 
 # The welcome. Termux's login runs ~/.termux/motd.sh in place of its own
 # static /etc/motd. Debian's own greeting (os-release name + base-files
-# /etc/motd), then where this userland runs.
+# /etc/motd), then where this userland runs. Each /etc/motd paragraph is
+# collapsed to one long line so the terminal soft-wraps it to its own width
+# instead of Debian's hard breaks at ~75 columns.
 gen "$TERMUX_DIR/motd.sh" <<'MOTD'
 #!/system/bin/sh
 # deb-native dn-shell welcome (generated; do not edit), run by Termux login.
 
 . __INSTDIR__/etc/os-release 2>/dev/null
-# Reflow Debian's /etc/motd to the real terminal width: its own hard line
-# breaks at ~75 columns double-wrap on a narrow phone terminal otherwise.
-fmt=__INSTDIR__/usr/bin/fmt
-stty=__INSTDIR__/usr/bin/stty
-[ -x "$fmt" ] || fmt=fmt
-[ -x "$stty" ] || stty=stty
-w=$("$stty" size 2>/dev/null); w=${w##* }
-case "$w" in ''|*[!0-9]*) w=80 ;; esac
-printf '%s\n' "${PRETTY_NAME:-Debian GNU/Linux}"
-"$fmt" -w "$w" __INSTDIR__/etc/motd 2>/dev/null || cat __INSTDIR__/etc/motd 2>/dev/null
-printf '\n%s is running inside a deb-native prefix.\n\n' "${PRETTY_NAME:-Debian GNU/Linux}"
+awk=__INSTDIR__/usr/bin/awk
+[ -x "$awk" ] || awk=__INSTDIR__/usr/bin/mawk
+[ -x "$awk" ] || awk=awk
+printf '%s\n\n' "${PRETTY_NAME:-Debian GNU/Linux}"
+"$awk" 'BEGIN { RS=""; ORS="\n\n" } { gsub(/\n+/, " "); print }' \
+  __INSTDIR__/etc/motd 2>/dev/null || cat __INSTDIR__/etc/motd 2>/dev/null
+printf '%s is running inside a deb-native prefix.\n\n' "${PRETTY_NAME:-Debian GNU/Linux}"
 printf '  prefix  %s\n' "__DN_DISP__"
 printf '  source  %s\n' "https://github.com/jronminh/deb-native"
 printf '\n'
