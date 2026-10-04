@@ -75,17 +75,24 @@ int main(int argc, char **argv) {
    * entries, so programs that need the tracer are routed there rather than
    * run directly -- this is what makes the userland session the default,
    * with no ~/.bashrc activation (docs/spec/userlands.md). */
-  /* The prefix's own dirs win every name. Termux's glibc coreutils and Bionic
-   * bin stay LAST as a last-resort fallback: early-bootstrap maintainer scripts
-   * (libc6/libc-bin postinst) run through this shell before the prefix has any
-   * base tools, so they need Termux's cp/dpkg-trigger. Once the base is
-   * installed the prefix's own tools shadow them; the $TP-empty harness is the
-   * real independence gate. */
+  /* Prefix dirs first. Termux's glibc/Bionic dirs are appended ONLY while the
+   * prefix has no dpkg yet (early bootstrap: libc6/libc-bin maintainer scripts
+   * run through this shell and need Termux's cp/dpkg-trigger). Once the base
+   * is installed the prefix is self-sufficient, so the steady-state PATH is
+   * prefix-only -- no Termux entry (0.7.0 R1). */
   snprintf(path, sizeof path,
            "%s/usr/lib/deb-native/priv:%s/usr/lib/deb-native/bin:"
            "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:"
-           "%s/usr/games:%s/glibc/bin:%s/bin",
-           inst, inst, inst, inst, inst, inst, inst, pfx, pfx);
+           "%s/usr/games",
+           inst, inst, inst, inst, inst, inst, inst);
+  {
+    char dpkg[4096];
+    snprintf(dpkg, sizeof dpkg, "%s/usr/bin/dpkg", inst);
+    if (access(dpkg, X_OK) != 0) {
+      size_t l = strlen(path);
+      snprintf(path + l, sizeof path - l, ":%s/glibc/bin:%s/bin", pfx, pfx);
+    }
+  }
 
   /* Preserve whatever preload we inherited (on Termux, termux-exec) so the
    * shim can hand it back to a Bionic child it execs -- see bionic_env()

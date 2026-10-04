@@ -609,13 +609,14 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
 
 **Runtime-overlay plan (the Termux-independent half), R0-R7:**
 
-- **R0 Acceptance harness**: run the userland with `DN_TERMUX_PREFIX` at an
-  empty dir -- by-name programs, `apt`/`dpkg`, `getent`, DNS, `dn-*` -- as the
-  gate: every item below is "done" only when R0 is green.
-- **R1 Steady-state PATH prefix-only**: split the bootstrap PATH (with
-  `$TP/bin` last, for `cp`/`dpkg-trigger`/`start-stop-daemon`) from the runtime
-  PATH (prefix only); `dn-launch.c`/`dn-run.c` and `apt.conf`'s `DPkg::Path`
-  drop `$TP` at steady state.
+- **R0 Acceptance harness** (done): `tests/prefix-independence/run.sh` runs
+  the userland with `DN_TERMUX_PREFIX` at an empty dir and checks by-name
+  programs, `apt`/`dpkg`, `getent` and the path overlay. Passes on the live
+  prefix.
+- **R1 Steady-state PATH prefix-only** (done): `dn-launch.c`/`dn-run.c` append
+  Termux's dirs only while the prefix has no `$DN/usr/bin/dpkg` (bootstrap);
+  once the base is in, PATH is prefix-only. `apt.conf`'s `DPkg::Path` no
+  longer lists `$TP/bin`.
 - **R2 Overlay coverage**: `/tmp` (`TMPDIR` is set; consider a shim rewrite of
   `/tmp` -> `$DN/tmp`), `/run` when services come, and an audit of the shim
   coverage the runtime's own tools need.

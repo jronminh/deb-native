@@ -389,12 +389,11 @@ Dpkg::Options:: "--force-script-chrootless";
 // scripts that run under it -- apt reads it even though Dir::Bin::dpkg
 // itself is not overridden.
 // priv/ first: a maintainer script's update-alternatives/dpkg-divert must hit
-// the prefix's own wrappers (setup-runtime.sh), not Termux's. The prefix's
-// own bin dirs next; Termux's $TP/bin LAST as a last-resort fallback for the
-// bootstrap only -- installing Debian's dpkg itself needs start-stop-daemon,
-// which the prefix does not have yet -- and never wins a name once the base
-// is in place (0.7.0).
-DPkg::Path "$DN/usr/lib/deb-native/priv:$DN/usr/bin:$DN/usr/sbin:$TP/bin";
+// the prefix's own wrappers (setup-runtime.sh); then the prefix's own bin
+// dirs. No $TP/bin: the bootstrap installs the base with Termux's dpkg
+// directly (never apt), so DPkg::Path only takes effect at steady state,
+// where the prefix is self-sufficient (0.7.0 R1).
+DPkg::Path "$DN/usr/lib/deb-native/priv:$DN/usr/bin:$DN/usr/sbin";
 DPkg::Pre-Install-Pkgs { "$INSTALL/dn-hook-pre.sh $DN"; };
 DPkg::Tools::Options::$INSTALL/dn-hook-pre.sh "";
 DPkg::Tools::Options::$INSTALL/dn-hook-pre.sh::Version "3";
