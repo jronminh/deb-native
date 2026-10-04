@@ -497,25 +497,28 @@ symlink any more. The glibc bundle is unaffected at run time: the loader and
 
 ## 0.7.0: prefix independent of Termux's tree (pre-alpha, planned)
 
-**Goal**: the deb-native prefix becomes a *peer* of Termux's own prefix, not
-a tenant of it -- it runs without leaning on Termux's `$PREFIX` at run time
-(own package manager, own userland tools, own resolver) and owns its
-`/root`, so "delete the prefix, Termux is untouched" holds in both
-directions. Location freedom is 0.6.1 (the section just above); this section
-is the operational half, and it is the project's largest remaining piece: it
-inverts the deliberate "reuse Termux" foundation (`AGENTS.md`).
+**Goal**: *operational* independence and fault isolation between the two
+prefixes -- not a self-contained ship. Reusing Termux's material is fine,
+bootstrap (`install.sh`, the toolchain) legitimately needs Termux's tree,
+and the two share one `$HOME` on purpose. What must hold: a *broken* prefix
+-- Termux's or deb-native's -- cannot break the other, and neither can make
+the other's operation fail. (Location freedom is 0.6.1, just above.)
 
-**Status**: not started. Today the prefix reuses Termux by design: its
-`dpkg`/`apt` are launchers onto `$TP/bin/*`, its PATH falls back onto
-`$PREFIX/glibc/bin` (`perl`, `bash`), its NSS route binds
-`$PREFIX/glibc/etc`, it carries termux-exec's preload, and `$DN/root` is a
-symlink to `$HOME`. The shim, the launchers and the glibc loader already
-derive the prefix from their own path, so *relocation* is solved; the
+**Status**: not started as a stated property. Most current coupling is
+bootstrap-time or a fallback (Termux's `dpkg`/`apt` behind stand-ins,
+`$PREFIX/glibc` coreutils on PATH, termux-exec) and is acceptable. The
+property to establish is that none of it is a *runtime hard requirement*:
+with Termux's tree damaged or gone, the prefix still runs, and neither
+prefix writes into the other's state. Relocation is 0.6.1; the
 compiled-artifact retarget that finishes it is 0.6.1's Open list.
 
-**Open** -- the coupling, by tier (Tier 1 = the 0.6.1 retarget+rebuild):
+**Open** -- the couplings to remove and the properties to establish:
 
-- **Own package manager** (largest): `dpkg`/`apt`/`apt-get`/`apt-cache` are
+- **No cross-damage** (the core property): audit that nothing in the
+  userland writes into Termux's tree (`$PREFIX`) or its package DB, and
+  that deleting or breaking the deb-native prefix leaves Termux's shell
+  fully working (the `~/.dn-login` fallback already covers the login path).
+- **Package manager must not need a healthy Termux**: `dpkg`/`apt`/`apt-get`/`apt-cache` are
   Termux binaries behind stand-in launchers
   (`scripts/bootstrap/dn-standins.sh:26-116`), and the bootstrap drives
   them (`setup-apt-prefix.sh:64,150-151,196-254`,
@@ -523,7 +526,7 @@ compiled-artifact retarget that finishes it is 0.6.1's Open list.
   `dn-hook-pre.sh:28,73`, `dn-fix-alternatives.sh:15,18,19`,
   `make-launchers.sh:70`). Ship the prefix's own apt/dpkg (the `apt-dpkg/`
   fork noted in this file) instead of exec'ing Termux's.
-- **Own userland toolchain**: install-time builds lean on Termux `clang` +
+- **Runtime tools must not need Termux's glibc**: install-time builds lean on Termux `clang` +
   the `$PREFIX/glibc` side-install + `libtalloc`
   (`build-path-redirect.sh:24`, `setup-runtime.sh:26-27,37,62,72,83`); the
   run-time PATH appends `$PREFIX/glibc/bin` and `$PREFIX/bin`
@@ -531,18 +534,18 @@ compiled-artifact retarget that finishes it is 0.6.1's Open list.
   and the bash fallback exec'ing `$PREFIX/glibc/bin`
   (`dn-launch.c:101,114`). Give the prefix its own perl/bash/coreutils and
   a build path that does not need Termux's glibc side-install.
-- **Own resolver / NSS**: `$DN/etc/resolv.conf` is a live symlink to
+- **Resolver / NSS must not need Termux**: `$DN/etc/resolv.conf` is a live symlink to
   `$TP/etc/resolv.conf` (`setup-apt-prefix.sh:169`), and the NSS tracer
   route binds the prefix `/etc` over `$PREFIX/glibc/etc`
   (`native/dn-run.c:184-186,237`). Manage DNS inside the prefix.
-- **Drop termux-exec**: `native/path-redirect.c:230-308` (`bionic_env`,
-  `DN_BIONIC_PRELOAD`) exists to hand Termux's preload back to Bionic
-  children; with no Termux coupling it goes away.
-- **Own `/root`**: `$DN/root` a symlink to `$HOME`
-  (`setup-apt-prefix.sh:156-157`) is why `custom/base-files.sh:10-32`
-  strips `/root` and why the shim rewrites `/root`
-  (`native/path-redirect.c:178-187,207`). Make `/root` a real dir in the
-  prefix.
+- **termux-exec is acceptable**: `native/path-redirect.c:230-308`
+  (`bionic_env`, `DN_BIONIC_PRELOAD`) hands Termux's preload back to Bionic
+  children; keep it unless it proves to be a hard runtime requirement.
+- **Shared `$HOME` stays**: one home for both is intended, so `$DN/root ->
+  $HOME` (`setup-apt-prefix.sh:156-157`) is kept -- it is also why
+  `custom/base-files.sh:10-32` strips `/root` and the shim rewrites `/root`
+  (`native/path-redirect.c:178-187,207`). The only constraint is that this
+  link cannot make `$HOME` recurse (fixed by 0.6.1's location move).
 - **Home-side writes are the interface, keep but audit**:
   `make-shell-interface.sh:63-77,106,148-153` owns `~/.dn-login`,
   `~/.termux/shell`, `~/.termux/motd.sh` and the `~/.bashrc` cleanup;
