@@ -168,3 +168,12 @@ below, oldest first, matching the original file's order.
   file at EOF, read EOF, and exited. Fixed by selecting into a variable and
   calling `enter` after the loop; `~/.termux/shell` repointed back to
   `.dn-login`.
+- [`silent-untranslated-runtime-installs.md`](silent-untranslated-runtime-installs.md)
+  — 2026-10-04, **Repo change**: a runtime `apt install` (htop) shipped an ELF
+  still on `/lib/ld-linux-aarch64.so.1`. `dn-translate-deb.sh:77` swallowed
+  every `patchelf` failure (`|| interp=""`) and returned 0, and the prefix's
+  own patchelf was itself untranslated (the bootstrap never checked the host
+  patchelf it translates with). Fixed by preflighting patchelf in both
+  `dn-translate-deb.sh` (fail loud) and `setup-apt-prefix.sh` (require the
+  host patchelf). Verified: with a runnable patchelf, `apt-get install
+  --reinstall htop` repoints it and htop runs.

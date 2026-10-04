@@ -44,6 +44,22 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # Runtime interpreter: the prefix's own fused glibc loader (dn-glibc-prefix.md).
 LD="$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 
+# The interpreter rewrite below is this script's whole job. A missing or
+# unrunnable patchelf used to be swallowed by the per-file `|| interp=""`, so
+# every ELF -- a runtime-installed package's included -- was repacked still
+# carrying /lib/ld-linux-aarch64.so.1 while the install reported success. Fail
+# loudly instead: the caller (bootstrap, or the apt Pre-Install-Pkgs hook) then
+# aborts rather than ship binaries that cannot run.
+command -v patchelf >/dev/null 2>&1 || {
+  echo "E: patchelf not found -- cannot translate $DEB" >&2
+  echo "   in the prefix: apt install patchelf; on the Termux host: pkg install patchelf" >&2
+  exit 1
+}
+patchelf --version >/dev/null 2>&1 || {
+  echo "E: patchelf at $(command -v patchelf) does not run -- cannot translate $DEB" >&2
+  exit 1
+}
+
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/pkg"

@@ -64,6 +64,18 @@ DN=$NEWPREFIX
 TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 DPKG="$TP/bin/dpkg --admindir=$DN/var/lib/dpkg --instdir=$DN --force-not-root --force-script-chrootless"
 
+# The base is translated with the HOST (Termux) patchelf: dn-translate-deb.sh
+# runs in Termux's environment here, and the prefix's own patchelf does not
+# exist yet. Nothing downstream checked this -- the silent `|| interp=""` in
+# dn-translate-deb.sh would leave every base ELF, the prefix's seeded patchelf
+# included, on /lib/ld-linux-aarch64.so.1 and install them anyway, and then
+# every later runtime apt install would be silently untranslated. Require it
+# up front so a missing translator fails before the prefix is touched.
+command -v patchelf >/dev/null 2>&1 && patchelf --version >/dev/null 2>&1 || {
+  echo "E: the Termux host patchelf is required to translate packages: pkg install patchelf" >&2
+  exit 1
+}
+
 # The base: what every Debian package assumes is there -- 0.1.x's
 # bootstrap-base.sh set plus Debian's Essential tools maintainer scripts call
 # by name (without them a script's `sed /etc/x` falls through to Termux's
