@@ -104,3 +104,10 @@ below, oldest first, matching the original file's order.
   the glibc source + our build's DWARF (a binary diff flags 283 and is
   meaningless: build config differs). `libnss_files`/`libnss_dns` stubs
   confirmed upstream design, correctly excluded.
+- [`termux-app-and-home-programs.md`](termux-app-and-home-programs.md) —
+  2026-10-04, **Isolated**: how the app starts a session
+  (`$PREFIX/bin/login` -> `~/.termux/shell` -> `exec $SHELL -l`), the app's
+  capabilities (the `termux-*` bridges, storage, properties), and a probe
+  showing a minimal Bionic ELF or `/system/bin/sh` script runs from `$HOME`
+  with an empty env -- so a prefix-independent chooser/shell in `$HOME` is
+  feasible (the login already is).
