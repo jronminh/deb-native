@@ -40,7 +40,8 @@ a checkout: `sh install.sh [PREFIX] [pkg ...]`; log in `~/.dn/var/log/`.
 [`docs/README.md`](docs/README.md) maps everything: start with
 [`docs/spec/status.md`](docs/spec/status.md) (where it is today) and
 [`docs/spec/design.md`](docs/spec/design.md) (how it works). Roadmap in
-[`TODO.md`](TODO.md); conventions in [`AGENTS.md`](AGENTS.md).
+[`TODO.md`](TODO.md); conventions in [`AGENTS.md`](AGENTS.md); releases in
+[`Releases`](https://github.com/jronminh/deb-native/releases).
 
 ## Credit & license
 

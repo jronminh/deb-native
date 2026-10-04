@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Known issues — check first
+    url: https://github.com/jronminh/deb-native/blob/main/docs/reference/known-issues.md
+    about: Confirmed breakages and their workarounds.
+  - name: Q&A / questions
+    url: https://github.com/jronminh/deb-native/discussions
+    about: Setup questions, ideas and general talk — not for bug reports.
+  - name: Documentation
+    url: https://github.com/jronminh/deb-native/blob/main/docs/README.md
+    about: The documentation map (status, design, references, guides).
