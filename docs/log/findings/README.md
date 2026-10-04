@@ -161,3 +161,10 @@ below, oldest first, matching the original file's order.
   the fix as translate-at-launch (tracer coverage + a routing criterion), with
   patchelf/loader-wrapper as narrower options; flags the open questions
   (installer environment, PATH/env registration).
+- [`dn-login-stdin-eof.md`](dn-login-stdin-eof.md) — 2026-10-04,
+  **Repo change**: the "welcome then kicked" bug behind the seccomp one.
+  `.dn-login` called `enter` (an `exec dn-shell`) from **inside** a
+  `while ... done < "$LISTF"` loop, so the new shell inherited fd 0 = the list
+  file at EOF, read EOF, and exited. Fixed by selecting into a variable and
+  calling `enter` after the loop; `~/.termux/shell` repointed back to
+  `.dn-login`.

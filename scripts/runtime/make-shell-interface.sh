@@ -120,23 +120,32 @@ if [ "$choose" = 1 ]; then
   printf '  choose: ' >&2
   read -r choice || choice=""
   [ "$choice" = 0 ] && host "$@"
+  sel=""
   i=1
   while IFS="$(printf '\t')" read -r n p; do
-    [ "$i" = "$choice" ] && enter "$p" "$@"
+    [ "$i" = "$choice" ] && { sel=$p; break; }
     i=$((i+1))
   done < "$LISTF"
+  [ -n "$sel" ] && enter "$sel" "$@"
   host "$@"
 fi
 
 # Bare app start: open the default -- the explicit `dn-default`, else last
 # used, else this generated prefix, else the first -- with no prompt.
+# Select OUTSIDE the read loop: calling enter/exec from inside
+# `while ... done < "$LISTF"` would hand the new shell that file as stdin
+# (already read to EOF), so an interactive shell would read EOF and exit at
+# once -- the "welcome then kicked" bug.
+sel=""
 for want in "$EXPLICIT" "$LAST" "$DEFAULT"; do
+  [ -n "$sel" ] && break
   [ -n "$want" ] || continue
   while IFS="$(printf '\t')" read -r n p; do
-    [ "$p" = "$want" ] && enter "$p" "$@"
+    [ "$p" = "$want" ] && { sel=$p; break; }
   done < "$LISTF"
 done
-enter "$first" "$@"
+[ -n "$sel" ] || sel="$first"
+enter "$sel" "$@"
 WRAP
 ln -sfn "$HOME_DIR/.dn-login" "$TERMUX_DIR/shell"
 
