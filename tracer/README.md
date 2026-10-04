@@ -1,10 +1,6 @@
 # tracer/ — fork-lite
 
-> Template: [`templates/readme.template.md`](../templates/readme.template.md). Read this
-> file before touching anything in this directory or guessing a
-> file's purpose from its name alone. Add a `README.md` like this one
-> whenever a new directory holds more than a couple of files that
-> aren't self-explanatory from their names alone.
+<!-- template: templates/readme.template.md -->
 
 The project's syscall-level path tracer: a reduced subset of **PRoot**
 (<https://github.com/termux/proot>), kept **arm64-only** and trimmed to path

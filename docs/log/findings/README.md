@@ -1,10 +1,6 @@
 # docs/log/findings/
 
-> Template: [`templates/readme.template.md`](../../../templates/readme.template.md). Read this
-> file before touching anything in this directory or guessing a
-> file's purpose from its name alone. Add a `README.md` like this one
-> whenever a new directory holds more than a couple of files that
-> aren't self-explanatory from their names alone.
+<!-- template: templates/readme.template.md -->
 
 The engineering log for the prototype, one entry per file instead of
 one long chronological doc (split 2026-10-02 from the former

@@ -1,13 +1,6 @@
 # Deploy: Debian's `libc6`/`libc-bin`, then the 10-file swap
 
-> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
-> (fix the relative path to match this file's depth). Read a doc's
-> summary and table of contents below before its sections, and read its
-> directory's own `README.md` first to confirm this is the right doc to
-> open. Create a new doc, instead of extending an existing one, when the
-> content is a distinct kind of writing -- a new spec topic, a new one-off
-> investigation, or a new guide -- not just a long addition to what a doc
-> already covers.
+<!-- template: templates/docs.template.md -->
 
 How a `dn-glibc` prefix is deployed: install Debian's **real** `libc6` and
 `libc-bin`, then immediately **swap in the 10 files** the Android patch

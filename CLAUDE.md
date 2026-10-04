@@ -70,9 +70,10 @@ belongs to) for the two biggest trees.
 
 Every `README.md` and every content doc under `docs/` follows a stable
 template in [`templates/`](templates/) (`readme.template.md`,
-`docs.template.md`) — each file points at it in a blockquote right after
-its title. Copy the matching template instead of improvising a layout
-when adding a new one.
+`docs.template.md`); copy the matching template instead of improvising a
+layout when adding a new one. The how-to lives as an HTML comment inside
+each template, and a one-line `<!-- template: ... -->` marks each finished
+file, so the rendered doc stays clean for readers.
 
 **Docs state only the current truth.** From 0.6.0+s.1 no doc under `docs/`
 records history — no "was X", no superseded banner, no change narrative;

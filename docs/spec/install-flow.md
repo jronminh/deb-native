@@ -1,13 +1,6 @@
 # Install flow — what happens, in order
 
-> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
-> (fix the relative path to match this file's depth). Read a doc's
-> summary and table of contents below before its sections, and read
-> its directory's own `README.md` first to confirm this is the right
-> doc to open. Create a new doc, instead of extending an existing
-> one, when the content is a distinct kind of writing -- a new spec
-> topic, a new one-off investigation, or a new guide -- not just a
-> long addition to what a doc already covers.
+<!-- template: templates/docs.template.md -->
 
 From nothing to "any `apt-get install` works". Grounded in the scripts; the
 mechanisms each step installs are documented in

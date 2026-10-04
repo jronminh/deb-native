@@ -54,9 +54,11 @@ relevant one before working in a directory or guessing a file's purpose
 from its name. Start from `docs/README.md` and `scripts/README.md`.
 Every `README.md` and content doc follows a stable template in
 `templates/` (`readme.template.md`, `docs.template.md`) — copy it instead
-of improvising a layout when adding a new one. After moving/renaming/
-deleting a doc or a script, run `scripts/tools/check-repo.py` (broken
-links, broken ToC anchors, scripts nothing calls any more).
+of improvising a layout when adding a new one; each template carries its
+how-to in an HTML comment, so it does not show in the rendered doc. After
+moving/renaming/deleting a doc or a script, run
+`scripts/tools/check-repo.py` (broken links, broken ToC anchors, scripts
+nothing calls any more).
 
 `docs/spec/design.md` is the live design doc (scope, the 0.2.0
 self-contained prefix, day-to-day commands, fake root) — read it before

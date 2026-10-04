@@ -1,5 +1,7 @@
 # Known issues
 
+<!-- template: templates/docs.template.md -->
+
 Confirmed breakages and limitations in the current tree — reproduced, not
 merely suspected. This is a catalog of the current state, like the other
 specs, and a hub for issues documented in more depth elsewhere: each entry
