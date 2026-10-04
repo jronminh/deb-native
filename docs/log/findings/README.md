@@ -185,3 +185,10 @@ below, oldest first, matching the original file's order.
   per-binary, no session tracing. A device-level trap: inside the shim a bare
   `access()` is itself rewired, so the check uses `dlsym(RTLD_NEXT,"access")`.
   Verified on a foreign `fastfetch`.
+- [`prefix-owned-apt-hooks.md`](prefix-owned-apt-hooks.md) — 2026-10-04,
+  **Repo change**: the apt translate/index hooks were pointed at an absolute
+  path into the checkout, so a moved/removed checkout silently stopped runtime
+  translation. `install-hooks.sh` now copies the hook set (+
+  `make-launchers.sh`, `scan-direct-syscalls.py`, `custom/`) into the prefix and
+  `setup-apt-prefix.sh` points `apt.conf` at the prefix copies; `install.sh`
+  refresh re-copies. Prefixes bootstrapped before need a one-time re-point.

@@ -15,3 +15,6 @@ Front end used after a prefix already exists. See
   one launcher entry per program, first on `PATH`.
 - `make-apt-wrappers.sh` — installs `termux-apt`/`termux-dpkg`,
   `termux-dn-doctor` and `dn-adopt` as commands in the launcher dir.
+- `install-hooks.sh` — copies the apt translate/index hook scripts (and the
+  files they call) inside the prefix, so the prefix's own `apt` translates
+  packages without depending on the checkout's path.
