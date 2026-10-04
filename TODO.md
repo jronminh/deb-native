@@ -591,18 +591,47 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   already lands the session in the Debian userland, i.e. opening the app
   boots into the deb-native prefix. No entry of our own; `$PREFIX/bin/login`
   stays app-level and exempt.
-- **apt/dpkg**: reuse Termux's own `apt`/`dpkg` -- they are patched from
-  real Debian packages -- *inside our prefix*: vendor the binaries (and the
-  Termux libs they need) into `$DN` and prove they run with `$PREFIX`
-  disabled. No new fork.
+- **apt/dpkg**: Debian's real `apt`/`dpkg`/`libapt-pkg` are installed *into
+  the prefix* and run under its own glibc via the shim -- no Termux binaries,
+  no fork. The shim's `system()`/`popen()` (glibc's shell exec bypassed it
+  before) and the `link()` copy-fallback (Android forbids hard links) make
+  them work; verified with `apt install hello`.
 - **N userlands**: support as many sibling userlands as one wants, not just
   one Debian; the prefix must be a copyable/portable artifact and the
   interface must let you pick/enter among them.
 
 **Still open**:
 
-- **termux-exec**: investigate exactly what breaks without it (M0), then
-  reimplement, vendor, or keep it as an optional fallback.
+- **termux-exec**: only meaningful for Bionic children; with Debian apt/dpkg
+  (glibc) and a prefix-first PATH few remain, so it is already optional -- the
+  shim uses `DN_BIONIC_PRELOAD` only if present. Revisit when the last Bionic
+  children (`/system/bin/sh` priv wrappers) are addressed.
+
+**Runtime-overlay plan (the Termux-independent half), R0-R7:**
+
+- **R0 Acceptance harness**: run the userland with `DN_TERMUX_PREFIX` at an
+  empty dir -- by-name programs, `apt`/`dpkg`, `getent`, DNS, `dn-*` -- as the
+  gate: every item below is "done" only when R0 is green.
+- **R1 Steady-state PATH prefix-only**: split the bootstrap PATH (with
+  `$TP/bin` last, for `cp`/`dpkg-trigger`/`start-stop-daemon`) from the runtime
+  PATH (prefix only); `dn-launch.c`/`dn-run.c` and `apt.conf`'s `DPkg::Path`
+  drop `$TP` at steady state.
+- **R2 Overlay coverage**: `/tmp` (`TMPDIR` is set; consider a shim rewrite of
+  `/tmp` -> `$DN/tmp`), `/run` when services come, and an audit of the shim
+  coverage the runtime's own tools need.
+- **R4 Tracer**: `dn-trace` solid for static / raw-syscall / NSS (the syscall
+  layer), built when `make`/`libtalloc` are present and routed.
+- **R5 `dn-adopt`**: adopt non-apt glibc binaries; test.
+- **R6 fake-root/identity**: apt/dpkg root semantics (uid 0, `chown` no-op)
+  and the `_apt` user under the overlay.
+- **R7 Dead-code sweep** (after R0): drop `dn-perl` (no perl in the minimal
+  seed), `bionic_env`/`DN_BIONIC_PRELOAD` and the `$TP` fallbacks.
+
+Not needed: **no CI bundle rebuild** -- the loader/shim self-derive the live
+prefix (`native/path-redirect.c` `dn_init` via `dladdr`; glibc-patch commits
+`90f2528`, `297909d`, `1a4780d`, `9b328eb`, `59985d9`), and the shim code is
+kept from the local build (`dn-install-glibc.sh`). Only a static program /
+`ldconfig` falls back to the compiled prefix (0.6.1 Tier 1).
 
 ## Services, then sudo (after alpha)
 
