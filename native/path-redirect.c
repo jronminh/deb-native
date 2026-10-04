@@ -538,6 +538,23 @@ int __fxstatat(int ver, int dirfd, const char *pathname, struct stat *st, int fl
   return r;
 }
 
+/* The 64-bit twin. On aarch64 (LP64) glibc implements fstatat() on top of
+ * __fxstatat64, and a program that reaches it directly -- Bun/Node, and so
+ * Claude Code and opencode -- bypasses __fxstatat above: without this the
+ * real owner leaks past fake-root (a program then sees its own temp dir as
+ * "another user's", e.g. Claude's temp-dir ownership check refusing to run)
+ * and its paths are not redirected. Same shape as __fxstatat. */
+typedef int (*fxstatat64_t)(int, int, const char *, struct stat64 *, int);
+int __fxstatat64(int ver, int dirfd, const char *pathname, struct stat64 *st, int flags) {
+  static fxstatat64_t real;
+  if (!real) real = (fxstatat64_t)dlsym(RTLD_NEXT, "__fxstatat64");
+  if (!real) return -1;
+  char buf[4096];
+  int r = real(ver, dirfd, rewrite(pathname, buf, sizeof buf), st, flags);
+  if (r == 0) FAKE_OWNER(st);
+  return r;
+}
+
 /* Legacy stat entry points: a binary built against glibc < 2.33 reaches
  * stat through the versioned __xstat/__lxstat names, and Termux's glibc
  * still exports them for compatibility. The first argument is the (unused)
