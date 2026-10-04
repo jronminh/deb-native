@@ -502,8 +502,8 @@ the Termux *app*. Once a session is up, the Debian userland runs and manages
 itself without needing Termux's tree; bootstrap may still borrow Termux (the
 app's job), the two share one `$HOME` on purpose, and the app's Android
 capabilities (`termux-api`, storage) stay reachable through `termux-shell`.
-Model: one host (Android) with sibling userlands (`$PREFIX`, `$DN`) under
-`termux/files/` -- no rank, only the bootstrap-time borrow
+Model: one host (Android) with N sibling userlands (`$PREFIX`, `$DN`, ...)
+under `termux/files/` -- no rank, only the bootstrap-time borrow
 (`docs/spec/userlands.md`).
 
 **Status**: not started. Most current coupling is bootstrap-time or a
@@ -533,14 +533,14 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   termux-exec with our own shebang handling, or drop it
   (`native/path-redirect.c:230-308`); make `install.sh` upgrade an existing
   prefix in place. Done when the harness passes run-by-name + DNS.
-- **M2 Own package manager**: replace the stand-ins that exec `$TP/bin/*`
+- **M2 Package manager inside the prefix**: the stand-ins exec `$TP/bin/*`
   (`scripts/bootstrap/dn-standins.sh:26-116`; drivers
   `setup-apt-prefix.sh:64,150-151,196-254`, `dn-install-glibc.sh:28,35,56`,
   `apt-install.sh:13,15`, `dn-hook-pre.sh:28,73`,
-  `dn-fix-alternatives.sh:15,18,19`, `make-launchers.sh:70`) with a
-  prefix-owned `apt`/`dpkg` (the `apt-dpkg/` fork); the bootstrap still
-  borrows Termux to stage. Done when `apt update && apt install` works with
-  `$PREFIX` disabled.
+  `dn-fix-alternatives.sh:15,18,19`, `make-launchers.sh:70`). Instead of
+  depending on `$PREFIX/bin`, install Termux's Debian-patched `apt`/`dpkg`
+  (and the libs they need) into the prefix and run them from there. Done
+  when `apt update && apt install` works with `$PREFIX` disabled.
 - **M3 No cross-damage**: move our host-layer files (`termux-shell`,
   `dn-shell`, the entry) out of `$PREFIX/bin` into a host-layer dir beside
   `$DN`, leaving at most symlinks
@@ -551,26 +551,33 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   working.
 - **M4 Acceptance and release**: a CI job that simulates the broken prefix
   and runs the by-name/apt/DNS/toolchain/git suite; tag `v0.7.0-prealpha`.
+- **Multi-userland**: with N supported, add naming/selection (which userland
+  a `dn-shell` enters, which one the login default points at) and make the
+  prefix copyable between locations; touches `make-shell-interface.sh`,
+  `~/.dn-login` and `$PREFIX/bin/dn-shell`.
 - **Dedup the redirect set**: `/usr /etc /var /opt /bin /sbin` is spelled
   in four places that must agree -- `native/path-redirect.c:200-212`,
   `native/dn-run.c:221`, `scripts/install/normalize-symlinks.sh:16` and the
   tracer binds -- into one source.
 
-**Open questions** (decide before M1/M2):
+**Decisions** (from the discussion):
 
-- **Session entry**: Termux's app hardcodes `$PREFIX/bin/login` as the
-  terminal's entry, so it is app-level and exempt from the DoD. Is that the
-  final answer, or do we want our own entry (needs the app to cooperate and
-  may not be possible)? Everything else can be independent without this.
-- **termux-exec**: it exists so a Bionic child keeps Termux's shebang
-  handling. If we drop it, which commands regress, and is the answer to
-  reimplement it in the prefix or keep it as an optional fallback?
-- **apt/dpkg fork**: a prefix-owned `apt`/`dpkg` is the single largest
-  piece. Is "stand-ins as a fallback now, own binaries later" acceptable,
-  or a hard gate for 0.7.0?
-- **Resource cost**: each userland carries its own glibc/toolchain/base.
-  How many sibling userlands do we actually support -- one Debian, or a
-  multi-distro feature?
+- **Entry**: keep Termux's app `login` -- it reads `~/.termux/shell`, which
+  already lands the session in the Debian userland, i.e. opening the app
+  boots into the deb-native prefix. No entry of our own; `$PREFIX/bin/login`
+  stays app-level and exempt.
+- **apt/dpkg**: reuse Termux's own `apt`/`dpkg` -- they are patched from
+  real Debian packages -- *inside our prefix*: vendor the binaries (and the
+  Termux libs they need) into `$DN` and prove they run with `$PREFIX`
+  disabled. No new fork.
+- **N userlands**: support as many sibling userlands as one wants, not just
+  one Debian; the prefix must be a copyable/portable artifact and the
+  interface must let you pick/enter among them.
+
+**Still open**:
+
+- **termux-exec**: investigate exactly what breaks without it (M0), then
+  reimplement, vendor, or keep it as an optional fallback.
 
 ## Services, then sudo (after alpha)
 
