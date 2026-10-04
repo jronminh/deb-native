@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/stat.h>
 
 static void up_dirs(char *p, int n) {
   while (n-- > 0) {
@@ -98,6 +99,15 @@ int main(int argc, char **argv) {
   setenv("DN_INSTDIR", inst, 1);
   setenv("PATH", path, 1);
   setenv("DEBIAN_FRONTEND", "noninteractive", 1);
+  /* Android has no writable /tmp; give the userland the prefix's own tmp so
+   * programs that honour TMPDIR (apt) work. /tmp itself is not redirected by
+   * the shim, so setting the variable is the portable fix. */
+  if (!getenv("TMPDIR")) {
+    char tmp[4096];
+    snprintf(tmp, sizeof tmp, "%s/tmp", inst);
+    mkdir(tmp, 0777);
+    setenv("TMPDIR", tmp, 1);
+  }
 
   const char *base = strrchr(self, '/');
   base = base ? base + 1 : self;

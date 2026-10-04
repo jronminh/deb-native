@@ -69,15 +69,14 @@ DPKG="$TP/bin/dpkg --admindir=$DN/var/lib/dpkg --instdir=$DN --force-not-root --
 # by name (without them a script's `sed /etc/x` falls through to Termux's
 # Bionic sed, which the shim never reaches). Tools first: unpack order is the
 # order preinsts run in.
-# A + B: the bootstrap seed (0.7.0). Termux dry-installs these and their
-# closure, the translate hook rewrites them, and Termux's dpkg installs them;
-# from there the prefix's own apt works and installs anything further (C)
-# itself. bash is the session shell; perl for maintainer scripts / dn-perl.
-# Everything here is Debian arm64 -- Termux only fetches and drives the
-# install.
+# 0.7.0 minimal: pure fake-root identity -- base-passwd alone (apt's
+# `base-passwd | adduser` alternative is satisfied by base-passwd, and
+# apt.postinst creates its `_apt` user with `adduser ... || true`, so the
+# user-management/PAM stack is not needed). debconf here has no perl
+# dependency; perl is only needed once a perl script actually is.
 TOOLS="mawk coreutils sed grep findutils"
 SYSTEM="base-files base-passwd dash bash debianutils diffutils gzip tar"
-APT="apt dpkg libapt-pkg7.0 gpgv xz-utils ca-certificates debconf perl"
+APT="apt dpkg libapt-pkg7.0 gpgv sqv xz-utils ca-certificates debconf"
 BASE="$TOOLS $SYSTEM $APT"
 # Not held: new Debian releases bring new keys through it.
 KEYRING="debian-archive-keyring"
@@ -262,11 +261,31 @@ BASE_CLOSURE=$(APT_CONFIG="$T/apt.conf" apt-cache depends --recurse \
   --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces \
   --no-enhances -i $BASE $KEYRING 2>/dev/null \
   | grep -v '^ ' | grep -v '^<' | sort -u)
+# apt-cache depends --recurse expands every alternative, pulling packages the
+# seed already satisfies another way (0.7.0 minimal prefix):
+#   base-passwd | adduser            -> base-passwd (drop the user/PAM chain)
+#   mawk | gawk | original-awk       -> mawk
+#   debconf | debconf-2.0            -> debconf (drop cdebconf + its libs)
+# perl is not a dependency of debconf here, and pure fake-root needs no
+# user-management/PAM stack, so those go too.
+SKIP_RE='^(adduser|passwd|libpam0g|libpam-modules|libpam-modules-bin|perl|perl-base|perl-modules-5.40|libperl5.40|gawk|original-awk|cdebconf|libnewt0.52|libslang2|libtextwrap1|libdebian-installer4)$'
+BASE_CLOSURE=$(printf '%s\n' "$BASE_CLOSURE" | grep -vE "$SKIP_RE" || true)
 mark stage "downloading the base"
 # The total comes from apt's own "N newly installed" line (install.sh reads
 # it), not from a separate dry run over the whole index.
 mark count Get: auto packages
 $TAPT install -y --download-only $BASE_CLOSURE
+
+# apt re-adds deps the seed satisfies another way (SKIP_RE above): drop their
+# .debs so they are neither translated nor installed. dpkg --force-depends
+# tolerates the missing declarations; apt works without the user/PAM stack
+# (sandbox=root; apt.postinst's `adduser ... || true`).
+for deb in "$T"/debs/*.deb; do
+  case "$(dpkg-deb -f "$deb" Package 2>/dev/null)" in
+    adduser|passwd|libpam0g|libpam-modules|libpam-modules-bin|perl|perl-base|perl-modules-5.40|libperl5.40|gawk|original-awk|cdebconf|libnewt0.52|libslang2|libtextwrap1|libdebian-installer4)
+      rm -f "$deb" ;;
+  esac
+done
 
 # 4. Translate, in Termux's environment (no apt hooks involved), several
 # packages at once (DN_JOBS, default: the CPU count): each is independent
@@ -313,6 +332,13 @@ for p in $TOOLS $SYSTEM; do echo "$p set on hold."; done
 echo $BASE $KEYRING | tr ' ' '\n' > "$DN/var/lib/deb-native/base-packages"
 "$INSTALL/dn-fix-alternatives.sh" "$DN"
 "$INSTALL/normalize-symlinks.sh" "$DN"
+
+# apt's method sandbox drops to _apt; base-passwd does not ship it and the
+# adduser/passwd stack is deliberately not installed (0.7.0 minimal, pure
+# fake-root), so create it the way apt.postinst's `adduser --system _apt`
+# would -- otherwise apt fails "Could not switch group" while downloading.
+grep -q '^_apt:' "$DN/etc/passwd" 2>/dev/null || printf '_apt:x:42:65534::/nonexistent:/usr/sbin/nologin\n' >> "$DN/etc/passwd"
+grep -q '^_apt:' "$DN/etc/group" 2>/dev/null || printf '_apt:x:65534:\n' >> "$DN/etc/group"
 
 # === Stage 1: package database and apt config ============================
 mark stage "writing the prefix's apt configuration"
