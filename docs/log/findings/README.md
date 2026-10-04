@@ -141,3 +141,12 @@ below, oldest first, matching the original file's order.
   `status/is-active/is-enabled/stop/start` plus unit->`run` translation
   (prefix shebang, no cgroup lines, service supervised + logging). Still
   needs the per-prefix `runsvdir` launcher.
+- [`android-seccomp-setfsuid.md`](android-seccomp-setfsuid.md) — 2026-10-04,
+  **Repo change**: a new session showed the welcome then died. `strace` pinned
+  it to **SIGSYS** on `setfsuid`, trapped by Android seccomp; libtinfo/ncurses
+  (`tput`, terminfo) calls it, so readline -- and thus every interactive bash
+  -- died. Fixed by overriding `setfsuid`/`setfsgid` as no-ops in
+  `native/path-redirect.c` (outside `FAKE_SETID`, since the trap ignores
+  fake-root). Rebuilt shim: interactive shell + `tput` work again. The
+  `~/.dn-login` chooser's own exit-0 bug is deferred -- `~/.termux/shell`
+  now points straight at the prefix `dn-shell`.

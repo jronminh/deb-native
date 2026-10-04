@@ -1496,6 +1496,16 @@ FAKE_SETID(setresgid, (gid_t r, gid_t e, gid_t s), (r, e, s))
 FAKE_SETID(setgroups, (size_t n, const gid_t *l), (n, l))
 FAKE_SETID(initgroups, (const char *u, gid_t g), (u, g))
 
+/* setfsuid()/setfsgid() are NOT in the FAKE_SETID set: Android's seccomp
+ * filter traps those syscalls with SIGSYS regardless of ours being fake root,
+ * so a real() fallthrough would still kill the process ("Bad system call").
+ * They are reached by things that only need to *check* file access as the
+ * caller's identity -- ncurses/libtinfo's terminfo lookup (so any interactive
+ * bash, via readline) and bash's own access checks. We run as one uid, so make
+ * them silent no-ops returning the current uid/gid as the "previous" fsuid. */
+int setfsuid(uid_t uid) { (void)uid; return (int)getuid(); }
+int setfsgid(gid_t gid) { (void)gid; return (int)getgid(); }
+
 typedef int (*utime_t)(const char *, const struct utimbuf *);
 int utime(const char *pathname, const struct utimbuf *times) {
   static utime_t real;
