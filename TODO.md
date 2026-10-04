@@ -576,9 +576,9 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   `$HOME` shared but never touch Termux's dotfiles. Done when nothing of
   ours writes into `$PREFIX` and deleting `$DN` leaves Termux's login
   working.
-- **Real login (multi-userland selector)**: `~/.termux/shell` points at a
-  host-layer `dn-login` (outside `$PREFIX`, per M3) that chooses among the
-  machine's existing prefixes, not a fixed one. It reads a registry
+- **Real login (multi-userland selector)** (done): `~/.termux/shell` points at
+  a host-layer login wrapper that chooses among the machine's existing
+  prefixes, not a fixed one. It reads a registry
   (`$HOME/.config/deb-native/prefixes`, written by `install.sh`; fallback:
   scan `$(dirname "$PREFIX")/*` for `usr/bin/dn-shell`), shows a menu when
   more than one exists (default = last used; auto-pick on a non-TTY), and
