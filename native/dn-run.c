@@ -182,14 +182,15 @@ static void launch_glibc(char **args) {
  * Termux's proot: the prefix's own loader, the shim and dn-trace cover the
  * prefix. Only dirs that exist are bound.
  *
- * nss=1 adds one more bind: Termux's glibc reads its sysconfdir at
- * $PREFIX/glibc/etc (a host path outside the prefix), so NSS reads
- * (/etc/passwd, /etc/hosts, ...) never hit the guest /etc. Bind the prefix's
- * /etc over it so those lookups resolve in the prefix. */
+ * The prefix's own fused glibc self-derives its sysconfdir, so its NSS
+ * reads (/etc/passwd, /etc/hosts, ...) already resolve inside the prefix
+ * through the /etc bind below -- no Termux glibc sysconfdir bind is needed
+ * (0.7.0 removed it). */
 static void launch_trace(char **args, int nss) {
   char tracer[4096];
   const char *e = getenv("DN_TRACE");
   struct stat st;
+  (void)nss;   /* the prefix's own glibc self-derives NSS; no extra bind */
 
   if (e && *e)
     snprintf(tracer, sizeof tracer, "%s", e);
@@ -230,17 +231,6 @@ static void launch_trace(char **args, int nss) {
     snprintf(binds[i], sizeof binds[i], "%s/%s:/%s", instdir, dirs[i], dirs[i]);
     pargv[n++] = (char *)"-b";
     pargv[n++] = binds[i];
-  }
-  if (nss && n < 4078) {
-    static char getc_bind[8192];
-    char host_etc[4096];
-    snprintf(host_etc, sizeof host_etc, "%s/etc", instdir);
-    if (stat(host_etc, &st) == 0) {
-      snprintf(getc_bind, sizeof getc_bind, "%s/etc:%s/glibc/etc",
-               instdir, termux_prefix());
-      pargv[n++] = (char *)"-b";
-      pargv[n++] = getc_bind;
-    }
   }
   int ac = 0;
   while (args[ac]) ac++;

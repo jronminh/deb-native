@@ -170,11 +170,17 @@ fi
 # nameservers -- Termux's own Bionic resolver doesn't need it, so nothing
 # populated it until this project's first real glibc network client hit
 # "Temporary failure resolving" with an empty prefix /etc (found 2026-10-01
-# trying real apt/dpkg, TODO.md). Symlink to Termux's own so it tracks
-# whatever DNS Android/Termux is actually using, no separate upkeep.
+# trying real apt/dpkg, TODO.md). A REAL file, not a symlink into Termux's
+# tree, so the prefix keeps working with Termux's tree gone (0.7.0 runtime
+# independence): snapshot Termux's resolver at install, else public resolvers.
 mkdir -p "$DN/etc"
-[ -e "$DN/etc/resolv.conf" ] || [ -L "$DN/etc/resolv.conf" ] || \
-  ln -s "$TP/etc/resolv.conf" "$DN/etc/resolv.conf"
+if [ ! -e "$DN/etc/resolv.conf" ] && [ ! -L "$DN/etc/resolv.conf" ]; then
+  if [ -r "$TP/etc/resolv.conf" ]; then
+    cp "$TP/etc/resolv.conf" "$DN/etc/resolv.conf"
+  else
+    printf 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n' > "$DN/etc/resolv.conf"
+  fi
+fi
 
 # 2. Throwaway apt config: resolves and downloads, never installs. Its status
 # file is the prefix's, so the stand-ins count as installed.

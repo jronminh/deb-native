@@ -114,7 +114,11 @@ int main(int argc, char **argv) {
 
   if (strcmp(base, "dn-perl") == 0) {
     char perl[4096], p5[8192];
-    snprintf(perl, sizeof perl, "%s/glibc/bin/perl", pfx);
+    /* The prefix's own perl when installed (0.7.0); Termux's glibc perl only
+     * as a bootstrap fallback (the minimal seed has no perl). */
+    snprintf(perl, sizeof perl, "%s/usr/bin/perl", inst);
+    if (access(perl, X_OK) != 0)
+      snprintf(perl, sizeof perl, "%s/glibc/bin/perl", pfx);
     snprintf(p5, sizeof p5,
              "%s/usr/share/perl5:%s/usr/lib/aarch64-linux-gnu/perl5:%s/usr/share/perl/5.36",
              inst, inst, inst);
