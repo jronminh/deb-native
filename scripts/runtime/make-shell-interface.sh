@@ -239,8 +239,16 @@ gen "$TERMUX_DIR/motd.sh" <<'MOTD'
 # deb-native dn-shell welcome (generated; do not edit), run by Termux login.
 
 . __INSTDIR__/etc/os-release 2>/dev/null
+# Reflow Debian's /etc/motd to the real terminal width: its own hard line
+# breaks at ~75 columns double-wrap on a narrow phone terminal otherwise.
+fmt=__INSTDIR__/usr/bin/fmt
+stty=__INSTDIR__/usr/bin/stty
+[ -x "$fmt" ] || fmt=fmt
+[ -x "$stty" ] || stty=stty
+w=$("$stty" size 2>/dev/null); w=${w##* }
+case "$w" in ''|*[!0-9]*) w=80 ;; esac
 printf '%s\n' "${PRETTY_NAME:-Debian GNU/Linux}"
-cat __INSTDIR__/etc/motd 2>/dev/null
+"$fmt" -w "$w" __INSTDIR__/etc/motd 2>/dev/null || cat __INSTDIR__/etc/motd 2>/dev/null
 printf '\n%s is running inside a deb-native prefix.\n\n' "${PRETTY_NAME:-Debian GNU/Linux}"
 printf '  prefix  %s\n' "__DN_DISP__"
 printf '  source  %s\n' "https://github.com/jronminh/deb-native"
