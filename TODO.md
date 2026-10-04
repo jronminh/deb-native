@@ -617,9 +617,9 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   Termux's dirs only while the prefix has no `$DN/usr/bin/dpkg` (bootstrap);
   once the base is in, PATH is prefix-only. `apt.conf`'s `DPkg::Path` no
   longer lists `$TP/bin`.
-- **R2 Overlay coverage**: `/tmp` (`TMPDIR` is set; consider a shim rewrite of
-  `/tmp` -> `$DN/tmp`), `/run` when services come, and an audit of the shim
-  coverage the runtime's own tools need.
+- **R2 Overlay coverage** (done): `/tmp` and `/run` are redirect roots now
+  (shim `rewrite` switch, `dn-run` tracer binds, `normalize-symlinks` BOUND);
+  `/dev`, `/proc`, `/sys` stay real. Bootstrap creates `$DN/tmp` and `$DN/run`.
 - **R4 Tracer**: `dn-trace` solid for static / raw-syscall / NSS (the syscall
   layer), built when `make`/`libtalloc` are present and routed.
 - **R5 `dn-adopt`**: adopt non-apt glibc binaries; test.

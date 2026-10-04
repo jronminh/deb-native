@@ -229,7 +229,7 @@ static void launch_trace(char **args, int nss) {
 
   static char *pargv[4096];
   static char binds[10][8192];
-  const char *dirs[] = { "usr", "etc", "var", "opt", "bin", "sbin", NULL };
+  const char *dirs[] = { "usr", "etc", "var", "opt", "bin", "sbin", "tmp", "run", NULL };
   int n = 0;
   pargv[n++] = tracer;
   for (int i = 0; dirs[i] && n < 4080; i++) {

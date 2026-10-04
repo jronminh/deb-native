@@ -152,7 +152,7 @@ echo "Bootstrapping the Debian base into $DN ..."
 # base-files ships bin, lib, sbin as links to usr/*, and its preinst refuses
 # if they already exist as directories.
 mkdir -p "$DN/var/lib/dpkg/updates" "$DN/var/lib/dpkg/info" "$DN/var/log" \
-         "$DN/var/lib/deb-native" "$DN/usr/bin" "$DN/usr/lib"
+         "$DN/var/lib/deb-native" "$DN/usr/bin" "$DN/usr/lib" "$DN/tmp" "$DN/run"
 [ -f "$DN/var/lib/dpkg/status" ] || : > "$DN/var/lib/dpkg/status"
 [ -f "$DN/var/lib/dpkg/available" ] || : > "$DN/var/lib/dpkg/available"
 "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --print-foreign-architectures | grep -qx arm64 \
