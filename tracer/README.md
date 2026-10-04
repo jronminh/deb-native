@@ -105,8 +105,8 @@ Drop (done):
   `execve/auxv.c`, `syscall/heap.c` (brk emulation) and the qemu runner:
   the kernel now execs the translated program itself (`execve/enter.c`).
   PRoot's loader exists to map a program whose `PT_INTERP` is a guest path;
-  in a deb-native prefix every interpreter is a host path (ld-dn, Termux's
-  glibc loader, Bionic's linker64) and static programs have none. Only the
+  in a deb-native prefix every interpreter is a host path (the prefix's own
+  glibc loader, Termux's glibc loader, Bionic's linker64) and static programs have none. Only the
   program path and a script's `#!` interpreter are translated, so an
   untranslated Debian ELF (`PT_INTERP` = `/lib/ld-linux-aarch64.so.1`)
   fails with ENOENT under the tracer; `dn-translate-deb.sh` rewrites them all.

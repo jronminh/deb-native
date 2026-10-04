@@ -13,7 +13,7 @@ When a program in the prefix misbehaves at runtime — a path lands outside
 the prefix, a library is not found, a call slips past the shim — reach for
 the **cheapest layer that can see the problem**. This guide is the decision
 path: symptom → layer → fix → rebuild cost. It is generic (applies to the
-`ld-dn` and `dn-glibc` prefixes alike); the layers themselves are specified
+`dn-glibc` prefix); the layers themselves are specified
 in [`../spec/path-shim.md`](../spec/path-shim.md),
 [`../spec/dl-mechanics.md`](../spec/dl-mechanics.md),
 [`../spec/syscall-boundary.md`](../spec/syscall-boundary.md), and
@@ -91,8 +91,7 @@ go to Layer 5.
 `native/path-redirect.c` interposes the libc functions that take a path
 (`open`/`stat`/`execve`/…) and rewrites `/usr`, `/etc`, `/var`, `/opt`,
 `/root`, `/lib`, `/bin`, `/sbin` to `<prefix>/…`. It is loaded once per
-program — via `LD_PRELOAD` in the `ld-dn` prefix, via
-`<prefix>/etc/ld.so.preload` in the `dn-glibc` one — and it derives the
+program — via `<prefix>/etc/ld.so.preload` — and it derives the
 prefix from its own load path, so nothing has to be injected with it.
 
 If a path is being read but the debug line never shows it, the entry point

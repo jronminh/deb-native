@@ -71,7 +71,7 @@ int translate_and_check_exec(Tracee *tracee, char host_path[PATH_MAX], const cha
  * PRoot runs its own loader instead of the program and has it map the
  * program and its ELF interpreter, so that a guest-rootfs PT_INTERP
  * can be found.  In a deb-native prefix every interpreter is already a
- * host path (ld-dn, Termux's glibc loader, Bionic's linker64) and
+ * host path (the prefix's own glibc loader, Termux's glibc loader, Bionic's linker64) and
  * static programs have none, so the kernel can load them directly:
  * only the program path (and a script's "#!" interpreter, see
  * expand_shebang()) needs translating.  The loader, its load script,

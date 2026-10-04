@@ -31,8 +31,8 @@ libraries use the standard `LD_LIBRARY_PATH`, documented below.
   and [`../log/findings/patchelf-et-exec-runpath.md`](../log/findings/patchelf-et-exec-runpath.md)
   — the engineering trail for the `PT_INTERP`/`gcc` fixes this guide
   relies on.
-- [`../spec/ld-dn-config.md`](../log/ld-dn-config.md) — the loader whose
-  `LD_LIBRARY_PATH` policy this guide relies on.
+- [`../spec/dn-glibc-prefix.md`](../spec/dn-glibc-prefix.md) — the prefix's
+  own glibc loader and the `ld.so.cache` this guide relies on.
 - [`python-venv.md`](python-venv.md) — the other guide in this directory,
   for a different language (Python) hitting a different wall (no
   `manylinux` wheel) with a different mechanism (a separate venv, not
@@ -68,17 +68,18 @@ does not exist on Android and that the kernel resolves itself at
 userspace ever runs. The fix is a `specs` file dropped next to each
 installed `gcc` version's `libgcc.a` (GCC's own site-customization
 hook, no `gcc`/`binutils` patch or rebuild) that swaps just that one
-string for `ld-dn`'s real, resolvable path. Confirm it's in place:
+string for the prefix's loader's real, resolvable path. Confirm it's in
+place:
 
 ```sh
 dn-shell -c "readelf -l hello | grep -A1 'program interpreter'"
-# [Requesting program interpreter: .../usr/lib/deb-native/ld-dn]
+# [Requesting program interpreter: .../usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1]
 ```
 
 If that line instead shows the literal `/lib/ld-linux-aarch64.so.1`,
 the specs file is missing or stale — rerun
 `scripts/install/dn-fix-gcc-specs.sh` (it's idempotent, a no-op if
-`gcc` or `ld-dn` isn't present yet).
+`gcc` or the prefix's loader isn't present yet).
 
 ## `make` works
 
@@ -108,20 +109,18 @@ dn-shell -c "gcc -o main main.c -L. -ladd"
 dn-shell -c "LD_LIBRARY_PATH=. ./main"     # works
 ```
 
-`native/ld-dn.c` — the interpreter every translated/adopted program's
-`PT_INTERP` points at, including a plain `gcc`-linked binary via the
-specs fix above — sets `LD_LIBRARY_PATH` itself, so the whole transitive
-load graph resolves inside the prefix (one variable set once, instead of
-patching every `.so`'s `RUNPATH`, which risked corrupting a tightly
-packed `ET_EXEC` binary's program headers:
+The prefix's own glibc loader — the interpreter every translated/adopted
+program's `PT_INTERP` points at, including a plain `gcc`-linked binary via
+the specs fix above — resolves the prefix's libraries from
+`$DN/usr/etc/ld.so.cache` (built by our `ldconfig`), so the whole
+transitive load graph resolves inside the prefix without patching every
+`.so`'s `RUNPATH` (which risked corrupting a tightly packed `ET_EXEC`
+binary's program headers:
 [`../log/findings/patchelf-et-exec-runpath.md`](../log/findings/patchelf-et-exec-runpath.md)).
-It puts the two fixed prefix directories
-(`$DN/usr/lib/aarch64-linux-gnu`, `$DN/usr/lib`) first, so the prefix's
-own libraries always win, then merges the caller's entries after them,
-deduplicated. Before 0.5.3 a caller-set `LD_LIBRARY_PATH` was discarded
-outright; since 0.5.3 it is honoured. **That one variable is the whole
-convention** — no `-rpath`, no copying the library into the prefix, no
-special launcher flag.
+A caller-set `LD_LIBRARY_PATH` is honoured as standard glibc does, after
+the cache's directories. **That search is the whole convention** — no
+`-rpath`, no copying the library into the prefix, no special launcher
+flag.
 
 It covers every case the same way: a `gcc -o` output, a child process
 that inherits the variable, and a runtime `dlopen`/`ctypes.CDLL` by bare
@@ -131,7 +130,7 @@ name ([`python-venv.md`](python-venv.md)).
 
 Working end to end: `gcc`/`make`/shared-library builds all compile,
 link, and run correctly inside the prefix. Shared libraries use the
-standard `LD_LIBRARY_PATH`, which `ld-dn` sets (prefix directories
-first) and merges the caller's entries into — one convention for every
-case. `g++`/C++ untested (not installed on this device yet);
+standard library search, which the prefix's `ld.so.cache` resolves first
+and the loader honours a caller's `LD_LIBRARY_PATH` after — one convention
+for every case. `g++`/C++ untested (not installed on this device yet);
 `rustc`/`ghc` remain unresearched per `TODO.md`.

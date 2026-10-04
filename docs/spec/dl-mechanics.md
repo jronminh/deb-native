@@ -119,7 +119,7 @@ Handled by `handle_preload_list` (`elf/rtld.c:850`, called from `:1805`,
 `:1814`, `:1825`), then loaded by `_dl_map_object_deps` (`:1928`).
 Preloaded objects are placed first in the link map, so they can interpose
 symbols -- which is precisely how deb-native's `path-redirect.so` shim
-works today, via `ld-dn` setting `LD_PRELOAD`.
+works today, via the `ld.so.preload` file.
 
 ## Auditing
 
@@ -163,7 +163,7 @@ Running as `PT_INTERP`, only three kinds of surface are usable:
 The **file** surfaces are the interesting ones, because they are
 environment-free and, being read only by glibc's loader, are **glibc-only by
 construction** (Bionic/Termux programs never see them) -- the same
-selectivity `ld-dn` currently manufactures with a per-exec env.
+selectivity the project now gets from `ld.so.preload` / `ld.so.cache`.
 
 ## How this slims the loader patch
 
@@ -172,7 +172,7 @@ Because glibc already implements search-dir and preload handling as
 loader does not need to re-implement any of it. The patch reduces to:
 
 1. **Derive the prefix** from the program's `PT_INTERP` (the irreducible
-   core -- see `ld-dn-runtime.md`, step C2).
+   core -- see `docs/log/ld-dn-runtime.md`, step C2).
 2. **Point the standard surfaces at the prefix**: resolve
    `<prefix>/etc/ld.so.preload` and the prefix's `ld.so.cache` instead of
    the hardcoded host paths. Then the shim is just one line in the prefix's

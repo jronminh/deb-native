@@ -100,8 +100,8 @@ rather than re-deriving the split from upstream again.
 
 **Needs its own read before deciding, not a simple fork/skip**:
 `set-ld-variables.patch` (a parallel `GLIBC_LD_*` env-var namespace,
-checked before the plain `LD_*` names — lands on top of `native/ld-dn.c`'s
-own env-building job).
+checked before the plain `LD_*` names — lands on top of the project's own
+glibc-child environment).
 
 **Deferred, real feature but not urgent for the Alpha goal**: `locale-gen`,
 `locale.gen.txt`, `syslog.c` (routes to Android's real `logd`).
@@ -201,8 +201,8 @@ PATH=/data/data/com.termux/files/usr/bin \
   --disable-multi-arch --enable-stack-protector=strong --disable-nscd \
   --disable-profile --disable-werror --disable-default-pie
 PATH=/data/data/com.termux/files/usr/bin make -O -j8   # NOT -j1: $DN must
-  # be off PATH (COMPILER_PATH from ld-dn.c is sufficient) -- with $DN on
-  # PATH, this project's own coreutils going through ld-dn+shim under
+  # be off PATH (the toolchain's COMPILER_PATH is sufficient) -- with $DN on
+  # PATH, this project's own coreutils going through the loader+shim under
   # heavy repeated invocation was unstable (docs/log/findings/); -j8 itself
   # is not the issue and is ~3-4x faster than -j1.
 make -k install DESTDIR=<destdir>   # -k: the manual subdir fails for an
@@ -213,8 +213,8 @@ make -k install DESTDIR=<destdir>   # -k: the manual subdir fails for an
 `$DESTDIR/usr/lib/`, not Debian's `usr/lib/aarch64-linux-gnu/`. Confirmed
 safe to relocate at packaging time rather than rebuild: no binary or
 cache file (`libc.so.6`, `gconv-modules.cache`) has that path baked in as
-a literal string (checked with `strings`), and `native/ld-dn.c` already
-sets `LD_LIBRARY_PATH` covering both locations per launch regardless.
+a literal string (checked with `strings`), and the prefix's `ld.so.cache`
+covers both locations regardless.
 
 **Packaging as `libc6`**: [`scripts/bootstrap/dn-package-glibc.sh`](../../scripts/bootstrap/dn-package-glibc.sh)
 takes a real Debian `libc6_<ver>_arm64.deb` (`apt-get download

@@ -58,7 +58,7 @@ goes through this once.
    fetches the base package set. Each downloaded `.deb` is translated in
    parallel by `dn-translate-deb.sh` directly (the prefix's own apt hooks
    don't exist yet at this point in the bootstrap) — `Architecture: all`
-   -> `arm64`, ELF interpreter -> `ld-dn`, maintainer-script shebangs ->
+   -> `arm64`, ELF interpreter -> the prefix's own fused glibc loader, maintainer-script shebangs ->
    `dn-shell`, per-package fixes from `custom/`.
 
 3. **Unpack, then configure, the whole base in one dpkg call.** `dpkg

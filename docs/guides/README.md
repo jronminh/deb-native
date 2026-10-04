@@ -18,8 +18,8 @@ How-to for a specific, one-off case — not a spec of the project itself.
   `pytest`-needs-`dn-trace` gap.
 - `gcc-glibc-dev.md` — compile, link, and run C code with `apt install
   gcc` inside the prefix: `make`, shared libraries, and the one
-  library-search convention, `LD_LIBRARY_PATH` (`ld-dn` sets it, prefix
-  dirs first, and merges the caller's entries after).
+  library-search convention, `LD_LIBRARY_PATH` (the prefix's `ld.so.cache`
+  resolves its dirs, and the loader honours a caller's entries).
 - `fixing-runtime-edge-cases.md` — a runtime problem hits the prefix (a
   path outside it, a library not found, a call past the shim): the decision
   table from symptom to the cheapest layer (shim, `ld.so.preload`/

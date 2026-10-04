@@ -33,8 +33,8 @@ changes.
 - `package-lifecycle.md` — one package's lifecycle, stage by stage, mapped to
   the hook/script/layer that handles each (`install-flow.md` is the
   one-time bootstrap instead).
-- `multiarch-mechanics.md` — dpkg multi-arch mechanics, shared with the
-  `naibed` branch.
+- `multiarch-mechanics.md` — dpkg multi-arch mechanics as the prefix's
+  apt/dpkg uses them.
 - `path-shim.md` is the mechanism; the boundary around it:
   - `shim-coverage.md` — which libc entry points the shim covers (+
     `coverage/`, the measured corpus data).

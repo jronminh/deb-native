@@ -21,7 +21,7 @@ software running on Android, side by side:
 | Termux packages | not Debian: Termux's own ports (Bionic) | native | `pkg`, Termux's repo | no |
 | glibc-runner (termux-pacman) | Termux's patched glibc; glibc binaries run by hand | native | no Debian packages | no |
 | namespaces (Docker, Podman, sudo-less) | the kernel mounts the layout | native | Debian's own | needs user namespaces, which Android blocks |
-| **deb-native** | the prefix is a real Debian tree; programs find it through `ld-dn` and an in-process path shim | native; the tracer only for static programs, raw syscalls, NSS | the prefix's own sources, database and base (Termux's apt/dpkg binaries) | no |
+| **deb-native** | the prefix is a real Debian tree; programs find it through the prefix's own glibc loader and an in-process path shim | native; the tracer only for static programs, raw syscalls, NSS | the prefix's own sources, database and base (Termux's apt/dpkg binaries) | no |
 
 ## Contents
 
@@ -36,7 +36,7 @@ software running on Android, side by side:
 - [`prior-art.md`](prior-art.md) — sudo-less and proroot in more depth,
   including what carries over and what's blocked on Android.
 - [`design.md`](design.md) — why deb-native's own mechanism (the shim,
-  `ld-dn`, the tracer) works the way the table's last row says.
+  the prefix's own loader, the tracer) works the way the table's last row says.
 
 ## What that buys
 
@@ -45,7 +45,7 @@ software running on Android, side by side:
    stand-in); everything else is Debian's own `.deb`.
 2. **No proot for normal programs.** proot-distro pays a ptrace round trip
    on every file access of every program. Here the shim rewrites paths
-   inside the process, set up by `ld-dn` when the program starts; in the
+   inside the process, loaded by the prefix's own glibc loader when the program starts; in the
    0.2.0 survey every program that ran, ran this way.
 3. **Mixed with Termux.** A Debian program is a Termux process: it calls
    Termux's programs and they call it, Termux's home is its `/root`, its
@@ -56,7 +56,8 @@ software running on Android, side by side:
    afterwards it runs directly.
 5. **Removable.** Termux is never modified: delete `~/.dn` and the
    `# deb-native` lines in `~/.bashrc`, and Termux is as before. (The
-   `naibed` branch is the opposite: it converts Termux itself, one way.)
+   opposite approach -- converting Termux itself, one way -- was tried and
+   is dropped.)
 
 ## What it costs
 

@@ -141,8 +141,8 @@ something that needs the tracer for every run.
 
 Most PyPI wheels with compiled extensions (`pydantic-core`, `cffi`'s own
 `_cffi_backend`, …) need nothing special — they're self-contained,
-either linking only against libraries already on `ld-dn`'s fixed search
-path (`$DN/usr/lib`, `$DN/usr/lib/aarch64-linux-gnu`) or carrying their
+either linking only against libraries already in the prefix's `ld.so.cache`
+(`$DN/usr/lib`, `$DN/usr/lib/aarch64-linux-gnu`) or carrying their
 own bundled `.so` deps with an `-rpath $ORIGIN`-style reference baked in
 at build time (`auditwheel`'s doing, not this project's). Confirmed
 working with no extra steps in this guide's own test suite.
@@ -151,8 +151,8 @@ The one case that *does* need help: code that calls
 `ctypes.CDLL("libfoo.so")` or `cffi`'s `dlopen` with a **bare name**
 (not an absolute path) for a library you built yourself, not installed
 via `apt`. `dlopen()` by bare name consults the process's
-`LD_LIBRARY_PATH`, which for anything launched through `ld-dn` is the
-two fixed prefix directories first, then the caller's entries merged in
+`LD_LIBRARY_PATH`, which for anything launched in the prefix starts from
+`ld.so.cache`'s directories, then the caller's entries merged in
 (`docs/guides/gcc-glibc-dev.md` has the full story, found building an
 unrelated project's CLI). Confirmed:
 

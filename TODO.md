@@ -41,7 +41,7 @@ cleanly (`gcc`/`cpp`/`binutils` and their whole dependency chain);
 packaging needed -- `dn-package-glibc.sh` keeps the own-built `libc6`'s
 version string an exact match instead); the shim's redirect scope now
 covers `/lib`/`/bin`/`/sbin`; and `gcc`'s own default dynamic linker is
-repointed at `ld-dn` via a generated `specs` file
+repointed at the prefix's own fused glibc loader via a generated `specs` file
 (`scripts/install/dn-fix-gcc-specs.sh`, wired into `dn-hook-post.sh`) --
 GCC's own site-customization hook, no gcc/binutils patch or rebuild
 needed. `gcc -o hello hello.c && ./hello` now compiles **and runs**
@@ -77,9 +77,8 @@ downloaded executables.
 
 **After alpha**: services + sudo modes (own section below), the
 pre-translated repo, 0.4.0's lighter base (own section below), and *true
-fusion rebuilt on the 0.2 core* (the `naibed` branch's `ld-dn`/`dn-trace`/
-translator/priv layer, with Termux's prefix as the root — frozen until
-alpha).
+fusion rebuilt on the 0.2 core* (the translator/priv layer, with Termux's
+prefix as the root — frozen until alpha).
 
 ## 0.2.0: a self-contained prefix (released)
 
@@ -105,7 +104,7 @@ standing until the identity/services layer replaces it.
 Termux's borrowed binaries.** Motivated by the same principle already
 applied to `bash`/`dash` this session (self-contained > borrowed for
 bootstrap scaffolding), and by a real architectural itch: `apt`/`dpkg`
-are the one thing in the prefix that never goes through `ld-dn`/the shim
+are the one thing in the prefix that never goes through the loader/the shim
 at all. Two approaches tried, both hit a real, hard blocker:
 - **Real Debian `apt` 3.0.3/`dpkg` 1.22.22** (`apt-get download`,
   translated and `dpkg -i`'d like any other package): installed clean,
@@ -368,8 +367,8 @@ hardcoded path instead of carrying it over as-is.
   needed after all: `elf/rtld.c` ignores the inherited `LD_PRELOAD`
   (`dn-glibc-android.patch`) because `ld-dn` used to sanitize the env and a
   host preload (Termux's termux-exec) aborts a fused program;
-  `native/dn-run.c` updated to match. Still open: register `libc-bin` with
-  `dpkg` (currently unpacked by hand) and retire `ld-dn` once verified.
+  `native/dn-run.c` updated to match. `ld-dn` is now retired (0.6.0+s.1).
+  Still open: register `libc-bin` with `dpkg` (currently unpacked by hand).
 - **`libc-l10n`/`locales`**: still pinned to -1 in
   `setup-apt-prefix.sh`; the same exact-version-match reasoning as
   `libc6-dev` likely lets them install unmodified (not yet tested).
@@ -671,45 +670,23 @@ not chased down.
 ## Runtime overhaul
 
 **Goal**: the runtime pieces were named and built as the design evolved, and
-some names now misdescribe what the code actually does. `native/ld-dn.c` is
-the clearest case: the name reads as "deb-native's ld-linux" (a loader), but
-it is an **interpreter trampoline** in the `PT_INTERP` slot -- it prepares
-the environment and does the kernel-side handoff (rebuilds
-`argc`/`argv`/`envp`/`auxv`, maps glibc's real `ld-linux-aarch64.so.1`,
-sets `AT_BASE`, jumps to its entry), then steps aside; the actual dynamic
-linking is still done by glibc's loader. Rename it **`dn-interp`** (the name
-that matches the slot it fills) and re-read the rest of the runtime for the
-same class of misnomer.
-
-**Status**: decided 2026-10-03 (rename `ld-dn` -> `dn-interp`), not started.
-`native/README.md` and `ld-dn.c`'s own header call it a "program loader
-stub", the same ambiguity in prose. The `patchelf` replacement now has its
-exact spec written down -- `docs/spec/elf-interp-patch.md`'s `dn-elf`
-section (`get-interp`/`set-interp`, the two `PT_INTERP` fields touched, the
-append-when-longer rule); the tool itself is not built yet.
+some names now misdescribe what the code actually does. `native/ld-dn.c`
+was the clearest case -- its name read as "deb-native's ld-linux" (a
+loader), but it was an **interpreter trampoline** in the `PT_INTERP` slot,
+preparing the environment and doing the kernel-side handoff before glibc's
+real loader ran. That role was fused into the prefix's own glibc loader in
+0.6.0+s.1, and `ld-dn` is retired: the rename is moot, and the same pass
+should re-read the rest of the runtime for the same class of misnomer.
 
 **Open**:
 
-- Rename `ld-dn` -> `dn-interp` across the tree (~40 files: `native/ld-dn.c`,
-  `native/ld-dn.conf`, `setup-runtime.sh`, `dn-translate-deb.sh`,
-  `dn-adopt.sh`, `make-launchers.sh`, `dn-fix-gcc-specs.sh`,
-  `tests/ld-dn-config/`, docs). The install path is baked into every
-  translated ELF's `PT_INTERP` and self-matched in `ld-dn.c` (the
-  `/usr/lib/deb-native/ld-dn` suffix it strips to find the prefix), so keep
-  a compat symlink `ld-dn -> dn-interp` or force a re-bootstrap (pre-alpha,
-  so a re-bootstrap is acceptable).
 - Same pass: any other runtime name that no longer describes its mechanism
-  (`dn-run`'s "launch classifier", "loader stub", ...); fold findings into
-  the "Runtime component audit" above.
+  (`dn-run`'s "launch classifier", ...); fold findings into the "Runtime
+  component audit" above.
 - Build the self-brewed replacement (`dn-elf`) per
   `docs/spec/elf-interp-patch.md`: read/set the one `PT_INTERP` field in
   `dn-translate-deb.sh` (its only call site), dropping `patchelf` and its
   failure modes.
-- Fuse `ld-dn` into the loader (**`dn-glibc`**): the kernel loads the
-  patched `ld-linux` directly and the trampoline disappears -- plan,
-  pros/cons, and the trigger in `docs/log/ld-dn-runtime.md`'s
-  "Alternative: fuse into the loader". Name locked 2026-10-03; develop and
-  validate the hook on amd64 first, arm64 on-device after.
 
 ## Quick wins
 
@@ -746,9 +723,9 @@ append-when-longer rule); the tool itself is not built yet.
   2026-10-01: `scripts/install/dn-fix-gcc-specs.sh` (wired into
   `dn-hook-post.sh`) writes a `specs` file next to each installed gcc
   version's `libgcc.a`, overriding just the `-dynamic-linker` string to
-  `ld-dn`'s real path -- GCC's own site-customization hook (same mechanism
+  the prefix loader's real path -- GCC's own site-customization hook (same mechanism
   musl/NDK toolchains use), no gcc/binutils patch or rebuild. Idempotent,
-  no-op if gcc or `ld-dn` isn't present yet. `gcc -o hello hello.c &&
+  no-op if gcc or the prefix's loader isn't present yet. `gcc -o hello hello.c &&
   ./hello` now compiles and runs end to end.
 - [ ] Refresh `README.md`'s status numbers once the unfiltered survey
   (Alpha goal, above) reports.

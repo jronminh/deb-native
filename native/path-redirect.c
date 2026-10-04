@@ -69,8 +69,8 @@ static size_t g_rootlen;
 static int g_debug;
 static const char *g_bionic_preload;
 static int g_init;
-/* Redirect roots a caller (ld-dn, from ld-dn.conf's shim-prefix) chose to
- * replace the compiled set with: ':'-separated guest paths, e.g.
+/* Redirect roots a caller can set (DN_REDIRECT_PREFIXES) to replace the
+ * compiled set with: ':'-separated guest paths, e.g.
  * "/usr:/etc:/var". Unset keeps the switch-based default below, with no
  * per-call list walk. */
 static char g_rprefixes[512];

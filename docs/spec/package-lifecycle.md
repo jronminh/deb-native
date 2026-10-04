@@ -46,7 +46,7 @@ Living doc: it tracks the shipped pipeline, not a proposal.
 | 3 | `dpkg --unpack` — `preinst` | `preinst` through the prefix's `dn-shell` | maintainer script + shim |
 | 4 | `dpkg --configure` — `postinst` | `postinst`/`configure` + dpkg helpers/triggers | maintainer script + shim |
 | 5 | `DPkg::Post-Invoke` | `dn-hook-post.sh` -> `dn-fix-alternatives.sh` -> `normalize-symlinks.sh` -> `make-launchers.sh` -> `dn-fix-gcc-specs.sh` | prefix fixups |
-| 6 | run by name | launcher -> `dn-run` classifies, then `ld-dn`/shim/`dn-trace` | runtime |
+| 6 | run by name | launcher -> `dn-run` classifies, then the prefix loader/shim/`dn-trace` | runtime |
 
 The two hooks (stages 2 and 5) are the whole per-install pipeline; everything
 else is dpkg's own order, left intact on purpose (`design.md`).
@@ -92,14 +92,15 @@ relative), `normalize-symlinks.sh` (every absolute symlink inside the prefix
 relative, so the kernel -- and the bind-only tracer -- never resolves outside
 it), `make-launchers.sh` (one launcher per program, also tagging NSS and
 direct-syscall binaries), and `dn-fix-gcc-specs.sh` (point an installed gcc's
-default dynamic linker at `ld-dn`). Unlike the pre-hook, **this hook never
+default dynamic linker at the prefix's own fused glibc loader). Unlike the pre-hook, **this hook never
 fails the transaction.**
 
 **6. Run by name.** The launcher (`make-launchers.sh`) puts `dn-run` in front
 of the program; `dn-run` classifies the target ELF and picks the shim, a plain
-exec, or the tracer (`dn-trace`). Every translated ELF names `ld-dn` as its
-interpreter, so the loader stub sets up the shim and hands over to glibc --
-runtime detail in `path-shim.md`, `tracer.md`, `syscall-boundary.md`.
+exec, or the tracer (`dn-trace`). Every translated ELF names the prefix's own
+fused glibc loader as its interpreter, which reads the shim from
+`ld.so.preload` and hands over to glibc -- runtime detail in `path-shim.md`,
+`tracer.md`, `syscall-boundary.md`.
 
 ## Removal and upgrade
 

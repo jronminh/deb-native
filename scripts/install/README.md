@@ -36,4 +36,4 @@ for the current one.
 - `dn-fix-alternatives.sh` — makes every `update-alternatives` link in
   the prefix relative instead of absolute.
 - `setup-runtime.sh` — builds and installs the maintainer-script runtime
-  (`ld-dn`, `dn-run`, the shim, the tracer) inside a prefix.
+  (`dn-run`, the shim, the tracer) inside a prefix.

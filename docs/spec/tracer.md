@@ -9,7 +9,7 @@
 > topic, a new one-off investigation, or a new guide -- not just a
 > long addition to what a doc already covers.
 
-What the syscall tracer is for now that ld-dn exists, how it was measured,
+What the syscall tracer is for now that the fused loader exists, how it was measured,
 and what is still open. Living doc, not per-release — last major update
 2026-09-27 on `dev-0.2.0`, tested on `fe2`. Code: [`../../tracer/`](../../tracer/) (its
 [`README.md`](../../tracer/README.md) keeps the per-file prune list);
@@ -40,7 +40,7 @@ A Debian program in the prefix normally never meets the tracer:
 
 | program | how it runs | tracer? |
 |---|---|---|
-| dynamic glibc (every translated `.deb`) | its `PT_INTERP` is ld-dn, which sets up the path shim and hands over to glibc's loader | no |
+| dynamic glibc (every translated `.deb`) | its `PT_INTERP` is the prefix's own fused glibc loader, which reads the path shim from `ld.so.preload` and finds libraries via `ld.so.cache` | no |
 | script | its `#!` points into the prefix (or `dn-shell`/`dn-perl`) | no |
 | **static binary** | no loader, the shim cannot see it | **yes** |
 | **makes its own syscalls** (inline `svc`, `syscall()`) | the shim cannot see them (`scan-direct-syscalls.py`) | **yes** |
@@ -82,8 +82,9 @@ extensions' options):
 PRoot execs its own loader in place of every program and has it map the
 program and its ELF interpreter, so that a `PT_INTERP` naming a guest path
 (`/lib/ld-linux-aarch64.so.1` inside a rootfs) can be found. In a deb-native
-prefix every interpreter already names a host path — ld-dn, Termux's glibc
-loader, Bionic's `linker64` — and static programs have none. So `execve`
+prefix every interpreter already names a host path — the prefix's own
+glibc loader, Termux's glibc loader, Bionic's `linker64` — and static
+programs have none. So `execve`
 now translates only the program path (and a script's `#!` interpreter,
 `execve/shebang.c`) and lets the kernel load it. `/proc/self/exe` is still
 emulated from the guest path committed after a successful `execve`.
