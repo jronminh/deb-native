@@ -620,8 +620,11 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
 - **R2 Overlay coverage** (done): `/tmp` and `/run` are redirect roots now
   (shim `rewrite` switch, `dn-run` tracer binds, `normalize-symlinks` BOUND);
   `/dev`, `/proc`, `/sys` stay real. Bootstrap creates `$DN/tmp` and `$DN/run`.
-- **R4 Tracer**: `dn-trace` solid for static / raw-syscall / NSS (the syscall
-  layer), built when `make`/`libtalloc` are present and routed.
+- **R4 Tracer** (hardened): `setup-runtime.sh` detects `make` and
+  `libtalloc.so*` separately, tolerates a build failure (the shim alone still
+  works) and reports whether `dn-trace` was installed. Routing is covered by
+  `tests/tracer-nss/`; the tracer binds the same roots as the shim (incl.
+  `tmp`/`run`).
 - **R5 `dn-adopt`**: adopt non-apt glibc binaries; test.
 - **R6 fake-root/identity**: apt/dpkg root semantics (uid 0, `chown` no-op)
   and the `_apt` user under the overlay.

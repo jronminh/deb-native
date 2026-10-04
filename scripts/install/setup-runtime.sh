@@ -80,19 +80,30 @@ put "$CACHE/dn-run" "$LIBDIR/dn-run"
 # checkout like the rest; without them those programs run untranslated
 # (dn-run warns; there is no fallback to Termux's proot).
 TRACER="$HERE/../../tracer"
-if [ -x "$(command -v make || true)" ] && [ -e "$PREFIX_DIR/lib/libtalloc.so" ]; then
+# The tracer is optional: it is the syscall-level route for static / raw-syscall
+# / NSS programs, which the shim cannot reach. Its build needs make + libtalloc
+# (Termux packages); without them those programs run untranslated. Detect each
+# separately, tolerate a build failure (the prefix still works with the shim
+# alone), and say plainly whether dn-trace made it in.
+have_make=$(command -v make 2>/dev/null || true)
+have_talloc=$(ls "$PREFIX_DIR"/lib/libtalloc.so* 2>/dev/null | head -n1 || true)
+if [ -n "$have_make" ] && [ -n "$have_talloc" ]; then
   if [ ! -x "$TRACER/dn-trace" ] || [ -n "$(find "$TRACER" -name '*.[ch]' -newer "$TRACER/dn-trace" | head -n1)" ]; then
     echo "Building the tracer (dn-trace) ..."
     # From clean: dependency files of a removed source break an
     # incremental build ("No rule to make target").
     make -s -C "$TRACER" clean
-    make -C "$TRACER" CC=clang
+    make -C "$TRACER" CC=clang || echo "W: tracer build failed; static/raw-syscall programs will run untranslated"
   fi
 else
-  echo "W: tracer not built (needs: pkg install make libtalloc); static programs will run untranslated"
+  [ -n "$have_make" ] || echo "W: 'make' not found (pkg install make); tracer not built"
+  [ -n "$have_talloc" ] || echo "W: no libtalloc (pkg install libtalloc); tracer not built"
 fi
 if [ -x "$TRACER/dn-trace" ]; then
   put "$TRACER/dn-trace" "$LIBDIR/dn-trace"
+  echo "dn-trace installed: static/NSS syscall routing available."
+else
+  echo "W: no dn-trace in the prefix; only the shim route is available."
 fi
 
 # The maintainer-script launcher. One binary, dispatched by its own argv[0]
