@@ -495,7 +495,7 @@ symlink any more. The glibc bundle is unaffected at run time: the loader and
   bypasses it under the tracer (`docs/spec/deploy.md` "Open items");
   re-confirm the explicit `-C`/`-f` bind path at the new location.
 
-## 0.7.0: prefix independent of Termux's tree (pre-alpha, planned)
+## 0.7.0: prefix independent of Termux's tree (released)
 
 **Goal**: absolute freedom from Termux's *prefix* (`$PREFIX/usr`), not from
 the Termux *app*. Once a session is up, the Debian userland runs and manages
