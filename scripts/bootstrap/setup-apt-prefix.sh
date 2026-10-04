@@ -87,8 +87,8 @@ B8B80B5B623EAB6AD8775C45B7C5D7D6350947F8
 05AB90340C0C5E797F44A8C8254CF3B5AEC0A8F0
 4D64FEC119C2029067D6E791F8D2585B8783D481"
 
-# Safety: never inside Termux's own prefix (that is the naibed branch's
-# one-way transformation, not this).
+# Safety: never inside Termux's own prefix (a one-way transformation of
+# Termux itself, not this).
 case "$DN" in
   "$TP"|"$TP"/*)
     echo "E: $DN is inside Termux's prefix ($TP); use a separate prefix, e.g. \$HOME/.dn" >&2

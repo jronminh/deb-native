@@ -143,7 +143,7 @@ done
 # --log too, root-relative with DPKG_ROOT set: update-alternatives joins
 # DPKG_ROOT onto its log path even when given explicitly (found as
 # $INSTDIR/data/data/com.termux/files/usr/var/log/alternatives.log, in 0.1.x
-# prefixes and on the naibed branch). Its links are absolute, which the
+# prefixes). Its links are absolute, which the
 # kernel follows against Android's root, so they are made relative at once
 # (dn-fix-alternatives.sh): until then the command itself (awk) is broken.
 cat > "$PRIV/update-alternatives" <<EOF
@@ -156,7 +156,7 @@ EOF
 chmod 755 "$PRIV/update-alternatives"
 rm -f "$BINDIR/update-alternatives"   # 0.1.x location
 # dpkg-divert has the same bug: under DPKG_ROOT it joins DPKG_ROOT with its
-# compiled-in admindir (traced on naibed: $ROOT$PREFIX/var/lib/dpkg/diversions).
+# compiled-in admindir (traced: $ROOT$PREFIX/var/lib/dpkg/diversions).
 cat > "$PRIV/dpkg-divert" <<EOF
 #!/system/bin/sh
 exec "$PREFIX_DIR/bin/dpkg-divert" --admindir "$INSTDIR/var/lib/dpkg" --instdir "$INSTDIR" "\$@"

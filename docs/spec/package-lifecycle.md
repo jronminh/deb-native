@@ -83,8 +83,8 @@ maintainer-script exec path exists (`native/dn-launch.c`).
 **4. Configure, `postinst`.** dpkg runs `postinst`/`configure` and triggers.
 dpkg's helpers are wrapped so they compute prefix paths themselves
 (`update-alternatives` with `--altdir`/`--admindir`, `dpkg-divert`,
-`dpkg-statoverride` as a no-op, `dpkg-trigger`) -- each root-caused on `naibed`
-(`design.md`).
+`dpkg-statoverride` as a no-op, `dpkg-trigger`) -- each root-caused with
+`strace` (`design.md`).
 
 **5. Fix up after the transaction (`DPkg::Post-Invoke`).** `dn-hook-post.sh`
 runs, in order: `dn-fix-alternatives.sh` (make `update-alternatives` links

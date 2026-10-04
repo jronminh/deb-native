@@ -72,18 +72,18 @@ base, installed at bootstrap — "just apt", the way it is on Debian.
 Termux is never touched; deleting the prefix restores it exactly.
 
 **Status: partly superseded.** `TODO.md`'s current roadmap keeps `arm64`
-as a foreign architecture (naibed's method) instead of this section's
-`aarch64` relabel, and reuses naibed's code base directly. What follows is
-kept as the record of the proposal, with the divergence noted; the rest —
+as a foreign architecture instead of this section's `aarch64` relabel.
+What follows is kept as the record of the proposal, with the divergence
+noted; the rest —
 the self-contained-prefix idea itself, the stand-in packages, the launcher
 wrappers — is what got built (`scripts/bootstrap/setup-apt-prefix.sh`).
 
-This is the principle `sudo-less` uses on Debian and the `naibed` branch
-proved on Termux: **apt and dpkg own their root.** When the place packages
-live is apt/dpkg's own `/`, dpkg's normal rules (dependencies, Pre-Depends
-order, alternatives, diversions, upgrades) just work, and the glue between
-two package managers disappears. `naibed` gets that by taking over
-Termux's own prefix (one way, unsafe); 0.2.0 gets it inside a sandbox.
+This is the principle `sudo-less` uses on Debian: **apt and dpkg own their
+root.** When the place packages live is apt/dpkg's own `/`, dpkg's normal
+rules (dependencies, Pre-Depends order, alternatives, diversions, upgrades)
+just work, and the glue between two package managers disappears. Taking
+over Termux's own prefix would get that too, but one-way and unsafe; 0.2.0
+gets it inside a sandbox.
 
 The split stays as above: **self-contained for installing, a guest of
 Termux for running.** Programs run through the runtime layer (path shim,
@@ -98,8 +98,8 @@ an app no namespace "view" to fake paths with.
 | `dpkg`, `apt` | stand-ins for Termux's own `dpkg`/`apt`, versioned like Termux's, so `Depends: dpkg (>= ...)` is satisfied |
 | `mawk`, `base-files`, `base-passwd`, `dash`, `debianutils`, `debconf`, `cdebconf`, `openssl`, `ca-certificates` | Debian's own, translated at install, then **held** |
 
-A separate database has no name clashes with Termux, so, unlike `naibed`,
-`dash`, `openssl` and `ca-certificates` are Debian's own packages. Only
+A separate database has no name clashes with Termux, so `dash`, `openssl`
+and `ca-certificates` are Debian's own packages. Only
 `libc6`, `dpkg` and `apt` are stand-ins.
 
 ### apt and dpkg: Termux's own, through launchers (decided, built)
@@ -116,7 +116,7 @@ through.
   one (the doubled-path bug class, below).
 - **dpkg's helpers** compute paths from `DPKG_ROOT` by themselves when a
   maintainer script calls them, so each gets a wrapper forcing its own
-  paths (from `naibed`, where each was root-caused with `strace`):
+  paths (each was root-caused with `strace`):
   - `update-alternatives`: `--altdir`/`--admindir`, and `--log
     /var/log/alternatives.log` with `DPKG_ROOT` set -- it joins
     `DPKG_ROOT` onto an explicit `--log` too.
@@ -128,9 +128,9 @@ through.
 ### Layout: Debian's own, nested
 
 `~/.dn/usr/bin`, `~/.dn/etc`, ... exactly as on Debian, merged-`/usr`
-links from `base-files` included. `naibed` flattens `usr/` only because
-Termux's own prefix is flat; a prefix of our own has no reason to. The
-shim keeps mapping `/usr` -> `$DN/usr`.
+links from `base-files` included. A prefix of our own has no reason to
+flatten `usr/` (only taking over Termux's flat `$PREFIX` would). The shim
+keeps mapping `/usr` -> `$DN/usr`.
 
 ### Architecture: proposed relabel to `aarch64` (not what shipped)
 
@@ -147,8 +147,7 @@ fix", but the relabel was never built to replace it).
 
 ### Install pipeline
 
-Phase A (built): translation on the device, in the prefix's apt hooks
-(naibed's pipeline, minus what only fusion needs):
+Phase A (built): translation on the device, in the prefix's apt hooks:
 
 | Hook | Step |
 |---|---|

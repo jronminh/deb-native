@@ -1,5 +1,5 @@
 #!/bin/sh
-# Index translation (docs/spec/design.md; from the naibed branch): rewrite
+# Index translation (docs/spec/design.md): rewrite
 # "Architecture: all" to "arm64" in every Debian binary-arm64 Packages list,
 # so Debian's arch-independent packages live on the arm64 side and resolve
 # their dependencies against Debian. dpkg treats "all" as the native

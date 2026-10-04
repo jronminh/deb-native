@@ -1,11 +1,11 @@
 #!/bin/sh
 # Make every update-alternatives link in the prefix relative
-# (docs/spec/design.md; from the naibed branch). update-alternatives writes
+# (docs/spec/design.md). update-alternatives writes
 # absolute targets (usr/bin/awk -> /etc/alternatives/awk -> /usr/bin/mawk);
 # the kernel follows those against Android's real root, so the command is
 # gone until they are rewritten -- and when the group is awk, so is every
-# script that would rewrite them (on naibed, reinstalling mawk broke awk
-# exactly this way). So this runs right after each update-alternatives call
+# script that would rewrite them (reinstalling mawk broke awk exactly this
+# way). So this runs right after each update-alternatives call
 # (the priv/ wrapper setup-runtime.sh writes), with Termux's own gawk by
 # full path: never an alternatives link.
 #

@@ -1,6 +1,6 @@
 #!/bin/sh
-# The prefix's apt DPkg::Pre-Install-Pkgs hook (docs/spec/design.md; from
-# the naibed branch). apt feeds its plan on stdin in hook protocol version 3
+# The prefix's apt DPkg::Pre-Install-Pkgs hook (docs/spec/design.md).
+# apt feeds its plan on stdin in hook protocol version 3
 # (set in the prefix's apt.conf):
 #
 #   VERSION 3

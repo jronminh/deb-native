@@ -9,34 +9,27 @@
 > topic, a new one-off investigation, or a new guide -- not just a
 > long addition to what a doc already covers.
 
-Reference doc, shared across both the classic (separate-prefix) design and
-the true fusion branch (`naibed`, formerly `fusion-no-prefix`) — the mechanics here are dpkg's own, and
-apply identically regardless of which install strategy is on top of them.
-Written after a real, live incident on the fusion branch (`docs/
-findings.md` there, "Cross-check: a second, genuinely different package")
-raised the question of whether some architecture-aware mechanism should
-have prevented it. Researched against Debian's actual policy and dpkg's
-own man pages rather than assumed — the answer clarifies what each
-mechanism is actually *for*, which turns out to matter for how the two
-designs use them differently.
+Reference doc for dpkg's own multi-arch mechanics as this project uses
+them — the mechanics are dpkg's own and apply regardless of the install
+strategy on top of them. Written after a real, live incident raised the
+question of whether some architecture-aware mechanism should have
+prevented it. Researched against Debian's actual policy and dpkg's own man
+pages rather than assumed — the answer clarifies what each mechanism is
+actually *for*.
 
 ## Contents
 
 - [The `Multi-Arch` control field](#the-multi-arch-control-field)
 - [The two mechanisms that actually govern *paths*](#the-two-mechanisms-that-actually-govern-paths)
 - [`--force-architecture` vs `--add-architecture`: not the same thing](#--force-architecture-vs---add-architecture-not-the-same-thing)
-- [Net: which branch needs which, and why](#net-which-branch-needs-which-and-why)
+- [Net: what the prefix needs](#net-what-the-prefix-needs)
 
 ## Related docs
 
 - [`classic-design.md`](classic-design.md) — the separate-prefix design
   that uses `--force-architecture`, one of the mechanisms this doc
   clarifies.
-- [`design.md`](design.md) — the 0.2.0 pivot's own architecture handling,
-  the other design this doc is shared across.
-- [`../log/findings/README.md`](../log/findings/README.md) — the live
-  incident that prompted this research happened on the `naibed` branch,
-  whose own engineering log isn't part of this split.
+- [`design.md`](design.md) — the 0.2.0 pivot's own architecture handling.
 
 ## The `Multi-Arch` control field
 
@@ -110,10 +103,10 @@ starts completely empty and is *only ever* going to hold arm64 content —
 there's nothing else in it whose real identity would be lost by the
 pretense.
 
-`naibed`, by contrast, **must** use the proper mechanism: it
-reuses Termux's own real, pre-populated dpkg database, which already has
-thousands of packages under its own native identity. That identity is
-worth confirming precisely, not assumed:
+A design that instead reused Termux's own real, pre-populated dpkg
+database **must** use the proper mechanism: that database already has
+thousands of packages under its own native identity, worth confirming
+precisely rather than assumed:
 
 ```
 dpkg --print-architecture            # aarch64 -- Termux's own historical label
@@ -128,18 +121,17 @@ blunt `--force-architecture` here would blur that distinction across a
 database that has to keep both identities straight for everything already
 in it — `--add-architecture` is what lets `aarch64`-native and
 `arm64`-foreign packages coexist correctly in the one, real, shared
-database, which is exactly fusion mode's whole premise.
+database.
 
-## Net: which branch needs which, and why
+## Net: what the prefix needs
 
 | | Multi-Arch field | update-alternatives | `--force-architecture` | `--add-architecture` |
 |---|---|---|---|---|
-| Classic (separate prefix) | used for stub `Provides` (`native-seed.sh`) | used normally, no cross-namespace issue possible | used, sufficient (fresh, single-arch db) | not needed |
-| `naibed` | used identically | used, **plus** needs bridging Termux's own non-dpkg providers into it (see `docs/fusion-multiarch.md` on that branch) | used too (still needed for the same dpkg-vs-package arch checks) | **needed** — shares Termux's real, pre-populated, `aarch64`-native database |
+| Separate prefix | used for stub `Provides` (`native-seed.sh`) | used normally, no cross-namespace issue possible | used, sufficient (fresh, single-arch db) | not needed |
+| A shared Termux database | used identically | used, **plus** needs bridging Termux's own non-dpkg providers into it | used too (still needed for the same dpkg-vs-package arch checks) | **needed** — shares Termux's real, pre-populated, `aarch64`-native database |
 
 Neither `Multi-Arch` nor `update-alternatives` differs between the two
-designs — they're dpkg's own layer, unmodified either way. What differs is
-*how much of dpkg's real multi-arch machinery each design's database
-actually has to exercise*: a fresh, disposable, single-arch sandbox can
-get away with pretending; a shared, permanent, already-native database
-cannot.
+strategies — they're dpkg's own layer, unmodified either way. What differs
+is *how much of dpkg's real multi-arch machinery the database actually has
+to exercise*: a fresh, disposable, single-arch sandbox can get away with
+pretending; a shared, permanent, already-native database cannot.
