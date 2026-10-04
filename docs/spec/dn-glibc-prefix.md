@@ -16,10 +16,9 @@ for the prefix this branch is preparing to make installable. The proxy
 runtime it replaces: [`ld-dn-runtime.md`](../log/ld-dn-runtime.md) and its
 "Alternative: fuse into the loader" section.
 
-Status: design + partial proof (2026-10-03). The mechanism is proven on the
-phone (`fused-shim-self-derives-prefix.md`); the packaging and install order
-below are what this branch is landing. [Runtime prefix
-self-derivation](#runtime-prefix-self-derivation) is design only.
+Status: shipped (0.6.0+s.1). The mechanism is proven on the phone
+(`fused-shim-self-derives-prefix.md`); the packaging, install order and
+run-time prefix self-derivation below are what shipped.
 
 ## Contents
 
@@ -131,55 +130,48 @@ under a different one, needs a rebuild. This section designs the fix: make
 those files **derive the prefix at run time**, so one prebuilt set works under
 any prefix, and a Debian base update never forces a glibc rebuild.
 
-Status: design only (2026-10-03). No code changed yet.
+Status: shipped (0.6.0+s.1). Implemented as **one global live prefix** in
+`sysdeps/generic/dn-prefix.h` + `elf/rtld.c` + `elf/dl-cache.c` +
+`elf/ldconfig.c` -- not per-file `dladdr` as first sketched below. The
+static `ldconfig` is the one exception (see [`deploy.md`](deploy.md),
+Open items).
 
-### Each file knows its own path
+### How the live prefix is cut
 
-The shim already proves the pattern (`fused-shim-self-derives-prefix.md`):
-`dladdr` on one of its own symbols returns its own absolute load path, and
-stripping the shim's fixed suffix (`/usr/lib/deb-native/path-redirect.so`)
-yields the prefix. Every patched file can do the same -- self-contained, no
-cross-file coupling. glibc's own `$ORIGIN` (`elf/dl-origin.c`,
-`elf/dl-load.c`) is the same idea for DSOs.
+The loader runs before the link maps (and libc) exist, so it cannot call
+`dladdr` -- but it does not need to: it already holds its own path, taken
+from the main executable's `PT_INTERP`, in `_dl_rtld_map.l_name`
+(`elf/rtld.c`). `ld.so.preload` is read later and the cache only on first
+lookup, so the path is available before either is used.
 
-The loader is the one exception: it runs before the link maps (and libc)
-exist, so it cannot call `dladdr`. It does not need to -- it already holds its
-own path, taken from the main executable's `PT_INTERP`, in
-`_dl_rtld_map.l_name`:
+Shipped as **one global**, cut by the loader and shared:
 
-- `elf/rtld.c:1139-1149` -- `_dl_rtld_libname.name = main_map->l_addr + PT_INTERP`.
-- `elf/rtld.c:1703-1706` -- `_dl_rtld_map.l_name = _dl_rtld_libname->name`.
+- `elf/rtld.c` cuts the live prefix from `_dl_rtld_map.l_name` once, before
+  the search paths are built, and exports it as the weak-linked
+  `__dn_prefix_get()`.
+- `sysdeps/generic/dn-prefix.h` declares `__dn_prefix_get()` (weak) and
+  `__dn_build(dst, sz, "/guest/path")`, which prepends the live prefix.
+  When the live prefix is NULL (a static link), `__dn_build` leaves the
+  guest path as-is.
+- libc's own internal opens (`elf/dl-load.c`, ...) and `elf/dl-cache.c`'s
+  cache path use the same global; `elf/ldconfig.c` derives its
+  cache/conf/libdirs/aux paths from it.
 
-`ld.so.preload` is read later (`elf/rtld.c:1825`), and the cache only on first
-lookup, so the loader path is available before either is used. So the loader
-is still "self", just through its own mechanism rather than `dladdr`.
-
-### Rule and per-file mechanism
-
-One rule everywhere: **prefix = this file's own absolute path minus its own
-fixed suffix.** All ten compute the same prefix because they share one layout.
-
-| file(s) | own path from | suffix stripped |
-| --- | --- | --- |
-| `ld-linux-aarch64.so.1` | `_dl_rtld_map.l_name` | `/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1` |
-| `libc.so.6`, `libresolv.so.2`, `libnsl.so.1`, `libnss_compat.so.2`, `libnss_hesiod.so.2`, `librt.so.1` | `dladdr` on a local symbol | `/usr/lib/aarch64-linux-gnu/<own name>` |
-| `ldconfig`, `localedef`, `iconv` | `dladdr`, or `readlink("/proc/self/exe")` | `/usr/sbin/ldconfig`, `/usr/bin/<own name>` |
-
-An alternative -- anchor every file to the *loader's* path (via
-`dl_iterate_phdr`, the interpreter's entry) -- is more robust if a library is
-relocated out of the layout, but couples every file to the loader and is
-inconsistent with the shim. Use it only as a fallback.
+Match requires a path-component boundary, so `.dn` does not match `.dn12`.
+The compiled `@TERMUX_PREFIX@` stays the fallback when derivation yields
+nothing.
 
 ### Patch shape
 
-1. A small `dn_prefix()` helper per file, computed once and cached.
+1. One global live prefix (`__dn_prefix_get`), cut once in `elf/rtld.c`
+   and declared in `sysdeps/generic/dn-prefix.h`.
 2. Replace the baked `"@TERMUX_PREFIX@/..."` literals with strings built at
-   run time from `dn_prefix()`.
-3. In the loader, `preload_file` (`elf/rtld.c:1825`) and `LD_SO_CACHE`
-   (`elf/dl-cache.c:390,395`) become run-time paths, computed after
-   `_dl_rtld_map.l_name` is set (line 1706) and before first use (line 1825).
-4. `@TERMUX_PREFIX@` stays as the build-time default/fallback; derivation
-   overrides it.
+   run time via `__dn_build(...)`.
+3. In the loader, `preload_file` and the cache path (`elf/dl-cache.c`)
+   become run-time paths, computed after `_dl_rtld_map.l_name` is set and
+   before first use.
+4. `@TERMUX_PREFIX@` stays as the build-time default/fallback; the live
+   prefix overrides it.
 
 ### Caveats
 

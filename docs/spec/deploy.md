@@ -12,10 +12,10 @@
 How a `dn-glibc` prefix is deployed: install Debian's **real** `libc6` and
 `libc-bin`, then immediately **swap in the 10 files** the Android patch
 actually changes. Nothing else about the bootstrap changes. The swapped
-files must be prefix-agnostic for this to work under any prefix, which is
-what run-time prefix self-derivation provides. Status: design; the
-self-derivation build is currently blocked by a clean-build regression
-(see below), so deployment uses the last buildable build for now.
+files are prefix-agnostic: the loader derives the live prefix from its own
+path once at run time (`__dn_prefix_get`, `sysdeps/generic/dn-prefix.h`),
+so one prebuilt set fits any prefix. Shipped and verified (0.6.0+s.1); the
+prebuilt set ships as the rolling `glibc-bundle` release asset.
 
 ## Contents
 
@@ -68,34 +68,46 @@ opens at run time.
 ## Run-time prefix self-derivation
 
 For the swapped files to fit **any** prefix, they must not bake the prefix
-at compile time. The mechanism and sites are specified in
-[`dn-glibc-prefix.md`](dn-glibc-prefix.md), "Runtime prefix
-self-derivation"; in short, the loader derives the prefix from its own
-path (`_dl_rtld_map.l_name`), libc from `dladdr`, and every internal file
-open is rewritten onto the live prefix.
+at compile time. One small mechanism does it: a global **live prefix** cut
+once from the loader's own absolute path (`_dl_rtld_map.l_name`) and
+exported as the weak-linked `__dn_prefix_get()` (`sysdeps/generic/
+dn-prefix.h`). Every internal file path is then built from it via
+`__dn_build()` instead of the compiled `@TERMUX_PREFIX@`:
 
-Status: **blocked.** The self-derivation build breaks the clean glibc build
-at `elf/librtld.map` with multiple-definition errors (reproduced on CI --
-ubuntu-24.04-arm -- and on-device, so it is the patch, not the
-environment). Deployment therefore uses the last buildable build for now.
-Two edit groups are involved and need bisecting:
+- loader: system search dirs, `preload_file` (`/etc/ld.so.preload`) and the
+  cache path (`/usr/etc/ld.so.cache`), computed once before the search
+  paths are built (`elf/rtld.c`, `elf/dl-cache.c`);
+- libc's own internal opens use the same global (`elf/dl-load.c`, ...);
+- `ldconfig` derives its cache/conf/libdirs/aux paths from the live prefix
+  (`elf/ldconfig.c`).
 
-- loader: `elf/rtld.c`, `elf/dl-cache.c`, `sysdeps/generic/dn-prefix.h`;
-- libc: `sysdeps/unix/sysv/linux/open*/openat*.c`.
+Prefix matching requires a path-component boundary, so a prefix whose name
+is a prefix of another (`.dn` vs `.dn12`) does not match wrongly. The
+compiled prefix stays the fallback when derivation yields nothing. One
+consequence: a **static** link leaves `__dn_prefix_get` NULL, so
+`__dn_build` yields guest-relative paths -- the static `ldconfig` cannot
+self-derive, and the bootstrap bypasses it (see [Open items](#open-items)).
+
+Shipped (0.6.0+s.1): `build-glibc.yml` builds the set on an aarch64 runner
+and publishes it as the rolling `glibc-bundle` release; no clean-build
+regression remains (verified on CI and by a fresh on-device bootstrap).
 
 ## Install order in the bootstrap
 
-1. Bootstrap the base set as today.
-2. Install Debian's real `libc6` then `libc-bin` (their loader,
-   `ldconfig`, ... land under the prefix).
-3. Swap in the 10 files (`cp`/extract over the installed ones).
-4. Wire `ld.so.preload` (the shim) at `<prefix>/etc/`, `ld.so.conf` and
-   the `ldconfig`-built `ld.so.cache` at `<prefix>/usr/etc/` (see
-   `dn-glibc-prefix.md`, "Fixed paths").
-5. Continue: `libc6-dev`/toolchain, gcc `specs`, launchers.
+`scripts/bootstrap/setup-apt-prefix.sh`, in order:
 
-The current `scripts/bootstrap/dn-install-glibc.sh` installs our own full
-`libc6`/`libc-bin` packages; the overhaul changes it to step 2 + the swap.
+1. Build the runtime (`setup-runtime.sh`): shim, `dn-run`, `dn-shell`,
+   `dn-trace`, priv wrappers.
+2. Fetch and verify the Debian index; `dn-debian-index.sh` rewrites
+   `Architecture: all` -> `arm64`.
+3. **`dn-install-glibc.sh`**: install Debian's real `libc6` then `libc-bin`
+   (both held), swap in the 10 files, wire `<prefix>/etc/ld.so.preload`
+   (the shim), `<prefix>/usr/etc/ld.so.conf`, and build `ld.so.cache`
+   (ldconfig under the tracer -- see Open items).
+4. `dn-standins.sh`: the prefix's `dpkg`/`apt` stand-ins.
+5. Download the base and its transitive closure, translate each `.deb`,
+   unpack and configure in one dpkg call; hold the base set.
+6. `setup-runtime` again (idempotent), launchers, apt wrappers, activation.
 
 ## What stays unchanged
 
@@ -106,14 +118,14 @@ acquisition step changes.
 
 ## Open items
 
-- **Fix the self-derivation build regression** (bisect the two groups
-  above), then regenerate the patch and validate on CI.
-- **`ldconfig` writer**: its cache path (`LD_SO_CACHE`/`LD_SO_CONF`) is
-  still baked; it needs the same run-time derivation as the loader.
-  Until then the bootstrap **bypasses** it: `dn-install-glibc.sh` runs the
-  static `ldconfig` under the tracer with explicit `-C`/`-f` (bare guest
-  paths bound into the prefix) and ignores its exit status, because a
-  static link leaves `__dn_prefix_get` NULL and `__dn_build` yields empty
-  paths (`Renaming of ~ to  failed`).
-- **Artifact distribution**: how the 10 files are shipped (release asset
-  vs. `deb-native-repo`) is still open.
+- **`ldconfig` writer**: `elf/ldconfig.c` derives its cache/conf/libdirs/
+  aux paths from the live prefix, but the shipped `ldconfig` is **static**,
+  so `__dn_prefix_get` is NULL and `__dn_build` yields empty paths
+  (`Renaming of ~ to  failed`). The bootstrap therefore **bypasses** it:
+  `dn-install-glibc.sh` runs the static `ldconfig` under the tracer with
+  explicit `-C`/`-f` (bare guest paths bound into the prefix) and ignores
+  its exit status. A missing `ld.so.cache` is not fatal (programs still
+  run). Open: give the static writer a working derivation.
+- **Artifact distribution**: the 10 files ship as the rolling
+  `glibc-bundle` release asset, fetched by `setup-apt-prefix.sh`. Whether
+  to also publish to `deb-native-repo` is still open.
