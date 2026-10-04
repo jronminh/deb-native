@@ -19,3 +19,7 @@ there).
   functional checks on an upgraded prefix, tolerant of a not-yet-migrated
   package set. See
   [`../docs/spec/dn-glibc-prefix.md`](../docs/spec/dn-glibc-prefix.md).
+- `prefix-independence/` — R0: runs the deployed prefix's userland with
+  `DN_TERMUX_PREFIX` at an empty dir so Termux's tree is unusable; asserts the
+  prefix's own shell/coreutils, Debian `apt`/`dpkg`, `getent` and the path
+  overlay all work from `$DN` alone (see `TODO.md` 0.7.0, R0).
