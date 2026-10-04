@@ -11,8 +11,11 @@
 
 deb-native's static "binary surgery" on a `.deb`'s ELF files is exactly
 one field: the `PT_INTERP` program header's pathname, rewritten from
-`/lib/ld-linux-aarch64.so.1` to `ld-dn`
-(`scripts/install/dn-translate-deb.sh`, via `patchelf`). This doc
+`/lib/ld-linux-aarch64.so.1` to the prefix's own fused glibc loader
+`$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`
+(`scripts/install/dn-translate-deb.sh`, via `patchelf`). (Before
+0.6.0+s.1 the target was the `ld-dn` trampoline, since retired — this doc
+kept the old target in places below.) This doc
 documents precisely which bytes that touches, why the kernel only ever
 reads that pathname through `p_offset`/`p_filesz` (never `p_vaddr`),
 why the rewrite usually has to relocate the string rather than overwrite
@@ -36,7 +39,7 @@ tool's only remaining use.
 
 - [`package-lifecycle.md`](package-lifecycle.md) — where the translate
   step (which does this patch) sits in a package's overall lifecycle.
-- [`ld-dn-config.md`](ld-dn-config.md) — `ld-dn`'s policy and config
+- [`ld-dn-config.md`](../log/ld-dn-config.md) — `ld-dn`'s policy and config
   file; the runtime side this patch hands off to.
 - [`../log/findings/patchelf-et-exec-runpath.md`](../log/findings/patchelf-et-exec-runpath.md)
   — the related `patchelf` bug (`--set-rpath` on `ET_EXEC`, not

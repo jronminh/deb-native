@@ -15,7 +15,7 @@ name**, unprivileged. "Install and run, not emulate" — no isolation.
 Three path mechanisms:
 
 - **Maintainer scripts** — plain-text path rewrite before `dpkg` runs them
-  (`scripts/install/patch-maintainer-scripts.sh`).
+  (`scripts/install/patch-scripts-tree.sh`).
 - **Dynamic glibc binaries** — `native/path-redirect.c`, an `LD_PRELOAD` shim
   interposing path-taking libc functions (`/usr /etc /var /opt` →
   `$INSTDIR`). **This layer is complete** — see `docs/spec/shim-coverage.md`.
@@ -103,6 +103,11 @@ per-subdirectory ones) — kept current there, not duplicated here.
 - Test prefix `~/dn6`. No `sudo`/root anywhere; the box is
   small (low RAM).
 - Persisted files (code, docs, commits) are in **English**.
+- **Docs state only the current truth.** From 0.6.0+s.1 no doc records
+  history — no "was X", no superseded banner, no change narrative. The only
+  history is `docs/log/` (`docs/README.md` has the rule). A retired
+  mechanism's spec moves to `docs/log/`; live docs are rewritten to the new
+  truth.
 
 ## Rule
 

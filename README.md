@@ -85,27 +85,25 @@ side-by-side diff: [`docs/spec/vs-sudo-less.md`](docs/spec/vs-sudo-less.md).
 
 ## How it works
 
-`install.sh` builds `~/.dn` debootstrap-style (Debian's index, a `libc6`
-stand-in for Termux's glibc, `dpkg`/`apt` -> Termux's binaries, then the
-Debian base). An apt hook translates every `.deb` before dpkg sees it:
-ELF interpreter -> `ld-dn`, library path -> the prefix, scripts and
-maintainer scripts -> the prefix's shell. `native/ld-dn.c` is every
-installed program's interpreter — it loads a path shim
-(`native/path-redirect.c`, `LD_PRELOAD`, rewrites `/usr /etc /var /opt
-/root /lib /bin /sbin` into the prefix), then hands over to glibc's
-loader. Its policy (library dirs, preloads, extra env, redirect roots,
-per-program overrides) is read at startup from
-`~/.dn/etc/deb-native/ld-dn.conf`, so extending it is a config edit, not
-a rebuild ([`docs/spec/ld-dn-config.md`](docs/spec/ld-dn-config.md));
-what the shim can't reach (static binaries, raw syscalls, NSS) falls to
-`dn-trace`, a ptrace tracer grown out of PRoot's core. Installed programs
-are linked into `~/.dn/usr/lib/deb-native/bin`, first on `PATH`.
+`install.sh` builds `~/.dn` debootstrap-style (Debian's index, `dpkg`/`apt`
+-> Termux's binaries, Debian's real `libc6`/`libc-bin`, then this
+project's own Android-patched glibc swapped in over them, then the Debian
+base). An apt hook translates every `.deb` before dpkg sees it: its ELF
+interpreter -> the prefix's own fused glibc loader, scripts and maintainer
+scripts -> the prefix's shell. That loader is Debian's glibc source built
+with this project's Android compatibility patches
+([`third_party/glibc-android-patches/`](third_party/glibc-android-patches/));
+it derives the live prefix from its own path at run time, loads the path
+shim (`native/path-redirect.c`, via `$DN/etc/ld.so.preload`, rewrites
+`/usr /etc /var /opt /root /lib /bin /sbin` into the prefix) and finds the
+prefix's libraries from `$DN/usr/etc/ld.so.cache`. What the shim can't
+reach (static binaries, raw syscalls, NSS) falls to `dn-trace`, a ptrace
+tracer grown out of PRoot's core. Installed programs are linked into
+`~/.dn/usr/lib/deb-native/bin`, first on `PATH`.
 
-A real Debian `libc6` (Debian's own glibc source plus this project's own
-Android compatibility patches,
-[`third_party/glibc-android-patches/`](third_party/glibc-android-patches/))
-is built and packaged, but not yet the `install.sh` default — tracked in
-[`TODO.md`](TODO.md).
+The deploy that installs Debian's package and swaps in the ten-file own
+glibc build: [`docs/spec/deploy.md`](docs/spec/deploy.md) and
+[`docs/spec/dn-glibc-prefix.md`](docs/spec/dn-glibc-prefix.md).
 
 Full detail: [`docs/spec/design.md`](docs/spec/design.md) (the mechanism
 end to end), [`docs/spec/install-flow.md`](docs/spec/install-flow.md)

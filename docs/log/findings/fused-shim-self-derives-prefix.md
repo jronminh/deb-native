@@ -10,7 +10,7 @@
 > already covers.
 
 **Impact: Repo change.** Toward the `dn-glibc` fused loader (fold `ld-dn`
-into glibc's own loader; `docs/spec/ld-dn-runtime.md`, "Alternative: fuse
+into glibc's own loader; `docs/log/ld-dn-runtime.md`, "Alternative: fuse
 into the loader"; `TODO.md`, "Runtime overhaul"): recon showed glibc can
 already do the shim-injection and library-search jobs from files, so the
 only piece missing was the prefix the shim needs. `native/path-redirect.c`
@@ -28,7 +28,7 @@ Proven on `fe2`.
 
 ## Related docs
 
-- [`../../spec/ld-dn-runtime.md`](../../spec/ld-dn-runtime.md) -- the
+- [`../../spec/ld-dn-runtime.md`](../../log/ld-dn-runtime.md) -- the
   trampoline, and the "Alternative: fuse into the loader" plan this serves.
 - [`../../spec/dl-mechanics.md`](../../spec/dl-mechanics.md) -- the loader
   mechanisms (`ld.so.preload`, `ld.so.cache`) this leans on.

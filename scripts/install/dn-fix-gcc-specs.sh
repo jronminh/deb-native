@@ -1,6 +1,6 @@
 #!/bin/sh
 # Point gcc's own default dynamic linker at the prefix's glibc loader
-# (docs/spec/dn-glibc-prefix.md; the ld-dn fix it replaces:
+# (docs/spec/dn-glibc-prefix.md; the earlier fix it replaces:
 # docs/log/findings/gcc-hello-pt-interp-gap.md, 2026-10-01: "the shim's
 # /lib gap, and a separate PT_INTERP wall").
 #
@@ -27,10 +27,8 @@
 # Usage: dn-fix-gcc-specs.sh PREFIX
 set -u
 DN=${1:?usage: dn-fix-gcc-specs.sh PREFIX}
-# Runtime interpreter: the prefix's own glibc loader (dn-glibc-prefix.md).
-# DN_INTERP lets the bootstrap/transition point this back at the ld-dn
-# trampoline ($DN/usr/lib/deb-native/ld-dn) until the fused loader is in place.
-INTERP="${DN_INTERP:-$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1}"
+# Runtime interpreter: the prefix's own fused glibc loader (dn-glibc-prefix.md).
+INTERP="$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 [ -x "$INTERP" ] || exit 0
 [ -d "$DN/usr/lib/gcc" ] || exit 0
 

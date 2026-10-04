@@ -11,17 +11,15 @@
 #     this project's packaged libc6): the kernel loads it directly, and it
 #     reads the shim from $DN/etc/ld.so.preload and the prefix's library
 #     dirs from $DN/usr/etc/ld.so.cache -- the dn-glibc runtime
-#     (docs/spec/dn-glibc-prefix.md), no ld-dn trampoline. Done here, not
+#     (docs/spec/dn-glibc-prefix.md). Done here, not
 #     after install, so it is right before any maintainer script runs the
 #     binary. Library search is the loader's cache rather than a per-file
 #     RUNPATH rewrite: RUNPATH is not inherited transitively, and rewriting
 #     it on a tightly-packed ET_EXEC binary can corrupt its program headers
-#     (docs/log/findings/patchelf-et-exec-runpath.md). Overridable via
-#     DN_INTERP: the bootstrap points it back at ld-dn until the fused
-#     loader is installed;
+#     (docs/log/findings/patchelf-et-exec-runpath.md);
 #   - program scripts' "#!" line pointed into the prefix: sh/dash ->
 #     $DN/usr/bin/dash, bash -> $DN/usr/bin/bash (both real, apt-installed
-#     packages with ld-dn as their own interpreter -- the kernel following
+#     packages with the fused loader as their own interpreter -- the kernel following
 #     the shebang already gets the shim/env set up, same as any other
 #     prefix binary, no extra indirection), perl -> dn-perl (Termux's own,
 #     no Debian-perl replacement yet), any other /usr, /bin, /sbin
@@ -44,11 +42,8 @@ DN=${2:?usage: dn-translate-deb.sh DEB_FILE PREFIX}
 case "$DEB" in /*) ;; *) DEB="$PWD/$DEB" ;; esac
 case "$DN" in /*) ;; *) DN="$PWD/$DN" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-# Runtime interpreter: the prefix's own glibc loader (dn-glibc-prefix.md).
-# DN_INTERP lets the bootstrap/transition point this back at the ld-dn
-# trampoline ($DN/usr/lib/deb-native/ld-dn) until the fused loader is in
-# place.
-LD="${DN_INTERP:-$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1}"
+# Runtime interpreter: the prefix's own fused glibc loader (dn-glibc-prefix.md).
+LD="$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -82,7 +77,7 @@ find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print | while IFS= 
   # (captured, not shown -- it is the expected answer, not an error).
   interp=$(patchelf --print-interpreter "$f" 2>&1) || interp=""
   case "$interp" in
-    */ld-linux-aarch64.so.1|*/ld-dn) [ "$interp" = "$LD" ] || patchelf --set-interpreter "$LD" "$f" ;;
+    */ld-linux-aarch64.so.1) [ "$interp" = "$LD" ] || patchelf --set-interpreter "$LD" "$f" ;;
   esac
   # Library search is the fused loader's ld.so.cache now
   # ($DN/usr/etc/ld.so.cache, built by our libc-bin's ldconfig), which

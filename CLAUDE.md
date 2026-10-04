@@ -24,14 +24,17 @@ Three path mechanisms:
   reduced fork of PRoot's ptrace core), wired via `native/dn-run.c`. Done,
   not a TODO — replaced the old `proot` fallback in 0.2.3.
 
-`native/ld-dn.c` is the ELF interpreter every translated program's
-`PT_INTERP` points at (the kernel has no other way to invoke a glibc
-program here — Android has no `/lib/ld-linux-aarch64.so.1`). It builds a
-per-launch environment (`LD_PRELOAD`, `DN_INSTDIR`, `LD_LIBRARY_PATH`,
-`COMPILER_PATH`) before handing off to glibc's real loader. Prefer adding
-a launch-time env var here over a static per-`.deb` ELF patch when both
-would solve the same problem — one code path, no risk of `patchelf`
-miscomputing a binary's layout (see
+Every translated program's `PT_INTERP` points at the prefix's own fused
+glibc loader (`$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`) — the
+kernel has no other way to invoke a glibc program here, since Android has
+no `/lib/ld-linux-aarch64.so.1`. That loader is Debian's glibc source with
+this project's Android compatibility patches (the ten-file swap,
+`docs/spec/deploy.md`); it derives the live prefix from its own path at run
+time, reads the path shim from `$DN/etc/ld.so.preload`, and the prefix's
+library dirs from `$DN/usr/etc/ld.so.cache`. The old `native/ld-dn.c`
+trampoline is retired. Prefer a launch-time env var / loader path over a
+static per-`.deb` ELF patch when both would solve the same problem — one
+code path, no risk of `patchelf` miscomputing a binary's layout (see
 `docs/log/findings/patchelf-et-exec-runpath.md`).
 
 ## Priority: ship the idea fast, don't study every failure
@@ -70,6 +73,12 @@ template in [`templates/`](templates/) (`readme.template.md`,
 `docs.template.md`) — each file points at it in a blockquote right after
 its title. Copy the matching template instead of improvising a layout
 when adding a new one.
+
+**Docs state only the current truth.** From 0.6.0+s.1 no doc under `docs/`
+records history — no "was X", no superseded banner, no change narrative;
+the only history is `docs/log/`. A retired mechanism's spec moves to
+`docs/log/` and the live specs are rewritten to the new truth
+([`docs/README.md`](docs/README.md)).
 
 After moving, renaming, or deleting a doc or a script, run
 `scripts/tools/check-repo.py` — it catches broken markdown links, broken

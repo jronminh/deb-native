@@ -1,6 +1,6 @@
 # <Title>
 
-> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> Template: `templates/docs.template.md`
 > (fix the relative path to match this file's depth). Read a doc's summary
 > and table of contents below before its sections, and read its
 > directory's own `README.md` first to confirm this is the right doc to
@@ -20,7 +20,7 @@ one-off investigation).>
 
 ## Related docs
 
-- [`other-doc.md`](other-doc.md) — why it's related.
+- `other-doc.md` — why it's related.
 
 ## Section one
 

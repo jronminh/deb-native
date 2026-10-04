@@ -31,7 +31,7 @@ wiring it into the prefix is the remaining step.
   the fused-loader result this follows from.
 - [`../../spec/dl-mechanics.md`](../../spec/dl-mechanics.md) -- `ld.so.cache`
   and where the loader reads it.
-- [`../../spec/ld-dn-runtime.md`](../../spec/ld-dn-runtime.md) -- the
+- [`../../spec/ld-dn-runtime.md`](../../log/ld-dn-runtime.md) -- the
   fused-loader plan.
 
 ## Context

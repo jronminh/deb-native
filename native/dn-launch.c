@@ -19,7 +19,7 @@
  *     Termux's glibc coreutils, then Termux's own Bionic bin) and
  *     DEBIAN_FRONTEND,
  *   - execs the prefix's own `bash` (Debian's real package, apt-installed
- *     like any other -- the same translation/ld-dn pipeline as everything
+ *     like any other -- the same translation/loader pipeline as everything
  *     else the prefix runs, not a binary borrowed from outside it) with the
  *     original argv, so the maintainer script runs. Falls back to Termux's
  *     glibc bash only if the prefix's own is not yet installed (true during

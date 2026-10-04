@@ -15,13 +15,6 @@ there).
 - `tracer-nss/` — proves the tracer route resolves glibc's statically-bound
   NSS reads (`getpwnam`, ...) against the prefix, the one case the shim
   cannot reach. See [`../docs/spec/syscall-boundary.md`](../docs/spec/syscall-boundary.md).
-- `ld-dn-config/` — builds ld-dn + the shim + a glibc probe in a throwaway
-  prefix and asserts the environment ld-dn resolves from compiled
-  defaults, the shipped default config, explicit overrides and a
-  per-program block, and that a malformed config fails open. See
-  [`../docs/spec/ld-dn-config.md`](../docs/spec/ld-dn-config.md).
-  **Obsolete for `dn-glibc`**: it tests `ld-dn`, which the fused loader
-  retires; kept only until that code is removed.
 - `glibc-swap/` — the 0.6.0+s.1 (`s` = swap in deploy) acceptance test for
   an **already-deployed** prefix (it never bootstraps or downloads). Run
   `run.sh PREFIX [fresh|live]`: `fresh` checks the whole swap (Debian's

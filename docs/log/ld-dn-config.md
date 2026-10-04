@@ -19,7 +19,7 @@ config layer landed in 0.5.2-prealpha; honouring the caller's
 compiled defaults reproduce the pre-config behaviour when the file is
 absent, and the shim reads `DN_REDIRECT_PREFIXES`. As-built specifics
 and deviations are in [Status](#status).
-[`path-shim.md`](path-shim.md) and [`design.md`](design.md) describe the
+[`path-shim.md`](../spec/path-shim.md) and [`design.md`](../spec/design.md) describe the
 surrounding mechanism.
 
 ## Contents
@@ -42,15 +42,15 @@ surrounding mechanism.
 
 ## Related docs
 
-- [`design.md`](design.md) — the live design; ld-dn's role in the
+- [`design.md`](../spec/design.md) — the live design; ld-dn's role in the
   prefix ("the loader stub").
-- [`path-shim.md`](path-shim.md) — the `LD_PRELOAD` shim ld-dn installs,
+- [`path-shim.md`](../spec/path-shim.md) — the `LD_PRELOAD` shim ld-dn installs,
   and the env its constructor reads.
-- [`install-flow.md`](install-flow.md) — when `setup-runtime.sh` builds
+- [`install-flow.md`](../spec/install-flow.md) — when `setup-runtime.sh` builds
   and copies ld-dn into a prefix.
-- [`tracer.md`](tracer.md) — `dn-trace`, the other consumer of the
+- [`tracer.md`](../spec/tracer.md) — `dn-trace`, the other consumer of the
   policy (static binaries / raw syscalls).
-- [`direct-usage.md`](direct-usage.md) — why a config-fed policy matters
+- [`direct-usage.md`](../spec/direct-usage.md) — why a config-fed policy matters
   for the tracer's routing.
 
 ## Why: the policy is compiled in
@@ -73,7 +73,7 @@ static ELF (it runs with no libc). The goal is that, after **one**
 rebuild, growing its behaviour is a file edit in the prefix, not another
 compile. This is the same shift `sudo-less` makes with its generated
 `00local-prefix` config rather than per-case wrappers
-([`classic-design.md`](classic-design.md)).
+([`classic-design.md`](../spec/classic-design.md)).
 
 ## What ld-dn does
 
@@ -231,7 +231,7 @@ Semantics:
 
 Deliberately **not** in v1: `include`, globs, arithmetic, conditionals.
 A freestanding parser is the riskiest new code; keep its surface tiny so
-it can be audited at a glance (see [`standard.md`](standard.md)).
+it can be audited at a glance (see [`standard.md`](../spec/standard.md)).
 
 ## Processing order
 
@@ -363,7 +363,7 @@ Phased so each lands independently and is testable on `fe2`
 7. **Docs.** Update `native/README.md`, `path-shim.md`'s env section,
    and this doc's status; run `scripts/tools/check-repo.py`.
 
-Suggested order matches [`bind-only.md`](bind-only.md)'s style: land the
+Suggested order matches [`bind-only.md`](../spec/bind-only.md)'s style: land the
 no-op refactor first, A/B the cost, only then let config drive the
 shim.
 

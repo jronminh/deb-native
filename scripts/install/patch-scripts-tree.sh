@@ -2,7 +2,7 @@
 # Point an extracted package's maintainer scripts at the prefix's own
 # interpreter: their "#!/bin/sh" (or bash, dash) shebang is rewritten to
 # $INSTDIR/usr/bin/dash or .../bash directly -- both are real,
-# apt-installed packages with ld-dn as their own ELF interpreter, so the
+# apt-installed packages with the fused loader as their own ELF interpreter, so the
 # kernel following the shebang already gets the shim/environment set up
 # the same way any other prefix binary does, no extra indirection. Falls
 # back to dn-shell only when the target isn't installed yet (true during

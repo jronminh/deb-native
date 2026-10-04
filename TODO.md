@@ -20,10 +20,10 @@ mostly works". Reached when every item below is done. Announce with one
 number ("N of 100 random Debian packages install and run, no root, no
 proot"), the comparison with proot-distro (README), and a `gcc` demo.
 
-**Status**: 0.2.0's foundation and 0.3.0's fake-root are released. 0.5.0's
-own-glibc patch is written, forked, and validated (clean-room rebuild,
-`hello` + NSS working) but not yet packaged as the prefix's real `libc6`
-by default (`install.sh` still defaults to `dn-standins.sh`'s stand-in).
+**Status**: 0.2.0's foundation and 0.3.0's fake-root are released. This
+project's own Android-patched glibc is now the prefix's real `libc6` by
+default (0.6.0+s.1, below); `install.sh` no longer uses `dn-standins.sh`'s
+stand-in, and `ld-dn` is retired as the interpreter.
 
 **0.6.0+s.1 (released, 2026-10-03)**: a fresh prefix is `dn-glibc` by
 default -- it fetches the glibc bundle, installs Debian's real
@@ -227,8 +227,8 @@ Debian base (as in Debian's own installer environment).
 everything else in the prefix depends on), not required for alpha.
 Leaning, per the findings below: **prebuilt base + apt-cache cleaning
 (+ parallel translation, already released) first; a busybox base only if
-size still matters after that.** Full options/tradeoffs recorded in
-[`docs/spec/design-0.4.0.md`](docs/spec/design-0.4.0.md) once written; findings so
+size still matters after that.** Full options/tradeoffs to be recorded in
+`docs/spec/design-0.4.0.md` once written; findings so
 far (trixie index, 2026-09-27):
 - The kept GNU base (`mawk coreutils sed grep findutils debianutils
   diffutils gzip tar hostname`) is Essential and depended on
@@ -409,7 +409,7 @@ binaries atomically. `native/path-redirect.c` consumes
 redirect roots with no rebuild. `tests/ld-dn-config/run.sh` covers
 defaults, the default file, overrides, per-program blocks and fail-open.
 Design and as-built detail:
-[`docs/spec/ld-dn-config.md`](docs/spec/ld-dn-config.md).
+[`docs/log/ld-dn-config.md`](docs/log/ld-dn-config.md).
 
 **Open**:
 - Benchmark the always-probe `openat` per exec on a spawn-heavy workload;
@@ -433,7 +433,7 @@ guides now document only `LD_LIBRARY_PATH`
 `tests/ld-dn-config/run.sh` covers the merge and deduplication, and an
 on-prefix `gcc` shared-library build runs with `LD_LIBRARY_PATH=.` and
 fails without it. Design:
-[`docs/spec/ld-dn-config.md`](docs/spec/ld-dn-config.md).
+[`docs/log/ld-dn-config.md`](docs/log/ld-dn-config.md).
 
 **Open**: none.
 
@@ -453,7 +453,7 @@ from the config rather than the shim's compiled switch, and it documents
 that global directives must precede the first `[program]` block.
 `tests/ld-dn-config/run.sh` covers oversized values, an oversized file
 and aggregate overflow. Design:
-[`docs/spec/ld-dn-config.md`](docs/spec/ld-dn-config.md).
+[`docs/log/ld-dn-config.md`](docs/log/ld-dn-config.md).
 
 **Open**:
 - Gate/benchmark the always-probe `openat` (see 0.5.2 Open).
@@ -707,7 +707,7 @@ append-when-longer rule); the tool itself is not built yet.
   failure modes.
 - Fuse `ld-dn` into the loader (**`dn-glibc`**): the kernel loads the
   patched `ld-linux` directly and the trampoline disappears -- plan,
-  pros/cons, and the trigger in `docs/spec/ld-dn-runtime.md`'s
+  pros/cons, and the trigger in `docs/log/ld-dn-runtime.md`'s
   "Alternative: fuse into the loader". Name locked 2026-10-03; develop and
   validate the hook on amd64 first, arm64 on-device after.
 

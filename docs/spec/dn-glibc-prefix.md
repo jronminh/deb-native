@@ -13,7 +13,7 @@ The next-generation prefix: the runtime's loader is glibc's own, built for the
 prefix, and `native/ld-dn.c` is retired. This doc covers how a package gets in
 (**packaging**) and how the compiler toolchain fits (**the GCC lifecycle**),
 for the prefix this branch is preparing to make installable. The proxy
-runtime it replaces: [`ld-dn-runtime.md`](ld-dn-runtime.md) and its
+runtime it replaces: [`ld-dn-runtime.md`](../log/ld-dn-runtime.md) and its
 "Alternative: fuse into the loader" section.
 
 Status: design + partial proof (2026-10-03). The mechanism is proven on the
@@ -35,7 +35,7 @@ self-derivation](#runtime-prefix-self-derivation) is design only.
 
 ## Related docs
 
-- [`ld-dn-runtime.md`](ld-dn-runtime.md) -- the trampoline being retired; its
+- [`ld-dn-runtime.md`](../log/ld-dn-runtime.md) -- the trampoline being retired; its
   fuse section is this doc's origin.
 - [`dl-mechanics.md`](dl-mechanics.md) -- the glibc mechanisms this leans on
   (`ld.so.preload`, `ld.so.cache`), and why they keep the patch small.

@@ -31,7 +31,7 @@ libraries use the standard `LD_LIBRARY_PATH`, documented below.
   and [`../log/findings/patchelf-et-exec-runpath.md`](../log/findings/patchelf-et-exec-runpath.md)
   — the engineering trail for the `PT_INTERP`/`gcc` fixes this guide
   relies on.
-- [`../spec/ld-dn-config.md`](../spec/ld-dn-config.md) — the loader whose
+- [`../spec/ld-dn-config.md`](../log/ld-dn-config.md) — the loader whose
   `LD_LIBRARY_PATH` policy this guide relies on.
 - [`python-venv.md`](python-venv.md) — the other guide in this directory,
   for a different language (Python) hitting a different wall (no

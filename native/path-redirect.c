@@ -260,9 +260,9 @@ static char **bionic_env(char *const *envp) {
       continue;
     }
     /* Same reasoning as LD_PRELOAD above, found 2026-09-30 root-causing a
-     * real crash: ld-dn sets LD_LIBRARY_PATH (and COMPILER_PATH) pointing
-     * at this project's own glibc library/bin dirs for the glibc target it
-     * launches (native/ld-dn.c) -- a Bionic child inheriting that had no
+     * real crash: a glibc launch sets LD_LIBRARY_PATH (and COMPILER_PATH)
+     * pointing at this project's own glibc library/bin dirs -- a Bionic
+     * child inheriting that had no
      * business seeing it, but bionic_env() only ever stripped LD_PRELOAD.
      * Confirmed directly: Termux's own dpkg-deb (Bionic) fails to link
      * ("cannot find verneed/verdef ... at .../glibc/lib/libc.so.6") when
@@ -323,16 +323,13 @@ static int elf_glibc_interp(int fd, const unsigned char *hdr, ssize_t n) {
     if (r <= 0) return 0;
     interp[(r < (ssize_t)sizeof interp) ? r : (ssize_t)sizeof interp - 1] = '\0';
     /* Every program this project has translated has its PT_INTERP set to
-     * ld-dn (dn-translate-deb.sh/dn-adopt.sh, patchelf --set-interpreter),
-     * not Termux's original ld-linux-aarch64.so.1 -- so "ld-linux"/"glibc"
-     * alone stopped matching this project's own binaries the moment that
-     * rewrite shipped, misclassifying nearly every translated glibc
-     * program as Bionic. Found 2026-09-30 root-causing a segfault this
-     * caused (find -exec test / env test): a glibc target misclassified
-     * this way gets bionic_env()'s PATH-reordering (meant for a genuinely
-     * Bionic child) applied to it, which can point its own PATH lookups
-     * at Termux's own binaries instead of the prefix's. */
-    if (strstr(interp, "/deb-native/ld-dn") != NULL) return 1;
+     * the prefix's own fused glibc loader (dn-translate-deb.sh/dn-adopt.sh,
+     * patchelf --set-interpreter), an "ld-linux" path -- caught by the
+     * ld-linux match below. A glibc target misclassified as Bionic would
+     * get bionic_env()'s PATH-reordering (meant for a genuinely Bionic
+     * child) applied to it, which can point its own PATH lookups at
+     * Termux's own binaries instead of the prefix's (found 2026-09-30
+     * root-causing a segfault: find -exec test / env test). */
     return strstr(interp, "ld-linux") != NULL && strstr(interp, "glibc") != NULL
                ? 1
                : (strstr(interp, "/glibc/") != NULL || strstr(interp, "ld-linux") != NULL);
@@ -391,8 +388,8 @@ static const char *map_shebang_interp(const char *in, char *buf, size_t sz) {
   if (root) {
     /* Same preference as dn-translate-deb.sh/patch-scripts-tree.sh
      * (translate: direct shebang, 2026-09-30): point at the prefix's own
-     * dash/bash directly when installed -- real apt packages with ld-dn
-     * as their own ELF interpreter, so the kernel following the rewritten
+     * dash/bash directly when installed -- real apt packages with the fused
+     * loader as their own ELF interpreter, so the kernel following the rewritten
      * shebang already gets the shim/environment set up, no extra
      * indirection needed. dn-shell is only the bootstrap-time fallback,
      * kept here too for the same chicken-and-egg reason (a script the
@@ -1630,7 +1627,7 @@ int posix_spawn(pid_t *pid, const char *path,
    * used to only classify glibc-vs-Bionic and skip the script/shebang
    * branch entirely, so a script spawned via posix_spawn (glibc's own
    * system()/popen() can use it internally) never got its shebang
-   * interpreter remapped to ld-dn/dn-shell the way execve's targets do,
+   * interpreter remapped to the prefix's loader/dn-shell the way execve's targets do,
    * and -- since a plain-text script fails target_is_glibc()'s ELF-magic
    * check -- was always treated as a Bionic target regardless of what it
    * actually needed. */

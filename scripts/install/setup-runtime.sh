@@ -47,9 +47,10 @@ CACHE="$SRC/.build"
 mkdir -p "$CACHE"
 stale() { [ ! -e "$1" ] || [ "$2" -nt "$1" ]; }   # ARTIFACT SOURCE
 # Replace TO atomically: write a sibling temp then rename(2). A prefix is
-# live: ld-dn is the PT_INTERP of every Debian program and this script runs
-# from inside that prefix, so a plain cp -f could leave a half-written
-# interpreter for a process exec'ing during the copy.
+# live: the prefix's own glibc loader is the PT_INTERP of every Debian
+# program and this script runs from inside that prefix, so a plain cp -f
+# could leave a half-written interpreter for a process exec'ing during the
+# copy.
 put() {                                            # FROM TO
   if [ ! -e "$2" ] || ! cmp -s "$1" "$2"; then
     cp -f "$1" "$2.tmp.$$" && chmod 755 "$2.tmp.$$" && mv -f "$2.tmp.$$" "$2"
@@ -72,29 +73,7 @@ if stale "$CACHE/dn-run" "$SRC/dn-run.c"; then
 fi
 put "$CACHE/dn-run" "$LIBDIR/dn-run"
 
-# The loader stub every Debian program names as its interpreter
-# (dn-translate-deb.sh): sets up the shim, then hands over to glibc's real
-# loader. Freestanding static PIE -- no libc, no relocations.
-if stale "$CACHE/ld-dn" "$SRC/ld-dn.c"; then
-  echo "Building ld-dn ..."
-  clang -O2 -static -nostdlib -ffreestanding -fno-builtin -fno-stack-protector \
-        -fPIE -Wl,-pie -Wl,--no-dynamic-linker -o "$CACHE/ld-dn" "$SRC/ld-dn.c"
-fi
-put "$CACHE/ld-dn" "$LIBDIR/ld-dn"
-
-# ld-dn's runtime policy (docs/spec/ld-dn-config.md). Installed once, then
-# left alone: the prefix's copy is the user's to edit, and a missing file
-# just means ld-dn's compiled defaults (which reproduce the shipped file).
-# Config directives are also available per-program and per-prefix without
-# rebuilding anything -- the point of the file.
-CONFDIR="$INSTDIR/etc/deb-native"
-mkdir -p "$CONFDIR"
-if [ ! -e "$CONFDIR/ld-dn.conf" ]; then
-  cp "$SRC/ld-dn.conf" "$CONFDIR/ld-dn.conf"
-  chmod 644 "$CONFDIR/ld-dn.conf"
-fi
-
-# The syscall tracer (fork-lite, tracer/) for what ld-dn and the shim cannot
+# The syscall tracer (fork-lite, tracer/) for what the shim cannot
 # reach: static binaries (which Android's seccomp filter also kills without
 # its syscall emulation), programs making their own syscalls, NSS. Built here
 # when its build needs are present (pkg install make libtalloc), once per

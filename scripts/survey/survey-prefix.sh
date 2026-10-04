@@ -27,7 +27,7 @@
 # run: none (no program in a bin dir), ok, partial, fail, untested (every
 #   program needs a display or a terminal, or hangs); "-" if not installed
 # programs: NAME:HOW:RESULT,... HOW is how the user's shell reaches it
-#   (usr/lib/deb-native/bin, make-launchers.sh): native (a symlink: ld-dn or
+#   (usr/lib/deb-native/bin, make-launchers.sh): native (a symlink: the prefix loader or
 #   a translated "#!"), trace (a dn-run --trace wrapper), dn-run, script
 #   (dn-shell/dn-perl wrapper), hidden (no entry; run by full path).
 #   RESULT is ok, fail, miss (failed, but works under the tracer: the
@@ -127,7 +127,7 @@ install_failure() {
 # Whether the output in $2 of a run that exited with $1 shows it works.
 run_ok() {
   local rc=$1 out=$2
-  if grep -qiE 'error while loading shared libraries|bad interpreter|No such file or directory|ModuleNotFoundError|ImportError|Can.t locate .* in @INC|cannot load such file|LoadError|ClassNotFoundException|Could not find or load main class|Cannot find module|not found in (the )?(path|search)|CANNOT LINK EXECUTABLE|Bad system call|Segmentation fault|^dn-run:|^ld-dn:' "$out"; then
+  if grep -qiE 'error while loading shared libraries|bad interpreter|No such file or directory|ModuleNotFoundError|ImportError|Can.t locate .* in @INC|cannot load such file|LoadError|ClassNotFoundException|Could not find or load main class|Cannot find module|not found in (the )?(path|search)|CANNOT LINK EXECUTABLE|Bad system call|Segmentation fault|^dn-run:' "$out"; then
     return 1
   fi
   [ "$rc" = 0 ] && return 0

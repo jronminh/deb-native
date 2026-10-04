@@ -116,16 +116,15 @@ static int classify(const char *path, int *nss) {
     char in[512];
     if (pread(fd, in, ph.p_filesz, ph.p_offset) != (ssize_t)ph.p_filesz) continue;
     in[ph.p_filesz] = '\0';
-    /* Every binary this project translates has PT_INTERP rewritten to
-     * ld-dn (dn-translate-deb.sh, patchelf --set-interpreter), not
-     * Termux's original ld-linux-aarch64.so.1 -- so "ld-linux" alone
-     * never matched any of this project's own glibc binaries, which fell
-     * through to C_DYNOTHER below and its bare execv() with no NSS
-     * check, silently skipping the tracer routing this function exists
-     * for. Same bug, same fix, as path-redirect.c's target_is_glibc()
-     * (runtime component audit, 2026-09-30) -- found here by checking
-     * for the same pattern after fixing it there, not independently. */
-    if (strstr(in, "ld-linux") || strstr(in, "/deb-native/ld-dn")) {
+    /* Every binary this project translates has PT_INTERP rewritten to the
+     * prefix's own fused glibc loader (dn-translate-deb.sh,
+     * patchelf --set-interpreter), an "ld-linux" path -- caught by the
+     * ld-linux match below. A glibc binary that slipped through to
+     * C_DYNOTHER would get a bare execv() with no NSS check, silently
+     * skipping the tracer routing this function exists for. Same
+     * classification as path-redirect.c's target_is_glibc() (runtime
+     * component audit, 2026-09-30). */
+    if (strstr(in, "ld-linux")) {
       *nss = has_nss_import(fd);
       close(fd);
       return C_GLIBC;
@@ -178,7 +177,7 @@ static void launch_glibc(char **args) {
  * needs), maps the guest /usr,/etc,... onto the prefix for the whole traced
  * tree, which is why it reaches static binaries, raw syscalls, and the
  * libc-internal NSS reads the libc shim cannot. There is no fallback to
- * Termux's proot: the loader (ld-dn), the shim and dn-trace cover the
+ * Termux's proot: the prefix's own loader, the shim and dn-trace cover the
  * prefix. Only dirs that exist are bound.
  *
  * nss=1 adds one more bind: Termux's glibc reads its sysconfdir at

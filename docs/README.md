@@ -20,9 +20,14 @@ where it feels thematically closest, and add it to that directory's
 - [`guides/`](guides/README.md) — how-to for a specific, one-off case,
   not a spec of the project itself.
 
-A spec doc that gets superseded moves to `log/` (or gets a status note)
-rather than being silently edited into agreement with history it never
-described. The reverse also happens: when a log turns out to contain
-durable reference knowledge (a taxonomy, a catalog, a verdict table) mixed
-in with its narrative, pull that part into `spec/` and leave a pointer —
-`spec/android-platform.md`/`log/android-seccomp-audit.md` is the example.
+A spec doc that gets superseded moves to `log/` rather than being silently
+edited into agreement with history it never described. **From 0.6.0+s.1 a
+spec states only the current state: no "was X", no "superseded" banner, no
+change narrative — the only history in this repo is
+[`log/`](log/README.md).** When a mechanism is retired, its spec moves to
+`log/` (or is deleted if `log/` already covers it) and the live specs are
+rewritten to the new truth. The reverse also happens: when a log turns out
+to contain durable reference knowledge (a taxonomy, a catalog, a verdict
+table) mixed in with its narrative, pull that part into `spec/` and leave a
+pointer — `spec/android-platform.md`/`log/android-seccomp-audit.md` is the
+example.

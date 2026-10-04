@@ -2,16 +2,15 @@
 # Expose a prefix's installed programs by name: one entry per program in
 # $INSTDIR/usr/lib/deb-native/bin, which dn-activate.sh puts first on PATH.
 #
-# Since 0.2.0 a Debian program sets itself up however it is started: its
-# interpreter is ld-dn (dn-translate-deb.sh, native/ld-dn.c), and a program
+# A Debian program sets itself up however it is started: its interpreter is
+# the prefix's own fused glibc loader (dn-translate-deb.sh), and a program
 # script's "#!" line points into the prefix. So most entries are plain
 # symlinks -- no wrapper, no extra process. A wrapper is kept only where the
 # program itself cannot do it:
 #   - static binaries and programs making their own syscalls: no loader to
 #     set anything up, the shim cannot see them -> dn-run --trace (tracer);
-#   - anything installed before ld-dn (a glibc program on another loader, a
-#     script with an untranslated "#!") -> dn-run / dn-shell / dn-perl, as
-#     in 0.1.x.
+#   - a glibc program on another loader, or a script with an untranslated
+#     "#!" -> dn-run / dn-shell / dn-perl.
 #
 # Not exposed: the prefix's base system (setup-apt-prefix.sh) and the
 # stand-ins' files -- their ls, sed, grep, awk, which ... are there for
@@ -31,9 +30,9 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 LIBDIR="$INSTDIR/usr/lib/deb-native"
 LAUNCHDIR="$LIBDIR/bin"
-LDDN="$LIBDIR/ld-dn"
+LD="$INSTDIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 
-[ -x "$LDDN" ] || { echo "E: no ld-dn (run setup-runtime.sh)" >&2; exit 1; }
+[ -x "$LD" ] || { echo "E: no fused glibc loader (install the prefix first)" >&2; exit 1; }
 [ -x "$LIBDIR/dn-run" ] || { echo "E: no dn-run (run setup-runtime.sh)" >&2; exit 1; }
 [ -x "$INSTDIR/usr/bin/dn-shell" ] || { echo "E: no dn-shell (run setup-runtime.sh)" >&2; exit 1; }
 
@@ -95,7 +94,7 @@ expose() {
     interp=$(patchelf --print-interpreter "$real" 2>&1) || interp=""
     if grep -qxF "$real" "$DIRECT_LIST"; then
       wrapper "$name" "\"$LIBDIR/dn-run\" --trace \"$f\""
-    elif [ "$interp" = "$LDDN" ]; then
+    elif [ "$interp" = "$LD" ]; then
       ln -sfn "$f" "$LAUNCHDIR/$name"
     else
       wrapper "$name" "\"$LIBDIR/dn-run\" \"$f\""

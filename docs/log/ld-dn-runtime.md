@@ -15,7 +15,7 @@ interpreter trampoline, slated for rename to `dn-interp`, `TODO.md`
 "Runtime overhaul") actually *does*, as a phase model with line anchors --
 for reviewing or re-reading the file, and for future reference when the
 rename lands. Its static counterpart (how `PT_INTERP` is rewritten to point
-here) is [`elf-interp-patch.md`](elf-interp-patch.md).
+here) is [`elf-interp-patch.md`](../spec/elf-interp-patch.md).
 
 Living doc: tracks the shipped code, not a proposal.
 
@@ -33,14 +33,14 @@ Living doc: tracks the shipped code, not a proposal.
 
 - [`ld-dn-config.md`](ld-dn-config.md) -- the policy/config file this
   loader reads; the data side of the same component.
-- [`elf-interp-patch.md`](elf-interp-patch.md) -- the static
+- [`elf-interp-patch.md`](../spec/elf-interp-patch.md) -- the static
   `PT_INTERP` patch that makes the kernel pick this file in the first
   place; the other half of the mechanism.
-- [`path-shim.md`](path-shim.md) -- the `LD_PRELOAD` shim this loader
+- [`path-shim.md`](../spec/path-shim.md) -- the `LD_PRELOAD` shim this loader
   injects into the environment it builds.
-- [`design.md`](design.md) -- scope and the three path mechanisms; this
+- [`design.md`](../spec/design.md) -- scope and the three path mechanisms; this
   doc is the deepest look at the runtime one.
-- [`dn-glibc-prefix.md`](dn-glibc-prefix.md) -- the next-gen prefix that
+- [`dn-glibc-prefix.md`](../spec/dn-glibc-prefix.md) -- the next-gen prefix that
   replaces this trampoline with glibc's own prefix-built loader.
 - `native/README.md` -- the other `native/` C programs.
 
@@ -175,7 +175,7 @@ Make it concrete: `tests/ld-dn-config/` exercises the config/override path;
 
 ## Alternative: fuse into the loader
 
-**Chosen**, being built out in [`dn-glibc-prefix.md`](dn-glibc-prefix.md)
+**Chosen**, being built out in [`dn-glibc-prefix.md`](../spec/dn-glibc-prefix.md)
 (`TODO.md`, "Runtime overhaul"). Instead of a separate `ld-dn` the kernel
 runs first, point `PT_INTERP` straight at glibc's own loader, built for the
 prefix, which supplies the shim (`ld.so.preload`) and the library path
