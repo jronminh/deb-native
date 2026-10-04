@@ -236,29 +236,13 @@ DEF
 gen "$TERMUX_DIR/motd.sh" <<'MOTD'
 #!/system/bin/sh
 # deb-native dn-shell welcome (generated; do not edit), run by Termux login.
-BR='\033[1;31m'; R='\033[0;31m'; G='\033[0;32m'; Y='\033[1;33m'
-C='\033[1;36m'; D='\033[2m'; N='\033[0m'
-LINE="${D}  ──────────────────────────────────────────────────${N}"
 
-printf '%b\n' \
+printf '%s\n' \
   "" \
-  "  ${BR}dn-shell${N} ${D}-${N} ${R}Debian userland on Termux${N}" \
-  "  ${D}prefix __DN_DISP__${N}" \
-  "$LINE" \
-  "  ${C}Docs${N}        https://github.com/jronminh/deb-native/tree/main/docs" \
-  "  ${C}Contribute${N}  https://github.com/jronminh/deb-native" \
+  "  Welcome to dn-shell, the Debian userland beside Termux." \
   "" \
-  "  ${Y}Debian packages${N} ${D}(apt / dpkg in this userland)${N}" \
-  "    ${G}apt search${N}  <query>       ${D}find a package${N}" \
-  "    ${G}apt install${N} <package>     ${D}install it${N}" \
-  "    ${G}apt update${N} && ${G}apt upgrade${N}    ${D}refresh & upgrade${N}" \
-  "" \
-  "  ${Y}Termux / Android${N} ${D}(separate shell, its own pkg)${N}" \
-  "    ${G}termux-shell${N}              ${D}open it${N}" \
-  "    ${G}pkg install${N} <package>     ${D}install from Termux${N}" \
-  "" \
-  "  ${D}Issues & PRs: https://github.com/jronminh/deb-native/issues${N}" \
-  ""
+  "  It runs from  __DN_DISP__" \
+  "  Source        https://github.com/jronminh/deb-native"
 MOTD
 
 # pkg is Termux's; inside the userland it must not run (its PATH and
