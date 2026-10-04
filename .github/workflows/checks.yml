@@ -1,0 +1,38 @@
+name: checks
+
+# Static checks only: this project targets Termux on unrooted Android, so a
+# hosted runner cannot install or run it. It can still catch the cheap
+# breakages every PR tends to carry: dead docs links, a renamed heading, a
+# shell syntax error. The real tests are on-device (tests/).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docs and script links and anchors
+        run: python3 scripts/tools/check-repo.py
+
+      - name: Shell syntax
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            case "$(head -n1 "$f")" in
+              *bash*) interp=bash ;;
+              *)      interp=sh ;;
+            esac
+            "$interp" -n "$f" || { echo "::error file=$f::shell syntax error"; fail=1; }
+          done < <(git ls-files '*.sh')
+          exit "$fail"
+
+      - name: Python syntax
+        run: |
+          mapfile -t pys < <(git ls-files '*.py')
+          [ "${#pys[@]}" -eq 0 ] || python3 -m py_compile "${pys[@]}"
