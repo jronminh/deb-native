@@ -523,6 +523,16 @@ no `$TP/bin`, so maintainer scripts hit the prefix's own
 the rest of M1 (PATH, resolver, termux-exec) and M2 packaging (no migration
 path).
 
+**Progress (continued)**: the full runtime-independence harness
+(`tests/prefix-independence/run.sh`, R0) passes on a fresh 51-package prefix
+with `DN_TERMUX_PREFIX` empty -- shell/coreutils, Debian apt/dpkg, identity,
+the whole path overlay, fake-root, NSS, resolv.conf, dn-trace and
+`apt install`+run -- so the prefix is runtime-independent of Termux's tree.
+Three fresh-install gaps it caught are fixed: the prefix apt now reads its
+config (`$DN/etc/apt/apt.conf` symlink), the seed ships the translate hook's
+`file`/`patchelf`, and a default `/etc/hosts`. No CI/`P8` bundle step is
+needed -- the loader/shim self-derive the live prefix.
+
 **Status**: not started. Most current coupling is bootstrap-time or a
 fallback (Termux's `dpkg`/`apt` behind stand-ins, `$PREFIX/glibc` coreutils
 on PATH, termux-exec) and is acceptable; the property to establish is that
@@ -629,10 +639,15 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   minimal seed, so it now fails with "apt install patchelf" instead of
   silently skipping. Adoption is only needed for non-apt glibc binaries
   (`apt` installs are translated automatically) -- stay on-demand.
-- **R6 fake-root/identity**: apt/dpkg root semantics (uid 0, `chown` no-op)
-  and the `_apt` user under the overlay.
-- **R7 Dead-code sweep** (after R0): drop `dn-perl` (no perl in the minimal
-  seed), `bionic_env`/`DN_BIONIC_PRELOAD` and the `$TP` fallbacks.
+- **R6 fake-root/identity** (done): apt/dpkg root semantics (uid 0, `chown`
+  no-op) and `_apt` -- proven by R0's `id -u` / chown / getent checks.
+- **R7 reclassified -- not an independence item.** The remaining Bionic pieces
+  (`bionic_env`/`DN_BIONIC_PRELOAD`, the `C_BIONIC` branch) and the
+  `termux-shell`/`dn-shell`/`pkg` doors are the **host<->userland crossing on
+  Android** -- a deliberate feature, not Termux coupling, and needed however
+  independent the two userlands are. The only independence-adjacent leftovers
+  are `dn-perl`'s Termux fallback (a gap, not a dependency: `apt install perl`
+  closes it) and the bootstrap-only `$TP` PATH/priv fallbacks.
 
 Not needed: **no CI bundle rebuild** -- the loader/shim self-derive the live
 prefix (`native/path-redirect.c` `dn_init` via `dladdr`; glibc-patch commits
