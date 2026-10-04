@@ -332,6 +332,12 @@ APT::Architectures { "aarch64"; "arm64"; };
 APT::Install-Recommends "false";
 Acquire::PDiffs "false";          // the index is rewritten after download
 Acquire::Languages "none";
+// The prefix is fake-root: apt's default method sandbox drops to _apt with a
+// real setgid/setgroups that Android refuses ("Could not switch group"), and
+// its seccomp sandbox cannot work under this loader. Run methods as root and
+// disable the seccomp sandbox (docs/spec/design.md, 0.7.0).
+APT::Sandbox::User "root";
+APT::Sandbox::Seccomp "false";
 APT::Update::Post-Invoke-Success { "$INSTALL/dn-debian-index.sh $DN/var/lib/apt/lists"; };
 Dpkg::Options:: "--instdir=$DN";
 Dpkg::Options:: "--admindir=$DN/var/lib/dpkg";
@@ -346,7 +352,10 @@ Dpkg::Options:: "--force-script-chrootless";
 // installing gcc's dependency cpp, 2026-10-01). DPkg::Path is apt's own
 // hook for exactly this -- it is read even though Dir::Bin::dpkg itself
 // is not overridden.
-DPkg::Path "$DN/usr/bin:$DN/usr/sbin:$TP/bin";
+// priv/ first: a maintainer script's update-alternatives/dpkg-divert must hit
+// the prefix's own wrappers (setup-runtime.sh), not Termux's; and never put
+// $TP/bin on a maintainer script's PATH (runtime independence, 0.7.0).
+DPkg::Path "$DN/usr/lib/deb-native/priv:$DN/usr/bin:$DN/usr/sbin";
 DPkg::Pre-Install-Pkgs { "$INSTALL/dn-hook-pre.sh $DN"; };
 DPkg::Tools::Options::$INSTALL/dn-hook-pre.sh "";
 DPkg::Tools::Options::$INSTALL/dn-hook-pre.sh::Version "3";

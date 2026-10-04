@@ -506,6 +506,23 @@ Model: one host (Android) with N sibling userlands (`$PREFIX`, `$DN`, ...)
 under `termux/files/` -- no rank, only the bootstrap-time borrow
 (`docs/spec/userlands.md`).
 
+**Progress 2026-10-04 (P4 proven on branch `0.7.0`)**: a real Debian
+`apt`/`dpkg` now installs and runs *inside the prefix*, with no apt rebuild
+or patch -- the shim "fools" it. Two shim gaps closed in
+`native/path-redirect.c`: (1) `system()`/`popen()`/`pclose()` -- glibc runs
+`/bin/sh` through libc-internal calls the shim never saw, so apt's hardcoded
+`Args[0]="/bin/sh"` hooks hit Bionic toybox and aborted; now routed to the
+prefix's own `dash`. (2) `link()`/`linkat()` fall back to a copy -- Android
+forbids hard links (EACCES), which killed dpkg's `status-old` backup.
+Config in `setup-apt-prefix.sh`'s `apt.conf`: methods run as root
+(`APT::Sandbox::User "root"`) with `APT::Sandbox::Seccomp "false"` (Android
+refuses the `_apt` group switch), and `DPkg::Path` puts `priv/` first with
+no `$TP/bin`, so maintainer scripts hit the prefix's own
+`update-alternatives`/`dpkg-divert`. Verified: `apt install hello` and
+`--reinstall figlet` translate via the hook, configure, and run. Still open:
+the rest of M1 (PATH, resolver, termux-exec) and M2 packaging (no migration
+path).
+
 **Status**: not started. Most current coupling is bootstrap-time or a
 fallback (Termux's `dpkg`/`apt` behind stand-ins, `$PREFIX/glibc` coreutils
 on PATH, termux-exec) and is acceptable; the property to establish is that

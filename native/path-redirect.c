@@ -57,6 +57,8 @@
 #include <mntent.h>
 #include <grp.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
+#include <signal.h>
 
 /* Cached once, at load. rewrite() is on the hot path of every intercepted
  * open/stat/exec call, so it must not call getenv()/strlen() per call or
@@ -784,11 +786,53 @@ int symlinkat(const char *target, int newdirfd, const char *linkpath) {
 }
 
 typedef int (*link_t)(const char *, const char *);
+
+/* Android forbids hard links in app data (linkat -> EACCES, both from
+ * Bionic and glibc); Debian dpkg's status-old backup uses linkat and dies
+ * "error creating new backup file ... Permission denied". Fall back to a
+ * content copy when the real link is refused -- semantically fine for the
+ * backup and for dpkg's dedup uses. */
+static int dn_copy_file(const char *oldp, const char *newp) {
+  int in = open(oldp, O_RDONLY | O_CLOEXEC);
+  if (in < 0) return -1;
+  struct stat st;
+  if (fstat(in, &st) != 0 || !S_ISREG(st.st_mode)) { close(in); errno = EPERM; return -1; }
+  int out = open(newp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, st.st_mode & 07777);
+  if (out < 0) { close(in); return -1; }
+  char buf[65536];
+  ssize_t r;
+  int ok = 0;
+  while ((r = read(in, buf, sizeof buf)) > 0) {
+    ssize_t off = 0;
+    while (off < r) {
+      ssize_t w = write(out, buf + off, (size_t)(r - off));
+      if (w <= 0) { close(in); close(out); return -1; }
+      off += w;
+    }
+  }
+  if (r == 0) ok = 1;
+  close(in);
+  close(out);
+  return ok ? 0 : -1;
+}
+
+static int link_fallback(link_t real, const char *o, const char *n) {
+  int r = real(o, n);
+  if (r == 0) return 0;
+  int e = errno;
+  if (e == EACCES || e == EPERM || e == EXDEV || e == ENOSYS || e == EOPNOTSUPP) {
+    if (dn_copy_file(o, n) == 0) return 0;
+  }
+  errno = e;
+  return -1;
+}
+
 int link(const char *oldpath, const char *newpath) {
   static link_t real;
   if (!real) real = (link_t)dlsym(RTLD_NEXT, "link");
   char b1[4096], b2[4096];
-  return real(rewrite(oldpath, b1, sizeof b1), rewrite(newpath, b2, sizeof b2));
+  return link_fallback(real, rewrite(oldpath, b1, sizeof b1),
+                       rewrite(newpath, b2, sizeof b2));
 }
 
 typedef int (*linkat_t)(int, const char *, int, const char *, int);
@@ -796,8 +840,17 @@ int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath,
   static linkat_t real;
   if (!real) real = (linkat_t)dlsym(RTLD_NEXT, "linkat");
   char b1[4096], b2[4096];
-  return real(olddirfd, rewrite(oldpath, b1, sizeof b1), newdirfd,
-              rewrite(newpath, b2, sizeof b2), flags);
+  const char *o = rewrite(oldpath, b1, sizeof b1);
+  const char *n = rewrite(newpath, b2, sizeof b2);
+  int r = real(olddirfd, o, newdirfd, n, flags);
+  if (r == 0) return 0;
+  int e = errno;
+  if ((e == EACCES || e == EPERM || e == EXDEV || e == ENOSYS || e == EOPNOTSUPP) &&
+      olddirfd == AT_FDCWD && newdirfd == AT_FDCWD) {
+    if (dn_copy_file(o, n) == 0) return 0;
+  }
+  errno = e;
+  return -1;
 }
 
 typedef int (*rename_t)(const char *, const char *);
@@ -1084,6 +1137,124 @@ int execveat(int dirfd, const char *pathname, char *const argv[],
   const char *rp = rewrite(pathname, buf, sizeof buf);
   if (target_is_glibc(rp)) return real(dirfd, rp, argv, envp, flags);
   return real(dirfd, rp, argv, bionic_env(envp), flags);
+}
+
+/* ---- system()/popen(): the shell glibc uses by default ---------------- */
+
+/* glibc's system() and popen() exec `/bin/sh` through libc-internal calls
+ * that never reach the interposed execve/posix_spawn symbols, so the shim
+ * cannot redirect them. On Android `/bin/sh` is Bionic toybox, and the
+ * environment glibc hands it carries the shim's glibc preload, so the
+ * Bionic linker aborts ("CANNOT LINK EXECUTABLE ... libc.so.6") -- exactly
+ * why apt's hardcoded `Args[0]="/bin/sh"` hooks fail with a real Debian
+ * apt/dpkg in the prefix (found 2026-10-04). Interpose both and run the
+ * command through the prefix's own dash instead. */
+static const char *prefix_shell(void) {
+  if (!g_init) dn_init();
+  if (!g_root) return NULL;
+  static char sh[4096];
+  snprintf(sh, sizeof sh, "%s/usr/bin/dash", g_root);
+  if (access(sh, X_OK) == 0) return sh;
+  snprintf(sh, sizeof sh, "%s/bin/sh", g_root);
+  return sh;
+}
+
+int system(const char *command) {
+  if (!command) return 1;   /* "is a shell available?" -- yes, the prefix's */
+  const char *sh = prefix_shell();
+  if (!sh) {
+    static int (*real)(const char *);
+    if (!real) real = (int (*)(const char *))dlsym(RTLD_NEXT, "system");
+    return real ? real(command) : -1;
+  }
+  struct sigaction ign, sa_int, sa_quit;
+  memset(&ign, 0, sizeof ign);
+  ign.sa_handler = SIG_IGN;
+  sigaction(SIGINT, &ign, &sa_int);
+  sigaction(SIGQUIT, &ign, &sa_quit);
+  pid_t pid = fork();
+  if (pid == 0) {
+    struct sigaction dfl;
+    memset(&dfl, 0, sizeof dfl);
+    dfl.sa_handler = SIG_DFL;
+    sigaction(SIGINT, &dfl, NULL);
+    sigaction(SIGQUIT, &dfl, NULL);
+    execl(sh, "sh", "-c", command, (char *)NULL);
+    _exit(127);
+  }
+  if (pid < 0) {
+    sigaction(SIGINT, &sa_int, NULL);
+    sigaction(SIGQUIT, &sa_quit, NULL);
+    return -1;
+  }
+  int status;
+  while (waitpid(pid, &status, 0) == -1 && errno == EINTR) { /* retry */ }
+  sigaction(SIGINT, &sa_int, NULL);
+  sigaction(SIGQUIT, &sa_quit, NULL);
+  return status;
+}
+
+/* popen/pclose: same reasoning; track the child pid per FILE* so pclose()
+ * can wait on it. A small fixed table is enough (popen() is used a handful
+ * of times at once, never in the thousands). */
+struct pclose_ent { FILE *f; pid_t pid; };
+static struct pclose_ent pclose_reg[64];
+static int pclose_n;
+
+FILE *popen(const char *command, const char *type) {
+  const char *sh = prefix_shell();
+  if (!sh) {
+    static FILE *(*real)(const char *, const char *);
+    if (!real) real = (FILE *(*)(const char *, const char *))dlsym(RTLD_NEXT, "popen");
+    return real ? real(command, type) : NULL;
+  }
+  int reading = (type && type[0] == 'r');
+  int pfd[2];
+  if (pipe(pfd) != 0) return NULL;
+  pid_t pid = fork();
+  if (pid < 0) { close(pfd[0]); close(pfd[1]); return NULL; }
+  if (pid == 0) {
+    if (reading) dup2(pfd[1], STDOUT_FILENO);
+    else         dup2(pfd[0], STDIN_FILENO);
+    close(pfd[0]);
+    close(pfd[1]);
+    execl(sh, "sh", "-c", command, (char *)NULL);
+    _exit(127);
+  }
+  FILE *f;
+  if (reading) { close(pfd[1]); f = fdopen(pfd[0], "r"); }
+  else         { close(pfd[0]); f = fdopen(pfd[1], "w"); }
+  if (!f) {
+    if (reading) close(pfd[0]); else close(pfd[1]);
+    return NULL;
+  }
+  for (int i = 0; i < pclose_n; i++) {
+    if (!pclose_reg[i].f) { pclose_reg[i].f = f; pclose_reg[i].pid = pid; return f; }
+  }
+  if (pclose_n < 64) {
+    pclose_reg[pclose_n].f = f;
+    pclose_reg[pclose_n].pid = pid;
+    pclose_n++;
+    return f;
+  }
+  fclose(f);   /* table exhausted (should not happen) */
+  return NULL;
+}
+
+int pclose(FILE *stream) {
+  pid_t pid = -1;
+  for (int i = 0; i < pclose_n; i++) {
+    if (pclose_reg[i].f == stream) { pid = pclose_reg[i].pid; pclose_reg[i].f = NULL; break; }
+  }
+  if (pid < 0) {
+    static int (*real)(FILE *);
+    if (!real) real = (int (*)(FILE *))dlsym(RTLD_NEXT, "pclose");
+    return real ? real(stream) : -1;
+  }
+  fclose(stream);
+  int status;
+  while (waitpid(pid, &status, 0) == -1 && errno == EINTR) { /* retry */ }
+  return status;
 }
 
 /* ---- dlopen / dlmopen ------------------------------------------------- */
