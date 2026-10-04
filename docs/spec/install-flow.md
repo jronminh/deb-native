@@ -78,8 +78,9 @@ goes through this once.
 
 5. **Finalize and activate.** `make-launchers.sh` (wrappers; also tags
    NSS and direct-syscall binaries), `make-apt-wrappers.sh` (`termux-apt`/
-   `termux-dpkg`/`termux-dn-doctor`/`dn-adopt`), and `dn-activate.sh`
-   (the `~/.bashrc` block, PATH).
+   `termux-dpkg`/`termux-dn-doctor`/`dn-adopt`), and `make-shell-interface.sh`
+   (the login wrapper and `~/.termux/shell`, `termux-shell`, the welcome,
+   the `pkg` guard).
 
 6. **Now `apt install` works, for anything after this point.** A
    subsequent `apt-install.sh PREFIX pkg` is a plain `apt-get install -y`

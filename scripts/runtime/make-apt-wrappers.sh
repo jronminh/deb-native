@@ -1,5 +1,6 @@
 #!/bin/sh
-# Commands for the prefix's launcher dir (on PATH via dn-activate.sh):
+# Commands for the prefix's launcher dir (first on the userland PATH,
+# dn-launch.c, after priv/):
 #
 #   termux-apt, termux-dpkg   Termux's own apt and dpkg, by a name that the
 #                             prefix's apt/dpkg can never shadow
@@ -7,12 +8,12 @@
 #   dn-shell                  an interactive shell inside the prefix
 #   dn-adopt FILE...          run a downloaded glibc program through the prefix
 #
-# Since 0.2.0 the plain names `apt`, `apt-get`, `apt-cache`, `apt-mark`,
-# `dpkg`, `dpkg-query` typed in an interactive shell are the prefix's own
-# (aliases, dn-activate.sh), and Termux's packages are managed with `pkg`,
-# as Termux recommends. Aliases never reach scripts, so `pkg` and every other
-# Termux script still call Termux's real apt/dpkg. The 0.1.x "Termux wins"
-# routing wrappers (apt, apt-get, apt-cache, dpkg on PATH) are removed.
+# The userland is the default session (docs/spec/host-userland.md), so the
+# plain names `apt`, `apt-get`, `apt-cache`, `apt-mark`, `dpkg`, `dpkg-query`
+# are the prefix's own simply because $INSTDIR/usr/bin is on PATH. Termux's
+# packages are managed with `pkg` in a host shell (termux-shell); inside the
+# userland a `pkg` guard refuses (make-shell-interface.sh). The 0.1.x "Termux
+# wins" routing wrappers (apt, apt-get, apt-cache, dpkg on PATH) are removed.
 #
 # Usage: make-apt-wrappers.sh INSTDIR
 set -eu

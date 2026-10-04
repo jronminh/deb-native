@@ -167,7 +167,7 @@ else
     "$HERE/scripts/install/setup-runtime.sh" "$DNPREFIX"
     "$HERE/scripts/runtime/make-launchers.sh" "$DNPREFIX"
     "$HERE/scripts/runtime/make-apt-wrappers.sh" "$DNPREFIX"
-    "$HERE/scripts/runtime/dn-activate.sh" "$DNPREFIX"
+    "$HERE/scripts/runtime/make-shell-interface.sh" "$DNPREFIX"
 fi
 
 if [ $# -gt 0 ]; then
@@ -189,11 +189,11 @@ out "$(printf '%s done%s in %s' "$G" "$R" "$took")"
 kv "prefix" "$DNPREFIX"
 kv "installed" "${installed:-0} packages"
 kv "run" "a program by name"
-kv "apt, dpkg" "the prefix's (Debian); Termux's: pkg, termux-apt, termux-dpkg"
+kv "session" "the Debian userland (termux-shell opens the host)"
+kv "apt, dpkg" "the prefix's (Debian); Termux's: pkg -- use termux-shell"
 kv "check" "termux-dn-doctor"
-# The activation lives in ~/.bashrc, which only new shells read: without
-# this, `apt` in the current session is still Termux's (and `apt --version`
-# looks the same either way -- it is the same program, other config).
+# The shell interface is installed as ~/.termux/shell, which Termux reads
+# only when it starts a session, so the current shell is unchanged.
 out ""
-out "$(printf '%s restart Termux to finish%s (or open a new session, or run: . ~/.bashrc)' "$Y$B" "$R")"
-out "   until then, apt/dpkg and the new programs are not active in this shell."
+out "$(printf '%s restart Termux to finish%s (or open a new session)' "$Y$B" "$R")"
+out "   the new session is the Debian userland; 'termux-shell' opens a host shell."

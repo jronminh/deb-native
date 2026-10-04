@@ -1,6 +1,7 @@
 #!/bin/sh
 # Expose a prefix's installed programs by name: one entry per program in
-# $INSTDIR/usr/lib/deb-native/bin, which dn-activate.sh puts first on PATH.
+# $INSTDIR/usr/lib/deb-native/bin, which dn-launch.c puts first on the
+# userland PATH (after priv/).
 #
 # A Debian program sets itself up however it is started: its interpreter is
 # the prefix's own fused glibc loader (dn-translate-deb.sh), and a program
@@ -84,7 +85,7 @@ expose() {
   name=$1; f=$2
   case "$name" in
     dn-shell|dn-perl|chown|chgrp|''|termux-*) return 0 ;;
-    # The prefix's own apt/dpkg are reached through dn-activate.sh's aliases.
+    # The prefix's own apt/dpkg are on PATH in usr/bin; not shadowed here.
     apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split) return 0 ;;
   esac
   real=$(readlink -f "$f") || return 0

@@ -358,9 +358,9 @@ mkdir -p "$DN/var/lib/apt/lists/partial"
 cp "$T"/lists/*_Packages "$T"/lists/*Release "$DN/var/lib/apt/lists/"
 
 # === Stage 2: front end ===================================================
-mark stage "launchers, routing and PATH"
-echo "Setting up launchers, routing and PATH ..."
+mark stage "launchers, routing and the shell interface"
+echo "Setting up launchers, routing and the shell interface ..."
 "$RUNTIME/make-launchers.sh" "$DN"
 "$RUNTIME/make-apt-wrappers.sh" "$DN"
-"$RUNTIME/dn-activate.sh" "$DN"
+"$RUNTIME/make-shell-interface.sh" "$DN"
 echo "The prefix is ready: apt install <package> (Debian-only names go to $DN)."

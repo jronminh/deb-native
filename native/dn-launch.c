@@ -69,11 +69,16 @@ int main(int argc, char **argv) {
   char path[8192];
   /* priv/ first: the privilege layer (no-op chown/chgrp/dpkg-statoverride,
    * the update-alternatives and dpkg-divert wrappers) must win over any
-   * Debian package's real command of the same name (setup-runtime.sh). */
+   * Debian package's real command of the same name (setup-runtime.sh).
+   * bin/ next: the launchers (make-launchers.sh) win over the raw usr/bin
+   * entries, so programs that need the tracer are routed there rather than
+   * run directly -- this is what makes the userland session the default,
+   * with no ~/.bashrc activation (docs/spec/host-userland.md). */
   snprintf(path, sizeof path,
-           "%s/usr/lib/deb-native/priv:%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:"
+           "%s/usr/lib/deb-native/priv:%s/usr/lib/deb-native/bin:"
+           "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:"
            "%s/usr/games:%s/glibc/bin:%s/bin",
-           inst, inst, inst, inst, inst, inst, pfx, pfx);
+           inst, inst, inst, inst, inst, inst, inst, pfx, pfx);
 
   /* Preserve whatever preload we inherited (on Termux, termux-exec) so the
    * shim can hand it back to a Bionic child it execs -- see bionic_env()

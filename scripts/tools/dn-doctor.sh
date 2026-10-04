@@ -6,7 +6,7 @@
 #     Termux's own apt (pkg, termux-apt) at the prefix;
 #   - a Termux `sources.list` clobbered by installing into $PREFIX;
 #   - missing termux-apt/termux-dpkg, 0.1.x routing wrappers left on PATH,
-#     or missing activation.
+#     or a missing shell interface (~/.termux/shell).
 #
 # Usage: dn-doctor.sh [PREFIX] [--fix]
 #   PREFIX defaults to the deb-native launcher dir found on PATH, else ~/.dn.
@@ -65,10 +65,11 @@ for rc in "$HOME/.bashrc" "$HOME/.profile" "$HOME/.bash_profile"; do
     fi
   fi
 done
-case ":$PATH:" in
-  *":$LAUNCHDIR:"*) ok "launcher dir is on PATH" ;;
-  *) warn "$LAUNCHDIR is not on PATH (run dn-activate.sh, then a new shell)" ;;
-esac
+if [ -L "$HOME/.termux/shell" ] && [ -x "$ROOT/usr/bin/dn-shell" ]; then
+  ok "shell interface installed (userland is the default session)"
+else
+  warn "$HOME/.termux/shell missing (run make-shell-interface.sh)"
+fi
 
 # 3. Termux's own apt must still point at the Termux repo.
 sl="$TP/etc/apt/sources.list"
@@ -113,7 +114,7 @@ else
 fi
 
 if [ "$FIX" = 1 ] && [ -d "$LAUNCHDIR" ]; then
-  sh "$REPO/scripts/runtime/dn-activate.sh" "$ROOT" && ok "re-activated launchers (start a new shell)"
+  sh "$REPO/scripts/runtime/make-shell-interface.sh" "$ROOT" && ok "reinstalled the shell interface (start a new session)"
 fi
 
 [ "$fail" = 0 ] && echo "==> ok" || echo "==> problems found (re-run with --fix to repair)"

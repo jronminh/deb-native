@@ -174,23 +174,23 @@ only as a fallback for packages not in the repo.
 
 - The runtime layer: shim, `dn-shell`/`dn-perl`, `dn-run`, launchers,
   `termux-dn-doctor`.
-- ~~Routing ("Termux wins")~~ -- superseded: in the user's interactive
-  shell `apt`/`dpkg` are the prefix's (aliases), Termux's are `pkg`,
-  `termux-apt`, `termux-dpkg`; see `TODO.md`.
+- Routing ("Termux wins") -- superseded: the userland is the default
+  session, so `apt`/`dpkg` are the prefix's by PATH; Termux's are `pkg`
+  in a host shell (`termux-shell`). See `docs/spec/host-userland.md`.
 
 ### Day-to-day commands
 
-What the aliasing above actually gives the user, in the interactive shell
-`dn-activate.sh` sets up (a managed block in `~/.bashrc`):
+The userland is the default session (`docs/spec/host-userland.md`):
+opening Termux lands in Debian, not in Termux's own shell.
 
 - `apt`, `apt-get`, `apt-cache`, `apt-mark`, `dpkg`, `dpkg-query` are
-  **the prefix's** (Debian's packages). Termux's own are `pkg` (as Termux
-  recommends), `termux-apt`, `termux-dpkg` -- scripts are unaffected,
-  since shell aliases never reach them. Undo: `sed -i '/# deb-native/d'
-  ~/.bashrc` and delete the prefix.
-- **`dn-shell`** -- a shell inside the prefix (Termux's glibc `bash` with
-  the path shim, the prefix first on `PATH`), for scripts that expect
-  Debian's layout. `exit` returns to Termux.
+  **the prefix's** (Debian's packages), by PATH -- no aliases.
+- **`termux-shell`** -- open a clean, nested Termux (host) shell: there
+  `pkg`, `termux-apt` and `termux-dpkg` are Termux's, and `exit` returns
+  to the userland. `pkg` typed in the userland is refused (a guard).
+- **`dn-shell`** -- from a host shell, enter the userland again (the
+  reverse crossing). The userland prompt is red (`~ # `), the host's
+  green (`~ $ `).
 - **`dn-adopt FILE...`** -- make a glibc arm64 program obtained outside
   apt (a release download, a direct installer's binary) run through the
   prefix: its interpreter becomes the prefix's own fused glibc loader. The

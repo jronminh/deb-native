@@ -38,7 +38,7 @@ Without them those programs run untranslated.
 # pinned pre-alpha release:
 curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.6.0+s.1-prealpha/install.sh | DEB_NATIVE_REF=v0.6.0+s.1-prealpha sh
 
-# then restart Termux (or: . ~/.bashrc)
+# then restart Termux — the new session is the Debian userland
 apt install figlet # the prefix's apt: Debian's packages
 figlet hi          # an installed program, run by name
 ```
@@ -112,9 +112,12 @@ end to end), [`docs/spec/install-flow.md`](docs/spec/install-flow.md)
 
 ## apt and dpkg
 
-In your shell, `apt`/`apt-get`/`dpkg` (and friends) are **the prefix's**;
-Termux's own are `pkg`, `termux-apt`, `termux-dpkg`. Undo: `sed -i
-'/# deb-native/d' ~/.bashrc` and delete `~/.dn`.
+The default session is the **Debian userland**: `apt`/`apt-get`/`dpkg` (and
+friends) are the prefix's, by PATH. Termux's own tooling lives in a host
+shell — run `termux-shell` (green `~ $ ` prompt) for `pkg`, `termux-apt`,
+`termux-dpkg`; `exit` returns. Inside the userland a `pkg` guard refuses.
+Undo: `rm ~/.termux/shell` and delete `~/.dn`
+([`docs/spec/host-userland.md`](docs/spec/host-userland.md)).
 
 `install.sh` is idempotent — from a checkout: `sh install.sh [PREFIX]
 [pkg ...]`; log in `~/.dn/var/log/`. `termux-dn-doctor` checks the common

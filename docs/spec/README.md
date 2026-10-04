@@ -33,6 +33,9 @@ changes.
 - `package-lifecycle.md` — one package's lifecycle, stage by stage, mapped to
   the hook/script/layer that handles each (`install-flow.md` is the
   one-time bootstrap instead).
+- `host-userland.md` — the two roots (Termux host + Debian userland) and
+  the interface over them: the userland is the default session; `termux-shell`
+  crosses to the host, `dn-shell` back; distinct prompts and a `pkg` guard.
 - `multiarch-mechanics.md` — dpkg multi-arch mechanics as the prefix's
   apt/dpkg uses them.
 - `path-shim.md` is the mechanism; the boundary around it:
