@@ -232,17 +232,18 @@ echo "default userland: $p"
 DEF
 
 # The welcome. Termux's login runs ~/.termux/motd.sh in place of its own
-# static /etc/motd.
+# static /etc/motd. Debian's own greeting (os-release name + base-files
+# /etc/motd), then where this userland runs.
 gen "$TERMUX_DIR/motd.sh" <<'MOTD'
 #!/system/bin/sh
 # deb-native dn-shell welcome (generated; do not edit), run by Termux login.
 
-printf '%s\n' \
-  "" \
-  "  Welcome to dn-shell, the Debian userland beside Termux." \
-  "" \
-  "  It runs from  __DN_DISP__" \
-  "  Source        https://github.com/jronminh/deb-native"
+. __INSTDIR__/etc/os-release 2>/dev/null
+printf '%s\n' "${PRETTY_NAME:-Debian GNU/Linux}"
+cat __INSTDIR__/etc/motd 2>/dev/null
+printf '\n%s is running inside a deb-native prefix.\n\n' "${PRETTY_NAME:-Debian GNU/Linux}"
+printf '  prefix  %s\n' "__DN_DISP__"
+printf '  source  %s\n' "https://github.com/jronminh/deb-native"
 MOTD
 
 # pkg is Termux's; inside the userland it must not run (its PATH and
