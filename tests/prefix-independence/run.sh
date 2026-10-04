@@ -98,6 +98,57 @@ done
   || note "no dn-trace (static/raw-syscall programs run untranslated)"
 ok "runtime pieces present (dn-shell, dn-run, shim, dn-adopt)"
 
+# 9b. Independence at the ELF level, not just in the environment. Masking
+#     Termux with DN_TERMUX_PREFIX does NOT reach the Bionic host-layer
+#     binaries' hard-coded Termux rpath (their clang link adds $tp/lib), and
+#     dn-trace NEEDs libtalloc from there. Assert the rpath was retargeted
+#     into the prefix and the libs were vendored, so a runtime never opens
+#     $tp. (setup-runtime.sh does the vendoring + patchelf.)
+HOST="$P/usr/lib/deb-native/host"
+if in_ul 'command -v readelf >/dev/null 2>&1'; then
+  for b in "$P/usr/lib/deb-native/dn-run" "$P/usr/lib/deb-native/dn-trace" \
+           "$P/usr/bin/dn-shell" "$P/usr/bin/dn-perl"; do
+    [ -e "$b" ] || continue
+    rp=$(in_ul "readelf -d '$b' 2>/dev/null | grep -Ei '(RPATH|RUNPATH)'" || true)
+    case "$rp" in
+      *"$tp"*) fail "runtime ELF $b still points its rpath at $tp" ;;
+    esac
+  done
+  ok "Bionic host ELFs carry no Termux rpath"
+else
+  note "no readelf in the prefix; skipping the static rpath check"
+fi
+if [ -x "$P/usr/lib/deb-native/dn-trace" ]; then
+  [ -e "$HOST/libtalloc.so.2" ] \
+    || fail "dn-trace is installed but libtalloc is not vendored in $HOST"
+  ok "libtalloc is vendored in the prefix"
+fi
+
+# 9c. The Bionic preload the session inherits from Termux (termux-exec) is
+#     remapped onto the prefix's own copy, so a Bionic child needs no $tp.
+if [ -e "$HOST/libtermux-exec-ld-preload.so" ] \
+   && [ -e "$tp/lib/libtermux-exec-ld-preload.so" ]; then
+  got=$(TMPDIR="$TMP" DN_TERMUX_PREFIX="$EMPTY" \
+        LD_PRELOAD="$tp/lib/libtermux-exec-ld-preload.so" \
+        "$P/usr/bin/dn-shell" -c 'printf %s "$DN_BIONIC_PRELOAD"' 2>/dev/null || true)
+  case "$got" in
+    "$P"/*) ok "Bionic preload remapped into the prefix" ;;
+    *)      fail "DN_BIONIC_PRELOAD still points outside the prefix: ${got:-<empty>}" ;;
+  esac
+else
+  note "termux-exec not vendored (or absent in Termux); skipping remap check"
+fi
+
+# 9d. Exercise the tracer for real: dn-trace must load its libtalloc from the
+#     vendored copy, with Termux's tree masked.
+if [ -x "$P/usr/lib/deb-native/dn-run" ] && [ -x "$P/usr/lib/deb-native/dn-trace" ]; then
+  in_ul "'$P/usr/lib/deb-native/dn-run' --trace /bin/true" \
+    || fail "the tracer route did not run (dn-trace or libtalloc missing)"
+  ok "tracer route runs with Termux's tree masked"
+else
+  note "no dn-run/dn-trace; skipping the tracer run"
+fi
+
 # 10. dn-adopt with no patchelf says so plainly (does not silently skip)
 case "$(in_ul 'dn-adopt /bin/true' 2>&1)" in
   *"apt install patchelf"*) note "dn-adopt asks for patchelf (expected)" ;;

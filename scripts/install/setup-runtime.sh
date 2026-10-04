@@ -115,6 +115,48 @@ fi
 put "$CACHE/dn-shell" "$BINDIR/dn-shell"
 put "$CACHE/dn-shell" "$BINDIR/dn-perl"
 
+# Bundle the Bionic host-layer libraries into the prefix so the *runtime*
+# never opens anything under Termux's tree (0.7.0's independence goal, R7
+# follow-up). dn-run/dn-trace/dn-shell/dn-perl are Bionic ELFs built by
+# Termux's clang, so their linker rpath points at $PREFIX_DIR/lib and
+# dn-trace NEEDs libtalloc.so.2 from there -- a hard-coded path no
+# DN_TERMUX_PREFIX override reaches. Copy those libs into the prefix and
+# retarget the rpath at $ORIGIN. Bootstrap still borrows Termux to build;
+# only the steady state is Termux-independent.
+HOST="$LIBDIR/host"
+mkdir -p "$HOST"
+have_termux_exec=$(ls "$PREFIX_DIR"/lib/libtermux-exec-ld-preload.so 2>/dev/null | head -n1 || true)
+# libtalloc: dn-trace's only non-system NEEDED (libc/libdl are Android's).
+if [ -n "$have_talloc" ]; then
+  cp -Lf "$have_talloc" "$HOST/libtalloc.so.2" \
+    || echo "W: could not vendor libtalloc into the prefix; dn-trace keeps needing $PREFIX_DIR/lib"
+fi
+# termux-exec: the Bionic preload the shim hands to a Bionic child
+# (DN_BIONIC_PRELOAD). Vendored so that child needs no Termux tree either.
+if [ -n "$have_termux_exec" ]; then
+  cp -f "$have_termux_exec" "$HOST/libtermux-exec-ld-preload.so" \
+    || echo "W: could not vendor termux-exec into the prefix; Bionic children keep needing it from Termux"
+fi
+# Retarget the rpath at the prefix's own host dir (via $ORIGIN, so the
+# prefix stays relocatable). patchelf is a bootstrap requirement (README);
+# if it is missing, say so rather than leave the Termux path silently.
+if command -v patchelf >/dev/null 2>&1; then
+  for f in "$LIBDIR/dn-run" "$LIBDIR/dn-trace"; do
+    if [ -f "$f" ]; then
+      patchelf --set-rpath '$ORIGIN/host' "$f" \
+        || echo "W: patchelf could not retarget $f; it keeps its Termux rpath"
+    fi
+  done
+  for f in "$BINDIR/dn-shell" "$BINDIR/dn-perl"; do
+    if [ -f "$f" ]; then
+      patchelf --set-rpath '$ORIGIN/../lib/deb-native/host' "$f" \
+        || echo "W: patchelf could not retarget $f; it keeps its Termux rpath"
+    fi
+  done
+else
+  echo "W: patchelf not found; the Bionic host binaries keep their Termux rpath"
+fi
+
 # No-op shims for root-only/unshipped commands a maintainer script may call
 # by bare name: an unprivileged process cannot chown/chgrp no matter what
 # path the shim points it at

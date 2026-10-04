@@ -204,8 +204,17 @@ static void launch_glibc(char **args) {
    * Preserve it for a Bionic child the shim may exec: capture before
    * unsetting. */
   const char *inh = getenv("LD_PRELOAD");
-  if (inh && *inh && !strstr(inh, "path-redirect.so"))
-    setenv("DN_BIONIC_PRELOAD", inh, 1);
+  if (inh && *inh && !strstr(inh, "path-redirect.so")) {
+    /* Prefer the prefix's vendored copy (setup-runtime.sh) so a Bionic child
+     * the shim may exec needs nothing under Termux's tree at runtime. */
+    char hostpre[4096];
+    snprintf(hostpre, sizeof hostpre,
+             "%s/usr/lib/deb-native/host/libtermux-exec-ld-preload.so", instdir);
+    if (strstr(inh, "libtermux-exec") && access(hostpre, R_OK) == 0)
+      setenv("DN_BIONIC_PRELOAD", hostpre, 1);
+    else
+      setenv("DN_BIONIC_PRELOAD", inh, 1);
+  }
   unsetenv("LD_PRELOAD");
   setenv("DN_INSTDIR", instdir, 1);
   set_path();
