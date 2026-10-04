@@ -77,8 +77,8 @@ int main(int argc, char **argv) {
   snprintf(path, sizeof path,
            "%s/usr/lib/deb-native/priv:%s/usr/lib/deb-native/bin:"
            "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:"
-           "%s/usr/games:%s/glibc/bin:%s/bin",
-           inst, inst, inst, inst, inst, inst, inst, pfx, pfx);
+           "%s/usr/games",
+           inst, inst, inst, inst, inst, inst, inst);
 
   /* Preserve whatever preload we inherited (on Termux, termux-exec) so the
    * shim can hand it back to a Bionic child it execs -- see bionic_env()

@@ -141,12 +141,11 @@ static int classify(const char *path, int *nss) {
 }
 
 static void set_path(void) {
-  const char *p = termux_prefix();
   char path[8192];
   snprintf(path, sizeof path,
            "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/usr/games:"
-           "%s/usr/lib/deb-native/bin:%s/glibc/bin:%s/bin",
-           instdir, instdir, instdir, instdir, instdir, instdir, p, p);
+           "%s/usr/lib/deb-native/bin",
+           instdir, instdir, instdir, instdir, instdir, instdir);
   setenv("PATH", path, 1);
 }
 

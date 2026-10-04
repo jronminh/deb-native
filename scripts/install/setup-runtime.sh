@@ -148,7 +148,7 @@ done
 # (dn-fix-alternatives.sh): until then the command itself (awk) is broken.
 cat > "$PRIV/update-alternatives" <<EOF
 #!/system/bin/sh
-DPKG_ROOT="$INSTDIR" "$PREFIX_DIR/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log /var/log/alternatives.log "\$@"
+DPKG_ROOT="$INSTDIR" "$INSTDIR/usr/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log /var/log/alternatives.log "\$@"
 rc=\$?
 "$HERE/dn-fix-alternatives.sh" "$INSTDIR"
 exit \$rc
@@ -159,7 +159,7 @@ rm -f "$BINDIR/update-alternatives"   # 0.1.x location
 # compiled-in admindir (traced: $ROOT$PREFIX/var/lib/dpkg/diversions).
 cat > "$PRIV/dpkg-divert" <<EOF
 #!/system/bin/sh
-exec "$PREFIX_DIR/bin/dpkg-divert" --admindir "$INSTDIR/var/lib/dpkg" --instdir "$INSTDIR" "\$@"
+exec "$INSTDIR/usr/bin/dpkg-divert" --admindir "$INSTDIR/var/lib/dpkg" --instdir "$INSTDIR" "\$@"
 EOF
 chmod 755 "$PRIV/dpkg-divert"
 
@@ -211,7 +211,7 @@ cat > "$PRIV/getent" <<EOF
 #!/system/bin/sh
 case "\$1" in
   passwd|group|shadow|gshadow) ;;
-  *) exec "$GLIBC/bin/getent" "\$@" ;;
+  *) exec "$INSTDIR/usr/bin/getent" "\$@" ;;
 esac
 db=\$1; shift
 f="$INSTDIR/etc/\$db"
