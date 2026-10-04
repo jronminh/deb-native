@@ -123,3 +123,12 @@ below, oldest first, matching the original file's order.
   to get right: translate the interpreter, put `$DN/usr/bin` on the
   supervisor's `PATH`, `run` shebang -> the prefix's `sh`, and start it with
   `DN_INSTDIR` = that prefix.
+- [`systemctl-on-runit-prior-art.md`](systemctl-on-runit-prior-art.md) —
+  2026-10-04, **Isolated**: survey of the `systemctl`-on-runit layer the
+  services plan assumes we would write. **SINS** (Go, MIT) is a real one --
+  `systemctl` shim + unit->`run` translation + optional D-Bus/notify/cgroups/
+  journal/libsystemd, configurable per prefix via `RUNIT_SV_DIR`/
+  `SYSTEMD_UNIT_PATH`/`SYSTEMCTL_PATH`; already-written engine we could vendor
+  (caveats: desktop/root-shaped, x86_64 libsystemd, hardcoded cgroup lines,
+  still needs our `runsvdir` launcher). Debian's `systemctl` is Python/SysV
+  (not runit); Void/Artix ship no shim. Recorded, not decided.
