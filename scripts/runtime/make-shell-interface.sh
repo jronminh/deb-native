@@ -59,10 +59,11 @@ gen() {
   mv -f "$f.tmp.$$" "$f"
 }
 
-# The login wrapper: pick a userland (prefix) and exec its dn-shell. Reached
-# through ~/.termux/shell; falls back to the host shell. Each prefix is a
-# "user" -- no account layer; the last choice is remembered. See
-# docs/spec/userlands.md.
+# The login wrapper: open the DEFAULT userland (prefix) and exec its
+# dn-shell. The Termux app runs this through ~/.termux/shell, so a bare app
+# start lands in the default session with no prompt; `dn-switch` re-runs it
+# with --choose to pick another. Each prefix is a "user" -- no account layer;
+# the last choice is the default. See docs/spec/userlands.md.
 gen "$HOME_DIR/.dn-login" <<'WRAP'
 #!/system/bin/sh
 # deb-native login (generated; do not edit).
@@ -74,6 +75,9 @@ STATE="$HOME_DIR/.local/state/deb-native"
 mkdir -p "$STATE" 2>/dev/null
 LAST=""
 [ -r "$STATE/last" ] && LAST=$(cat "$STATE/last" 2>/dev/null)
+
+choose=0
+[ "${1:-}" = "--choose" ] && { choose=1; shift; }
 
 # Candidate prefixes: the registry (name<TAB>path) if present, else every
 # sibling of Termux's own prefix that looks like a deb-native prefix.
@@ -103,40 +107,34 @@ host() { rm -f "$LISTF" 2>/dev/null; exec "$TP/bin/bash" "$@"; }
 [ "$count" -gt 0 ] || host "$@"
 [ "$count" -eq 1 ] && enter "$first" "$@"
 
-# default: last used, else this generated prefix, else the first
-def=1; i=1
-while IFS="$(printf '\t')" read -r n p; do
-  [ "$p" = "$LAST" ] && def=$i
-  i=$((i+1))
-done < "$LISTF"
-
-# no tty: go straight to the default
-if [ ! -t 0 ]; then
-  for want in "$LAST" "$DEFAULT"; do
-    [ -n "$want" ] || continue
-    while IFS="$(printf '\t')" read -r n p; do
-      [ "$p" = "$want" ] && enter "$p" "$@"
-    done < "$LISTF"
-  done
-  enter "$first" "$@"
+# --choose (dn-switch): show the menu.
+if [ "$choose" = 1 ]; then
+  printf '\n  deb-native userlands\n    0) Termux shell\n' >&2
+  i=1
+  while IFS="$(printf '\t')" read -r n p; do
+    printf '    %s) %s\n' "$i" "$n" >&2
+    i=$((i+1))
+  done < "$LISTF"
+  printf '  choose: ' >&2
+  read -r choice || choice=""
+  [ "$choice" = 0 ] && host "$@"
+  i=1
+  while IFS="$(printf '\t')" read -r n p; do
+    [ "$i" = "$choice" ] && enter "$p" "$@"
+    i=$((i+1))
+  done < "$LISTF"
+  host "$@"
 fi
 
-printf '\n  deb-native userlands\n    0) Termux shell\n' >&2
-i=1
-while IFS="$(printf '\t')" read -r n p; do
-  printf '    %s) %s\n' "$i" "$n" >&2
-  i=$((i+1))
-done < "$LISTF"
-printf '  choose [%s]: ' "$def" >&2
-read -r choice || choice=""
-[ -z "$choice" ] && choice=$def
-[ "$choice" = 0 ] && host "$@"
-i=1
-while IFS="$(printf '\t')" read -r n p; do
-  [ "$i" = "$choice" ] && enter "$p" "$@"
-  i=$((i+1))
-done < "$LISTF"
-host "$@"
+# Bare app start: open the default -- last used, else this generated prefix,
+# else the first -- with no prompt.
+for want in "$LAST" "$DEFAULT"; do
+  [ -n "$want" ] || continue
+  while IFS="$(printf '\t')" read -r n p; do
+    [ "$p" = "$want" ] && enter "$p" "$@"
+  done < "$LISTF"
+done
+enter "$first" "$@"
 WRAP
 ln -sfn "$HOME_DIR/.dn-login" "$TERMUX_DIR/shell"
 
@@ -185,8 +183,8 @@ LIST
 # dn-switch: re-run the login selector from inside a userland.
 gen "$HOME_DIR/.local/bin/dn-switch" <<'SWITCH'
 #!/system/bin/sh
-# deb-native dn-switch (generated; do not edit): re-run the login selector.
-exec "${DN_HOME:-$HOME}/.dn-login" "$@"
+# deb-native dn-switch (generated; do not edit): pick another userland.
+exec "${DN_HOME:-$HOME}/.dn-login" --choose "$@"
 SWITCH
 
 # The welcome. Termux's login runs ~/.termux/motd.sh in place of its own
