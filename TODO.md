@@ -497,70 +497,80 @@ symlink any more. The glibc bundle is unaffected at run time: the loader and
 
 ## 0.7.0: prefix independent of Termux's tree (pre-alpha, planned)
 
-**Goal**: *operational* independence and fault isolation between the two
-prefixes -- not a self-contained ship. Reusing Termux's material is fine,
-bootstrap (`install.sh`, the toolchain) legitimately needs Termux's tree,
-and the two share one `$HOME` on purpose. What must hold: a *broken* prefix
--- Termux's or deb-native's -- cannot break the other, and neither can make
-the other's operation fail. (Location freedom is 0.6.1, just above.)
-
-**Status**: not started as a stated property. Most current coupling is
-bootstrap-time or a fallback (Termux's `dpkg`/`apt` behind stand-ins,
-`$PREFIX/glibc` coreutils on PATH, termux-exec) and is acceptable. The
-property to establish is that none of it is a *runtime hard requirement*:
-with Termux's tree damaged or gone, the prefix still runs, and neither
-prefix writes into the other's state. Relocation is 0.6.1; the
-compiled-artifact retarget that finishes it is 0.6.1's Open list. Model:
-one host (Android) with sibling userlands (`$PREFIX`, `$DN`) under
+**Goal**: absolute freedom from Termux's *prefix* (`$PREFIX/usr`), not from
+the Termux *app*. Once a session is up, the Debian userland runs and manages
+itself without needing Termux's tree; bootstrap may still borrow Termux (the
+app's job), the two share one `$HOME` on purpose, and the app's Android
+capabilities (`termux-api`, storage) stay reachable through `termux-shell`.
+Model: one host (Android) with sibling userlands (`$PREFIX`, `$DN`) under
 `termux/files/` -- no rank, only the bootstrap-time borrow
 (`docs/spec/userlands.md`).
 
-**Open** -- the couplings to remove and the properties to establish:
+**Status**: not started. Most current coupling is bootstrap-time or a
+fallback (Termux's `dpkg`/`apt` behind stand-ins, `$PREFIX/glibc` coreutils
+on PATH, termux-exec) and is acceptable; the property to establish is that
+none of it is a *runtime hard requirement*. Relocation, and the
+compiled-artifact retarget that finishes it, are 0.6.1's Open list.
 
-- **No cross-damage** (the core property): audit that nothing in the
-  userland writes into Termux's tree (`$PREFIX`) or its package DB, and
-  that deleting or breaking the deb-native prefix leaves Termux's shell
-  fully working (the `~/.dn-login` fallback already covers the login path).
-- **Package manager must not need a healthy Termux**: `dpkg`/`apt`/`apt-get`/`apt-cache` are
-  Termux binaries behind stand-in launchers
-  (`scripts/bootstrap/dn-standins.sh:26-116`), and the bootstrap drives
-  them (`setup-apt-prefix.sh:64,150-151,196-254`,
-  `dn-install-glibc.sh:28,35,56`, `apt-install.sh:13,15`,
-  `dn-hook-pre.sh:28,73`, `dn-fix-alternatives.sh:15,18,19`,
-  `make-launchers.sh:70`). Ship the prefix's own apt/dpkg (the `apt-dpkg/`
-  fork noted in this file) instead of exec'ing Termux's.
-- **Runtime tools must not need Termux's glibc**: install-time builds lean on Termux `clang` +
-  the `$PREFIX/glibc` side-install + `libtalloc`
-  (`build-path-redirect.sh:24`, `setup-runtime.sh:26-27,37,62,72,83`); the
-  run-time PATH appends `$PREFIX/glibc/bin` and `$PREFIX/bin`
-  (`native/dn-run.c:143-151`, `native/dn-launch.c:77-81`), with `dn-perl`
-  and the bash fallback exec'ing `$PREFIX/glibc/bin`
-  (`dn-launch.c:101,114`). Give the prefix its own perl/bash/coreutils and
-  a build path that does not need Termux's glibc side-install.
-- **Resolver / NSS must not need Termux**: `$DN/etc/resolv.conf` is a live symlink to
-  `$TP/etc/resolv.conf` (`setup-apt-prefix.sh:169`), and the NSS tracer
-  route binds the prefix `/etc` over `$PREFIX/glibc/etc`
-  (`native/dn-run.c:184-186,237`). Manage DNS inside the prefix.
-- **termux-exec is acceptable**: `native/path-redirect.c:230-308`
-  (`bionic_env`, `DN_BIONIC_PRELOAD`) hands Termux's preload back to Bionic
-  children; keep it unless it proves to be a hard runtime requirement.
-- **Shared `$HOME` stays**: one home for both is intended, so `$DN/root ->
-  $HOME` (`setup-apt-prefix.sh:156-157`) is kept -- it is also why
-  `custom/base-files.sh:10-32` strips `/root` and the shim rewrites `/root`
-  (`native/path-redirect.c:178-187,207`). The only constraint is that this
-  link cannot make `$HOME` recurse (fixed by 0.6.1's location move).
-- **Home-side writes are the interface, keep but audit**:
-  `make-shell-interface.sh:63-77,106,148-153` owns `~/.dn-login`,
-  `~/.termux/shell`, `~/.termux/motd.sh` and the `~/.bashrc` cleanup;
-  `install.sh:17` clones into `$HOME/.deb-native`. The *userland* must not
-  depend on any of it.
-- **Keep as-is** (the host<->userland doors): `$PREFIX/bin/termux-shell`,
-  `$PREFIX/bin/dn-shell`, the `pkg` guard and `termux-apt`/`termux-dpkg`
-  (`make-shell-interface.sh:82-102`, `make-apt-wrappers.sh:37-53`).
+**Done = testable**: inside a running session, with
+`DN_TERMUX_PREFIX`/`PREFIX` pointed at an empty dir, the userland still runs
+programs by name, `apt install`/`dpkg`, resolves DNS and `git clone`s, and
+writes nothing into `$PREFIX`; deleting `$DN` leaves Termux's login working.
+Exempt: the app's own entry, `$PREFIX/bin/login`.
+
+**Open** -- the plan, phase by phase:
+
+- **M0 Discovery harness** (measure before fixing): a script that runs the
+  userland with `PREFIX` at an empty dir and logs what breaks, plus
+  `DN_REDIRECT_DEBUG` and a log of any `$PREFIX` exec/read from the shim,
+  `dn-run` and `dn-launch`. Done when the failing list matches reality.
+- **M1 Core runtime self-sufficient**: drop `$PREFIX/glibc/bin` and
+  `$PREFIX/bin` from PATH (`native/dn-run.c:143-151`,
+  `native/dn-launch.c:77-81`) and give the prefix its own coreutils / bash /
+  perl (`native/dn-launch.c:101,114`); own the resolver instead of the
+  `$TP/etc/resolv.conf` symlink (`setup-apt-prefix.sh:169`) and the
+  `$PREFIX/glibc/etc` NSS bind (`native/dn-run.c:184-186,237`); replace
+  termux-exec with our own shebang handling, or drop it
+  (`native/path-redirect.c:230-308`); make `install.sh` upgrade an existing
+  prefix in place. Done when the harness passes run-by-name + DNS.
+- **M2 Own package manager**: replace the stand-ins that exec `$TP/bin/*`
+  (`scripts/bootstrap/dn-standins.sh:26-116`; drivers
+  `setup-apt-prefix.sh:64,150-151,196-254`, `dn-install-glibc.sh:28,35,56`,
+  `apt-install.sh:13,15`, `dn-hook-pre.sh:28,73`,
+  `dn-fix-alternatives.sh:15,18,19`, `make-launchers.sh:70`) with a
+  prefix-owned `apt`/`dpkg` (the `apt-dpkg/` fork); the bootstrap still
+  borrows Termux to stage. Done when `apt update && apt install` works with
+  `$PREFIX` disabled.
+- **M3 No cross-damage**: move our host-layer files (`termux-shell`,
+  `dn-shell`, the entry) out of `$PREFIX/bin` into a host-layer dir beside
+  `$DN`, leaving at most symlinks
+  (`scripts/runtime/make-shell-interface.sh:82-102`); stop any write into
+  `$PREFIX` (launchers, `update-alternatives`/`dpkg-divert` wrappers); keep
+  `$HOME` shared but never touch Termux's dotfiles. Done when nothing of
+  ours writes into `$PREFIX` and deleting `$DN` leaves Termux's login
+  working.
+- **M4 Acceptance and release**: a CI job that simulates the broken prefix
+  and runs the by-name/apt/DNS/toolchain/git suite; tag `v0.7.0-prealpha`.
 - **Dedup the redirect set**: `/usr /etc /var /opt /bin /sbin` is spelled
   in four places that must agree -- `native/path-redirect.c:200-212`,
   `native/dn-run.c:221`, `scripts/install/normalize-symlinks.sh:16` and the
   tracer binds -- into one source.
+
+**Open questions** (decide before M1/M2):
+
+- **Session entry**: Termux's app hardcodes `$PREFIX/bin/login` as the
+  terminal's entry, so it is app-level and exempt from the DoD. Is that the
+  final answer, or do we want our own entry (needs the app to cooperate and
+  may not be possible)? Everything else can be independent without this.
+- **termux-exec**: it exists so a Bionic child keeps Termux's shebang
+  handling. If we drop it, which commands regress, and is the answer to
+  reimplement it in the prefix or keep it as an optional fallback?
+- **apt/dpkg fork**: a prefix-owned `apt`/`dpkg` is the single largest
+  piece. Is "stand-ins as a fallback now, own binaries later" acceptable,
+  or a hard gate for 0.7.0?
+- **Resource cost**: each userland carries its own glibc/toolchain/base.
+  How many sibling userlands do we actually support -- one Debian, or a
+  multi-distro feature?
 
 ## Services, then sudo (after alpha)
 
