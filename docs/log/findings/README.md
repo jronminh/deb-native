@@ -117,3 +117,9 @@ below, oldest first, matching the original file's order.
   `sysuser-helper` -> `adduser`+`passwd`+`perl` and assumes a system init, so
   use the binaries directly, run `runsvdir "$DN/etc/service"` ourselves, and
   translate systemd units to `run` scripts (refuse the rest).
+- [`runit-spike.md`](runit-spike.md) — 2026-10-04, **Isolated**: the spike --
+  runit binaries patched into a test prefix, a `beat` service supervised end
+  to end (`sv up/status/down`, heartbeat logged into the prefix). Four things
+  to get right: translate the interpreter, put `$DN/usr/bin` on the
+  supervisor's `PATH`, `run` shebang -> the prefix's `sh`, and start it with
+  `DN_INSTDIR` = that prefix.
