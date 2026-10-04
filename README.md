@@ -51,28 +51,11 @@ log in `~/.dn/var/log/`.
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 
-## Status
-
-- **Packages:** install to `ii` and run by name. `apt`/`dpkg` are the prefix's;
-  the default session is the userland. Run `termux-shell` for a clean Termux
-  shell (`pkg`, `termux-apt`); inside the userland a `pkg` guard refuses.
-- **Scope:** the same packages as [`sudo-less`](https://github.com/jronminh/sudo-less),
-  by Debian section ([`docs/reference/standard.md`](docs/reference/standard.md)).
-  Proof: 99 of 100 random Debian 13 packages installed and ran, no tracer
-  needed ([`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md)).
-- **Toolchains:** `apt install gcc`, a full compile (`libc6-dev`), and running
-  the result all work.
-- **Not yet:** services (a shipping unit installs, the service does not run;
-  `runit` is planned) and packages that need real root (system users, `setuid`,
-  TUN, kernel modules; `sudo` modes are planned).
-- **Health:** `termux-dn-doctor` checks the common breakages. Confirmed
-  issues: [`docs/reference/known-issues.md`](docs/reference/known-issues.md).
-
 ## Documentation
 
 Full map in [`docs/README.md`](docs/README.md). Start with
-[`docs/spec/design.md`](docs/spec/design.md) for how the whole thing works,
-and [`TODO.md`](TODO.md) for current status.
+[`docs/spec/status.md`](docs/spec/status.md) for where it is today and
+[`docs/spec/design.md`](docs/spec/design.md) for how it works.
 
 - [`docs/spec/`](docs/spec/README.md) — the design, install flow, host/userland.
 - [`docs/reference/`](docs/reference/README.md) — look-up facts and catalogs

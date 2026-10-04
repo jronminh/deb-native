@@ -8,6 +8,8 @@ about the platform, ABI and formats the project leans on live in
 [`../reference/`](../reference/README.md); comparisons and superseded
 designs live in [`../notes/`](../notes/README.md).
 
+- `status.md` — what works today, the scope it holds to, the proof, and what
+  is not built yet.
 - `design.md` — the live design: scope, the self-contained prefix,
   day-to-day commands, fake root. Accumulated over releases; points out
   to the files here and below for depth.
