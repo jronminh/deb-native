@@ -13,6 +13,7 @@ proposes giving each prefix a **sparse home** for its own program state, while
 - [Design](#design)
 - [What lives where](#what-lives-where)
 - [Mechanism](#mechanism)
+- [Experiment: the shim cannot do it](#experiment-the-shim-cannot-do-it)
 - [Recursion safety](#recursion-safety)
 - [Open questions](#open-questions)
 
@@ -72,6 +73,39 @@ Defaults, meant to be configurable per prefix:
   the same way the inherited termux-exec preload is stashed.
 - The login selector `.dn-login` runs **before** `dn-shell` and keeps using
   the real `$HOME`; only the prefix sees the sparse home.
+
+## Experiment: the shim cannot do it
+
+Tried the no-symlink variant: have the shim rewrite `$HOME/<program-state>` to
+the store at the libc level (opt-in `DN_HOME_STORE`), which would isolate
+without any links and could not recurse. **It does not work.** The shim rewrites
+only **absolute** paths, and tools routinely `chdir` then use **relative**
+paths. `strace` of `mkdir -p "$HOME/.config/x"` inside the prefix:
+
+```
+mkdirat(AT_FDCWD, ".config", 0777)  = -1 EEXIST
+chdir(".config")                    = 0
+mkdirat(AT_FDCWD, "dn-probe", 0777) = 0
+```
+
+`.config` and `dn-probe` are relative, resolve against the real `$HOME`, and
+the shim never sees them -- the write lands in the real home. Catching that
+would require the shim to virtualize the cwd (intercept `chdir`/`fchdir`/
+`getcwd` and rewrite relative paths), a small in-process overlay -- out of
+scope. (Rewrites are still fine for *absolute* paths, which is why the existing
+`/usr /etc /var ...` roots work: their `chdir` targets are absolute and get
+rewritten, so the cwd is already inside the prefix.)
+
+So libc-level **partial**-HOME rewriting is not viable. The mechanisms that
+survive `chdir`+relative are those that move the **whole** `$HOME`:
+
+- **HOME remap** (this doc): the prefix's `HOME` *is* the store, so relative
+  paths resolve inside it; user data returns via **leaf** symlinks, and with
+  the store **outside `$HOME`** those cannot recurse.
+- **tracer bind** (`dn-trace -b store:$HOME`): a real overlay, no symlinks --
+  but it means tracing the whole session (rejected elsewhere for cost).
+
+Recommendation: **HOME remap, store outside `$HOME`.**
 
 ## Recursion safety
 
