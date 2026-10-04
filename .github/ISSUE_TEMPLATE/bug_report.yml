@@ -29,8 +29,8 @@ body:
     id: prefix
     attributes:
       label: Prefix path
-      description: Usually `~/.dn`; inside the userland it is `$DN_INSTDIR`.
-      placeholder: ~/.dn
+      description: Usually beside Termux's `usr/`; inside the userland it is `$DN_INSTDIR`.
+      placeholder: /data/data/com.termux/files/deb-native
     validations:
       required: true
   - type: textarea
@@ -60,7 +60,7 @@ body:
     id: logs
     attributes:
       label: Relevant output or log
-      description: The error text, or the tail of `~/.dn/var/log/deb-native-install-*.log`.
+      description: The error text, or the tail of `var/log/deb-native-install-*.log` under the prefix.
       render: text
     validations:
       required: false

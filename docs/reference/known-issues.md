@@ -64,7 +64,7 @@ shebang does not have this problem. Minimal repro, in the userland:
 
 ```sh
 cat > ~/t.sh <<'EOF'
-#!/data/data/com.termux/files/home/.dn/usr/bin/dash
+#!/data/data/com.termux/files/deb-native/usr/bin/dash
 sed -n 1p /etc/ca-certificates.conf
 EOF
 chmod 755 ~/t.sh

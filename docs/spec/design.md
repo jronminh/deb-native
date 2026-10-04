@@ -120,7 +120,7 @@ through.
 
 ### Layout: Debian's own, nested
 
-`~/.dn/usr/bin`, `~/.dn/etc`, ... exactly as on Debian, merged-`/usr`
+`$DN/usr/bin`, `$DN/etc`, ... exactly as on Debian, merged-`/usr`
 links from `base-files` included. A prefix of our own has no reason to
 flatten `usr/` (only taking over Termux's flat `$PREFIX` would). The shim
 keeps mapping `/usr` -> `$DN/usr`.

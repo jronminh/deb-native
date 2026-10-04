@@ -91,7 +91,7 @@ B8B80B5B623EAB6AD8775C45B7C5D7D6350947F8
 # Termux itself, not this).
 case "$DN" in
   "$TP"|"$TP"/*)
-    echo "E: $DN is inside Termux's prefix ($TP); use a separate prefix, e.g. \$HOME/.dn" >&2
+    echo "E: $DN is inside Termux's prefix ($TP); use a separate prefix outside both trees" >&2
     exit 1 ;;
 esac
 

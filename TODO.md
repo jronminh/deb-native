@@ -150,8 +150,6 @@ at all. Two approaches tried, both hit a real, hard blocker:
   way, were kept).
 
 **Open**:
-- Prefix location: keep `~/.dn` (a `$DN/root` -> `~` symlink loop is
-  harmless for `find`/`du`, not for `-L`), or move it out of `$HOME`.
 - `dpkg-trigger` under `DPKG_ROOT`: check a trigger-using package; wrap
   like `dpkg-divert` if it double-prefixes.
 - `dpkg --print-architecture` answers `aarch64` inside the prefix — watch
@@ -241,7 +239,7 @@ far (trixie index, 2026-09-27):
   translate 41s -> 14s, fresh install 1m37s -> 1m5s (fe2 baseline below).
 - Prebuilt base (build+translate once in CI/`deb-native-repo`, ship as a
   tarball) skips most of translate+configure — likely the largest win,
-  close to how Termux itself installs. Fits the default `~/.dn` path
+  close to how Termux itself installs. Fits the default prefix path
   (paths are embedded); other paths fall back to local bootstrap.
 - Cleaning `var/cache/apt` after bootstrap (-85MB) is a trivial win,
   could ship in 0.2.x independent of everything else here.
@@ -456,6 +454,46 @@ and aggregate overflow. Design:
 
 **Open**:
 - Gate/benchmark the always-probe `openat` (see 0.5.2 Open).
+
+## 0.6.1: prefix beside Termux's own (pre-alpha, in progress)
+
+**Goal**: the prefix sits beside Termux's `usr/` and `home/` (default
+`$(dirname "$PREFIX")/deb-native`) instead of under `$HOME`, so the
+`$DN/root` -> `$HOME` symlink the base needs cannot make `$HOME` recurse
+for anything that follows symlinks (`find -L`, file pickers, language
+servers). `install.sh` still takes an explicit prefix, so any location
+remains possible.
+
+**Status**: moved on-device 2026-10-04. `install.sh`'s default is
+`$(dirname "$PREFIX")/deb-native`; the guard, `setup-apt-prefix.sh`,
+`dn-doctor.sh`, the issue template and the live docs follow it. A fresh
+prefix bootstraps and runs there (26 packages, fake-root, the `gcc` chain
+unchanged), `termux-dn-doctor` is clean, and `$HOME` holds no prefix `root`
+symlink any more. The glibc bundle is unaffected at run time: the loader and
+`libc.so.6` cut the live prefix from their own path
+(`docs/spec/deploy.md`), so one prebuilt set works at any location.
+
+**Open**:
+- **Compiled fallback still `~/.dn`**: the glibc patch bakes
+  `/data/data/com.termux/files/home/.dn` as `@TERMUX_PREFIX@`
+  (`third_party/glibc-android-patches/`, `set-dirs.patch`). Run-time
+  derivation covers dynamic programs; a *static* one (no
+  `__dn_prefix_get`) still falls back into `$HOME`. Retarget the patch to
+  the new default and rebuild/publish the `glibc-bundle` before the move is
+  complete.
+- **CI and the patch helper**: `.github/workflows/build-glibc.yml`'s
+  `DN_PREFIX` and `scripts/bootstrap/dn-apply-glibc-patch.sh`'s example
+  still name `home/.dn`; update with the retarget above.
+- **Migration from `~/.dn`**: an existing install is silently orphaned --
+  nothing detects the old prefix or moves/removes it. Add a move/uninstall
+  path (`install.sh --uninstall` is itself still open, see the alpha goal)
+  and an upgrade note.
+- **Prebuilt base tarball**: it embeds paths, so a base built for the old
+  prefix may need a rebuild to fit the new default (fallback: local
+  bootstrap).
+- **Static `ldconfig`**: still cannot derive the prefix, so the bootstrap
+  bypasses it under the tracer (`docs/spec/deploy.md` "Open items");
+  re-confirm the explicit `-C`/`-f` bind path at the new location.
 
 ## Services, then sudo (after alpha)
 

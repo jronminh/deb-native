@@ -4,7 +4,8 @@
 
 **Real Debian `arm64` `.deb` packages inside Termux: no root, no `chroot`,
 no namespaces.** `apt install PKG` works and the program runs by name; a
-small Debian tree in `~/.dn`, Termux left untouched.
+small Debian tree beside Termux's own `usr/` and `home/`, Termux left
+untouched.
 
 > [!WARNING]
 > **Pre-alpha, AI-assisted, not independently audited.** Read `install.sh`
@@ -23,15 +24,16 @@ the tracer — without them, static and raw-syscall programs run untranslated.
 
 ```sh
 # pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.6.0+s.1-prealpha/install.sh | DEB_NATIVE_REF=v0.6.0+s.1-prealpha sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.6.1-prealpha/install.sh | DEB_NATIVE_REF=v0.6.1-prealpha sh
 
 # then restart Termux — the new session is the Debian userland
 apt install figlet
 figlet hi
 ```
 
-Rolling edge: replace both `v0.6.0+s.1-prealpha` with `main`. Idempotent from
-a checkout: `sh install.sh [PREFIX] [pkg ...]`; log in `~/.dn/var/log/`.
+Rolling edge: replace both `v0.6.1-prealpha` with `main`. Idempotent from
+a checkout: `sh install.sh [PREFIX] [pkg ...]`; log in `var/log/` under the
+prefix.
 
 ![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
 

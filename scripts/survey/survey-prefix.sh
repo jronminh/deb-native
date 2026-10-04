@@ -8,7 +8,8 @@
 #
 #   OUT=~/survey scripts/survey-prefix.sh docs/log/survey-0.2.0/list.tsv
 #
-# Needs an installed prefix (install.sh) at DN (default ~/.dn). Its state is
+# Needs an installed prefix (install.sh) at DN (default beside Termux's
+# usr/ and home/). Its state is
 # saved once to OUT/base.tar and restored before every package, so one
 # broken package cannot affect the next; the prefix is back to that state
 # at the end. Downloaded .debs are shared in OUT/archives. Resumable: a

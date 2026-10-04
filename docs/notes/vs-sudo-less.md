@@ -43,7 +43,7 @@ the host and the kernel are different.
 |---|---|---|---|
 | host | standard Debian, non-root user, `~/.local` | unrooted Android app (uid `u0_a…`), Termux prefix `/data/data/com.termux/files/usr` | different base, same no-root constraint |
 | apt/dpkg | fork of Termux's patches, retargeted *back* to Debian | Termux's own apt/dpkg, built for Bionic, reused **as-is** | the reuse runs in the opposite direction |
-| files land in | `~/.local` | a dedicated `$INSTDIR` (e.g. `~/.dn`), separate from Termux's own prefix | same idea, different target |
+| files land in | `~/.local` | a dedicated `$INSTDIR` (default: beside Termux's `usr/`), separate from Termux's own prefix | same idea, different target |
 | path virtualization | kernel **view**: `unshare(CLONE_NEWUSER)` + unprivileged overlayfs over `/usr /etc /var /opt` | userspace: our own `path-redirect.so` shim rewrites `/usr /etc /var /opt` → `$INSTDIR`, with `execve` dispatch and shebang handling | view is **dead here** (`unshare` = `EINVAL`, FUSE closed); the shim replaces *path resolution only* |
 | glibc / libc | host already has glibc; prefix seeded from the host's dpkg db | Termux has **no** glibc; `libc6` is a real stand-in package whose files link into Termux's `$PREFIX/glibc` side-install (0.5.0: or a real Debian `libc6` build); coreutils/perl reused the same way | the second userland is the fusion's whole point |
 | maintainer-script runtime | scripts run inside the view; the kernel's `/bin/sh` sees the prefix | `native/dn-launch.c`, a Bionic ELF, execs Termux's glibc `bash` (`dn-shell`) / `perl` (`dn-perl`) with the shim; control-script shebangs are rewritten to it | a real ELF is required — the kernel follows only one `#!`, and Android's `/system/bin/sh` is root-owned toybox |

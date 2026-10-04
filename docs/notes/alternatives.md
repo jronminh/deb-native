@@ -33,7 +33,7 @@ software running on Android, side by side:
 
 ## What that buys
 
-1. **No second system.** No distro image: `~/.dn` holds what you install
+1. **No second system.** No distro image: the prefix holds what you install
    plus a ~23-package base. Only glibc comes from Termux (the `libc6`
    stand-in); everything else is Debian's own `.deb`.
 2. **No proot for normal programs.** proot-distro pays a ptrace round trip
@@ -47,7 +47,7 @@ software running on Android, side by side:
 4. **Translated once, not emulated.** Each `.deb` is fixed at install
    (interpreter, library path, `#!` lines, maintainer scripts, hard links);
    afterwards it runs directly.
-5. **Removable.** Termux is never modified: delete `~/.dn` and the
+5. **Removable.** Termux is never modified: delete the prefix and the
    `# deb-native` lines in `~/.bashrc`, and Termux is as before. (The
    opposite approach -- converting Termux itself, one way -- was tried and
    is dropped.)

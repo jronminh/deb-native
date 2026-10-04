@@ -113,8 +113,9 @@ current-status source of truth.
 
 - Work happens **directly on this device** (no `ssh`, no remote host) —
   Termux's own shell, this repo's working tree is the source of truth.
-- Prefix is `/data/data/com.termux/files/home/.dn` (`$DN`), fixed, not
-  `~/dn6`.
+- Prefix is `/data/data/com.termux/files/deb-native` (`$DN`), beside Termux's
+  own `usr/` and `home/` so `$HOME` never contains it (`$DN/root` -> `$HOME`
+  under `$HOME` would make `$HOME` recurse); not `~/dn6`.
 - `/tmp` is not writable for this session — use the scratchpad directory
   the environment block names, not `/tmp`.
 - A long build (e.g. the glibc build itself) is started with

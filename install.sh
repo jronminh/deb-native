@@ -54,19 +54,22 @@ if [ ! -f "$HERE/scripts/bootstrap/setup-apt-prefix.sh" ]; then
     exec sh "$DIR/install.sh" "$@"
 fi
 
-DNPREFIX=${1:-$HOME/.dn}
+TERMUX_PREFIX=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
+# Default beside Termux's own trees (usr/, home/): a prefix under $HOME
+# plus its $DN/root -> $HOME symlink would make $HOME recurse infinitely
+# for anything that follows symlinks (find -L, file pickers, LSPs).
+DNPREFIX=${1:-$(dirname "$TERMUX_PREFIX")/deb-native}
 [ $# -gt 0 ] && shift
 case "$DNPREFIX" in /*) ;; *) DNPREFIX="$PWD/$DNPREFIX" ;; esac
 
 # Never install into Termux's own prefix: setup-apt-prefix.sh writes
 # sources.list under $DNPREFIX/etc/apt, which would overwrite Termux's and
 # make its repo disappear.
-TERMUX_PREFIX=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 case "$DNPREFIX" in
   "$TERMUX_PREFIX"|"$TERMUX_PREFIX"/*)
     printf '%s error: refusing prefix %s%s\n' "$Y" "$DNPREFIX" "$R" >&2
     printf '   it is inside Termux'"'"'s prefix (%s); that would clobber Termux'"'"'s apt.\n' "$TERMUX_PREFIX" >&2
-    printf '   use a separate prefix, e.g. \$HOME/.dn (the default).\n' >&2
+    printf '   use a separate prefix, e.g. %s (the default).\n' "$(dirname "$TERMUX_PREFIX")/deb-native" >&2
     exit 1 ;;
 esac
 

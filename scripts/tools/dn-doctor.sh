@@ -9,7 +9,8 @@
 #     or a missing shell interface (~/.termux/shell).
 #
 # Usage: dn-doctor.sh [PREFIX] [--fix]
-#   PREFIX defaults to the deb-native launcher dir found on PATH, else ~/.dn.
+#   PREFIX defaults to the deb-native launcher dir found on PATH, else the
+#   default prefix beside Termux's usr/ and home/.
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -33,7 +34,7 @@ if [ -z "$DN_PREFIX" ]; then
     case "$d" in */usr/lib/deb-native/bin) DN_PREFIX=${d%/usr/lib/deb-native/bin} ;; esac
   done
   IFS=$old_ifs
-  [ -n "$DN_PREFIX" ] || DN_PREFIX=$HOME/.dn
+  [ -n "$DN_PREFIX" ] || DN_PREFIX=$(dirname "$TP")/deb-native
 fi
 
 ROOT="$DN_PREFIX"
@@ -49,7 +50,7 @@ printf '  deb-native:     %s\n' "$DN_PREFIX"
 
 # 1. The prefix must never be Termux's own.
 case "$DN_PREFIX" in
-  "$TP"|"$TP"/*) bad "prefix is inside Termux's prefix — install into a separate dir (e.g. ~/.dn)" ;;
+  "$TP"|"$TP"/*) bad "prefix is inside Termux's prefix — install into a separate dir (e.g. $(dirname "$TP")/deb-native)" ;;
   *) ok "prefix is separate from Termux" ;;
 esac
 
