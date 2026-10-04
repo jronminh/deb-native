@@ -201,3 +201,11 @@ below, oldest first, matching the original file's order.
   Now it also repairs a dangling relative link under `usr/bin`/`usr/sbin`.
   The rest of the sweep (jq/tree/ncdu/zstd/curl/git/sqlite3/tmux/rsync/socat/
   lua/nodejs/python3+venv/redis/imagemagick/gcc) passed.
+- [`login-profile-resets-path.md`](login-profile-resets-path.md) — 2026-10-04,
+  **Repo change**: `export PATH=...` "didn't stick" and `opencode`/`dn-switch`
+  were missing in a fresh session. The session shell is `bash -l`, which reads
+  `/etc/profile` (not `~/.bashrc`, where opencode's installer writes), and
+  Debian's `/etc/profile` **overwrites PATH**, dropping dn-launch's userland
+  PATH including `$HOME/.local/bin`. `make-shell-interface.sh` now generates
+  `/etc/profile.d/deb-native.sh` to re-assert the userland dirs after the
+  reset.

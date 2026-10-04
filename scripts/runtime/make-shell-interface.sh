@@ -272,6 +272,26 @@ echo "     Use 'apt' (or 'dpkg') here, or run 'termux-shell', then 'pkg'." >&2
 exit 1
 PKG
 
+# The prefix's /etc/profile (Debian base-files) RESETS PATH to the Debian
+# default, dropping the userland PATH dn-launch set -- the launcher dir (first,
+# so per-binary launchers win over the raw bin) and $HOME/.local/bin (the
+# host-layer commands dn-list/dn-switch/dn-default, and a wrapper such as the
+# adopted opencode). That is why `export PATH=...` in a session and a
+# ~/.bashrc line both "don't stick": the login shell is bash -l, which reads
+# /etc/profile + ~/.profile, not ~/.bashrc, and /etc/profile overwrites PATH.
+# A profile.d snippet runs after the reset and puts the userland dirs back.
+mkdir -p "$INSTDIR/etc/profile.d"
+gen "$INSTDIR/etc/profile.d/deb-native.sh" <<'PATHSNIP'
+# deb-native userland PATH (generated; do not edit). The prefix's /etc/profile
+# resets PATH, so re-assert the userland dirs (launcher dir first) and the
+# host-layer $HOME/.local/bin after it.
+if [ -z "${DN_PATH_SET-}" ]; then
+  DN_PATH_SET=1; export DN_PATH_SET
+  PATH="__INSTDIR__/usr/lib/deb-native/priv:__INSTDIR__/usr/lib/deb-native/bin:__INSTDIR__/usr/sbin:__INSTDIR__/usr/bin:__INSTDIR__/sbin:__INSTDIR__/bin:__INSTDIR__/usr/games:${HOME:-/nonexistent}/.local/bin:$PATH"
+  export PATH
+fi
+PATHSNIP
+
 # Retire the old activation: lines tagged "# deb-native" (and an older,
 # untagged form) in ~/.bashrc. The userland is the default now; a managed
 # block there would also leak into termux-shell, which must stay clean.
