@@ -15,18 +15,19 @@ P=${1:?usage: run.sh PREFIX}
 case "$P" in /*) ;; *) P="$PWD/$P" ;; esac
 [ -x "$P/usr/bin/dn-shell" ] || { echo "not a deb-native prefix: $P" >&2; exit 1; }
 tp=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
+HOME_REAL=${HOME:-/data/data/com.termux/files/home}
+
+fail() { printf 'FAIL: prefix-independence: %s\n' "$1" >&2; exit 1; }
+ok()   { printf '  ok    %s\n' "$1"; }
+note() { printf '  note  %s\n' "$1"; }
 
 # A writable TMPDIR for the harness's own temp dirs: the caller's if usable,
-# else Termux's default, else the prefix itself (the caller's may be stale,
-# e.g. an inherited TMPDIR that no longer exists).
+# else Termux's default, else the prefix itself.
 if [ ! -d "${TMPDIR:-/nonexistent}" ] || ! touch "${TMPDIR:-/nonexistent}/.t.$$" 2>/dev/null; then
   TMPDIR="$tp/tmp"; [ -d "$TMPDIR" ] || TMPDIR="$P"
 fi
 rm -f "$TMPDIR/.t.$$" 2>/dev/null || true
 export TMPDIR
-
-fail() { printf 'FAIL: prefix-independence: %s\n' "$1" >&2; exit 1; }
-ok()   { printf '  ok    %s\n' "$1"; }
 
 EMPTY=$(mktemp -d)
 TMP=$(mktemp -d)
@@ -46,29 +47,66 @@ ok "Debian dpkg/apt run"
 
 # 3. identity: getent answers from the prefix's own /etc
 case "$(in_ul 'getent passwd root')" in root:*) ;; *) fail "getent passwd root failed";; esac
-ok "identity: getent resolves root from the prefix"
+case "$(in_ul 'getent group root')" in root:*) ;; *) fail "getent group root failed";; esac
+ok "identity: getent resolves users/groups from the prefix"
 
-# 4. the path overlay: absolute /usr and /etc resolve into the prefix
-in_ul 'test -e /etc/passwd && ls -1 /usr/bin >/dev/null' || fail "path overlay broken"
-ok "path overlay: /usr and /etc resolve in the prefix"
+# 4. every redirect root is reachable through the overlay, with content only
+#    the prefix has; /tmp and /run write into the prefix; /dev,/proc,/sys are
+#    not pulled in. (readlink -f is unusable here: realpath(3) walks paths
+#    internally, bypassing the shim.)
+for p in /usr/bin/bash /etc/passwd /var/lib/dpkg/status /opt /bin/bash \
+         /sbin/ldconfig /lib/aarch64-linux-gnu/libc.so.6 /root; do
+  in_ul "test -e $p" || fail "overlay: $p not reachable in the prefix"
+done
+in_ul 'echo x > /tmp/.dnprobe' && [ -f "$P/tmp/.dnprobe" ] || fail "/tmp is not redirected into the prefix"
+in_ul 'mkdir -p /run/.dnprobe && echo x > /run/.dnprobe/x' && [ -f "$P/run/.dnprobe/x" ] \
+  || fail "/run is not redirected into the prefix"
+in_ul 'rm -rf /tmp/.dnprobe /run/.dnprobe'
+for d in dev proc sys; do [ ! -e "$P/$d" ] || fail "the prefix must not carry a /$d"; done
+ok "overlay: /usr /etc /var /opt /bin /sbin /lib /tmp /run /root resolve in the prefix; /dev /proc /sys stay real"
 
-# 5. resolv.conf is the prefix's own, not a symlink into another tree
+# 5. no steady-state Termux path: PATH, and apt's own config
+case "$(in_ul 'echo "$PATH"' | tr ':' '\n' | grep -c "^$tp/")" in
+  0) ;; *) fail "PATH still lists a Termux dir";; esac
+case "$(in_ul 'apt-config dump 2>/dev/null' | grep -c "$tp")" in
+  0) ;; *) fail "apt config still references Termux";; esac
+ok "no Termux dir in PATH or the prefix's apt config"
+
+# 6. fake root: uid 0, chown a no-op
+case "$(in_ul 'id -u')" in 0) ;; *) fail "not fake-root";; esac
+in_ul 'touch /tmp/.dnfr && chown 1234:1234 /tmp/.dnfr && rm -f /tmp/.dnfr' \
+  || fail "chown is not a no-op under fake root"
+ok "fake root: uid=0 and chown is a no-op"
+
+# 7. NSS files lookup (hosts) resolves in the prefix, no Termux
+in_ul 'getent hosts localhost' >/dev/null 2>&1 || fail "getent hosts localhost failed"
+ok "NSS resolves (hosts) from the prefix"
+
+# 8. resolv.conf is the prefix's own, not a symlink into another tree
 if [ -L "$P/etc/resolv.conf" ]; then
   tgt=$(readlink -f "$P/etc/resolv.conf" 2>/dev/null || true)
   case "$tgt" in "$P"/*) ;; *) fail "resolv.conf points outside the prefix: $tgt";; esac
 fi
 ok "resolv.conf is the prefix's own"
 
-# 6. no steady-state Termux bin on PATH (informational until R1 lands)
-if in_ul 'echo "$PATH"' | tr ':' '\n' | grep -qx "$tp/bin"; then
-  printf '  note  PATH still lists %s/bin (R1 pending)\n' "$tp/bin"
-else
-  ok "PATH has no Termux bin dir"
-fi
+# 9. the runtime commands are present
+for f in "$P/usr/bin/dn-shell" "$P/usr/lib/deb-native/dn-run" \
+         "$P/usr/lib/deb-native/path-redirect.so" "$P/usr/lib/deb-native/bin/dn-adopt"; do
+  [ -e "$f" ] || fail "missing runtime piece: $f"
+done
+[ -x "$P/usr/lib/deb-native/dn-trace" ] && ok "dn-trace present" \
+  || note "no dn-trace (static/raw-syscall programs run untranslated)"
+ok "runtime pieces present (dn-shell, dn-run, shim, dn-adopt)"
 
-# 7. optional end-to-end: the prefix's apt installs a package, nothing of Termux
+# 10. dn-adopt with no patchelf says so plainly (does not silently skip)
+case "$(in_ul 'dn-adopt /bin/true' 2>&1)" in
+  *"apt install patchelf"*) note "dn-adopt asks for patchelf (expected)" ;;
+  *) ;; esac
+
+# 11. optional end-to-end: the prefix's apt installs and runs a package
 if [ "${DN_INDEP_APT:-0}" = 1 ]; then
-  in_ul 'apt-get install -y --reinstall hello >/dev/null 2>&1 || apt-get install -y hello >/dev/null 2>&1' \
+  in_ul 'apt-get install -y hello >/dev/null 2>&1' >/dev/null 2>&1 \
+    || in_ul 'apt-get install -y --reinstall hello >/dev/null 2>&1' >/dev/null 2>&1 \
     || fail "apt install in the prefix failed"
   case "$(in_ul 'hello')" in *"Hello, world!"*) ;; *) fail "installed program did not run";; esac
   ok "apt install + run with Termux's tree gone"

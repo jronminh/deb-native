@@ -21,5 +21,7 @@ there).
   [`../docs/spec/dn-glibc-prefix.md`](../docs/spec/dn-glibc-prefix.md).
 - `prefix-independence/` — R0: runs the deployed prefix's userland with
   `DN_TERMUX_PREFIX` at an empty dir so Termux's tree is unusable; asserts the
-  prefix's own shell/coreutils, Debian `apt`/`dpkg`, `getent` and the path
-  overlay all work from `$DN` alone (see `TODO.md` 0.7.0, R0).
+  prefix's own shell/coreutils, Debian `apt`/`dpkg`, identity (`getent`), the
+  full path overlay (`/usr /etc /var /opt /bin /sbin /lib /tmp /run /root`;
+  `/dev /proc /sys` stay real), fake-root, NSS and the runtime pieces — and,
+  with `DN_INDEP_APT=1`, an `apt install` + run. See `TODO.md` 0.7.0, R0.

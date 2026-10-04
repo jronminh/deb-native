@@ -184,6 +184,11 @@ if [ ! -e "$DN/etc/resolv.conf" ] && [ ! -L "$DN/etc/resolv.conf" ]; then
     printf 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n' > "$DN/etc/resolv.conf"
   fi
 fi
+# A default hosts file: none of the minimal seed ships /etc/hosts, so
+# `getent hosts localhost` would fail (0.7.0).
+if [ ! -e "$DN/etc/hosts" ]; then
+  printf '127.0.0.1\tlocalhost\n::1\t\tlocalhost ip6-localhost ip6-loopback\n' > "$DN/etc/hosts"
+fi
 
 # 2. Throwaway apt config: resolves and downloads, never installs. Its status
 # file is the prefix's, so the stand-ins count as installed.
