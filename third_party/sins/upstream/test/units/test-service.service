@@ -1,0 +1,13 @@
+[Unit]
+Description=Test Service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/sleep 1000
+User=spinty
+Environment=VAR1=VAL1
+Environment="VAR2=VAL2"
+WorkingDirectory=/tmp
+
+[Install]
+WantedBy=multi-user.target

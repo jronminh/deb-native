@@ -1,0 +1,12 @@
+# Example logrotate snippet for SINS append-only journal (optional).
+# Install as /etc/logrotate.d/sins-journal (see PKGBUILD).
+
+/var/log/sins-journal/journal.sins {
+    weekly
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

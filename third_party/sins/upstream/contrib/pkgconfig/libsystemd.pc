@@ -1,0 +1,13 @@
+prefix=/usr
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: systemd
+Description: SINS shim for systemd (trampoline to elogind)
+Version: 256.0
+Libs: -L${libdir} -lsystemd
+Cflags: -I${includedir}
+
+# This is a shim that provides systemd compatibility for runit-based systems.
+# Most symbols are trampolined to libelogind.so.0
+# sd_journal_* is implemented in SINS itself.

@@ -1,0 +1,11 @@
+[Unit]
+Description=Docker Engine
+After=network.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/dockerd
+ExecReload=/bin/kill -s HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+# SINS - SINS Is Not Systemd
+
+# Binaries
+/build/
+/test/systemctl
+/test/systemd-timers-shim
+
+# Go
+vendor/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

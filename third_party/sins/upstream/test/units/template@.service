@@ -1,0 +1,5 @@
+[Unit]
+Description=Template smoke for %i
+
+[Service]
+ExecStart=/bin/sh -c "echo TPL-%i-%p-%n >>/tmp/sins-template.log; exec sleep 300"

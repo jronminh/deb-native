@@ -681,10 +681,11 @@ at install (`ExecStart` foreground as the app user,
 `Environment`/`EnvironmentFile`, `WorkingDirectory`,
 `RuntimeDirectory`/`StateDirectory` -> `$DN/run|var/lib/NAME`; `User=`
 and sandbox options dropped; low ports/capabilities/devices refused with
-the reason); a small `systemctl` front maps
-`start/stop/restart/status/enable/disable` to `sv` (termux-services/
-runit), anything else says "not supported". Rule: translate what maps to
-a supervised process, refuse the rest. Test ladder: `cron` -> `redis`
+the reason); the `systemctl` front is a **vendored, pruned SINS**
+(`third_party/sins/`, MIT) -- a systemd-on-runit shim that maps
+`start/stop/restart/status/enable/disable` and translates units to `run`
+scripts, refusing the rest. Rule: translate what maps to a supervised
+process, refuse the rest. Test ladder: `cron` -> `redis`
 (system user + data dir) -> `dbus` (a socket in `/run`). Android may kill
 background services (phantom-process killer, battery optimization) —
 document the wake-lock/battery settings needed (see `scripts/bench/perf-run.sh`

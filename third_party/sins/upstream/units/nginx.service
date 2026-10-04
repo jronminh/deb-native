@@ -1,0 +1,12 @@
+[Unit]
+Description=Nginx Web Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nginx -g 'daemon off;'
+ExecReload=/usr/bin/nginx -s reload
+ExecStop=/usr/bin/nginx -s stop
+
+[Install]
+WantedBy=multi-user.target

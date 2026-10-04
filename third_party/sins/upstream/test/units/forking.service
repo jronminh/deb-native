@@ -1,0 +1,7 @@
+[Unit]
+Description=Forking smoke
+
+[Service]
+Type=forking
+PIDFile=/run/forking-smoke.pid
+ExecStart=/bin/sh -c "echo $$ > /run/forking-smoke.pid; sleep 60 &"

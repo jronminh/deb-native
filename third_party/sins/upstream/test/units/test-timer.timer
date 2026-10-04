@@ -1,0 +1,9 @@
+[Unit]
+Description=Test Timer
+
+[Timer]
+OnCalendar=10s
+Unit=test-service.service
+
+[Install]
+WantedBy=timers.target

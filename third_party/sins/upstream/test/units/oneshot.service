@@ -1,0 +1,6 @@
+[Unit]
+Description=Oneshot smoke
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "echo ONESHOT >>/tmp/sins-oneshot.log"

@@ -1,0 +1,6 @@
+[Unit]
+Description=Reloadable smoke
+
+[Service]
+ExecStart=/bin/sh -c "echo START >>/tmp/sins-reload.log; exec sleep 300"
+ExecReload=/bin/sh -c "echo RELOAD >>/tmp/sins-reload.log"

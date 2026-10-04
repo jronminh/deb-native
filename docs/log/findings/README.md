@@ -132,3 +132,12 @@ below, oldest first, matching the original file's order.
   (caveats: desktop/root-shaped, x86_64 libsystemd, hardcoded cgroup lines,
   still needs our `runsvdir` launcher). Debian's `systemctl` is Python/SysV
   (not runit); Void/Artix ship no shim. Recorded, not decided.
+- [`sins-vendored-systemctl.md`](sins-vendored-systemctl.md) — 2026-10-04,
+  **Repo change**: acted on it -- vendored SINS (`third_party/sins/`,
+  pristine upstream + 3 patches, pruned to the minimal shim) and built a
+  static `arm64` `systemctl`. Patches make paths resolve from `DN_INSTDIR` at
+  the source level (static Go bypasses the `LD_PRELOAD` shim), drop the
+  cgroup lines, and use a prefix `run` shebang. Verified on `dn-070-test`:
+  `status/is-active/is-enabled/stop/start` plus unit->`run` translation
+  (prefix shebang, no cgroup lines, service supervised + logging). Still
+  needs the per-prefix `runsvdir` launcher.

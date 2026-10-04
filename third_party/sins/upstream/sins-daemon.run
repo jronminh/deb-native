@@ -1,0 +1,8 @@
+#!/bin/sh
+# SINS Daemon - Runit Run Script
+# Provides D-Bus bridge, Notify socket, and Cgroups management
+
+# Ensure systemd run directory exists for compatibility
+mkdir -p /run/systemd/system
+
+exec /usr/bin/sins-daemon

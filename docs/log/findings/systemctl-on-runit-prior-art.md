@@ -10,7 +10,7 @@ prefix" / "Deploy" notes assume we would write -- does it already exist?
 ## Contents
 
 - [SINS -- SINS Is Not Systemd](#sins----sins-is-not-systemd)
-- [Debian / Devuan `systemctl`](#debian--devuan-systemctl)
+- [Debian / Devuan `systemctl`](#debian-devuan-systemctl)
 - [Void, Artix](#void-artix)
 - [What it means for us](#what-it-means-for-us)
 
