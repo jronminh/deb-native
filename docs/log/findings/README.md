@@ -209,3 +209,10 @@ below, oldest first, matching the original file's order.
   PATH including `$HOME/.local/bin`. `make-shell-interface.sh` now generates
   `/etc/profile.d/deb-native.sh` to re-assert the userland dirs after the
   reset.
+- [`per-userland-home.md`](per-userland-home.md) — 2026-10-04, **Open gap**
+  (sketch, no code): sharing one `$HOME` collides the two worlds' program
+  files and risks symlink recursion. Proposes a **sparse home** per prefix
+  (`/data/.../.dn/<name>/`) for program state, with `/home` kept for user data
+  and joined by **leaf** symlinks; `dn-shell` sets `HOME` to it. Includes the
+  isolate/share split, the mechanism, and the recursion-safety rule
+  (placement + leaf-ness, prefer `.dn` outside `$HOME`).

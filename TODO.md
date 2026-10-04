@@ -679,6 +679,15 @@ that could not run, and makes software installed **outside apt** run.
 
 **Open**: none specific; the general services/sudo work is below.
 
+## Per-userland home (planned)
+
+Give each prefix a **sparse `$HOME`** (`/data/data/com.termux/files/.dn/<name>/`)
+for program state -- config/cache/dotfiles -- while `/home` stays the user's
+data home, joined by **leaf** symlinks. Ends the two worlds' dotfile/config
+collisions without recursion (prefer `.dn` outside `$HOME`). `dn-shell` sets
+`HOME`. Design sketch:
+[`docs/log/findings/per-userland-home.md`](docs/log/findings/per-userland-home.md).
+
 ## Services, then sudo (after alpha)
 
 **Goal**: same scope as `sudo-less` — a service needs something to run it
