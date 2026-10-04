@@ -141,11 +141,14 @@ static int classify(const char *path, int *nss) {
 }
 
 static void set_path(void) {
+  const char *p = termux_prefix();
   char path[8192];
+  /* Prefix dirs first; Termux's glibc/Bionic dirs last as a last-resort
+   * fallback (see dn-launch.c). */
   snprintf(path, sizeof path,
            "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/usr/games:"
-           "%s/usr/lib/deb-native/bin",
-           instdir, instdir, instdir, instdir, instdir, instdir);
+           "%s/usr/lib/deb-native/bin:%s/glibc/bin:%s/bin",
+           instdir, instdir, instdir, instdir, instdir, instdir, p, p);
   setenv("PATH", path, 1);
 }
 

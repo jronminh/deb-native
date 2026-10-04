@@ -1,10 +1,11 @@
 #!/bin/sh
 # Bootstrap a self-contained prefix (docs/spec/design.md): a small, complete
-# Debian root of its own -- its own apt/dpkg (Termux's, through stand-in
-# launchers), this project's own libc6/libc-bin (the dn-glibc fused loader,
-# docs/spec/dn-glibc-prefix.md) and Debian base -- so installing into it is
-# plain apt, as on Debian. Termux is never touched: everything lives under
-# NEWPREFIX, and the prefix's apt reads only its own config.
+# Debian root of its own -- its own Debian apt/dpkg (run under the prefix's
+# glibc via the shim), this project's own libc6/libc-bin (the dn-glibc fused
+# loader, docs/spec/dn-glibc-prefix.md) and Debian base -- so installing into
+# it is plain apt, as on Debian. Termux only fetches and drives the
+# bootstrap; everything lives under NEWPREFIX and the prefix reads only its
+# own config (0.7.0).
 #
 # Every fresh prefix is dn-glibc, out of the box: the fused loader, not
 # ld-dn. DN_GLIBC_DEBS (required) is a directory holding Debian's real
@@ -20,12 +21,12 @@
 #        (shim, dn-shell, dn-run, privilege layer), $NEWPREFIX/root ->
 #        Termux's home -- all needed before any package script runs
 #     2. a throwaway apt config in a temp dir: Debian index, then this
-#        project's own libc6/libc-bin (dn-install-glibc.sh) and the
-#        dpkg/apt stand-ins (dn-standins.sh) straight into the prefix
+#        project's own libc6/libc-bin (dn-install-glibc.sh) straight into
+#        the prefix
 #     3. download the base and its dependencies (apt --download-only)
 #     4. translate every .deb in Termux's environment (dn-translate-deb.sh:
 #        one unpack/repack each, maintainer scripts included), as a batch
-#     5. install with the prefix's own dpkg: unpack all, then configure all
+#     5. install with Termux's dpkg: unpack all, then configure all
 #        -- every file of the base is on disk before any postinst runs
 #        (Debian never declares its Essential tools as dependencies);
 #        hold the base
@@ -68,10 +69,16 @@ DPKG="$TP/bin/dpkg --admindir=$DN/var/lib/dpkg --instdir=$DN --force-not-root --
 # by name (without them a script's `sed /etc/x` falls through to Termux's
 # Bionic sed, which the shim never reaches). Tools first: unpack order is the
 # order preinsts run in.
+# A + B: the bootstrap seed (0.7.0). Termux dry-installs these and their
+# closure, the translate hook rewrites them, and Termux's dpkg installs them;
+# from there the prefix's own apt works and installs anything further (C)
+# itself. bash is the session shell; perl for maintainer scripts / dn-perl.
+# Everything here is Debian arm64 -- Termux only fetches and drives the
+# install.
 TOOLS="mawk coreutils sed grep findutils"
-SYSTEM="base-files base-passwd dash debianutils diffutils gzip tar hostname ncurses-base ncurses-bin"
-CONFIG="debconf cdebconf openssl ca-certificates"
-BASE="$TOOLS $SYSTEM $CONFIG"
+SYSTEM="base-files base-passwd dash bash debianutils diffutils gzip tar"
+APT="apt dpkg libapt-pkg7.0 gpgv xz-utils ca-certificates debconf perl"
+BASE="$TOOLS $SYSTEM $APT"
 # Not held: new Debian releases bring new keys through it.
 KEYRING="debian-archive-keyring"
 
@@ -127,7 +134,9 @@ EOF
 # exact-version-match reasoning as libc6-dev likely applies, but is not yet
 # tested, and neither has a dpkg hold of its own.
 write_pins() {  # FILE
-  PINNED="libc-l10n:arm64 locales:arm64 dpkg:arm64 apt:arm64 sudo:arm64 doas:arm64"
+  # apt/dpkg are NOT pinned any more: they are Debian's own in the prefix
+  # now (0.7.0), not Termux stand-ins.
+  PINNED="libc-l10n:arm64 locales:arm64 sudo:arm64 doas:arm64"
   for o in deb.debian.org security.debian.org; do
     printf 'Package: %s\nPin: origin %s\nPin-Priority: -1\n\n' "$PINNED" "$o"
   done > "$1"
@@ -233,8 +242,6 @@ $TAPT update
 "$INSTALL/dn-debian-index.sh" "$T/lists"
 mark stage "installing this project's own libc6/libc-bin (dn-glibc)"
 "$HERE/dn-install-glibc.sh" "$DN" "$DN_GLIBC_DEBS"
-mark stage "installing the stand-ins dpkg, apt"
-DN_APT_CONFIG="$T/apt.conf" "$HERE/dn-standins.sh" "$DN"
 
 # 3. Download the base and its dependencies.
 #
@@ -282,22 +289,25 @@ total=$(ls "$T"/debs/*.deb | wc -l)
   done; }
 [ "$(cat "$T/translate.rc")" = 0 ] || { echo "E: translating the base failed" >&2; exit 1; }
 
-# 5. Install with the prefix's dpkg. Unpack order: libraries, then the tools,
-# then everything else (preinsts run at unpack).
-first="" tools="" rest=""
+# 5. Install with Termux's dpkg. Unpack order: the helper packages first
+# (dpkg ships dpkg-maintscript-helper, debconf ships confmodule -- later
+# packages' preinst scripts call them), then libraries, then the tools, then
+# everything else (preinsts run at unpack).
+pre="" first="" tools="" rest=""
 for deb in "$T"/debs/*.deb; do
   p=$(dpkg-deb -f "$deb" Package)
+  case "$p" in dpkg|debconf) pre="$pre $deb"; continue ;; esac
   case " $TOOLS " in *" $p "*) tools="$tools $deb"; continue ;; esac
   case "$p" in lib*|zlib*) first="$first $deb" ;; *) rest="$rest $deb" ;; esac
 done
 mark stage "unpacking"
 mark count Unpacking "$total" packages
-$DPKG --force-depends --unpack $first $tools $rest
+$DPKG --force-depends --unpack $pre $first $tools $rest
 mark stage "configuring"
 mark count Setting "$total" packages
 $DPKG --configure -a
-for p in $BASE; do echo "$p:arm64 hold"; done | "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --set-selections
-for p in $BASE; do echo "$p set on hold."; done
+for p in $TOOLS $SYSTEM; do echo "$p:arm64 hold"; done | "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --set-selections
+for p in $TOOLS $SYSTEM; do echo "$p set on hold."; done
 # The base is the prefix's own system, not programs for the user's shell:
 # make-launchers.sh gives it no launchers, so Termux's ls/sed/grep stay first.
 echo $BASE $KEYRING | tr ' ' '\n' > "$DN/var/lib/deb-native/base-packages"
@@ -343,19 +353,16 @@ Dpkg::Options:: "--instdir=$DN";
 Dpkg::Options:: "--admindir=$DN/var/lib/dpkg";
 Dpkg::Options:: "--force-not-root";
 Dpkg::Options:: "--force-script-chrootless";
-// apt forks dpkg directly via its own compiled-in Dir::Bin::dpkg default
-// (Termux's real binary, not the launcher()-generated $DN/usr/bin/dpkg
-// wrapper that sets this same PATH) -- an apt-driven install's maintainer
-// scripts otherwise can't see $DN/usr/bin at all, so anything only shipped
-// there (dpkg-maintscript-helper: Termux's own dpkg doesn't ship it; the
-// dpkg stand-in's own copy, dn-standins.sh) fails "not found" (found
-// installing gcc's dependency cpp, 2026-10-01). DPkg::Path is apt's own
-// hook for exactly this -- it is read even though Dir::Bin::dpkg itself
-// is not overridden.
+// DPkg::Path is the PATH apt gives the dpkg it forks and the maintainer
+// scripts that run under it -- apt reads it even though Dir::Bin::dpkg
+// itself is not overridden.
 // priv/ first: a maintainer script's update-alternatives/dpkg-divert must hit
-// the prefix's own wrappers (setup-runtime.sh), not Termux's; and never put
-// $TP/bin on a maintainer script's PATH (runtime independence, 0.7.0).
-DPkg::Path "$DN/usr/lib/deb-native/priv:$DN/usr/bin:$DN/usr/sbin";
+// the prefix's own wrappers (setup-runtime.sh), not Termux's. The prefix's
+// own bin dirs next; Termux's $TP/bin LAST as a last-resort fallback for the
+// bootstrap only -- installing Debian's dpkg itself needs start-stop-daemon,
+// which the prefix does not have yet -- and never wins a name once the base
+// is in place (0.7.0).
+DPkg::Path "$DN/usr/lib/deb-native/priv:$DN/usr/bin:$DN/usr/sbin:$TP/bin";
 DPkg::Pre-Install-Pkgs { "$INSTALL/dn-hook-pre.sh $DN"; };
 DPkg::Tools::Options::$INSTALL/dn-hook-pre.sh "";
 DPkg::Tools::Options::$INSTALL/dn-hook-pre.sh::Version "3";

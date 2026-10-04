@@ -78,7 +78,14 @@ done
 
 LIBDIR="$DN/usr/lib/deb-native"
 mkdir -p "$LIBDIR"
-cp -f "$DEBS/path-redirect.so" "$LIBDIR/path-redirect.so"
+# Keep the shim setup-runtime.sh just built from this checkout's
+# native/path-redirect.c (0.7.0: it carries the system()/popen()/pclose() and
+# link()/linkat() fallbacks the Debian apt/dpkg deploy needs). Only fall back
+# to the bundle's prebuilt shim if the local build is missing -- the rolling
+# glibc-bundle predates these fixes.
+if [ ! -e "$LIBDIR/path-redirect.so" ]; then
+  cp -f "$DEBS/path-redirect.so" "$LIBDIR/path-redirect.so"
+fi
 chmod 755 "$LIBDIR/path-redirect.so"
 
 mkdir -p "$DN/etc"

@@ -148,7 +148,9 @@ done
 # (dn-fix-alternatives.sh): until then the command itself (awk) is broken.
 cat > "$PRIV/update-alternatives" <<EOF
 #!/system/bin/sh
-DPKG_ROOT="$INSTDIR" "$INSTDIR/usr/bin/update-alternatives" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log /var/log/alternatives.log "\$@"
+ua="$INSTDIR/usr/bin/update-alternatives"
+[ -x "\$ua" ] || ua="$PREFIX_DIR/bin/update-alternatives"
+DPKG_ROOT="$INSTDIR" "\$ua" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log /var/log/alternatives.log "\$@"
 rc=\$?
 "$HERE/dn-fix-alternatives.sh" "$INSTDIR"
 exit \$rc
@@ -159,9 +161,25 @@ rm -f "$BINDIR/update-alternatives"   # 0.1.x location
 # compiled-in admindir (traced: $ROOT$PREFIX/var/lib/dpkg/diversions).
 cat > "$PRIV/dpkg-divert" <<EOF
 #!/system/bin/sh
-exec "$INSTDIR/usr/bin/dpkg-divert" --admindir "$INSTDIR/var/lib/dpkg" --instdir "$INSTDIR" "\$@"
+d="$INSTDIR/usr/bin/dpkg-divert"
+[ -x "\$d" ] || d="$INSTDIR/usr/sbin/dpkg-divert"
+[ -x "\$d" ] || d="$PREFIX_DIR/bin/dpkg-divert"
+exec "\$d" --admindir "$INSTDIR/var/lib/dpkg" --instdir "$INSTDIR" "\$@"
 EOF
 chmod 755 "$PRIV/dpkg-divert"
+
+# dpkg-trigger: libc6's postinst calls it before any Debian dpkg exists in the
+# prefix, and the prefix has no trigger system (services are out of scope), so
+# a missing prefix dpkg-trigger is a no-op at bootstrap; once Debian's dpkg is
+# installed (dn-install-aptdpkg.sh), the prefix's own runs. Never Termux's --
+# that would register the trigger in Termux's own database.
+cat > "$PRIV/dpkg-trigger" <<EOF
+#!/system/bin/sh
+t="$INSTDIR/usr/bin/dpkg-trigger"
+[ -x "\$t" ] && exec "\$t" "\$@"
+exit 0
+EOF
+chmod 755 "$PRIV/dpkg-trigger"
 
 # chroot -- TEMPORARY FIX (hotfix 0.2.1). dpkg sets DPKG_ROOT to the prefix
 # for maintainer scripts, and Debian's DPKG_ROOT support runs commands as
@@ -211,7 +229,7 @@ cat > "$PRIV/getent" <<EOF
 #!/system/bin/sh
 case "\$1" in
   passwd|group|shadow|gshadow) ;;
-  *) exec "$INSTDIR/usr/bin/getent" "\$@" ;;
+  *) g="$INSTDIR/usr/bin/getent"; [ -x "\$g" ] || g="$GLIBC/bin/getent"; exec "\$g" "\$@" ;;
 esac
 db=\$1; shift
 f="$INSTDIR/etc/\$db"

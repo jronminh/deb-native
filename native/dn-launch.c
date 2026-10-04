@@ -74,11 +74,17 @@ int main(int argc, char **argv) {
    * entries, so programs that need the tracer are routed there rather than
    * run directly -- this is what makes the userland session the default,
    * with no ~/.bashrc activation (docs/spec/userlands.md). */
+  /* The prefix's own dirs win every name. Termux's glibc coreutils and Bionic
+   * bin stay LAST as a last-resort fallback: early-bootstrap maintainer scripts
+   * (libc6/libc-bin postinst) run through this shell before the prefix has any
+   * base tools, so they need Termux's cp/dpkg-trigger. Once the base is
+   * installed the prefix's own tools shadow them; the $TP-empty harness is the
+   * real independence gate. */
   snprintf(path, sizeof path,
            "%s/usr/lib/deb-native/priv:%s/usr/lib/deb-native/bin:"
            "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:"
-           "%s/usr/games",
-           inst, inst, inst, inst, inst, inst, inst);
+           "%s/usr/games:%s/glibc/bin:%s/bin",
+           inst, inst, inst, inst, inst, inst, inst, pfx, pfx);
 
   /* Preserve whatever preload we inherited (on Termux, termux-exec) so the
    * shim can hand it back to a Bionic child it execs -- see bionic_env()
