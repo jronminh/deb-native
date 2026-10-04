@@ -9,7 +9,7 @@
 > topic, a new one-off investigation, or a new guide -- not just a
 > long addition to what a doc already covers.
 
-The shim ([`shim-coverage.md`](shim-coverage.md)) rewrites paths at the
+The shim ([`shim-coverage.md`](../spec/shim/shim-coverage.md)) rewrites paths at the
 **preemptible dynamic symbol** layer. Everything that reaches the filesystem
 without crossing such a symbol is out of its reach. This doc maps that wider
 boundary, measures it against the in-scope corpus, and records where Termux's
@@ -30,11 +30,11 @@ existing answer (`proot`) already applies.
 
 ## Related docs
 
-- [`shim-coverage.md`](shim-coverage.md) — the shim this doc's boundary
+- [`shim-coverage.md`](../spec/shim/shim-coverage.md) — the shim this doc's boundary
   sits beyond.
-- [`direct-usage.md`](direct-usage.md) — the living investigation into
+- [`direct-usage.md`](../spec/tracer/direct-usage.md) — the living investigation into
   what actually crosses this boundary.
-- [`tracer.md`](tracer.md) — the mechanism that reaches past it.
+- [`tracer.md`](../spec/tracer/tracer.md) — the mechanism that reaches past it.
 - [`android-platform.md`](android-platform.md) — the Android-specific
   limits (seccomp/capability/SELinux) layered on top of this boundary.
 
@@ -56,7 +56,7 @@ one function instead of needing a tracer. Nothing in the current shim does.
 
 ## Measured against the corpus
 
-Corpus: the 258 in-scope packages from [`shim-coverage.md`](shim-coverage.md),
+Corpus: the 258 in-scope packages from [`shim-coverage.md`](../spec/shim/shim-coverage.md),
 extracted to 668 ELFs.
 
 - **7 `ET_EXEC`** (non-PIE executables), **246 PIE executables** (dynamic),
@@ -167,7 +167,7 @@ python3 scripts/bench/scan-direct-syscalls.py DIR --verify --list
 ## Open questions
 
 These are tracked, with an experiment log and the mechanism decision, in
-[`direct-usage.md`](direct-usage.md).
+[`direct-usage.md`](../spec/tracer/direct-usage.md).
 
 - The corpus is dominated by **libraries** (415 of 668). What matters is the
   in-scope **programs** on `PATH`; that breakdown is not yet done.

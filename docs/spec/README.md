@@ -6,60 +6,32 @@
 > whenever a new directory holds more than a couple of files that
 > aren't self-explanatory from their names alone.
 
-Technical specification: what the project does and how, as it stands
-right now. Read these as ground truth; update them when the design
-changes.
+The project's own design: what it does and how, as it stands right now.
+Read these as ground truth; update them when the design changes. Facts
+about the platform, ABI and formats the project leans on live in
+[`../reference/`](../reference/README.md); comparisons and superseded
+designs live in [`../notes/`](../notes/README.md).
 
-- `design.md` — the live design: scope, the 0.2.0 self-contained prefix
-  (what's actually built), day-to-day commands, fake root. One doc,
-  accumulated over releases; points out to the files below for depth or
-  history.
-- `path-shim.md` — the path-redirect shim: design, verification, and the
-  ways a glibc target can be made to load it.
-- `native-reuse.md` — native dependency reuse: how `native-seed.sh`
-  matched a Debian dependency against Termux's `*-glibc` packages, before
-  the real `libc6` stand-in made it unnecessary. Superseded, kept as the
-  record.
-- `classic-design.md` — the pre-0.2.0 approach (plain `dpkg --instdir`,
-  static per-binary wrappers, the services research) — superseded in
-  large part by the 0.2.0 pivot, kept as the record.
-- `prior-art.md` — sudo-less and proroot: what carries over, what doesn't.
-- `vs-sudo-less.md` — the structured, per-concern diff against sudo-less.
-- `alternatives.md` — comparison with the other ways to run Debian on
-  Android (chroot, proot-distro, namespaces, ...).
-- `standard.md` — package scope: what "supported" means and how a claim
-  about a package is written down and proved.
+- `design.md` — the live design: scope, the self-contained prefix,
+  day-to-day commands, fake root. Accumulated over releases; points out
+  to the files here and below for depth.
+- `dn-glibc-prefix.md` — the prefix's glibc: its own loader built for the
+  prefix, and the packaging + GCC lifecycle that make it installable.
 - `install-flow.md` — the bootstrap/install order, end to end.
-- `package-lifecycle.md` — one package's lifecycle, stage by stage, mapped to
-  the hook/script/layer that handles each (`install-flow.md` is the
+- `package-lifecycle.md` — one package's lifecycle, stage by stage, mapped
+  to the hook/script/layer that handles each (`install-flow.md` is the
   one-time bootstrap instead).
 - `host-userland.md` — the two roots (Termux host + Debian userland) and
-  the interface over them: the userland is the default session; `termux-shell`
-  crosses to the host, `dn-shell` back; distinct prompts and a `pkg` guard.
-- `known-issues.md` — the confirmed breakages in the current tree, each
-  with how to reproduce it and its root cause.
-- `multiarch-mechanics.md` — dpkg multi-arch mechanics as the prefix's
-  apt/dpkg uses them.
-- `path-shim.md` is the mechanism; the boundary around it:
-  - `shim-coverage.md` — which libc entry points the shim covers (+
-    `coverage/`, the measured corpus data).
-  - `syscall-boundary.md` — what libc interposition cannot see at all.
-  - `direct-usage.md` — living investigation into what bypasses the shim.
-  - `bind-only.md` — the tracer's bind-only path fast path.
-  - `tracer.md` — the syscall tracer (`dn-trace`) itself.
-- `elf-interp-patch.md` — the one on-disk ELF edit deb-native makes
-  (`PT_INTERP`): exact fields touched, why the string usually has to
-  move, what `patchelf` does, and a sketch for a self-brewed
-  replacement (`dn-elf`).
-- `dn-glibc-prefix.md` — the current prefix: glibc's own loader built for
-  the prefix, and the packaging + GCC lifecycle that make it installable.
+  the interface over them: the userland is the default session;
+  `termux-shell` crosses to the host, `dn-shell` back; distinct prompts
+  and a `pkg` guard.
 - `deploy.md` — how a `dn-glibc` prefix is deployed: install Debian's real
-  `libc6`/`libc-bin`, then swap in the 10 patched files; the rest of the
+  `libc6`/`libc-bin`, then swap in the patched files; the rest of the
   bootstrap is unchanged.
-- `dl-mechanics.md` — reference catalog of glibc's dynamic-linker
-  mechanisms (env, files, CLI, dynamic tags, tunables, audit), and how
-  leaning on them keeps the `dn-glibc` loader patch small.
-- `runtime-failures.md` — what goes wrong when *running* a program,
-  grouped by cause.
-- `android-platform.md` — the Android enforcement-gate taxonomy (seccomp/
-  capability/SELinux) and the glibc patch's per-file fork verdict.
+
+Subdirectories, each with its own index:
+
+- [`shim/`](shim/README.md) — the path-redirect shim and what it does not
+  cover.
+- [`tracer/`](tracer/README.md) — the syscall tracer (`dn-trace`) and its
+  bind-only path.

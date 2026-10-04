@@ -44,7 +44,7 @@ the host is reached through one explicit, nested command. Installed by
 - [`dn-glibc-prefix.md`](dn-glibc-prefix.md) — the prefix itself, its
   loader, and why it reaches the host only through the tracer for
   static/raw-syscall programs.
-- [`tracer.md`](tracer.md) / [`syscall-boundary.md`](syscall-boundary.md)
+- [`tracer.md`](tracer/tracer.md) / [`syscall-boundary.md`](../reference/syscall-boundary.md)
   — the host-side machinery the userland still needs.
 
 ## The two worlds

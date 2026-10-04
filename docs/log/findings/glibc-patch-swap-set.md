@@ -33,7 +33,7 @@ patch. No code changed -- this is the analysis a deployment plan needs.
 
 - [`../../spec/dn-glibc-prefix.md`](../../spec/dn-glibc-prefix.md) -- the
   next-gen prefix this swap would deploy.
-- [`../../spec/shim-coverage.md`](../../spec/shim-coverage.md) -- documents
+- [`../../spec/shim/shim-coverage.md`](../../spec/shim/shim-coverage.md) -- documents
   the NSS stubs and why NSS reads are not shimmable.
 - [`own-glibc-missing-libc-bin.md`](own-glibc-missing-libc-bin.md) -- why
   `libc-bin` is path-sensitive and must be this project's build.
@@ -115,7 +115,7 @@ declaration-only `unistd.h` or the unused `P_tmpdir`/`_PATH_*` macros.
 but this is **expected, not a build bug**: `libc.so.6` itself defines
 `_nss_files_*`/`_nss_dns_*`, and the two modules are empty ABI stubs. Stock
 Debian glibc is identical. The full account is in
-[`../../spec/shim-coverage.md`](../../spec/shim-coverage.md) ("NSS lookups --
+[`../../spec/shim/shim-coverage.md`](../../spec/shim/shim-coverage.md) ("NSS lookups --
 confirmed out of the shim's reach"); the patch's `nss/nss_files/files-*.c`
 edits therefore land in `libc.so.6`, which is already file 1 above. The two
 stubs are correctly *not* in the swap set.

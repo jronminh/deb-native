@@ -15,7 +15,7 @@ runtime path, run manually.
   doesn't demote or kill it while Termux isn't the foreground app.
 - `scan-libc-symbols.sh` — scans ELFs for the dynamic libc symbols they
   import, to find which path-taking entry points the shim must intercept.
-  See [`../../docs/spec/shim-coverage.md`](../../docs/spec/shim-coverage.md).
+  See [`../../docs/spec/shim/shim-coverage.md`](../../docs/spec/shim/shim-coverage.md).
 - `scan-direct-syscalls.py` — scans ELFs for direct syscall usage (raw
   `svc #0`, no libc symbol) that the shim can't see at all. See
-  [`../../docs/spec/syscall-boundary.md`](../../docs/spec/syscall-boundary.md).
+  [`../../docs/reference/syscall-boundary.md`](../../docs/reference/syscall-boundary.md).

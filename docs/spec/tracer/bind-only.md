@@ -1,6 +1,6 @@
 # Bind-only fork-lite — what is safe to remove
 
-> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> Template: [`templates/docs.template.md`](../../../templates/docs.template.md)
 > (fix the relative path to match this file's depth). Read a doc's
 > summary and table of contents below before its sections, and read
 > its directory's own `README.md` first to confirm this is the right
@@ -13,7 +13,7 @@ Audit of `tracer/` (fork-lite, the reduced arm64-only PRoot) to turn it into a
 **bind-only** path tracer suited to this project's scope. Findings only; no
 code changed. Method: read the actual tree, cite `file:line`. See
 [`direct-usage.md`](direct-usage.md) for the fork-lite plan and
-[`syscall-boundary.md`](syscall-boundary.md) for why syscall-level rewriting is
+[`syscall-boundary.md`](../../reference/syscall-boundary.md) for why syscall-level rewriting is
 needed at all.
 
 ## Contents
@@ -33,7 +33,7 @@ needed at all.
 
 - [`direct-usage.md`](direct-usage.md) — the fork-lite plan this audit
   feeds into.
-- [`syscall-boundary.md`](syscall-boundary.md) — why syscall-level
+- [`syscall-boundary.md`](../../reference/syscall-boundary.md) — why syscall-level
   rewriting is needed at all.
 - [`tracer.md`](tracer.md) — what fork-lite became after this audit.
 

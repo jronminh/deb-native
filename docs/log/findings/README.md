@@ -59,7 +59,7 @@ below, oldest first, matching the original file's order.
   env, branch dispatch, `memcpy`, `-O2` build) — no stable end-to-end
   number claimed, but the code changes are unconditional wins.
 - **Platform sandbox limits, by direct probe** — 2026-09-26: moved
-  entirely into [`../../spec/android-platform.md`](../../spec/android-platform.md)
+  entirely into [`../../reference/android-platform.md`](../../reference/android-platform.md)
   ("Device probe: sandbox limits confirmed directly") at the time; no
   separate file here, just this pointer.
 - [`finishing-libc-level-shim.md`](finishing-libc-level-shim.md) —

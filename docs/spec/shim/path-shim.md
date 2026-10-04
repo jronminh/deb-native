@@ -1,6 +1,6 @@
 # The path-redirect shim: design and delivery
 
-> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> Template: [`templates/docs.template.md`](../../../templates/docs.template.md)
 > (fix the relative path to match this file's depth). Read a doc's
 > summary and table of contents below before its sections, and read
 > its directory's own `README.md` first to confirm this is the right
@@ -13,7 +13,7 @@ How `native/path-redirect.c` fakes the Debian layout without a kernel
 view — the one gap left once everything else (dynamic linker search
 path, interpreter module paths, the ELF interpreter itself) was already
 solved elsewhere — and the ways a glibc target can actually be made to
-load it. Split out of [`design.md`](design.md) (it was the single
+load it. Split out of [`design.md`](../design.md) (it was the single
 largest section there).
 
 ## Contents
@@ -23,15 +23,15 @@ largest section there).
 
 ## Related docs
 
-- [`design.md`](design.md) — the doc this was split out of; the current,
+- [`design.md`](../design.md) — the doc this was split out of; the current,
   live design overview.
 - [`shim-coverage.md`](shim-coverage.md) — which libc entry points the
   shim built here actually covers, measured against a package corpus.
-- [`syscall-boundary.md`](syscall-boundary.md) — what this shim cannot
+- [`syscall-boundary.md`](../../reference/syscall-boundary.md) — what this shim cannot
   reach at all (static binaries, raw syscalls, libc-internal NSS).
-- [`classic-design.md`](classic-design.md) — Direction 2's wrapper
+- [`classic-design.md`](../../notes/classic-design.md) — Direction 2's wrapper
   generation, which this doc's "Open work" items point into.
-- [`prior-art.md`](prior-art.md) — the view this shim replaces, and
+- [`prior-art.md`](../../notes/prior-art.md) — the view this shim replaces, and
   sudo-less's own "no shims needed" framing it responds to.
 
 ## Faking the Debian layout with our own shim (no kernel view)
@@ -110,7 +110,7 @@ mount" — a "manual overlay" in the sense the request that prompted this
 doc used the term: since the overlay itself is unbuildable, redirect the
 specific calls that would have needed it, one prefix mapping at a time,
 per-process (via env vars set alongside `LD_PRELOAD` when running the
-wrapped binary — ties directly into [`classic-design.md`](classic-design.md)'s wrapper
+wrapped binary — ties directly into [`classic-design.md`](../../notes/classic-design.md)'s wrapper
 scripts: the wrapper sets `DN_REDIRECT_FROM`/`DN_REDIRECT_TO`/
 `LD_PRELOAD` before `exec`ing the real binary).
 
@@ -248,7 +248,7 @@ shim above.
 
 - [ ] Generalize past one hardcoded `DN_REDIRECT_FROM`/`_TO` pair to a
       real mapping table (multiple prefixes per process) — needed once
-      this is wired into [`classic-design.md`](classic-design.md)'s wrapper-generation pipeline
+      this is wired into [`classic-design.md`](../../notes/classic-design.md)'s wrapper-generation pipeline
       for packages with more than one hardcoded path.
 - [x] The top-level redirect **roots** are caller-configurable:
       `DN_REDIRECT_PREFIXES` (a `:`-separated list a caller can set)
@@ -266,13 +266,13 @@ shim above.
       interposition cannot reach — static binaries, raw `syscall()`,
       libc-internal opens — is the syscall tracer's job.
 - [ ] Decide how the wrapper script generated per binary
-      ([`classic-design.md`](classic-design.md)) computes each binary's
+      ([`classic-design.md`](../../notes/classic-design.md)) computes each binary's
       `DN_REDIRECT_FROM`/`_TO` pairs — likely from `prefix-wrap`-style
       detection (which absolute paths under `/usr`, `/etc`, `/opt` does
       this package's own file list touch) rather than hand-set env vars.
 - [ ] Statically-linked binaries (no dynamic libc calls to intercept) are
       not reachable by this mechanism at all — same as `LD_PRELOAD`'s
-      general limitation, flagged in [`design.md`](design.md), now
+      general limitation, flagged in [`design.md`](../design.md), now
       confirmed as the actual remaining unreachable case rather than a
       theoretical one.
 - [ ] Confirm whether the `EINVAL` on `CLONE_NEWUSER` is universal across
@@ -305,6 +305,6 @@ has no dynamic symbols and no loader** — its libc is compiled in — so none o
 the above reaches it. The same is true of raw `syscall()` and libc-internal
 calls such as `dlopen`. Those need a syscall-level tracer
 (`ptrace` / `SECCOMP_RET_USER_NOTIF`) inside the app uid, which the platform
-probe shows is available ([`android-platform.md`](android-platform.md), "Device probe:
+probe shows is available ([`android-platform.md`](../../reference/android-platform.md), "Device probe:
 sandbox limits confirmed directly").
 

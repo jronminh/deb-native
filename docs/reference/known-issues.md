@@ -180,7 +180,7 @@ These still need their workaround; it is just installed for you, in
   (`__dn_prefix_get` is NULL, `__dn_build` yields empty paths). The bootstrap
   runs it under the tracer with explicit `-C`/`-f` and ignores its exit
   status; a missing `ld.so.cache` is non-fatal
-  ([`deploy.md`](deploy.md)).
+  ([`deploy.md`](../spec/deploy.md)).
 
 ## Design limitations
 

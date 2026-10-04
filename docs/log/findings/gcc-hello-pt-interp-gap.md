@@ -46,7 +46,7 @@ by the compiler toolchain instead of by corpus inspection first.
 Considered two fixes: a "full view" (redirect every top-level path
 through the shim, matching a real chroot more closely) vs. extending the
 existing targeted dispatch with just the three missing merged-usr
-aliases. Chose the latter (full detail: `docs/spec/shim-coverage.md`'s
+aliases. Chose the latter (full detail: `docs/spec/shim/shim-coverage.md`'s
 now-resolved "the five-prefix view may be too narrow" section) --
 `native/path-redirect.c`'s `rewrite()` now also dispatches `/lib`, `/bin`
 (second byte `'l'`/`'b'`, default `prelen = 4`) and `/sbin` (`'s'`,

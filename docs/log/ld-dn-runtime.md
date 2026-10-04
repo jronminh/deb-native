@@ -15,7 +15,7 @@ interpreter trampoline, slated for rename to `dn-interp`, `TODO.md`
 "Runtime overhaul") actually *does*, as a phase model with line anchors --
 for reviewing or re-reading the file, and for future reference when the
 rename lands. Its static counterpart (how `PT_INTERP` is rewritten to point
-here) is [`elf-interp-patch.md`](../spec/elf-interp-patch.md).
+here) is [`elf-interp-patch.md`](../reference/elf-interp-patch.md).
 
 Living doc: tracks the shipped code, not a proposal.
 
@@ -33,10 +33,10 @@ Living doc: tracks the shipped code, not a proposal.
 
 - [`ld-dn-config.md`](ld-dn-config.md) -- the policy/config file this
   loader reads; the data side of the same component.
-- [`elf-interp-patch.md`](../spec/elf-interp-patch.md) -- the static
+- [`elf-interp-patch.md`](../reference/elf-interp-patch.md) -- the static
   `PT_INTERP` patch that makes the kernel pick this file in the first
   place; the other half of the mechanism.
-- [`path-shim.md`](../spec/path-shim.md) -- the `LD_PRELOAD` shim this loader
+- [`path-shim.md`](../spec/shim/path-shim.md) -- the `LD_PRELOAD` shim this loader
   injects into the environment it builds.
 - [`design.md`](../spec/design.md) -- scope and the three path mechanisms; this
   doc is the deepest look at the runtime one.

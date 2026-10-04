@@ -10,7 +10,7 @@ Compatibility surveys, run manually against package samples. See
 [`../../docs/log/survey-0.2.0.md`](../../docs/log/survey-0.2.0.md) for the
 latest results. The 0.1.x prototype pipeline this once ran on
 (`survey.sh`, `prototype-install.sh`) is gone — see
-[`../../docs/spec/classic-design.md`](../../docs/spec/classic-design.md)
+[`../../docs/notes/classic-design.md`](../../docs/notes/classic-design.md)
 for the record of that approach.
 
 - `survey-apt.sh` — installs a random sample of real Debian `.deb`s

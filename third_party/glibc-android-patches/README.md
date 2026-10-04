@@ -7,7 +7,7 @@
 > aren't self-explanatory from their names alone.
 
 0.5.0's "own glibc" milestone 1 (see `TODO.md`'s 0.5.0 roadmap and
-`docs/spec/android-platform.md`'s "Termux's Android glibc patch: catalog
+`docs/reference/android-platform.md`'s "Termux's Android glibc patch: catalog
 and fork verdict" section for the catalog; `docs/log/android-seccomp-audit.md`
 has the full investigation history). One combined, ready-to-apply patch that
 turns Debian's real, unmodified `glibc` source into a build that runs under
@@ -25,7 +25,7 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
   a direct on-device test, `android-seccomp-audit.md`).
 - **This patch:** forked from [`termux-pacman/glibc-packages`](https://github.com/termux-pacman/glibc-packages)
   (`gpkg/glibc/`, GPL-2.0+, same license as glibc itself). Per-file fork
-  verdict for all 54 loose files there is in `docs/spec/android-platform.md`,
+  verdict for all 54 loose files there is in `docs/reference/android-platform.md`,
   "Per-file verdict, everything in `gpkg/glibc/`" — this patch carries every file marked
   "fork" there. Highlights:
   - `set-dirs.patch`: `@TERMUX_PREFIX_CLASSICAL@` resolved to the same
@@ -82,7 +82,7 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
 
 ## Explicitly not included yet (parked, not forgotten)
 
-**Fake-root-entangled, waiting on that decision** (`docs/spec/android-platform.md`,
+**Fake-root-entangled, waiting on that decision** (`docs/reference/android-platform.md`,
 "Per-file verdict, everything in `gpkg/glibc/`"): the `"0"`-bucket entries in
 `fakesyscall.json` (`setuid`/`setgid`/`setreuid`/`setregid`/`setresuid`/
 `setresgid`/`setfsuid`/`setfsgid`), `setfsuid.c`, `setfsgid.c`, and the

@@ -25,17 +25,17 @@ live in their own docs, listed below.
 
 ## Related docs
 
-- [`path-shim.md`](path-shim.md) — the path-redirect shim: design,
+- [`path-shim.md`](shim/path-shim.md) — the path-redirect shim: design,
   verification, delivery mechanisms. Split out of this doc.
-- [`native-reuse.md`](native-reuse.md) — native dependency reuse
+- [`native-reuse.md`](../notes/native-reuse.md) — native dependency reuse
   (`native-seed.sh`, since superseded). Split out of this doc.
-- [`classic-design.md`](classic-design.md) — the pre-0.2.0 approach
+- [`classic-design.md`](../notes/classic-design.md) — the pre-0.2.0 approach
   (plain `dpkg --instdir`, static per-binary wrappers, the services
   research) — superseded in large part by the 0.2.0 pivot below. Split
   out of this doc.
-- [`prior-art.md`](prior-art.md) — sudo-less and proroot. Split out of
+- [`prior-art.md`](../notes/prior-art.md) — sudo-less and proroot. Split out of
   this doc.
-- [`android-platform.md`](android-platform.md) — the fake-root-entangled
+- [`android-platform.md`](../reference/android-platform.md) — the fake-root-entangled
   glibc patch bucket mentioned under "Fake root" below.
 
 ## Scope and design philosophy
@@ -59,7 +59,7 @@ Everything in between can be ignored. And because this is an **adapter, not an
 emulator**, coverage is a named boundary rather than a promise: paths that go
 around libc — static binaries, raw `syscall()`, libc-internal `dlopen`, socket
 `sun_path` — are out of scope until the syscall-level tracer
-([`tracer.md`](tracer.md)) and `TODO.md` / issue #1.
+([`tracer.md`](tracer/tracer.md)) and `TODO.md` / issue #1.
 
 
 ## The 0.2.0 pivot: a self-contained prefix
@@ -219,7 +219,7 @@ destination -- the real fix for packages that need an actual second
 identity is a services/sudo layer (`TODO.md`), not a stronger fake. Kept
 exactly as released; the parked `set-fakesyscalls-parked.patch` (0.5.0's
 glibc patch, the `setuid`/`setgid`/... "0" bucket,
-[`android-platform.md`](android-platform.md)) stays unapplied for the
+[`android-platform.md`](../reference/android-platform.md)) stays unapplied for the
 same reason -- nothing about fake-root is being extended.
 
 **Mechanism:** the shim (`native/path-redirect.c`) fakes

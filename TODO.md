@@ -2,7 +2,7 @@
 
 Ordered the way `sudo-less` orders its own work (`docs/spec/design.md`, "Order
 of work"), judged by its criterion: **per-section coverage from a random
-sample**, not feature count. See [`docs/spec/vs-sudo-less.md`](docs/spec/vs-sudo-less.md)
+sample**, not feature count. See [`docs/notes/vs-sudo-less.md`](docs/notes/vs-sudo-less.md)
 for the side-by-side diff.
 
 **Format**: each section below has a **Goal** (stable, rarely changes), a
@@ -196,15 +196,15 @@ discussion below is kept for the record, not as planned work.
 **Tracer-cost discussion (2026-09-30, record only — not planned work per
 the note above)**:
 1. `SECCOMP_RET_USER_NOTIF` instead of `ptrace` for `dn-trace` — flagged
-   as "the endgame" in `docs/spec/direct-usage.md`/`docs/spec/syscall-boundary.md`/
-   `docs/spec/shim-coverage.md`, never attempted. Can allow/deny/inject an
+   as "the endgame" in `docs/spec/tracer/direct-usage.md`/`docs/reference/syscall-boundary.md`/
+   `docs/spec/shim/shim-coverage.md`, never attempted. Can allow/deny/inject an
    fd/return a value, but cannot rewrite a syscall's arguments in place
    the way `ptrace` can (path rewriting, the tracer's main job, would
    need `process_vm_writev`) — needs a small prototype against
    `dn-trace`'s rewrite paths (`path/path.c`) before committing.
 2. Narrow what still falls through to the tracer, rather than speeding it
    up. Widening the *shim* to catch NSS was tried and closed negative
-   (`docs/spec/shim-coverage.md`, `docs/spec/syscall-boundary.md`) — glibc's NSS
+   (`docs/spec/shim/shim-coverage.md`, `docs/reference/syscall-boundary.md`) — glibc's NSS
    opens through a private, link-time-bound symbol no `LD_PRELOAD`
    reaches. 0.5.0's own-glibc is the real fix (below). Cheaper interim,
    not started: narrow `native/dn-run.c`'s `classify()`/`has_nss_import()`
@@ -275,7 +275,7 @@ project can read the prefix's `/etc` directly, no tracer route needed.
 below glibc entirely (a syscall failing there fails the same way no
 matter which library issued it) — the app seccomp allowlist, capability/
 kernel-config gaps, and SELinux (full detail:
-[`docs/spec/android-platform.md`](docs/spec/android-platform.md)). Its
+[`docs/reference/android-platform.md`](docs/reference/android-platform.md)). Its
 confirmed leverage is the NSS/loader-internal-path class (NSS, `gconv`,
 locale, `ld.so.cache`, `RUNPATH`) plus whatever syscall stock Debian
 `libc6` trips at startup. `io_uring` (real gap, Gate A) is deliberately
@@ -293,7 +293,7 @@ natively, terminal I/O (`isatty`/`tcgetattr`/`tcsetattr`, baud-rate
 round-trip) works correctly with no port needed
 (`disable-termios2.patch` turned out unnecessary — `termios2` doesn't
 exist anywhere in glibc 2.41's source). Patch catalog and per-file verdict:
-[`docs/spec/android-platform.md`](docs/spec/android-platform.md). Full
+[`docs/reference/android-platform.md`](docs/reference/android-platform.md). Full
 investigation history:
 [`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md),
 [`docs/log/findings/`](docs/log/findings/README.md). One parked decision: the
@@ -509,7 +509,7 @@ structurally cannot reach (static binaries, raw `syscall()`, libc-internal
 opens) is caught by the tracer instead.
 
 **Status**: the libc-interposition layer is complete for its scope —
-[`docs/spec/shim-coverage.md`](docs/spec/shim-coverage.md)'s 258-package in-scope
+[`docs/spec/shim/shim-coverage.md`](docs/spec/shim/shim-coverage.md)'s 258-package in-scope
 corpus has every imported path-taking symbol intercepted (full family:
 `open`/`stat`/`exec`/`spawn`/`xattr`/`mkfifo`/`mknod`/AF_UNIX/
 `inotify`/`mkstemp`/... — see `tests/shim-libc/run.sh`), except NSS
@@ -540,7 +540,7 @@ postinst all complete with zero segfaults and zero `logcat` crash
 entries.
 
 **Open**:
-- Bake the shim into installed ELFs (`docs/spec/path-shim.md`, "Delivering
+- Bake the shim into installed ELFs (`docs/spec/shim/path-shim.md`, "Delivering
   the shim") so it survives an empty environment — `patchelf --add-needed`/
   `--add-rpath` or a `DT_AUDIT` module; the explicit loader
   (`ld.so --preload`) is the simpler variant.
@@ -573,7 +573,7 @@ entries.
   `survey-prefix.sh`'s `try_program()` already uses ad hoc for
   measurement, just never promoted to a real runtime mechanism; (c) a
   one-time audit of glibc's own source (per glibc build, not per
-  package) against `docs/spec/android-platform.md`'s allowlist, to name
+  package) against `docs/reference/android-platform.md`'s allowlist, to name
   the exact handful of public libc functions with a probe-and-fallback
   syscall pattern, then watch only those in the shim — more precise
   than (b), more upfront cost, pays off once instead of per-crash.
@@ -684,7 +684,7 @@ should re-read the rest of the runtime for the same class of misnomer.
   (`dn-run`'s "launch classifier", ...); fold findings into the "Runtime
   component audit" above.
 - Build the self-brewed replacement (`dn-elf`) per
-  `docs/spec/elf-interp-patch.md`: read/set the one `PT_INTERP` field in
+  `docs/reference/elf-interp-patch.md`: read/set the one `PT_INTERP` field in
   `dn-translate-deb.sh` (its only call site), dropping `patchelf` and its
   failure modes.
 
@@ -715,7 +715,7 @@ should re-read the rest of the runtime for the same class of misnomer.
   linking a plain `gcc -o hello hello.c`~~ — fixed 2026-10-01: added
   `/lib`, `/bin`, `/sbin` as three more redirected prefixes (Debian's own
   merged-usr aliases for `/usr/{lib,bin,sbin}`, same symlinks the
-  prefix's `base-files` already sets up) — `docs/spec/shim-coverage.md`,
+  prefix's `base-files` already sets up) — `docs/spec/shim/shim-coverage.md`,
   `docs/log/findings/gcc-hello-pt-interp-gap.md`.
 - [x] ~~A `gcc`-linked binary's `PT_INTERP` is a literal, unresolvable
   `/lib/ld-linux-aarch64.so.1` -- fails `cannot execute: required file not
@@ -748,7 +748,7 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
   `apt.conf` instead of leaving it untouched.
 - **Run Tailscale natively** — the target case for the tracer (a static
   Go daemon the shim cannot see). [`docs/guides/tailscale.md`](docs/guides/tailscale.md).
-- **Run wrappers** (`prefix-wrap` equivalent, `docs/spec/classic-design.md`) — the
+- **Run wrappers** (`prefix-wrap` equivalent, `docs/notes/classic-design.md`) — the
   biggest unbuilt piece: for each binary a package puts on `PATH`, detect
   whether it needs path help and generate a wrapper, triggered via apt's
   `DPkg::Post-Invoke`.
@@ -759,7 +759,7 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
   match a `.deb`'s `Depends:` against installed `*-glibc` packages'
   SONAMEs directly, instead of a hand-written name table. Not a revival of
   `native-seed.sh` (gone, replaced by the real `libc6` stand-in) — see
-  `docs/spec/native-reuse.md`, "Where this idea goes next", for the gap
+  `docs/notes/native-reuse.md`, "Where this idea goes next", for the gap
   this would close if ever built.
 - **Launcher/icon/desktop-DB integration** — mostly N/A on Android; do
   only what Termux needs.
@@ -775,7 +775,7 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
 
 ## Blocked / impossible on this device
 
-Kernel-wide, probed 2026-09-26 (`docs/spec/android-platform.md`, "Device
+Kernel-wide, probed 2026-09-26 (`docs/reference/android-platform.md`, "Device
 probe: sandbox limits confirmed directly"): user namespaces off entirely (`CLONE_NEWUSER` = `EINVAL` even
 seccomp-free), mount namespaces need `CAP_SYS_ADMIN`, `/dev/fuse` is
 root-only. Keep these out of scope:

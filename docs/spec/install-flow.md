@@ -11,10 +11,10 @@
 
 From nothing to "any `apt-get install` works". Grounded in the scripts; the
 mechanisms each step installs are documented in
-[`path-shim.md`](path-shim.md) (shim and maintainer-script layers),
-[`tracer.md`](tracer.md) (the tracer),
-[`syscall-boundary.md`](syscall-boundary.md) (what each layer reaches), and
-[`bind-only.md`](bind-only.md) (the tracer's path fast path).
+[`path-shim.md`](shim/path-shim.md) (shim and maintainer-script layers),
+[`tracer.md`](tracer/tracer.md) (the tracer),
+[`syscall-boundary.md`](../reference/syscall-boundary.md) (what each layer reaches), and
+[`bind-only.md`](tracer/bind-only.md) (the tracer's path fast path).
 
 ## Contents
 
@@ -25,13 +25,13 @@ mechanisms each step installs are documented in
 
 ## Related docs
 
-- [`path-shim.md`](path-shim.md) — the shim and maintainer-script
+- [`path-shim.md`](shim/path-shim.md) — the shim and maintainer-script
   layers this flow installs.
-- [`tracer.md`](tracer.md) — the tracer wired in during this flow.
-- [`syscall-boundary.md`](syscall-boundary.md) — what each layer
+- [`tracer.md`](tracer/tracer.md) — the tracer wired in during this flow.
+- [`syscall-boundary.md`](../reference/syscall-boundary.md) — what each layer
   installed here actually reaches.
-- [`bind-only.md`](bind-only.md) — the tracer's path fast path.
-- [`classic-design.md`](classic-design.md) — the pre-0.2.0 install
+- [`bind-only.md`](tracer/bind-only.md) — the tracer's path fast path.
+- [`classic-design.md`](../notes/classic-design.md) — the pre-0.2.0 install
   pipeline this flow superseded.
 
 ## The sequence
@@ -102,8 +102,8 @@ goes through this once.
   `dn-trace` are built from source on-device; Termux's `proot` is not used.
   (`native-seed.sh`'s own stub-database approach is the pre-0.2.0 classic
   design's version of this idea — see
-  [`classic-design.md`](classic-design.md) and
-  [`native-reuse.md`](native-reuse.md) — superseded here by the real
+  [`classic-design.md`](../notes/classic-design.md) and
+  [`native-reuse.md`](../notes/native-reuse.md) — superseded here by the real
   `libc6` stand-in itself satisfying the dependency.)
 
 One-liner: **runtime first → stand-ins + base, downloaded and translated

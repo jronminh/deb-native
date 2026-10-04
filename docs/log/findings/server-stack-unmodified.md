@@ -32,7 +32,7 @@ real code for that project:
 - [`../../guides/python-venv.md`](../../guides/python-venv.md) — the
   venv setup this test ran against, including the unrelated `pytest`/
   `dn-trace` gap this entry's checks did *not* hit.
-- `docs/spec/android-platform.md` — the `kernel-features.h.patch` note
+- `docs/reference/android-platform.md` — the `kernel-features.h.patch` note
   this entry explains is about 0.5.0's own-glibc build, not today's
   runtime.
 
@@ -58,7 +58,7 @@ Termux's own glibc side-install (`glibc-packages`), a mature, widely-used
 package — not yet 0.5.0's own-built `libc6`, which per `TODO.md` is
 "written, forked, and validated... but not yet packaged as the prefix's
 real `libc6`". The `kernel-features.h.patch` note in
-`docs/spec/android-platform.md` ("no
+`docs/reference/android-platform.md` ("no
 separate `accept`/`recv`/`send` syscalls — needed for sockets to work at
 all") describes a fix already folded into *that* own-glibc patch set for
 when it eventually becomes the default; it says nothing about today's

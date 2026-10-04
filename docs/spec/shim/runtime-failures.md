@@ -1,6 +1,6 @@
 # Runtime failure modes
 
-> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> Template: [`templates/docs.template.md`](../../../templates/docs.template.md)
 > (fix the relative path to match this file's depth). Read a doc's
 > summary and table of contents below before its sections, and read
 > its directory's own `README.md` first to confirm this is the right
@@ -14,7 +14,7 @@ it), grouped by cause. Each is tagged with what handles it: **shim** = our
 libc interposer (`native/path-redirect.c`), **tracer** = fork-lite
 (`tracer/`), **—** = nothing today. Coverage of the shim itself is in
 [`shim-coverage.md`](shim-coverage.md); the syscall boundary in
-[`syscall-boundary.md`](syscall-boundary.md).
+[`syscall-boundary.md`](../../reference/syscall-boundary.md).
 
 ## Contents
 
@@ -31,9 +31,9 @@ libc interposer (`native/path-redirect.c`), **tracer** = fork-lite
 ## Related docs
 
 - [`shim-coverage.md`](shim-coverage.md) — coverage of the shim itself.
-- [`syscall-boundary.md`](syscall-boundary.md) — the syscall-level
+- [`syscall-boundary.md`](../../reference/syscall-boundary.md) — the syscall-level
   boundary behind several of these failure modes.
-- [`../guides/tailscale.md`](../guides/tailscale.md) — a static daemon
+- [`../guides/tailscale.md`](../../guides/tailscale.md) — a static daemon
   hitting one of these failure modes in practice.
 
 ## A. Path / filesystem access
@@ -87,7 +87,7 @@ libc interposer (`native/path-redirect.c`), **tracer** = fork-lite
 - **`uname` reports `Android`**, and **`os-release` exists only under the
   shim** → static binaries and anything evading the shim see "other-linux".
   This is exactly Tailscale's installer failure
-  ([`tailscale.md`](../guides/tailscale.md)).
+  ([`tailscale.md`](../../guides/tailscale.md)).
 - **No systemd / dbus / `lsb_release`** → programs that branch on them take
   wrong paths or fail (`systemctl`, `sd_notify`).
 - **Distro / codename branches** in installers and apps.

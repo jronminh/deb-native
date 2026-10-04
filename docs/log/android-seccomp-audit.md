@@ -9,7 +9,7 @@
 > topic, a new one-off investigation, or a new guide -- not just a
 > long addition to what a doc already covers.
 
-Why: `../spec/runtime-failures.md` and `docs/log/findings/` list several things
+Why: `../spec/shim/runtime-failures.md` and `docs/log/findings/` list several things
 Android blocks (`libc6` killed at startup, `set_robust_list` SIGSYS, SysV
 IPC denied, `mount`/`CLONE_NEWNS` `EPERM`, `CLONE_NEWUSER` `EINVAL`), but
 each was found ad hoc, one program at a time. Before scoping 0.5.0 ("our
@@ -22,7 +22,7 @@ SIGSYS-emulation trick, or nothing, can). Method requested: check AOSP
 docs/source first, then test on-device, then conclude -- in that order,
 not the reverse.
 
-Phase 1 (the three enforcement gates) and Phase 2 (reconciling known findings against them) have been extracted as a standing reference: see [`../spec/android-platform.md`](../spec/android-platform.md) — "The three enforcement gates" and "Known findings, by gate". What follows here is the investigation from Phase 2b onward.
+Phase 1 (the three enforcement gates) and Phase 2 (reconciling known findings against them) have been extracted as a standing reference: see [`../reference/android-platform.md`](../reference/android-platform.md) — "The three enforcement gates" and "Known findings, by gate". What follows here is the investigation from Phase 2b onward.
 
 ## Contents
 
@@ -45,10 +45,10 @@ Phase 1 (the three enforcement gates) and Phase 2 (reconciling known findings ag
 
 ## Related docs
 
-- [`../spec/android-platform.md`](../spec/android-platform.md) — the
+- [`../reference/android-platform.md`](../reference/android-platform.md) — the
   standing reference this investigation produced (the gate taxonomy, the
   glibc patch catalog and fork verdict).
-- [`../spec/android-platform.md`](../spec/android-platform.md) —
+- [`../reference/android-platform.md`](../reference/android-platform.md) —
   "Device probe: sandbox limits confirmed directly", the earlier probe
   this audit builds on and reconciles with (originally a
   `docs/log/findings.md` entry, moved there in full).
@@ -109,7 +109,7 @@ probe (`cc` is available in Termux):
 Phase 1: it's not just Gate A (seccomp) and Gate B (capability/kernel
 config) -- there is also **Gate C: SELinux**, enforced independently of
 both (confirmed here: the syscall passed seccomp, no capability was
-needed for what was requested, and it still failed). `../spec/android-platform.md`'s
+needed for what was requested, and it still failed). `../reference/android-platform.md`'s
 probe table already noted "SELinux is enforcing" for both domains but had
 not pinned a concrete syscall to it before this test.
 
@@ -128,7 +128,7 @@ asked again.
 Goal: turn the Phase-1 allowlist into a real allow/deny table for this
 device's actual arch (arm64) and kernel (5.10.240), and classify every
 `runtime-failures.md` entry into Gate A / Gate B / neither, using the
-existing probe method (`../spec/android-platform.md`, "Device probe:
+existing probe method (`../reference/android-platform.md`, "Device probe:
 sandbox limits confirmed directly") --
 Termux app uid (`untrusted_app_27`) and `dsh` shell uid (`u:r:shell:s0`),
 since comparing the two separates "kernel-wide" from "app-seccomp-only."
@@ -327,7 +327,7 @@ confirmed by a syscall that passed A and needed nothing from B yet still
 failed. `io_uring` (group 6) is a confirmed real gap but deliberately
 deferred, not a current goal.
 
-**Net scope for three gates, now named with evidence each** — table moved to [`../spec/android-platform.md`](../spec/android-platform.md) ("The three enforcement gates"), updated with Gate C (SELinux, confirmed just above).
+**Net scope for three gates, now named with evidence each** — table moved to [`../reference/android-platform.md`](../reference/android-platform.md) ("The three enforcement gates"), updated with Gate C (SELinux, confirmed just above).
 
 
 **Closed 2026-09-30 (was "still open" above): stock Debian `libc6` doesn't
@@ -379,7 +379,7 @@ The bug is `ET_EXEC`-only; this section's conclusion stands.
 
 ## Termux's actual Android patch series, and the per-file fork verdict
 
-Extracted as a standing reference once the full read-through below settled: see [`../spec/android-platform.md`](../spec/android-platform.md), "Termux's Android glibc patch: catalog and fork verdict" for the patch catalog and the per-file verdict for all 54 files in `gpkg/glibc/`. The reading pass itself, and the reasoning behind each verdict, happened in this session (2026-09-30) following directly from the Conclusion above.
+Extracted as a standing reference once the full read-through below settled: see [`../reference/android-platform.md`](../reference/android-platform.md), "Termux's Android glibc patch: catalog and fork verdict" for the patch catalog and the per-file verdict for all 54 files in `gpkg/glibc/`. The reading pass itself, and the reasoning behind each verdict, happened in this session (2026-09-30) following directly from the Conclusion above.
 
 ## 0.5.0 first build attempt: partial fork tested, confirmed insufficient (2026-09-30)
 
@@ -418,7 +418,7 @@ the good part and the gap.
   unannounced `SIGSYS` kill, not narrowed to the exact syscall yet.
 - **Expected, matches this doc's own findings above, not a surprise.**
   `set-dirs.patch` alone was never claimed to be sufficient -- the patch
-  catalog (`../spec/android-platform.md`) already named
+  catalog (`../reference/android-platform.md`) already named
   `fakesyscall.json` (the `disabled-syscall.h` mechanism, wired into
   glibc's build via several `.c` files: `mprotect.c`, `syscall.c`,
   `setfsuid.c`/`setfsgid.c`, `fake_epoll_pwait2.c`, the `syscall.S`/
@@ -744,7 +744,7 @@ Matches the prefix's real `/etc/passwd` (`root:*:0:0:root:/root:/bin/bash`)
 exactly -- NSS is genuinely resolving against this project's own `/etc`, at
 runtime, not just carrying the right path as a dead string. This closes the
 loop `set-dirs.patch` was forked for in the first place: the tracer's NSS
-route (`../spec/shim-coverage.md`, "Resolved 2026-09-26") is no longer the only
+route (`../spec/shim/shim-coverage.md`, "Resolved 2026-09-26") is no longer the only
 way to get this -- own-glibc now does it natively, no tracer needed, for any
 program linked against it.
 

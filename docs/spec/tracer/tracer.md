@@ -1,6 +1,6 @@
 # The tracer: `dn-trace`
 
-> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> Template: [`templates/docs.template.md`](../../../templates/docs.template.md)
 > (fix the relative path to match this file's depth). Read a doc's
 > summary and table of contents below before its sections, and read
 > its directory's own `README.md` first to confirm this is the right
@@ -11,10 +11,10 @@
 
 What the syscall tracer is for now that the fused loader exists, how it was measured,
 and what is still open. Living doc, not per-release — last major update
-2026-09-27 on `dev-0.2.0`, tested on `fe2`. Code: [`../../tracer/`](../../tracer/) (its
-[`README.md`](../../tracer/README.md) keeps the per-file prune list);
+2026-09-27 on `dev-0.2.0`, tested on `fe2`. Code: [`../../tracer/`](../../../tracer) (its
+[`README.md`](../../../tracer/README.md) keeps the per-file prune list);
 earlier background: [`direct-usage.md`](direct-usage.md),
-[`bind-only.md`](bind-only.md), [`syscall-boundary.md`](syscall-boundary.md).
+[`bind-only.md`](bind-only.md), [`syscall-boundary.md`](../../reference/syscall-boundary.md).
 
 ## Contents
 
@@ -27,11 +27,11 @@ earlier background: [`direct-usage.md`](direct-usage.md),
 ## Related docs
 
 - [`direct-usage.md`](direct-usage.md), [`bind-only.md`](bind-only.md),
-  [`syscall-boundary.md`](syscall-boundary.md) — the earlier background
+  [`syscall-boundary.md`](../../reference/syscall-boundary.md) — the earlier background
   (investigation, bind-only audit, the boundary map).
-- [`android-platform.md`](android-platform.md) — the Android enforcement
+- [`android-platform.md`](../../reference/android-platform.md) — the Android enforcement
   gates this tracer's SIGSYS emulation works around.
-- [`path-shim.md`](path-shim.md) — the shim this tracer is the fallback
+- [`path-shim.md`](../shim/path-shim.md) — the shim this tracer is the fallback
   for.
 
 ## Where it sits
@@ -178,4 +178,4 @@ binaries in the same loop.
   loader syscalls. `path/glue.c` (PRoot's placeholder dirs for bind targets
   that do not exist on the host, such as `/usr`) likely stays; check before
   removing it.
-- **Real workloads:** a static Go daemon (Tailscale, [`tailscale.md`](../guides/tailscale.md)).
+- **Real workloads:** a static Go daemon (Tailscale, [`tailscale.md`](../../guides/tailscale.md)).

@@ -10,8 +10,8 @@
 > long addition to what a doc already covers.
 
 What `deb-native` supports, and how a claim about a package is written down
-and proved. The mechanism is in [`design.md`](design.md); the function-level
-coverage is measured in [`shim-coverage.md`](shim-coverage.md). The model is
+and proved. The mechanism is in [`design.md`](../spec/design.md); the function-level
+coverage is measured in [`shim-coverage.md`](../spec/shim/shim-coverage.md). The model is
 `sudo-less`'s `docs/standard.md`, adapted to Android.
 
 ## Contents
@@ -23,11 +23,11 @@ coverage is measured in [`shim-coverage.md`](shim-coverage.md). The model is
 
 ## Related docs
 
-- [`design.md`](design.md) — the mechanism that makes a package meet
+- [`design.md`](../spec/design.md) — the mechanism that makes a package meet
   this standard.
-- [`shim-coverage.md`](shim-coverage.md) — the function-level coverage
+- [`shim-coverage.md`](../spec/shim/shim-coverage.md) — the function-level coverage
   this standard's claims are measured against.
-- [`vs-sudo-less.md`](vs-sudo-less.md) — sudo-less's own
+- [`vs-sudo-less.md`](../notes/vs-sudo-less.md) — sudo-less's own
   `docs/standard.md`, the model this one is adapted from.
 
 ## Triage, not universal support
@@ -89,7 +89,7 @@ scope as an exception.
   statically linked, or that reaches the filesystem with a raw `syscall()`,
   is not path-redirected by the shim. That is the syscall tracer's job, and
   until it exists those programs are best-effort — see
-  [`shim-coverage.md`](shim-coverage.md#the-real-boundary).
+  [`shim-coverage.md`](../spec/shim/shim-coverage.md#the-real-boundary).
 
 ## "Supported" is proved, not predicted
 

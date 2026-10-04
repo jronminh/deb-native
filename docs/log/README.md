@@ -15,7 +15,7 @@ a pointer left here — see each file's own note.
   searchability and a per-entry repo-impact label). Add a new file,
   don't rewrite an existing one.
 - `android-seccomp-audit.md` — the investigation that produced
-  [`../spec/android-platform.md`](../spec/android-platform.md) (the gate
+  [`../reference/android-platform.md`](../reference/android-platform.md) (the gate
   taxonomy, the glibc patch catalog), plus the on-device glibc build
   attempt log.
 - `ld-dn-runtime.md` + `ld-dn-config.md` — the retired interpreter

@@ -35,7 +35,7 @@ software running on Android, side by side:
   same problem on a different host.
 - [`prior-art.md`](prior-art.md) — sudo-less and proroot in more depth,
   including what carries over and what's blocked on Android.
-- [`design.md`](design.md) — why deb-native's own mechanism (the shim,
+- [`design.md`](../spec/design.md) — why deb-native's own mechanism (the shim,
   the prefix's own loader, the tracer) works the way the table's last row says.
 
 ## What that buys

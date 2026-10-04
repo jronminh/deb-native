@@ -26,10 +26,10 @@ actually *for*.
 
 ## Related docs
 
-- [`classic-design.md`](classic-design.md) — the separate-prefix design
+- [`classic-design.md`](../notes/classic-design.md) — the separate-prefix design
   that uses `--force-architecture`, one of the mechanisms this doc
   clarifies.
-- [`design.md`](design.md) — the 0.2.0 pivot's own architecture handling.
+- [`design.md`](../spec/design.md) — the 0.2.0 pivot's own architecture handling.
 
 ## The `Multi-Arch` control field
 

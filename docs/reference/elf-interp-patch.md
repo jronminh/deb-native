@@ -37,7 +37,7 @@ tool's only remaining use.
 
 ## Related docs
 
-- [`package-lifecycle.md`](package-lifecycle.md) — where the translate
+- [`package-lifecycle.md`](../spec/package-lifecycle.md) — where the translate
   step (which does this patch) sits in a package's overall lifecycle.
 - [`ld-dn-config.md`](../log/ld-dn-config.md) — `ld-dn`'s policy and config
   file; the runtime side this patch hands off to.
@@ -45,7 +45,7 @@ tool's only remaining use.
   — the related `patchelf` bug (`--set-rpath` on `ET_EXEC`, not
   `--set-interpreter`) that led to dropping per-file `RUNPATH` rewrites
   entirely; background for "why not patch more than PT_INTERP" below.
-- [`design.md`](design.md) — overall scope and the three path
+- [`design.md`](../spec/design.md) — overall scope and the three path
   mechanisms (maintainer scripts, the libc shim, the tracer); this doc
   is the fourth, much smaller mechanism: a one-field static ELF edit.
 

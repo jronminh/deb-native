@@ -39,7 +39,7 @@ the host and the kernel are different.
   other ways to run Debian-like software, in one table row.
 - [`prior-art.md`](prior-art.md) — the narrative version of this diff,
   with the proroot comparison this table doesn't cover.
-- [`path-shim.md`](path-shim.md) — the shim this table's "run-time
+- [`path-shim.md`](../spec/shim/path-shim.md) — the shim this table's "run-time
   wrappers" row credits as deb-native's actual answer.
 - [`classic-design.md`](classic-design.md) — the unbuilt `prefix-wrap`
   equivalent this table's row also mentions.

@@ -27,7 +27,7 @@ optimizing.
 
 ## Related docs
 
-- [`../../spec/path-shim.md`](../../spec/path-shim.md) — the shim's
+- [`../../spec/shim/path-shim.md`](../../spec/shim/path-shim.md) — the shim's
   design this performance work optimizes.
 
 ## What changed

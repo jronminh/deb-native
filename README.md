@@ -56,7 +56,7 @@ runs its programs as ordinary Termux processes. Not an emulator and not
 isolation: **install and run, not emulate**.
 
 Scope is the same packages as [`sudo-less`](https://github.com/jronminh/sudo-less),
-by Debian section ([`docs/spec/standard.md`](docs/spec/standard.md)): install
+by Debian section ([`docs/reference/standard.md`](docs/reference/standard.md)): install
 (reach `ii`) and run by name, unprivileged. Not yet: **services** (a package
 that ships one installs, the service does not run; `runit` is the plan), and
 packages that need root (system users, `setuid`, TUN, kernel modules; `sudo`
@@ -76,12 +76,12 @@ chroot (needs root), proot-distro/UserLAnd (a full rootfs, every syscall
 through ptrace), or namespaces (Docker-style, blocked on Android). In one
 line: proot-distro puts a Debian machine next to Termux; deb-native puts
 Debian's packages into it. Full comparison table and trade-offs:
-[`docs/spec/alternatives.md`](docs/spec/alternatives.md).
+[`docs/notes/alternatives.md`](docs/notes/alternatives.md).
 
 **The same idea as [sudo-less](https://github.com/jronminh/sudo-less), for
 a platform that is not Debian** — same goal, same scope, same proof, the
 mechanism inverted because the host and kernel are different. Full
-side-by-side diff: [`docs/spec/vs-sudo-less.md`](docs/spec/vs-sudo-less.md).
+side-by-side diff: [`docs/notes/vs-sudo-less.md`](docs/notes/vs-sudo-less.md).
 
 ## How it works
 
@@ -107,8 +107,8 @@ glibc build: [`docs/spec/deploy.md`](docs/spec/deploy.md) and
 
 Full detail: [`docs/spec/design.md`](docs/spec/design.md) (the mechanism
 end to end), [`docs/spec/install-flow.md`](docs/spec/install-flow.md)
-(the bootstrap/install order), [`docs/spec/tracer.md`](docs/spec/tracer.md)
-(the tracer). Confirmed breakages: [`docs/spec/known-issues.md`](docs/spec/known-issues.md).
+(the bootstrap/install order), [`docs/spec/tracer/tracer.md`](docs/spec/tracer/tracer.md)
+(the tracer). Confirmed breakages: [`docs/reference/known-issues.md`](docs/reference/known-issues.md).
 
 ## apt and dpkg
 

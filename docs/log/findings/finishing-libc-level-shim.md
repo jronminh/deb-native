@@ -19,11 +19,11 @@ tracer), already tracked there.
 
 ## Related docs
 
-- [`../../spec/shim-coverage.md`](../../spec/shim-coverage.md) — the
+- [`../../spec/shim/shim-coverage.md`](../../spec/shim/shim-coverage.md) — the
   canonical, kept-current record this entry's findings were moved
   into (corpus results, full symbol list, the NSS proof,
   implementation notes).
-- [`../../spec/syscall-boundary.md`](../../spec/syscall-boundary.md) —
+- [`../../reference/syscall-boundary.md`](../../reference/syscall-boundary.md) —
   what's left (raw `syscall()`, static binaries, libc-internal NSS
   opens), which belongs to the tracer, not this shim.
 
@@ -38,11 +38,11 @@ libc-level shim could not yet see. `521cc73` closed the review items
 decided scope, closed the remaining genuinely-imported-but-uncovered
 symbols and tested the NSS question to a conclusion.
 
-**Full details moved into [`shim-coverage.md`](../../spec/shim-coverage.md)** — the
+**Full details moved into [`shim-coverage.md`](../../spec/shim/shim-coverage.md)** — the
 corpus results, the complete symbol list, the NSS proof (not redirectable
 at the libc layer — upstream glibc design, not a Termux packaging bug), and
 the implementation notes for `mkstemp`'s in-place template and
 `posix_spawn`'s own wrapper — since that doc is the canonical, kept-current
 record of shim coverage. What's left all belongs to the tracer (raw
 `syscall()`, static binaries, libc-internal NSS opens) — see
-[`syscall-boundary.md`](../../spec/syscall-boundary.md).
+[`syscall-boundary.md`](../../reference/syscall-boundary.md).

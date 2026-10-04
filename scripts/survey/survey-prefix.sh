@@ -4,7 +4,7 @@
 # while installing or while running, and why. sudo-less's dev/survey.sh
 # (its method, classifiers and columns) ported to deb-native; the result is
 # docs/log/survey-0.2.0.md. (The 0.1.x pipeline's own survey.sh is gone;
-# see docs/spec/classic-design.md.)
+# see docs/notes/classic-design.md.)
 #
 #   OUT=~/survey scripts/survey-prefix.sh docs/log/survey-0.2.0/list.tsv
 #

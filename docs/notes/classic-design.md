@@ -12,9 +12,9 @@
 The pre-0.2.0 approach: reuse Termux's apt/dpkg via plain relocation
 flags (no own database), and static per-binary wrappers instead of a
 kernel view. Superseded in large part by
-[`design.md`](design.md)'s 0.2.0 pivot (a self-contained prefix with
+[`design.md`](../spec/design.md)'s 0.2.0 pivot (a self-contained prefix with
 its own apt/dpkg database) and by the shim
-([`path-shim.md`](path-shim.md), which covers hardcoded paths that
+([`path-shim.md`](../spec/shim/path-shim.md), which covers hardcoded paths that
 this section's wrapper-generation direction never got built for) —
 kept as the record of the proposal and the research it did settle
 (Direction 3 is still the project's only writing on services).
@@ -28,9 +28,9 @@ kept as the record of the proposal and the research it did settle
 
 ## Related docs
 
-- [`design.md`](design.md) — the doc this was split out of; the 0.2.0
+- [`design.md`](../spec/design.md) — the doc this was split out of; the 0.2.0
   pivot that superseded most of the install-path content here.
-- [`path-shim.md`](path-shim.md) — the shim that replaced Direction 2's
+- [`path-shim.md`](../spec/shim/path-shim.md) — the shim that replaced Direction 2's
   wrapper-generation approach for hardcoded-path packages.
 - [`native-reuse.md`](native-reuse.md) — the two-layer database idea
   this doc's "Install path" section introduces.
@@ -80,7 +80,7 @@ used *before* building "the view" (`apt-dpkg-port.md`, point 6: "Before the
 view: `--instdir=$PREFIX` and `--force-script-chrootless`").
 
 Consequence of skipping the view (accepted limitation, see
-[`path-shim.md`](path-shim.md)): maintainer
+[`path-shim.md`](../spec/shim/path-shim.md)): maintainer
 scripts run via `--force-script-chrootless` execute directly with Termux's
 own `/bin/sh`, seeing real absolute paths (`/etc/foo`) that do **not**
 resolve into `$NEWPREFIX` — only `$DPKG_ROOT` (which dpkg exports to
@@ -141,7 +141,7 @@ purpose"): scripts calling `ldconfig`, `update-alternatives`, `systemctl`,
 the package excluded. Not designed yet — first need a real sample of
 maintainer scripts from target packages to see which helpers actually get
 called (open item, same as the coverage survey later measured in
-[`shim-coverage.md`](shim-coverage.md)).
+[`shim-coverage.md`](../spec/shim/shim-coverage.md)).
 
 ### Open work
 
@@ -171,7 +171,7 @@ resolve correctly at run time by overlaying the prefix onto the real `/usr
 /etc /var /opt` inside a private mount namespace, live, for the duration of
 the call. That needs `unshare(CLONE_NEWUSER)` + unprivileged overlayfs,
 both assumed blocked under Termux's SELinux domain (see
-[`path-shim.md`](path-shim.md)).
+[`path-shim.md`](../spec/shim/path-shim.md)).
 
 ### Approach
 
@@ -189,7 +189,7 @@ Concretely, by failure mode (same table as sudo-less's `view.md`):
 | interpreter only searches compiled-in module paths (Python/Perl/Node/...) | wrapper sets the interpreter's own search-path env var (`PYTHONPATH`, `PERL5LIB`, `NODE_PATH`, ...) to the prefix's copy before `exec`ing — this is exactly the case sudo-less's own docs call out as **not** solvable by env vars *for the view's other cases*, but it's the right tool specifically for module search paths |
 | `ldd` can't find a library the package ships | wrapper sets `LD_LIBRARY_PATH` to the prefix's lib dir before `exec` — same caveat as above: fine for this one case, not a general substitute for the view |
 | ELF binary is a glibc build, needs glibc-runner | wrapper (or the binary's patched ELF interpreter directly, per the existing manual glibc-runner method) invokes it against the glibc side-install |
-| binary/script has a hardcoded absolute path to its own data (`/usr/share/figlet`, `/etc/redis/redis.conf`) it reads directly, not through a library call the above env vars cover | **solved** — see [`path-shim.md`](path-shim.md): our own shim (`native/path-redirect.c`) intercepts `open`/`openat`/`fopen`/`stat`/`fstatat` and rewrites the path, verified against `figlet`'s real `/usr/share/figlet` lookup |
+| binary/script has a hardcoded absolute path to its own data (`/usr/share/figlet`, `/etc/redis/redis.conf`) it reads directly, not through a library call the above env vars cover | **solved** — see [`path-shim.md`](../spec/shim/path-shim.md): our own shim (`native/path-redirect.c`) intercepts `open`/`openat`/`fopen`/`stat`/`fstatat` and rewrites the path, verified against `figlet`'s real `/usr/share/figlet` lookup |
 
 ### What this used to not solve (now closed)
 
@@ -200,7 +200,7 @@ shebangs). A binary that does `open("/etc/foo.conf")` directly in its own
 C code, with no env var and no CLI flag to redirect it, used to have no
 static fix short of binary-patching the literal path string (only works if
 the replacement is the same length or shorter) — **until
-[`path-shim.md`](path-shim.md)'s shim, now built and verified**.
+[`path-shim.md`](../spec/shim/path-shim.md)'s shim, now built and verified**.
 Binary-patching the string remains the fallback for a statically-linked
 binary (no dynamic libc calls to intercept), which the shim genuinely
 cannot reach.
@@ -225,7 +225,7 @@ detection/generation step gets triggered automatically after an install (apt's
       coverage number for "wrapper suffices" vs. "needs a path-virtualization
       layer neither direction handles yet".
 - [x] ~~Decide whether the shim is worth building~~ — built,
-      see [`path-shim.md`](path-shim.md).
+      see [`path-shim.md`](../spec/shim/path-shim.md).
 - [ ] Wire the shim's env vars (`DN_REDIRECT_FROM`/`_TO`) into the
       wrapper-script generation this doc describes, instead of setting
       them by hand as done for the `figlet` test.

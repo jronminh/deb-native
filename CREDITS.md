@@ -17,7 +17,7 @@ builds on, and the license each part is under.
   theirs.
 - Why a fork and not a fresh tracer: rewriting a syscall's path arguments
   requires `ptrace` (seccomp user-notification can inspect and inject but not
-  modify arguments). See [`docs/spec/direct-usage.md`](docs/spec/direct-usage.md).
+  modify arguments). See [`docs/spec/tracer/direct-usage.md`](docs/spec/tracer/direct-usage.md).
 
 ## Termux
 
@@ -76,7 +76,7 @@ builds on, and the license each part is under.
 - Used for: the prefix-install approach and its documentation are the starting
   point, and the `apt`/`dpkg` lifecycle-hook idea (`DPkg::Pre-Install-Pkgs` /
   `DPkg::Post-Invoke`) follows it. See
-  [`docs/spec/vs-sudo-less.md`](docs/spec/vs-sudo-less.md). `sudo-less` solves the same
+  [`docs/notes/vs-sudo-less.md`](docs/notes/vs-sudo-less.md). `sudo-less` solves the same
   problem on a real Debian host with a kernel mount-namespace "view"; this
   project is that idea on Android, where the view is unavailable.
 

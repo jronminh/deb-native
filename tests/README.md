@@ -11,10 +11,10 @@ there).
 
 - `shim-libc/` — asserts every libc entry point `native/path-redirect.c`
   intercepts actually rewrites a path under `/etc` or `/usr` into a fake
-  prefix root. See [`../docs/spec/shim-coverage.md`](../docs/spec/shim-coverage.md).
+  prefix root. See [`../docs/spec/shim/shim-coverage.md`](../docs/spec/shim/shim-coverage.md).
 - `tracer-nss/` — proves the tracer route resolves glibc's statically-bound
   NSS reads (`getpwnam`, ...) against the prefix, the one case the shim
-  cannot reach. See [`../docs/spec/syscall-boundary.md`](../docs/spec/syscall-boundary.md).
+  cannot reach. See [`../docs/reference/syscall-boundary.md`](../docs/reference/syscall-boundary.md).
 - `glibc-swap/` — the 0.6.0+s.1 (`s` = swap in deploy) acceptance test for
   an **already-deployed** prefix (it never bootstraps or downloads). Run
   `run.sh PREFIX [fresh|live]`: `fresh` checks the whole swap (Debian's

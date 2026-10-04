@@ -18,7 +18,7 @@ Three path mechanisms:
   (`scripts/install/patch-scripts-tree.sh`).
 - **Dynamic glibc binaries** — `native/path-redirect.c`, an `LD_PRELOAD` shim
   interposing path-taking libc functions (`/usr /etc /var /opt` →
-  `$INSTDIR`). **This layer is complete** — see `docs/spec/shim-coverage.md`.
+  `$INSTDIR`). **This layer is complete** — see `docs/spec/shim/shim-coverage.md`.
 - **Syscall level** — for what the shim cannot see (static binaries, inline
   `svc #0`, explicit `syscall()`, libc-internal NSS reads). Today this is
   `proot` (fallback, wired in `native/dn-run.c`); it is being replaced by
@@ -64,7 +64,7 @@ changing direction; its intro points out to `path-shim.md`,
 `native-reuse.md`, `classic-design.md` and `prior-art.md` for depth or
 history. `docs/log/findings/` is the chronological engineering log,
 one entry per file.
-`docs/spec/android-platform.md` has the Android enforcement-gate taxonomy
+`docs/reference/android-platform.md` has the Android enforcement-gate taxonomy
 (seccomp/capability/SELinux) — read before scoping 0.5.0 work.
 `tracer/README.md` has fork-lite's provenance, build, and prune status.
 `TODO.md` is the roadmap.
@@ -81,7 +81,7 @@ one entry per file.
 - **fork-lite** (`tracer/`): proot base imported and pruned — extensions
   removed (framework kept) and made AArch64-only. It **builds on `fe2`**
   (`make CC=clang`, needs `libtalloc`) and a static binary reads through a
-  `-b` bind. **Bind-only fast path landed** (`docs/spec/bind-only.md`,
+  `-b` bind. **Bind-only fast path landed** (`docs/spec/tracer/bind-only.md`,
   `scripts/install/normalize-symlinks.sh`, ~1.6x stat-dense; `PROOT_NO_BIND_ONLY=1`
   reverts). **Next: replace `cli/` with our `dn-trace` binder** (bind
   `$INSTDIR` over `/usr /etc /var /opt`, handle missing paths), then point

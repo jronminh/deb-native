@@ -31,7 +31,7 @@ a `ld-dn`/`native/ld-dn.c` bug. It was not.
 
 ## Related docs
 
-- [`../../spec/android-platform.md`](../../spec/android-platform.md) —
+- [`../../reference/android-platform.md`](../../reference/android-platform.md) —
   the sandbox-limits probe this entry cross-checks against
   (`binfmt_misc` not mounted).
 - [`gcc-hello-pt-interp-gap.md`](gcc-hello-pt-interp-gap.md) — a later
@@ -97,7 +97,7 @@ transitively, for free. Checked for a kernel-native shortcut first
 per-file `PT_INTERP` patch at all): not mounted in the app sandbox
 (`/proc/sys/fs/binfmt_misc/register`: "No such file or directory"),
 consistent with the namespace/mount limits already probed
-(`../../spec/android-platform.md`, "Device probe: sandbox limits confirmed
+(`../../reference/android-platform.md`, "Device probe: sandbox limits confirmed
 directly") — no shortcut exists, `--set-interpreter`
 stays a required static patch (and is not itself buggy: tested alone
 above, clean on `ET_EXEC`).

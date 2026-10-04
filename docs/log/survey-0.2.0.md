@@ -13,7 +13,7 @@ The first survey of the 0.2.0 prefix: real Debian packages installed with the
 prefix's own apt and their programs run by name, the method of sudo-less's
 [`survey.md`](https://github.com/jronminh/sudo-less/blob/main/docs/survey.md)
 (same install and run classes). "Supported" is
-[`standard.md`](../spec/standard.md)'s: in scope, installed to `ii`, and its
+[`standard.md`](../reference/standard.md)'s: in scope, installed to `ii`, and its
 programs run from the prefix by name.
 
 Raw data in [`survey-0.2.0/`](survey-0.2.0/): `list.tsv` + `results.tsv`
@@ -32,7 +32,7 @@ run, stopped after 10). Columns: `scripts/survey/survey-prefix.sh`'s header.
 - [`findings/first-random-sample-survey.md`](findings/first-random-sample-survey.md)
   — the earlier, 0.1.x-era survey (2 of 30 installed) this run's
   99-of-100 result should be read against.
-- [`../spec/standard.md`](../spec/standard.md) — the scope this survey's
+- [`../reference/standard.md`](../reference/standard.md) — the scope this survey's
   package selection follows.
 - [`../../scripts/survey/README.md`](../../scripts/survey/README.md) —
   the scripts that produced this run and its raw data.

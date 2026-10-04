@@ -1,6 +1,6 @@
 # What the libc shim must intercept
 
-> Template: [`templates/docs.template.md`](../../templates/docs.template.md)
+> Template: [`templates/docs.template.md`](../../../templates/docs.template.md)
 > (fix the relative path to match this file's depth). Read a doc's
 > summary and table of contents below before its sections, and read
 > its directory's own `README.md` first to confirm this is the right
@@ -10,7 +10,7 @@
 > long addition to what a doc already covers.
 
 Which libc entry points `native/path-redirect.c` has to cover for the packages
-we support, and the ones it does not. The scope is [`standard.md`](standard.md);
+we support, and the ones it does not. The scope is [`standard.md`](../../reference/standard.md);
 the design is [`path-shim.md`](path-shim.md).
 
 ## Contents
@@ -24,13 +24,13 @@ the design is [`path-shim.md`](path-shim.md).
 
 ## Related docs
 
-- [`standard.md`](standard.md) — the scope this doc's corpus is drawn
+- [`standard.md`](../../reference/standard.md) — the scope this doc's corpus is drawn
   from.
 - [`path-shim.md`](path-shim.md) — the shim this doc measures coverage
   for.
-- [`syscall-boundary.md`](syscall-boundary.md) — what's left once this
+- [`syscall-boundary.md`](../../reference/syscall-boundary.md) — what's left once this
   doc's coverage is accounted for.
-- [`android-platform.md`](android-platform.md) — the per-file fork
+- [`android-platform.md`](../../reference/android-platform.md) — the per-file fork
   verdict for the glibc patch that supersedes part of this shim's job.
 
 ## First, the layer: libc functions, not syscalls
@@ -242,7 +242,7 @@ is tracked in [#1](https://github.com/jronminh/deb-native/issues/1) and
 `TODO.md`, and is distinct from the shim: **the shim is now as complete as the
 libc layer can be.** The wider boundary — inline `svc #0`, static executables,
 explicit `syscall()`, and the `PT_INTERP` routing gap in `dn-run.c` — is mapped
-and measured in [`syscall-boundary.md`](syscall-boundary.md).
+and measured in [`syscall-boundary.md`](../../reference/syscall-boundary.md).
 
 ## Resolved (2026-10-01): `/lib`, `/bin`, `/sbin` added; `/run`, `/lib64` still open
 

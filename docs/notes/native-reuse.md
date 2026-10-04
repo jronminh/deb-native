@@ -13,10 +13,10 @@ sudo-less's "host already has it" idea, adapted for a host (Termux)
 that has no glibc at all: how `native-seed.sh` decided a Debian
 dependency was already satisfied by one of Termux's own `*-glibc`
 packages, instead of duplicating it into the prefix. Split out of
-[`design.md`](design.md).
+[`design.md`](../spec/design.md).
 
 **Superseded, not current.** `native-seed.sh` is gone (see
-[`design.md`](design.md), "What went away from the classic design"): the
+[`design.md`](../spec/design.md), "What went away from the classic design"): the
 0.2.0 pivot's real `libc6` stand-in satisfies these dependencies directly,
 so there is no stub database to seed any more. Kept as the record of the
 idea and its one real gap (the hand-written name mapping below) — `TODO.md`
@@ -34,7 +34,7 @@ improvement, not a revival of this file.
 
 ## Related docs
 
-- [`design.md`](design.md) — the doc this was split out of.
+- [`design.md`](../spec/design.md) — the doc this was split out of.
 - [`classic-design.md`](classic-design.md) — the two-layer-database idea
   this doc builds on and corrects.
 - [`../log/findings/hard-package-ruby-adsf.md`](../log/findings/hard-package-ruby-adsf.md)

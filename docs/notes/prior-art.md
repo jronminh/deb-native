@@ -30,7 +30,7 @@ Android, see [`alternatives.md`](alternatives.md).
   against sudo-less (this doc is the narrative version).
 - [`alternatives.md`](alternatives.md) — other ways to run Debian on
   Android, including `proroot`'s own niche.
-- [`path-shim.md`](path-shim.md) — the shim that replaced sudo-less's
+- [`path-shim.md`](../spec/shim/path-shim.md) — the shim that replaced sudo-less's
   view, the mechanism this doc's "Blocked on Android" section explains.
 - [`classic-design.md`](classic-design.md) — Direction 3's services
   research, which starts from sudo-less's own `systemd --user` approach.
@@ -87,13 +87,13 @@ touching at all.
    into a binary resolve against the prefix. Needs `unshare(CLONE_NEWUSER)`
    + unprivileged overlayfs in that namespace. **Confirmed blocked on this
    device, with the actual syscall error** (see
-   [`path-shim.md`](path-shim.md)): `unshare(CLONE_NEWUSER)` fails with
+   [`path-shim.md`](../spec/shim/path-shim.md)): `unshare(CLONE_NEWUSER)` fails with
    `EINVAL` (not `EPERM`) — the kernel itself doesn't support unprivileged
    user namespaces at all here, not merely an SELinux policy denial. Plain
    `unshare(CLONE_NEWNS)` alone fails with `EPERM` as expected (needs
    `CAP_SYS_ADMIN`). FUSE is also closed (`/dev/fuse`: permission denied,
    no `fusermount`). Replaced by our userspace path-redirect shim
-   instead — see [`path-shim.md`](path-shim.md), verified working against
+   instead — see [`path-shim.md`](../spec/shim/path-shim.md), verified working against
    a real package (`figlet`).
 
 2. **`prefix-sandbox`'s seccomp/namespace-based isolation** — depends
@@ -108,7 +108,7 @@ touching at all.
 
 ~~Whether `unshare(CLONE_NEWNS)` alone... is available to Termux without
 root.~~ Answered: no — `EPERM`, confirmed by direct test and strace. See
-[`path-shim.md`](path-shim.md) for the full data and the replacement mechanism
+[`path-shim.md`](../spec/shim/path-shim.md) for the full data and the replacement mechanism
 (userspace path redirection, no mount involved at all).
 
 ## Related work found later: `proroot` (closed-source)
@@ -117,7 +117,7 @@ root.~~ Answered: no — `EPERM`, confirmed by direct test and strace. See
 proprietary "drop-in `proot` replacement, zero ptrace overhead" for
 Android, 82 stars as of 2026-09. Its README (source not published) hints
 at the same class of mechanism as this repo's own shim
-([`path-shim.md`](path-shim.md)):
+([`path-shim.md`](../spec/shim/path-shim.md)):
 separate `libproroot-linker.so` / `libproroot-stub-loader.so` /
 `libproroot-bridge.so` components suggest dynamic-linker/libc-call
 interception rather than `proot`'s `ptrace`-based one — and its own notice

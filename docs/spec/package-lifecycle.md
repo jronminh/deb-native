@@ -30,9 +30,9 @@ Living doc: it tracks the shipped pipeline, not a proposal.
 - [`install-flow.md`](install-flow.md) — the one-time bootstrap, end to end.
 - [`design.md`](design.md) — the live design; "Install pipeline" is this
   doc's two hook rows in context.
-- [`path-shim.md`](path-shim.md) — the shim and maintainer-script layers.
-- [`tracer.md`](tracer.md) — `dn-trace`, the syscall layer at run time.
-- [`syscall-boundary.md`](syscall-boundary.md) — what the shim cannot see.
+- [`path-shim.md`](shim/path-shim.md) — the shim and maintainer-script layers.
+- [`tracer.md`](tracer/tracer.md) — `dn-trace`, the syscall layer at run time.
+- [`syscall-boundary.md`](../reference/syscall-boundary.md) — what the shim cannot see.
 - `scripts/install/README.md`, `scripts/runtime/README.md`,
   `scripts/bootstrap/README.md` — the scripts per lifecycle category.
 

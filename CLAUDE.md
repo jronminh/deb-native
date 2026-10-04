@@ -19,7 +19,7 @@ Three path mechanisms:
 - **Maintainer scripts** — plain-text path rewrite (`scripts/install/patch-scripts-tree.sh`).
 - **Dynamic glibc binaries** — `native/path-redirect.c`, an `LD_PRELOAD`
   shim interposing path-taking libc functions. Complete at its layer —
-  `docs/spec/shim-coverage.md`.
+  `docs/spec/shim/shim-coverage.md`.
 - **Syscall level / can't-be-shimmed cases** — `tracer/` (`dn-trace`, a
   reduced fork of PRoot's ptrace core), wired via `native/dn-run.c`. Done,
   not a TODO — replaced the old `proot` fallback in 0.2.3.

@@ -30,9 +30,9 @@ Proven on `fe2`.
 
 - [`../../spec/ld-dn-runtime.md`](../../log/ld-dn-runtime.md) -- the
   trampoline, and the "Alternative: fuse into the loader" plan this serves.
-- [`../../spec/dl-mechanics.md`](../../spec/dl-mechanics.md) -- the loader
+- [`../../reference/dl-mechanics.md`](../../reference/dl-mechanics.md) -- the loader
   mechanisms (`ld.so.preload`, `ld.so.cache`) this leans on.
-- [`../../spec/path-shim.md`](../../spec/path-shim.md) -- the shim itself.
+- [`../../spec/shim/path-shim.md`](../../spec/shim/path-shim.md) -- the shim itself.
 
 ## Context
 

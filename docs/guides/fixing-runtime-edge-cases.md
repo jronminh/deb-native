@@ -14,9 +14,9 @@ the prefix, a library is not found, a call slips past the shim — reach for
 the **cheapest layer that can see the problem**. This guide is the decision
 path: symptom → layer → fix → rebuild cost. It is generic (applies to the
 `dn-glibc` prefix); the layers themselves are specified
-in [`../spec/path-shim.md`](../spec/path-shim.md),
-[`../spec/dl-mechanics.md`](../spec/dl-mechanics.md),
-[`../spec/syscall-boundary.md`](../spec/syscall-boundary.md), and
+in [`../spec/shim/path-shim.md`](../spec/shim/path-shim.md),
+[`../reference/dl-mechanics.md`](../reference/dl-mechanics.md),
+[`../reference/syscall-boundary.md`](../reference/syscall-boundary.md), and
 [`../spec/dn-glibc-prefix.md`](../spec/dn-glibc-prefix.md).
 
 Status: the decision table and the runtime layers are as built; the exact
@@ -36,12 +36,12 @@ shim-build command for the `dn-glibc` prefix is still being settled
 
 ## Related docs
 
-- [`../spec/dl-mechanics.md`](../spec/dl-mechanics.md) — the catalog of
+- [`../reference/dl-mechanics.md`](../reference/dl-mechanics.md) — the catalog of
   glibc mechanisms (env, files, CLI, dynamic tags, tunables, `LD_AUDIT`).
   Read it before assuming a new edge needs a rebuild.
-- [`../spec/shim-coverage.md`](../spec/shim-coverage.md) — which libc entry
+- [`../spec/shim/shim-coverage.md`](../spec/shim/shim-coverage.md) — which libc entry
   points the shim already covers, and the measured corpus data.
-- [`../spec/syscall-boundary.md`](../spec/syscall-boundary.md) — what the
+- [`../reference/syscall-boundary.md`](../reference/syscall-boundary.md) — what the
   shim cannot see at all (the tracer's job).
 - [`../spec/dn-glibc-prefix.md`](../spec/dn-glibc-prefix.md) — the fused
   loader these layers sit under today.
@@ -98,7 +98,7 @@ If a path is being read but the debug line never shows it, the entry point
 is missing from the shim's coverage. Add just that function to
 `native/path-redirect.c` (same pattern as its neighbours), rebuild the shim,
 and reinstall it at `<prefix>/usr/lib/deb-native/path-redirect.so`. The
-`ld.so.preload` string does not change. `../spec/shim-coverage.md` is the
+`ld.so.preload` string does not change. `../spec/shim/shim-coverage.md` is the
 current coverage list and the technique for measuring it.
 
 ## Layer 2: the loader's two files
@@ -157,8 +157,8 @@ and routes it through `dn-trace`, whose syscall-level rewrite maps the guest
 `/usr /etc /var /opt` onto the prefix for the whole process tree. If a new
 class of binary misbehaves, the fix is a `make-launchers.sh` classification
 or a tracer change — never a shim one. See
-[`../spec/syscall-boundary.md`](../spec/syscall-boundary.md) and
-[`../spec/tracer.md`](../spec/tracer.md).
+[`../reference/syscall-boundary.md`](../reference/syscall-boundary.md) and
+[`../spec/tracer/tracer.md`](../spec/tracer/tracer.md).
 
 ## Layer 6: build time (last resort)
 
@@ -173,7 +173,7 @@ not runtime behaviour:
   (`dn-glibc-android.patch`'s `elf/rtld.c` hunk): it changes what the loader
   *does*, so it is a rebuild.
 
-Before going here, re-read [`../spec/dl-mechanics.md`](../spec/dl-mechanics.md):
+Before going here, re-read [`../reference/dl-mechanics.md`](../reference/dl-mechanics.md):
 glibc exposes env vars, `ld.so.conf`, `ld.so.preload`, dynamic tags,
 `$ORIGIN`, tunables, and `LD_AUDIT`, and a surprising number of "edge cases"
 are one of those, not a patch.

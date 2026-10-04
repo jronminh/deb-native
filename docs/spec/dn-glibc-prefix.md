@@ -36,11 +36,11 @@ run-time prefix self-derivation below are what shipped.
 
 - [`ld-dn-runtime.md`](../log/ld-dn-runtime.md) -- the trampoline being retired; its
   fuse section is this doc's origin.
-- [`dl-mechanics.md`](dl-mechanics.md) -- the glibc mechanisms this leans on
+- [`dl-mechanics.md`](../reference/dl-mechanics.md) -- the glibc mechanisms this leans on
   (`ld.so.preload`, `ld.so.cache`), and why they keep the patch small.
 - [`package-lifecycle.md`](package-lifecycle.md) -- one package's install
   stages; this doc is the runtime/packaging overlay for the next-gen prefix.
-- [`elf-interp-patch.md`](elf-interp-patch.md) -- the `PT_INTERP` edit the
+- [`elf-interp-patch.md`](../reference/elf-interp-patch.md) -- the `PT_INTERP` edit the
   translate hook makes; only the target string changes here.
 - [`../../docs/log/findings/fused-shim-self-derives-prefix.md`](../log/findings/fused-shim-self-derives-prefix.md)
   -- the proof this builds on.
@@ -268,5 +268,5 @@ own `gcc` is never used to build its own glibc; it is purely the consumer above.
 The fused loader only covers **glibc-dynamic** ELFs. Static binaries, Bionic
 binaries, and programs making raw syscalls never reach the loader and still
 need `dn-run` + `dn-trace` (`make-launchers.sh` classification,
-[`tracer.md`](tracer.md), [`syscall-boundary.md`](syscall-boundary.md)). The
+[`tracer.md`](tracer/tracer.md), [`syscall-boundary.md`](../reference/syscall-boundary.md)). The
 fused loader removes `ld-dn`, not the tracer.

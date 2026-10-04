@@ -12,8 +12,8 @@ directly. The classic (pre-0.2.0) design's apt hooks
 (`patch-maintainer-scripts.sh`), the per-step ELF/control patchers they
 called (`patch-deb.sh`, `patch-elfs.sh`), and the stub-database dependency
 seeder (`native-seed.sh`, replaced by the real `libc6` stand-in) are gone
-— see [`../../docs/spec/classic-design.md`](../../docs/spec/classic-design.md)
-and [`../../docs/spec/native-reuse.md`](../../docs/spec/native-reuse.md)
+— see [`../../docs/notes/classic-design.md`](../../docs/notes/classic-design.md)
+and [`../../docs/notes/native-reuse.md`](../../docs/notes/native-reuse.md)
 for the record. See [`../../docs/spec/design.md`](../../docs/spec/design.md)
 (the install pipeline) and [`../../docs/spec/install-flow.md`](../../docs/spec/install-flow.md)
 for the current one.

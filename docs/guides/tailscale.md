@@ -29,9 +29,9 @@ Not started — this is the plan, measured from the package itself.
 
 - [`../spec/design.md`](../spec/design.md) — the day-to-day commands and
   mechanism this guide assumes.
-- [`../spec/direct-usage.md`](../spec/direct-usage.md) — the fork-lite
+- [`../spec/tracer/direct-usage.md`](../spec/tracer/direct-usage.md) — the fork-lite
   plan this guide's static-daemon case motivates.
-- [`../spec/runtime-failures.md`](../spec/runtime-failures.md) — other
+- [`../spec/shim/runtime-failures.md`](../spec/shim/runtime-failures.md) — other
   failure modes a daemon like this one can hit.
 
 ## What the package is (`tailscale 1.102.4`)
@@ -138,4 +138,4 @@ Either way the shipped binaries remain static → runtime still needs the tracer
 ## Status
 
 Not started. First dependency is **fork-lite running static binaries** — see
-[`direct-usage.md`](../spec/direct-usage.md) and [`../../tracer/README.md`](../../tracer/README.md).
+[`direct-usage.md`](../spec/tracer/direct-usage.md) and [`../../tracer/README.md`](../../tracer/README.md).
