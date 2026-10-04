@@ -151,6 +151,21 @@ def check_reachability(root: str) -> list[str]:
     return report
 
 
+def check_template_markers(root: str) -> list[str]:
+    """Inform on docs missing the template hint; don't make it a gate."""
+    docs_root = os.path.join(root, "docs")
+    missing = []
+    for path in sorted(glob.glob(os.path.join(docs_root, "**/*.md"), recursive=True)):
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as source:
+                opening = source.read(2048).splitlines()[:5]
+        except OSError:
+            continue
+        if not any(re.match(r"^\s*<!--\s*template:\s*.+?-->\s*$", line) for line in opening):
+            missing.append(os.path.relpath(path, root))
+    return missing
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--root", default=os.getcwd())
@@ -163,6 +178,15 @@ def main() -> int:
         print(" ", p)
     if not link_problems:
         print("  clean")
+
+    print()
+    print("== docs template markers (informational) ==")
+    missing_markers = check_template_markers(root)
+    if missing_markers:
+        for path in missing_markers:
+            print(f"  {path} (no template marker in the first five lines)")
+    else:
+        print("  all Markdown files under docs/ have a template marker")
 
     print()
     print("== Script reachability from install.sh (informational) ==")
