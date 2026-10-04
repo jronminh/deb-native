@@ -111,3 +111,9 @@ below, oldest first, matching the original file's order.
   showing a minimal Bionic ELF or `/system/bin/sh` script runs from `$HOME`
   with an empty env -- so a prefix-independent chooser/shell in `$HOME` is
   feasible (the login already is).
+- [`runit-for-the-prefix.md`](runit-for-the-prefix.md) — 2026-10-04,
+  **Isolated**: runit as the services layer. The binaries are small and
+  glibc (translate to the prefix loader); Debian's `runit` *package* pulls
+  `sysuser-helper` -> `adduser`+`passwd`+`perl` and assumes a system init, so
+  use the binaries directly, run `runsvdir "$DN/etc/service"` ourselves, and
+  translate systemd units to `run` scripts (refuse the rest).
