@@ -8,7 +8,7 @@
 #   dn-shell                  an interactive shell inside the prefix
 #   dn-adopt FILE...          run a downloaded glibc program through the prefix
 #
-# The userland is the default session (docs/spec/host-userland.md), so the
+# The userland is the default session (docs/spec/userlands.md), so the
 # plain names `apt`, `apt-get`, `apt-cache`, `apt-mark`, `dpkg`, `dpkg-query`
 # are the prefix's own simply because $INSTDIR/usr/bin is on PATH. Termux's
 # packages are managed with `pkg` in a host shell (termux-shell); inside the

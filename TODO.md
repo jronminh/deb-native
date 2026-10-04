@@ -510,7 +510,10 @@ bootstrap-time or a fallback (Termux's `dpkg`/`apt` behind stand-ins,
 property to establish is that none of it is a *runtime hard requirement*:
 with Termux's tree damaged or gone, the prefix still runs, and neither
 prefix writes into the other's state. Relocation is 0.6.1; the
-compiled-artifact retarget that finishes it is 0.6.1's Open list.
+compiled-artifact retarget that finishes it is 0.6.1's Open list. Model:
+one host (Android) with sibling userlands (`$PREFIX`, `$DN`) under
+`termux/files/` -- no rank, only the bootstrap-time borrow
+(`docs/spec/userlands.md`).
 
 **Open** -- the couplings to remove and the properties to establish:
 

@@ -34,8 +34,8 @@ reach" live in `runtime-failures.md`, `syscall-boundary.md` and
   redirected, `LD_PRELOAD` lost, no services/init, ...).
 - `syscall-boundary.md` / `android-platform.md` — what libc interposition
   cannot see, and the Android enforcement gates.
-- `host-userland.md` — the userland/host split; the shim is userland session
-  state.
+- `userlands.md` — the host/userland model (one host, sibling userlands);
+  the shim is userland session state.
 
 ## Bugs with a reproduction
 

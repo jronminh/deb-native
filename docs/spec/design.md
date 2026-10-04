@@ -167,22 +167,22 @@ only as a fallback for packages not in the repo.
 
 - The runtime layer: shim, `dn-shell`/`dn-perl`, `dn-run`, launchers,
   `termux-dn-doctor`.
-- Routing ("Termux wins") -- superseded: the userland is the default
+- Routing ("Termux wins") -- superseded: the Debian userland is the default
   session, so `apt`/`dpkg` are the prefix's by PATH; Termux's are `pkg`
-  in a host shell (`termux-shell`). See `docs/spec/host-userland.md`.
+  in a Termux shell (`termux-shell`). See `docs/spec/userlands.md`.
 
 ### Day-to-day commands
 
-The userland is the default session (`docs/spec/host-userland.md`):
+The Debian userland is the default session (`docs/spec/userlands.md`):
 opening Termux lands in Debian, not in Termux's own shell.
 
 - `apt`, `apt-get`, `apt-cache`, `apt-mark`, `dpkg`, `dpkg-query` are
   **the prefix's** (Debian's packages), by PATH -- no aliases.
-- **`termux-shell`** -- open a clean, nested Termux (host) shell: there
+- **`termux-shell`** -- open a clean, nested Termux shell: there
   `pkg`, `termux-apt` and `termux-dpkg` are Termux's, and `exit` returns
-  to the userland. `pkg` typed in the userland is refused (a guard).
-- **`dn-shell`** -- from a host shell, enter the userland again (the
-  reverse crossing). The userland prompt is red (`~ # `), the host's
+  to the Debian userland. `pkg` typed in the userland is refused (a guard).
+- **`dn-shell`** -- from a Termux shell, enter the Debian userland again
+  (the reverse crossing). The Debian prompt is red (`~ # `), Termux's
   green (`~ $ `).
 - **`dn-adopt FILE...`** -- make a glibc arm64 program obtained outside
   apt (a release download, a direct installer's binary) run through the

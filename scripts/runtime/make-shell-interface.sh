@@ -1,6 +1,6 @@
 #!/bin/sh
 # Make the Debian userland the default session, and the Termux host an
-# explicit, nested door (docs/spec/host-userland.md).
+# explicit, nested door (docs/spec/userlands.md).
 #
 # The two roots share one process tree, one $HOME and no boundary, so the
 # interface shows one world at a time and makes crossing deliberate. This
@@ -66,7 +66,7 @@ gen "$HOME_DIR/.dn-login" <<'WRAP'
 # ~/.termux/shell points here: Termux's login runs it, so the Debian
 # userland (dn-shell) is the default session. If the prefix is missing, or
 # its dn-shell gone, fall back to the host shell. See
-# docs/spec/host-userland.md.
+# docs/spec/userlands.md.
 DN=__INSTDIR__
 if [ -x "$DN/usr/bin/dn-shell" ]; then
   export PROMPT_COMMAND="PS1='\[\e[0;31m\]\w # \[\e[0m\]'"
@@ -82,7 +82,7 @@ ln -sfn "$HOME_DIR/.dn-login" "$TERMUX_DIR/shell"
 gen "$TP/bin/termux-shell" <<'HOST'
 #!/system/bin/sh
 # deb-native termux-shell (generated; do not edit): a clean, nested Termux
-# (host) shell. See docs/spec/host-userland.md.
+# (host) shell. See docs/spec/userlands.md.
 P="__TP__"
 unset LD_PRELOAD DN_INSTDIR DN_BIONIC_PRELOAD DN_REDIRECT_PREFIXES DN_ID PROMPT_COMMAND
 export PATH="$P/bin:$P/bin/applets"
@@ -96,7 +96,7 @@ gen "$TP/bin/dn-shell" <<'ENTER'
 #!/system/bin/sh
 # deb-native dn-shell (generated; do not edit): enter the Debian userland
 # from a host shell. The default session is already the userland; this is
-# the reverse crossing from termux-shell. See docs/spec/host-userland.md.
+# the reverse crossing from termux-shell. See docs/spec/userlands.md.
 export PROMPT_COMMAND="PS1='\[\e[0;31m\]\w # \[\e[0m\]'"
 exec "__INSTDIR__/usr/bin/dn-shell" "$@"
 ENTER

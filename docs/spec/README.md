@@ -19,10 +19,10 @@ designs live in [`../notes/`](../notes/README.md).
 - `package-lifecycle.md` — one package's lifecycle, stage by stage, mapped
   to the hook/script/layer that handles each (`install-flow.md` is the
   one-time bootstrap instead).
-- `host-userland.md` — the two roots (Termux host + Debian userland) and
-  the interface over them: the userland is the default session;
-  `termux-shell` crosses to the host, `dn-shell` back; distinct prompts
-  and a `pkg` guard.
+- `userlands.md` — one host (Android) and its sibling userlands (Termux's
+  and the project's) and the interface over them: the Debian userland is
+  the default session; `termux-shell` crosses to Termux, `dn-shell` back;
+  distinct prompts and a `pkg` guard.
 - `deploy.md` — how a `dn-glibc` prefix is deployed: install Debian's real
   `libc6`/`libc-bin`, then swap in the patched files; the rest of the
   bootstrap is unchanged.

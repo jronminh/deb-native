@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
    * bin/ next: the launchers (make-launchers.sh) win over the raw usr/bin
    * entries, so programs that need the tracer are routed there rather than
    * run directly -- this is what makes the userland session the default,
-   * with no ~/.bashrc activation (docs/spec/host-userland.md). */
+   * with no ~/.bashrc activation (docs/spec/userlands.md). */
   snprintf(path, sizeof path,
            "%s/usr/lib/deb-native/priv:%s/usr/lib/deb-native/bin:"
            "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:"
