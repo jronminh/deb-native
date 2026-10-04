@@ -164,6 +164,11 @@ export PS1='\[\e[0;32m\]\w $ \[\e[0m\]'
 exec "$P/bin/bash" "$@"
 HOST
 
+# Expose it in the host-layer bin too: the userland PATH includes
+# ~/.local/bin but NOT $PREFIX/bin, so without this `termux-shell` is only
+# reachable by absolute path from the Debian userland.
+ln -sfn "$TP/bin/termux-shell" "$HOME_DIR/.local/bin/termux-shell"
+
 # dn-shell: the explicit reverse crossing, host -> userland.
 gen "$TP/bin/dn-shell" <<'ENTER'
 #!/system/bin/sh
