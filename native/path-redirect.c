@@ -90,8 +90,10 @@ static int g_rprefixes_custom;
  *     is recorded: a chowned file still shows as root's);
  *   - USER/LOGNAME = root.
  * DN_ID=user turns it off for one command and its children (programs that
- * refuse root: postgres, Chromium's sandbox). Static programs under
- * dn-trace do not get it (the shim is not loaded there). */
+ * refuse root: postgres, Chromium's sandbox). A static binary gets it from
+ * dn-trace instead, which fakes the same calls at syscall exit
+ * (tracer/syscall/exit.c, dn_fake_root) -- the shim cannot be preloaded
+ * into a static ELF. */
 static int g_fakeroot;
 static uid_t g_ruid;
 static gid_t g_rgid;
