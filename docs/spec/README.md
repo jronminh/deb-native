@@ -36,6 +36,8 @@ changes.
 - `host-userland.md` — the two roots (Termux host + Debian userland) and
   the interface over them: the userland is the default session; `termux-shell`
   crosses to the host, `dn-shell` back; distinct prompts and a `pkg` guard.
+- `known-issues.md` — the confirmed breakages in the current tree, each
+  with how to reproduce it and its root cause.
 - `multiarch-mechanics.md` — dpkg multi-arch mechanics as the prefix's
   apt/dpkg uses them.
 - `path-shim.md` is the mechanism; the boundary around it:

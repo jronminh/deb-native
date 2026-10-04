@@ -108,7 +108,7 @@ glibc build: [`docs/spec/deploy.md`](docs/spec/deploy.md) and
 Full detail: [`docs/spec/design.md`](docs/spec/design.md) (the mechanism
 end to end), [`docs/spec/install-flow.md`](docs/spec/install-flow.md)
 (the bootstrap/install order), [`docs/spec/tracer.md`](docs/spec/tracer.md)
-(the tracer).
+(the tracer). Confirmed breakages: [`docs/spec/known-issues.md`](docs/spec/known-issues.md).
 
 ## apt and dpkg
 
