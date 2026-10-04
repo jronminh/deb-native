@@ -15,7 +15,7 @@ installer inside the prefix.
 - [The gap](#the-gap)
 - [The common install paths](#the-common-install-paths)
 - [Case study: opencode](#case-study-opencode)
-- [Why the shim cannot help](#why-the-shim-cannot-help)
+- [Shim vs tracer: who can fix the interpreter](#shim-vs-tracer-who-can-fix-the-interpreter)
 - [What it implies](#what-it-implies)
 
 ## The gap
@@ -75,31 +75,51 @@ fails before anything else. And the `~/.bashrc` PATH edit does nothing in the
 prefix: the prefix login shell is `bash -l`, which reads `~/.profile`, not
 `~/.bashrc`.
 
-## Why the shim cannot help
+## Shim vs tracer: who can fix the interpreter
 
-`PT_INTERP` is resolved by the **kernel**, before any user space runs. The
-`LD_PRELOAD` shim loads *after* the interpreter, so it can never fix a bad
-interpreter -- that is a kernel-level wall. This is exactly why the `.deb`
-pipeline rewrites `PT_INTERP` at install; a third-party binary skips that
-step, and no amount of shim coverage reaches it.
+There are two overlays, and only one of them reaches `PT_INTERP`:
+
+- **libc level (`LD_PRELOAD` shim) -- cannot.** `PT_INTERP` is resolved by the
+  **kernel** at `execve`, before any user space runs; the shim loads *after*
+  the interpreter. A bad interpreter is a miss the shim never sees. This is why
+  the `.deb` pipeline rewrites `PT_INTERP` at install.
+- **syscall level (the tracer, fork-lite/proot lineage) -- can.** It traps
+  `execve` at the syscall boundary, before the kernel finalizes the
+  interpreter, so it can rewrite it to the prefix loader -- or exec the loader
+  with the binary as an argument -- without touching the binary at all. proot
+  runs foreign binaries on exactly this mechanism.
+
+So point 3 is not a wall; it is a wall *for the shim only*. The overlay that
+reaches it is the tracer, and it does so at **launch**, uniformly, for any
+binary. The real constraint is tracer **coverage**: the `execve` has to go
+through it.
 
 ## What it implies
 
-The missing primitive is an **adopt step for non-dpkg software**, generalizing
-what the `.deb` pipeline already does. Two shapes, to weigh:
+The instinct "translate at install" should flip to **translate at launch**.
+Install-time translation (the `.deb` path) is then one fast case, not the only
+mechanism:
 
-- **Translate the artifact** -- `patchelf --set-interpreter <prefix>/usr/lib/
-  aarch64-linux-gnu/ld-linux-aarch64.so.1` (+ rpath). Works for ordinary ELF;
-  risky for appended-data binaries like Bun's (section surgery can corrupt
-  them).
-- **Wrap the launch** -- leave the binary untouched and exec the prefix loader
-  explicitly (`<prefix>/lib/ld-linux-aarch64.so.1 --library-path <prefix libs>
-  <binary>`), the glibc-runner trick. This is what the opencode wrapper does
-  and what the Termux musl launcher does for its own loader. Safe, but every
-  adopted tool needs a wrapper and its env quirks.
+- **syscall overlay (general)** -- route any ELF whose interpreter does not
+  resolve here (`/lib/ld-linux-aarch64.so.1` absent) through the tracer, which
+  resolves it to the prefix loader. The install channel stops mattering: dpkg,
+  `curl | bash`, npm, tarball all land on the same front door, with no
+  `patchelf` and no Bun-corruption risk.
+- **shim (fast path)** -- keep `LD_PRELOAD` for path redirection on the common
+  case, since the tracer (ptrace) is slower.
+- **narrower alternatives** -- `patchelf` the artifact's interpreter (durable,
+  but section surgery can corrupt appended-data binaries like Bun's), or a
+  per-tool loader wrapper (what the opencode wrapper does).
 
-Either way the open questions are the same and worth deciding before building:
-**which environment the installer should run in** (inside `dn-shell`, to pick
-the glibc build and stay "Debian", then adopt -- or on the host?), and **how an
-adopted tool is registered on the prefix PATH/env** when the installer only
-edits host rc files the prefix login never reads.
+The pivot is tracer **coverage**. `dn-run` currently routes *selectively* (NSS,
+static, direct-syscall); it needs one more criterion -- "interpreter not
+resolvable here" -- so foreign binaries become case N of the same door instead
+of an exception. And to cover the whole tree, the entry point (the session
+shell) must itself run under the tracer, or every launch must be routed
+through it.
+
+Open questions still worth deciding: **which environment the installer runs
+in** (inside `dn-shell`, to pick the glibc build and stay "Debian", then let
+launch-time adoption handle it -- or on the host?), and **how an adopted tool
+is registered on the prefix PATH/env** when the installer only edits host rc
+files the prefix login never reads.

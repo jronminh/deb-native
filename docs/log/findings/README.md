@@ -156,6 +156,8 @@ below, oldest first, matching the original file's order.
   language package managers, prebuilt tarballs, AppImage, containers, source
   builds) and maps each to deb-native; the axis is who builds the final ELF.
   `PT_INTERP` is kernel-resolved before the shim, so a third-party glibc
-  binary cannot run untranslated (opencode case study). Proposes an adopt
-  primitive (patchelf vs loader-wrapper) and flags the open questions
+  binary cannot run untranslated (opencode case study) -- but the syscall-level
+  overlay (tracer) **can** fix it at launch, where the shim cannot. Reframes
+  the fix as translate-at-launch (tracer coverage + a routing criterion), with
+  patchelf/loader-wrapper as narrower options; flags the open questions
   (installer environment, PATH/env registration).
