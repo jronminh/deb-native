@@ -610,12 +610,11 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   one Debian; the prefix must be a copyable/portable artifact and the
   interface must let you pick/enter among them.
 
-**Still open**:
-
-- **termux-exec**: only meaningful for Bionic children; with Debian apt/dpkg
-  (glibc) and a prefix-first PATH few remain, so it is already optional -- the
-  shim uses `DN_BIONIC_PRELOAD` only if present. Revisit when the last Bionic
-  children (`/system/bin/sh` priv wrappers) are addressed.
+**Bionic preload** (done): `termux-exec` is vendored into the prefix at
+bootstrap (`setup-runtime.sh` -> `$INSTDIR/usr/lib/deb-native/host/`) and
+`dn-launch.c`/`dn-run.c` remap `DN_BIONIC_PRELOAD` onto that copy, so a Bionic
+child needs nothing under `$TP` at runtime. It remains meaningful only for
+Bionic children.
 
 **Runtime-overlay plan (the Termux-independent half), R0-R7:**
 
@@ -630,24 +629,28 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
 - **R2 Overlay coverage** (done): `/tmp` and `/run` are redirect roots now
   (shim `rewrite` switch, `dn-run` tracer binds, `normalize-symlinks` BOUND);
   `/dev`, `/proc`, `/sys` stay real. Bootstrap creates `$DN/tmp` and `$DN/run`.
-- **R4 Tracer** (hardened): `setup-runtime.sh` detects `make` and
-  `libtalloc.so*` separately, tolerates a build failure (the shim alone still
-  works) and reports whether `dn-trace` was installed. Routing is covered by
-  `tests/tracer-nss/`; the tracer binds the same roots as the shim (incl.
-  `tmp`/`run`).
+- **R4 Tracer** (done): `setup-runtime.sh` detects `make` and `libtalloc.so*`
+  separately, tolerates a build failure (the shim alone still works) and
+  reports whether `dn-trace` was installed. Its one non-system `NEEDED`,
+  `libtalloc.so.2`, is vendored into `$INSTDIR/usr/lib/deb-native/host/` and
+  the four Bionic host ELFs' rpath is retargeted at `$ORIGIN` (no `$TP/lib`),
+  and `dn-run` pins the tracer's `TMPDIR`/`PROOT_TMP_DIR` under the prefix.
+  Routing is covered by `tests/tracer-nss/`; the tracer binds the same roots as
+  the shim (incl. `tmp`/`run`).
 - **R5 `dn-adopt`** (hardened): it needs `patchelf`, which is not in the
   minimal seed, so it now fails with "apt install patchelf" instead of
   silently skipping. Adoption is only needed for non-apt glibc binaries
   (`apt` installs are translated automatically) -- stay on-demand.
 - **R6 fake-root/identity** (done): apt/dpkg root semantics (uid 0, `chown`
   no-op) and `_apt` -- proven by R0's `id -u` / chown / getent checks.
-- **R7 reclassified -- not an independence item.** The remaining Bionic pieces
+- **R7 Bionic crossing** (done): the remaining Bionic pieces
   (`bionic_env`/`DN_BIONIC_PRELOAD`, the `C_BIONIC` branch) and the
   `termux-shell`/`dn-shell`/`pkg` doors are the **host<->userland crossing on
-  Android** -- a deliberate feature, not Termux coupling, and needed however
-  independent the two userlands are. The only independence-adjacent leftovers
-  are `dn-perl`'s Termux fallback (a gap, not a dependency: `apt install perl`
-  closes it) and the bootstrap-only `$TP` PATH/priv fallbacks.
+  Android** -- a deliberate feature, not Termux coupling. The preload they hand
+  a Bionic child is the vendored copy (R4), so nothing under `$TP` is read at
+  runtime. `dn-perl` already prefers the prefix's own perl; its
+  `$TP/glibc/bin/perl` path is a bootstrap-only fallback, as are the `$TP`
+  PATH/priv fallbacks.
 
 Not needed: **no CI bundle rebuild** -- the loader/shim self-derive the live
 prefix (`native/path-redirect.c` `dn_init` via `dladdr`; glibc-patch commits
