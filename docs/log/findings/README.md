@@ -150,3 +150,12 @@ below, oldest first, matching the original file's order.
   fake-root). Rebuilt shim: interactive shell + `tput` work again. The
   `~/.dn-login` chooser's own exit-0 bug is deferred -- `~/.termux/shell`
   now points straight at the prefix `dn-shell`.
+- [`non-dpkg-install-paths.md`](non-dpkg-install-paths.md) — 2026-10-04,
+  **Open gap**: software installed outside apt/dpkg is a second, never-
+  translated install path. Enumerates the common routes (vendor `curl|bash`,
+  language package managers, prebuilt tarballs, AppImage, containers, source
+  builds) and maps each to deb-native; the axis is who builds the final ELF.
+  `PT_INTERP` is kernel-resolved before the shim, so a third-party glibc
+  binary cannot run untranslated (opencode case study). Proposes an adopt
+  primitive (patchelf vs loader-wrapper) and flags the open questions
+  (installer environment, PATH/env registration).
