@@ -668,7 +668,12 @@ this project's own). The no-op `chown`/`chgrp`/`dpkg-statoverride` (and
 `deb-systemd-invoke`) are already grouped into one privilege layer
 (`$DN/usr/lib/deb-native/priv/`) a later real mode can replace.
 
-**Design for services, decided**: real systemd is out (PID 1, or
+**Design for services, decided**: supervisor is **runit, installed at
+deploy** -- its binaries are small and glibc, translated into the prefix;
+the Debian `runit` *package*'s `sysuser-helper` (`adduser`+`passwd`+`perl`)
+and its init glue are skipped, and `runsvdir "$DN/etc/service"` is started by
+us (`docs/log/findings/runit-for-the-prefix.md`). Experiments follow
+(cron -> redis -> dbus). Real systemd is out (PID 1, or
 `--user` with cgroups/a session bus Android gives an app none) —
 mimicking all of it is a trap. Instead: packages keep shipping units and
 calling `deb-systemd-helper`/`systemctl`; deb-native translates each unit
