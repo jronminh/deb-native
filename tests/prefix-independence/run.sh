@@ -126,11 +126,14 @@ fi
 
 # 9c. The Bionic preload the session inherits from Termux (termux-exec) is
 #     remapped onto the prefix's own copy, so a Bionic child needs no $tp.
+#     Launch through a Bionic parent (/system/bin/sh, the login's own shell,
+#     no shim): a *shimmed* glibc parent rewrites LD_PRELOAD for its Bionic
+#     children (path-redirect.c bionic_env), so it cannot hand dn-shell the
+#     inherited preload directly.
 if [ -e "$HOST/libtermux-exec-ld-preload.so" ] \
-   && [ -e "$tp/lib/libtermux-exec-ld-preload.so" ]; then
-  got=$(TMPDIR="$TMP" DN_TERMUX_PREFIX="$EMPTY" \
-        LD_PRELOAD="$tp/lib/libtermux-exec-ld-preload.so" \
-        "$P/usr/bin/dn-shell" -c 'printf %s "$DN_BIONIC_PRELOAD"' 2>/dev/null || true)
+   && [ -e "$tp/lib/libtermux-exec-ld-preload.so" ] && [ -x /system/bin/sh ]; then
+  got=$(/system/bin/sh -c 'LD_PRELOAD=$0 exec $1 -c "printf %s \"\$DN_BIONIC_PRELOAD\""' \
+        "$tp/lib/libtermux-exec-ld-preload.so" "$P/usr/bin/dn-shell" 2>/dev/null || true)
   case "$got" in
     "$P"/*) ok "Bionic preload remapped into the prefix" ;;
     *)      fail "DN_BIONIC_PRELOAD still points outside the prefix: ${got:-<empty>}" ;;
