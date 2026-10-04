@@ -30,6 +30,7 @@ extern int __xstat(int, const char *, struct stat *);
 extern int __lxstat(int, const char *, struct stat *);
 extern int __xstat64(int, const char *, struct stat64 *);
 extern int __lxstat64(int, const char *, struct stat64 *);
+extern int __fxstatat64(int, int, const char *, struct stat64 *, int);
 extern int eaccess(const char *, int);
 extern int euidaccess(const char *, int);
 
@@ -77,6 +78,7 @@ int main(void) {
   note("__lxstat");   { struct stat st; __lxstat(3, "/etc/zz_lxstat", &st); }
   note("__xstat64");  { struct stat64 st; __xstat64(3, "/etc/zz_xstat64", &st); }
   note("__lxstat64"); { struct stat64 st; __lxstat64(3, "/etc/zz_lxstat64", &st); }
+  note("__fxstatat64"); { struct stat64 st; __fxstatat64(3, AT_FDCWD, "/etc/zz_fxstatat64", &st, 0); }
   note("scandir");    { struct dirent **l = NULL; scandir("/etc/zz_scandir", &l, NULL, NULL); }
   note("scandir64");  { struct dirent64 **l = NULL; scandir64("/etc/zz_scandir64", &l, NULL, NULL); }
   note("setmntent");  { FILE *m = setmntent("/etc/zz_mtab", "r"); if (m) endmntent(m); }

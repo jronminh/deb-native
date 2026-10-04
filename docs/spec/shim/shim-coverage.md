@@ -130,9 +130,11 @@ intercepted. The counts are `app / base` imports across the corpus:
 
 ### Gaps found — and closed
 
-Eight genuine gaps were all closed in `native/path-redirect.c`:
+Nine genuine gaps were all closed in `native/path-redirect.c`:
 `__xstat`/`__lxstat` (legacy pre-2.33 stat entry points; `__fxstat` is
-fd-based and needs no redirect), `sendmsg` (the AF_UNIX path in
+fd-based and needs no redirect), `__fxstatat64` (the 64-bit `fstatat`, which
+Bun/Node call directly -- without it the real owner leaked past fake-root and
+Claude Code refused its own temp dir), `sendmsg` (the AF_UNIX path in
 `msghdr.msg_name`, mirroring `sendto`), `lutimes`, `mkstemps`/`mkostemps`,
 `eaccess`/`euidaccess`, and `setmntent`. `scandir`/`scandir64` were promoted
 from "indirect" to explicit redirects as well: glibc's own scan walks the
