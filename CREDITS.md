@@ -70,6 +70,20 @@ builds on, and the license each part is under.
   without it, static binaries and programs making their own syscalls run
   untranslated instead of failing to build.
 
+## termux-adb-bridge (adbwire)
+
+- <https://github.com/jronminh/termux-adb-bridge>
+- License: **GPL-3.0** (compatible with this project's GPL-3.0-or-later; same
+  author).
+- Used for: `adbwire`, the minimal Wireless-Debugging ADB client, vendored
+  under [`third_party/adbwire/`](third_party/adbwire/) and built into the
+  prefix by `setup-runtime.sh` so `dn-adbwire` runs one command per
+  connection at Android's `shell` UID with no daemon. The client carries no
+  secret (it pairs with `~/.android/adbkey`).
+- Its `ed25519/` is the ref10 Ed25519 implementation from
+  <https://github.com/orlp/ed25519> (**zlib** license, copyright Orson
+  Peters), vendored unmodified with its `NOTICE`.
+
 ## sudo-less
 
 - <https://github.com/jronminh/sudo-less>

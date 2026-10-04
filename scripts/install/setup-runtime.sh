@@ -115,6 +115,31 @@ fi
 put "$CACHE/dn-shell" "$BINDIR/dn-shell"
 put "$CACHE/dn-shell" "$BINDIR/dn-perl"
 
+# adbwire (third_party/adbwire): termux-adb-bridge's daemonless
+# Wireless-Debugging ADB client, so `dn-adbwire` can run one command per
+# connection at Android's `shell` UID. Built here with Termux's clang +
+# OpenSSL and vendored into the prefix (below) like the other host-layer
+# binaries. Optional: with no clang/OpenSSL it is simply absent, and
+# `dn-adbwire` says so when run.
+ADBWIRE_SRC="$HERE/../../third_party/adbwire"
+have_ssl=$(ls "$PREFIX_DIR"/lib/libssl.so* 2>/dev/null | head -n1 || true)
+if [ -e "$ADBWIRE_SRC/adbwire.c" ] && command -v clang >/dev/null 2>&1 && [ -n "$have_ssl" ]; then
+  if [ ! -x "$CACHE/adbwire" ] || [ -n "$(find "$ADBWIRE_SRC" -name '*.[ch]' -newer "$CACHE/adbwire" | head -n1)" ]; then
+    echo "Building adbwire ..."
+    clang -O2 -Wall -o "$CACHE/adbwire" \
+      "$ADBWIRE_SRC/adbwire.c" "$ADBWIRE_SRC/spake2.c" \
+      "$ADBWIRE_SRC/ed25519/fe.c" "$ADBWIRE_SRC/ed25519/ge.c" \
+      "$ADBWIRE_SRC/ed25519/sc.c" "$ADBWIRE_SRC/ed25519/sha512.c" \
+      "$ADBWIRE_SRC/ed25519/keypair.c" "$ADBWIRE_SRC/ed25519/sign.c" \
+      "$ADBWIRE_SRC/ed25519/verify.c" "$ADBWIRE_SRC/ed25519/key_exchange.c" \
+      -I"$ADBWIRE_SRC/ed25519" -lssl -lcrypto \
+      || { echo "W: adbwire build failed"; rm -f "$CACHE/adbwire"; }
+  fi
+fi
+if [ -x "$CACHE/adbwire" ]; then
+  put "$CACHE/adbwire" "$LIBDIR/adbwire"
+fi
+
 # Bundle the Bionic host-layer libraries into the prefix so the *runtime*
 # never opens anything under Termux's tree (0.7.0's independence goal, R7
 # follow-up). dn-run/dn-trace/dn-shell/dn-perl are Bionic ELFs built by
@@ -137,11 +162,19 @@ if [ -n "$have_termux_exec" ]; then
   cp -f "$have_termux_exec" "$HOST/libtermux-exec-ld-preload.so" \
     || echo "W: could not vendor termux-exec into the prefix; Bionic children keep needing it from Termux"
 fi
+# adbwire links Termux's OpenSSL (libssl/libcrypto); vendor both so the
+# client is self-contained too.
+for l in libssl.so.3 libcrypto.so.3; do
+  if [ -f "$PREFIX_DIR/lib/$l" ]; then
+    cp -f "$PREFIX_DIR/lib/$l" "$HOST/$l" \
+      || echo "W: could not vendor $l into the prefix; adbwire keeps needing it from Termux"
+  fi
+done
 # Retarget the rpath at the prefix's own host dir (via $ORIGIN, so the
 # prefix stays relocatable). patchelf is a bootstrap requirement (README);
 # if it is missing, say so rather than leave the Termux path silently.
 if command -v patchelf >/dev/null 2>&1; then
-  for f in "$LIBDIR/dn-run" "$LIBDIR/dn-trace"; do
+  for f in "$LIBDIR/dn-run" "$LIBDIR/dn-trace" "$LIBDIR/adbwire"; do
     if [ -f "$f" ]; then
       patchelf --set-rpath '$ORIGIN/host' "$f" \
         || echo "W: patchelf could not retarget $f; it keeps its Termux rpath"
