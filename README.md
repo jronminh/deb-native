@@ -2,20 +2,9 @@
 
 ![status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)
 
-**Install and run real Debian `arm64` `.deb` packages inside Termux — no root,
-no `chroot`, no kernel namespaces.** `apt install PKG` works and the program
-runs by name. Not a container and not an emulator: nothing is isolated.
-
-- **A small Debian tree, not a distro image:** `~/.dn`; only glibc comes from
-  Termux, every other package is Debian's own.
-- **Native speed:** no `proot` for normal programs — paths are rewritten
-  in-process, the tracer is only a fallback.
-- **Part of Termux:** Debian programs are ordinary Termux processes, run by
-  name, calling and called by Termux's own.
-- **Removable:** Termux is never modified; delete `~/.dn` and it is gone.
-
-In one line: `proot-distro` puts a Debian machine next to Termux; deb-native
-puts Debian's packages into it.
+**Real Debian `arm64` `.deb` packages inside Termux: no root, no `chroot`,
+no namespaces.** `apt install PKG` works and the program runs by name; a
+small Debian tree in `~/.dn`, Termux left untouched.
 
 > [!WARNING]
 > **Pre-alpha, AI-assisted, not independently audited.** Read `install.sh`
