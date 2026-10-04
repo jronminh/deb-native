@@ -32,6 +32,14 @@ LD="$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 
 [ -x "$LD" ] || { echo "E: no fused glibc loader in $DN (install the prefix first)" >&2; exit 1; }
 
+# patchelf only matters for adoption, so it is not in the minimal bootstrap
+# seed; get it from the prefix's own apt when first needed. Without this, a
+# missing patchelf silently reads as "static or a library; left alone".
+command -v patchelf >/dev/null 2>&1 || {
+  echo "E: patchelf not found -- adopting a glibc binary needs it: run 'apt install patchelf'" >&2
+  exit 1
+}
+
 rc=0
 for f in "$@"; do
   if [ ! -f "$f" ]; then

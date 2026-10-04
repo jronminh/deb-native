@@ -625,7 +625,10 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   works) and reports whether `dn-trace` was installed. Routing is covered by
   `tests/tracer-nss/`; the tracer binds the same roots as the shim (incl.
   `tmp`/`run`).
-- **R5 `dn-adopt`**: adopt non-apt glibc binaries; test.
+- **R5 `dn-adopt`** (hardened): it needs `patchelf`, which is not in the
+  minimal seed, so it now fails with "apt install patchelf" instead of
+  silently skipping. Adoption is only needed for non-apt glibc binaries
+  (`apt` installs are translated automatically) -- stay on-demand.
 - **R6 fake-root/identity**: apt/dpkg root semantics (uid 0, `chown` no-op)
   and the `_apt` user under the overlay.
 - **R7 Dead-code sweep** (after R0): drop `dn-perl` (no perl in the minimal
