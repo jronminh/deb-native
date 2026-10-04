@@ -142,13 +142,16 @@ static int classify(const char *path, int *nss) {
 
 static void set_path(void) {
   const char *p = termux_prefix();
+  const char *home = getenv("HOME");
   char path[8192];
+  /* Prefix dirs first, plus $HOME/.local/bin (host-layer commands:
+   * dn-list/dn-switch); Termux's dirs only while the prefix has no dpkg yet
+   * (bootstrap). The steady-state PATH has no Termux entry (0.7.0 R1). */
   snprintf(path, sizeof path,
            "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/usr/games:"
-           "%s/usr/lib/deb-native/bin",
-           instdir, instdir, instdir, instdir, instdir, instdir);
-  /* Termux's dirs only while the prefix has no dpkg yet (bootstrap); the
-   * steady-state PATH is prefix-only (0.7.0 R1). */
+           "%s/usr/lib/deb-native/bin:%s/.local/bin",
+           instdir, instdir, instdir, instdir, instdir, instdir,
+           (home && *home) ? home : "/nonexistent");
   {
     char dpkg[4096];
     snprintf(dpkg, sizeof dpkg, "%s/usr/bin/dpkg", instdir);

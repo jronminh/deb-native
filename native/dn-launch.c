@@ -79,12 +79,18 @@ int main(int argc, char **argv) {
    * prefix has no dpkg yet (early bootstrap: libc6/libc-bin maintainer scripts
    * run through this shell and need Termux's cp/dpkg-trigger). Once the base
    * is installed the prefix is self-sufficient, so the steady-state PATH is
-   * prefix-only -- no Termux entry (0.7.0 R1). */
-  snprintf(path, sizeof path,
-           "%s/usr/lib/deb-native/priv:%s/usr/lib/deb-native/bin:"
-           "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:"
-           "%s/usr/games",
-           inst, inst, inst, inst, inst, inst, inst);
+   * prefix-only -- no Termux entry (0.7.0 R1). $HOME/.local/bin is the
+   * host-layer dir for our own prefix-independent commands (dn-list,
+   * dn-switch). */
+  {
+    const char *home = getenv("HOME");
+    snprintf(path, sizeof path,
+             "%s/usr/lib/deb-native/priv:%s/usr/lib/deb-native/bin:"
+             "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:"
+             "%s/usr/games:%s/.local/bin",
+             inst, inst, inst, inst, inst, inst, inst,
+             (home && *home) ? home : "/nonexistent");
+  }
   {
     char dpkg[4096];
     snprintf(dpkg, sizeof dpkg, "%s/usr/bin/dpkg", inst);

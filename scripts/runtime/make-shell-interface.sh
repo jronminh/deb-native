@@ -38,7 +38,7 @@ TERMUX_DIR="$HOME_DIR/.termux"
 
 [ -x "$INSTDIR/usr/bin/dn-shell" ] || { echo "E: no dn-shell in $INSTDIR (run setup-runtime.sh)" >&2; exit 1; }
 
-mkdir -p "$PRIV" "$TERMUX_DIR"
+mkdir -p "$PRIV" "$TERMUX_DIR" "$HOME_DIR/.local/bin"
 
 # The prefix as shown in the welcome: $HOME shortened to ~.
 case "$INSTDIR" in
@@ -166,7 +166,7 @@ exec "__INSTDIR__/usr/bin/dn-shell" "$@"
 ENTER
 
 # dn-list: the userlands the login selector would offer.
-gen "$TP/bin/dn-list" <<'LIST'
+gen "$HOME_DIR/.local/bin/dn-list" <<'LIST'
 #!/system/bin/sh
 # deb-native dn-list (generated; do not edit): list the available userlands.
 TP="__TP__"
@@ -183,7 +183,7 @@ fi
 LIST
 
 # dn-switch: re-run the login selector from inside a userland.
-gen "$TP/bin/dn-switch" <<'SWITCH'
+gen "$HOME_DIR/.local/bin/dn-switch" <<'SWITCH'
 #!/system/bin/sh
 # deb-native dn-switch (generated; do not edit): re-run the login selector.
 exec "${DN_HOME:-$HOME}/.dn-login" "$@"
