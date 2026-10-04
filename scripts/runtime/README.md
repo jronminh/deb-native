@@ -10,7 +10,8 @@ Front end used after a prefix already exists. See
   nested door (`termux-shell`, `dn-shell`), with the welcome and the `pkg`
   guard (`docs/spec/userlands.md`).
 - `dn-adopt.sh` — makes a glibc arm64 program obtained outside apt (a
-  release download, a direct installer) run through the prefix.
+  release download, a direct installer) run through the prefix; `--scan`
+  adopts every candidate ELF under a directory.
 - `make-launchers.sh` — exposes a prefix's installed programs by name:
   one launcher entry per program, first on `PATH`.
 - `make-apt-wrappers.sh` — installs `termux-apt`/`termux-dpkg`,

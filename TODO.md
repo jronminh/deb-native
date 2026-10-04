@@ -655,6 +655,30 @@ prefix (`native/path-redirect.c` `dn_init` via `dladdr`; glibc-patch commits
 kept from the local build (`dn-install-glibc.sh`). Only a static program /
 `ldconfig` falls back to the compiled prefix (0.6.1 Tier 1).
 
+## 0.7.1: runtime correctness and adopt (released)
+
+**Status**: released 2026-10-04. Closes the ways a prefix shipped packages
+that could not run, and makes software installed **outside apt** run.
+
+- A runtime `apt install` was silently untranslated: the translating
+  `patchelf` was unusable inside the prefix and `dn-translate-deb.sh`
+  swallowed the failure. Now patchelf is preflighted (fail loud) and the
+  bootstrap requires the host patchelf, so the prefix's own patchelf is
+  translated too.
+- The apt translate/index hooks are copied **inside** the prefix
+  (`scripts/runtime/install-hooks.sh`), so the prefix's apt no longer depends
+  on the checkout's path (a moved checkout used to stop translation silently).
+- A foreign glibc binary (a vendor installer, a tarball) is **adopted at
+  launch**: the shim's `do_exec` hands it to `dn-run`, which rewrites its
+  interpreter to the fused loader once and runs it natively, falling back to
+  the tracer -- lazy, per-binary, no session tracing. `dn-adopt --scan`
+  adopts in bulk.
+- The interactive shell died on Android seccomp's `setfsuid` trap (the shim
+  now no-ops `setfsuid`/`setfsgid`), and the `~/.dn-login` chooser exec'd the
+  shell from inside a redirected loop, handing it EOF (fixed).
+
+**Open**: none specific; the general services/sudo work is below.
+
 ## Services, then sudo (after alpha)
 
 **Goal**: same scope as `sudo-less` — a service needs something to run it

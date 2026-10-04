@@ -24,14 +24,14 @@ the tracer — without them, static and raw-syscall programs run untranslated.
 
 ```sh
 # pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.7.0-prealpha/install.sh | DEB_NATIVE_REF=v0.7.0-prealpha sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.7.1-prealpha/install.sh | DEB_NATIVE_REF=v0.7.1-prealpha sh
 
 # then restart Termux — the new session is the Debian userland
 apt install figlet
 figlet hi
 ```
 
-Rolling edge: replace both `v0.7.0-prealpha` with `main`. Idempotent from
+Rolling edge: replace both `v0.7.1-prealpha` with `main`. Idempotent from
 a checkout: `sh install.sh [PREFIX] [pkg ...]`; log in `var/log/` under the
 prefix.
 
