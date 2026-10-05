@@ -16,6 +16,14 @@ int main(int argc, char **argv) {
   }
   char perl[4096], p5[8192];
   snprintf(perl, sizeof perl, "%s/usr/bin/perl", inst);
+  if (access(perl, X_OK) != 0) {
+    /* Bootstrap: the prefix's perl isn't installed yet (the app model has no
+     * Termux, so the branch is then dead). */
+    const char *pfx = getenv("DN_TERMUX_PREFIX");
+    if (!pfx || !*pfx) pfx = getenv("PREFIX");
+    if (!pfx || !*pfx) pfx = "/data/data/com.termux/files/usr";
+    snprintf(perl, sizeof perl, "%s/glibc/bin/perl", pfx);
+  }
   snprintf(p5, sizeof p5,
            "%s/usr/share/perl5:%s/usr/lib/aarch64-linux-gnu/perl5",
            inst, inst);

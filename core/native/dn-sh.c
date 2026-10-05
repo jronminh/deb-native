@@ -15,6 +15,14 @@ int main(int argc, char **argv) {
   }
   char bash[4096];
   snprintf(bash, sizeof bash, "%s/usr/bin/bash", inst);
+  if (access(bash, X_OK) != 0) {
+    /* Bootstrap: the prefix's bash isn't installed yet. Fall back to Termux's
+     * glibc bash (the app model has no Termux, so the branch is then dead). */
+    const char *pfx = getenv("DN_TERMUX_PREFIX");
+    if (!pfx || !*pfx) pfx = getenv("PREFIX");
+    if (!pfx || !*pfx) pfx = "/data/data/com.termux/files/usr";
+    snprintf(bash, sizeof bash, "%s/glibc/bin/bash", pfx);
+  }
   execv(bash, argv);
   perror("dn-sh: execv");
   return 127;

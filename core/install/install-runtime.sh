@@ -46,8 +46,8 @@ done
 LD="$INSTDIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 for n in dn-sh dn-perl; do
   [ -e "$CACHE/$n" ] || { echo "W: no $n in the build cache; interpreter missing"; continue; }
-  if command -v patchelf >/dev/null 2>&1; then patchelf --set-interpreter "$LD" "$CACHE/$n" || true; fi
   put "$CACHE/$n" "$BINDIR/$n"
+  if command -v patchelf >/dev/null 2>&1; then patchelf --set-interpreter "$LD" "$BINDIR/$n" || true; fi
 done
 [ -e "$CACHE/adbwire" ] && put "$CACHE/adbwire" "$LIBDIR/adbwire"
 

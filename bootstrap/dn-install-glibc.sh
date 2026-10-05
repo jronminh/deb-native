@@ -58,13 +58,16 @@ install_held() {  # DEB PACKAGE
   $DPKG -i "$WORK/$1"
   echo "$2:arm64 hold" | "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --set-selections
 }
+# Seed the loader + libc from the bundle BEFORE dpkg runs libc6's preinst: the
+# maintainer-script interpreters are glibc ELFs (PT_INTERP = the prefix
+# loader), so the loader must exist before any maintainer script runs.
+echo "Seeding the loader and libc from the bundle ..."
+cp -a "$DEBS/files/." "$DN/"
+
 echo "Installing Debian's libc6 ..."
 install_held libc6.deb libc6
 echo "Installing Debian's libc-bin ..."
 install_held libc-bin.deb libc-bin
-
-echo "Swapping the 10 patched glibc files ..."
-cp -a "$DEBS/files/." "$DN/"
 
 # The swapped programs still carry the build prefix in PT_INTERP; point them
 # at this prefix's own loader, exactly like dn-translate-deb.sh does per
