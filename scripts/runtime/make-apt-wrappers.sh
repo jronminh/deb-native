@@ -67,4 +67,13 @@ exec sh "$REPO/scripts/runtime/dn-adopt.sh" "$INSTDIR" "\$@"
 EOF
 chmod 755 "$LAUNCHDIR/dn-adopt"
 
-echo "Installed termux-apt, termux-dpkg, termux-dn-doctor, dn-shell and dn-adopt in $LAUNCHDIR."
+# dn-update: install a prebuilt deb-native overlay component into the prefix
+# (dn-update.sh; allowlisted targets only).
+cat > "$LAUNCHDIR/dn-update" <<EOF
+#!/system/bin/sh
+# deb-native dn-update (generated; do not edit).
+exec "$INSTDIR/usr/lib/deb-native/scripts/runtime/dn-update.sh" "\$@"
+EOF
+chmod 755 "$LAUNCHDIR/dn-update"
+
+echo "Installed termux-apt, termux-dpkg, termux-dn-doctor, dn-shell, dn-adopt and dn-update in $LAUNCHDIR."

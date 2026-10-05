@@ -31,6 +31,10 @@ chmod 755 "$HOOKS/"*.sh
 cp -f "$HERE/scripts/runtime/make-launchers.sh" "$DEST/scripts/runtime/"
 chmod 755 "$DEST/scripts/runtime/make-launchers.sh"
 
+# dn-update: the constrained overlay updater, run from the launcher dir.
+cp -f "$HERE/scripts/runtime/dn-update.sh" "$DEST/scripts/runtime/"
+chmod 755 "$DEST/scripts/runtime/dn-update.sh"
+
 cp -f "$HERE/scripts/bench/scan-direct-syscalls.py" "$DEST/scripts/bench/"
 chmod 755 "$DEST/scripts/bench/scan-direct-syscalls.py"
 
