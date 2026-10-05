@@ -41,21 +41,14 @@ for a in dn-shim.so dn-run dn-trace; do
   [ -e "$CACHE/$a" ] || continue
   put "$CACHE/$a" "$LIBDIR/$a"
 done
-# The maintainer-script interpreters: real glibc ELFs built with the prefix's
-# own gcc and repointed at the prefix's fused loader (fork model). The kernel
-# runs them from a maintainer script's shebang; each derives INSTDIR from its
-# own path (up three dirs). Needs the prefix's gcc; warn if absent.
+# The maintainer-script interpreters were built by build-core.sh (glibc ELFs
+# via the host clang); point them at the prefix's fused loader and install.
 LD="$INSTDIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
-GCC="$INSTDIR/usr/bin/gcc"; [ -x "$GCC" ] || GCC=$(command -v gcc || true)
-if [ -n "$GCC" ] && command -v patchelf >/dev/null 2>&1; then
-  for n in dn-sh dn-perl; do
-    "$GCC" -O2 -o "$CACHE/$n" "$SRC/$n.c" || { echo "W: could not build $n"; continue; }
-    patchelf --set-interpreter "$LD" "$CACHE/$n" || { echo "W: patchelf failed for $n"; continue; }
-    put "$CACHE/$n" "$BINDIR/$n"
-  done
-else
-  echo "W: no prefix gcc / patchelf; maintainer-script interpreters (dn-sh, dn-perl) not built"
-fi
+for n in dn-sh dn-perl; do
+  [ -e "$CACHE/$n" ] || { echo "W: no $n in the build cache; interpreter missing"; continue; }
+  if command -v patchelf >/dev/null 2>&1; then patchelf --set-interpreter "$LD" "$CACHE/$n" || true; fi
+  put "$CACHE/$n" "$BINDIR/$n"
+done
 [ -e "$CACHE/adbwire" ] && put "$CACHE/adbwire" "$LIBDIR/adbwire"
 
 # No-op shims for root-only/unshipped commands a maintainer script may call

@@ -35,6 +35,23 @@ if stale "$CACHE/dn-run" "$SRC/dn-run.c"; then
   clang -O2 -o "$CACHE/dn-run" "$SRC/dn-run.c"
 fi
 
+# The maintainer-script interpreters (dn-sh, dn-perl): tiny glibc executables
+# built with the host clang targeting the glibc side-install (same recipe as
+# an executable test binary), then repointed at the prefix loader by
+# install-runtime.sh. Needs the glibc side-install for Scrt1.o/crti.o/crtn.o
+# and libc.
+for n in dn-sh dn-perl; do
+  if [ ! -x "$CACHE/$n" ] || [ "$SRC/$n.c" -nt "$CACHE/$n" ] || [ "$SRC/dn-child.h" -nt "$CACHE/$n" ]; then
+    echo "Building $n ..."
+    clang --target=aarch64-linux-gnu --sysroot=/ -O2 \
+      -nostartfiles -nodefaultlibs -I"$SRC" -I"$GLIBC/include" -L"$GLIBC/lib" \
+      -Wl,-dynamic-linker,"$GLIBC/lib/ld-linux-aarch64.so.1" \
+      -o "$CACHE/$n" \
+      "$GLIBC/lib/Scrt1.o" "$GLIBC/lib/crti.o" "$SRC/$n.c" "$GLIBC/lib/crtn.o" \
+      -lc || { echo "W: could not build $n"; rm -f "$CACHE/$n"; }
+  fi
+done
+
 # The syscall tracer (fork-lite, tracer/) for what the shim cannot
 # reach: static binaries (which Android's seccomp filter also kills without
 # its syscall emulation), programs making their own syscalls, NSS. Built here
