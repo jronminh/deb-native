@@ -41,18 +41,17 @@ for a in dn-shim.so dn-run dn-trace; do
   [ -e "$CACHE/$a" ] || continue
   put "$CACHE/$a" "$LIBDIR/$a"
 done
-# The maintainer-script interpreters were built by build-core.sh (glibc ELFs);
-# point them at the prefix's fused loader and give them an $ORIGIN rpath to find
-# libc.so.6 next to the loader.
-LD="$INSTDIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
-for n in dn-sh dn-perl; do
-  [ -e "$CACHE/$n" ] || { echo "W: no $n in the build cache; interpreter missing"; continue; }
-  put "$CACHE/$n" "$BINDIR/$n"
-  if command -v patchelf >/dev/null 2>&1; then
-    patchelf --set-interpreter "$LD" "$BINDIR/$n" || true
-    patchelf --set-rpath '$ORIGIN/../lib/aarch64-linux-gnu' "$BINDIR/$n" || true
-  fi
-done
+# The maintainer-script interpreters (dn-sh, dn-perl): real glibc ELFs built
+# with the prefix's own gcc, so NEEDED/PT_INTERP match the prefix's glibc and
+# loader exactly (fork model, Stage 1). Requires gcc in the prefix.
+CC="$INSTDIR/usr/bin/gcc"; [ -x "$CC" ] || CC=$(command -v gcc || true)
+if [ -n "$CC" ]; then
+  for n in dn-sh dn-perl; do
+    "$CC" -O2 -I"$SRC" -o "$BINDIR/$n" "$SRC/$n.c" || echo "W: could not build $n"
+  done
+else
+  echo "W: no gcc in the prefix; maintainer-script interpreters (dn-sh, dn-perl) not built"
+fi
 [ -e "$CACHE/adbwire" ] && put "$CACHE/adbwire" "$LIBDIR/adbwire"
 
 # No-op shims for root-only/unshipped commands a maintainer script may call

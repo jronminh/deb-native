@@ -35,21 +35,10 @@ if stale "$CACHE/dn-run" "$SRC/dn-run.c"; then
   clang -O2 -o "$CACHE/dn-run" "$SRC/dn-run.c"
 fi
 
-# The maintainer-script interpreters (dn-sh, dn-perl): glibc ELFs built by
-# clang targeting the glibc side-install (fork model), then repointed at the
-# prefix's fused loader + rpath by install-runtime.sh. The prefix must have its
-# loader seeded first (dn-install-glibc seeds the bundle before the runtime).
-for n in dn-sh dn-perl; do
-  if [ ! -x "$CACHE/$n" ] || [ "$SRC/$n.c" -nt "$CACHE/$n" ] || [ "$SRC/dn-child.h" -nt "$CACHE/$n" ]; then
-    echo "Building $n ..."
-    clang --target=aarch64-linux-gnu --sysroot=/ -O2 \
-      -nostartfiles -nodefaultlibs -I"$SRC" -I"$GLIBC/include" -L"$GLIBC/lib" \
-      -Wl,-dynamic-linker,"$GLIBC/lib/ld-linux-aarch64.so.1" \
-      -o "$CACHE/$n" \
-      "$GLIBC/lib/Scrt1.o" "$GLIBC/lib/crti.o" "$SRC/$n.c" "$GLIBC/lib/crtn.o" \
-      -lc || { echo "W: could not build $n"; rm -f "$CACHE/$n"; }
-  fi
-done
+# The maintainer-script interpreters (dn-sh, dn-perl) are built by
+# install-runtime.sh with the prefix's own gcc, so their NEEDED/PT_INTERP match
+# the prefix's glibc and loader exactly (Stage 1, MODULARIZE.md "bootstrap
+# stages"). build-core cannot: it has no prefix/toolchain.
 
 # The syscall tracer (fork-lite, tracer/) for what the shim cannot
 # reach: static binaries (which Android's seccomp filter also kills without
