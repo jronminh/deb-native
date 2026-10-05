@@ -1,11 +1,18 @@
 # <directory>/
 
-> Template: [`templates/readme.template.md`](../templates/readme.template.md)
-> (fix the relative path to match this file's depth). Read this file
-> before touching anything in this directory or guessing a file's purpose
-> from its name alone. Add a `README.md` like this one whenever a new
-> directory holds more than a couple of files that aren't self-explanatory
-> from their names alone.
+<!--
+How to use this template (this comment renders as nothing). Copy the file
+to `<directory>/README.md`, then replace the placeholders.
+
+  - One short paragraph: what the directory is for, and anything a reader
+    needs before opening individual files (a shared convention, an
+    ordering rule, a pointer to the doc that explains why it's organized
+    this way).
+  - One bullet per file or subdirectory: ``<name>`` — one-line purpose.
+
+After adding or renaming a document, run `scripts/tools/check-repo.py`
+(broken links and ToC anchors).
+-->
 
 <One short paragraph: what this directory is for, and anything a reader
 needs before looking at individual files — a shared convention, an
