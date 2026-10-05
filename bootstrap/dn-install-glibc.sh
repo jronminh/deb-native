@@ -62,7 +62,10 @@ install_held() {  # DEB PACKAGE
 # maintainer-script interpreters are glibc ELFs (PT_INTERP = the prefix
 # loader), so the loader must exist before any maintainer script runs.
 echo "Seeding the loader and libc from the bundle ..."
-cp -a "$DEBS/files/." "$DN/"
+STASH="$DN/usr/lib/deb-native/glibc-swap"
+mkdir -p "$STASH"
+cp -a "$DEBS/files/." "$STASH/"
+"$HERE/../core/install/dn-fix-glibc.sh" "$DN"
 
 echo "Installing Debian's libc6 ..."
 install_held libc6.deb libc6

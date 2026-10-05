@@ -23,6 +23,7 @@ mkdir -p "$DN/var/log"
 # timestamp only to the log).
 echo "== $(date '+%F %T') post" >> "$LOG"
 {
+  "$HERE/dn-fix-glibc.sh" "$DN"
   "$HERE/dn-fix-alternatives.sh" "$DN"
   "$HERE/normalize-symlinks.sh" "$DN"
   "$HERE/../runtime/make-launchers.sh" "$DN"
