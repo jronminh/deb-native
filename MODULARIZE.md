@@ -81,15 +81,18 @@ Dependency direction (arrows point only downward, no cycles):
 - [ ] No logic changes in P1.
 
 ### P2 — Split the straddlers, parameterize the leaks
-- [ ] Split `scripts/install/setup-runtime.sh` into `build-core`,
-      `install-runtime` (prefix install + `priv/`), and `vendor-host-libs`
-      (adapter).
-- [ ] Move `scripts/runtime/make-shell-interface.sh` to the adapter module.
-- [ ] Parameterize adapter leaks that live in core files: which `dpkg-query`
-      (host vs prefix), the `$HERE/../../custom` path, `BASE_FILES`, and the
-      interpreter choice.
-- [ ] Give `install-hooks.sh` a **core manifest** so it stops copying
-      bootstrap scripts.
+- [x] Split `setup-runtime.sh` into `build-core` (build), `install-runtime`
+      (core: install + `priv/`), and `vendor-host-libs` (adapter). The
+      orchestrator stays bootstrap-level, so `core` no longer reaches build or
+      adapter; `module-edges.allow` is empty.
+- [x] Move the adapter leaf scripts to `adapters/deb-native/`
+      (`make-shell-interface.sh`, `make-apt-wrappers.sh`).
+- [x] Parameterize the `dpkg-query` leak (prefer the prefix's own; borrow the
+      host's only during bootstrap) in `dn-hook-pre.sh` and `make-launchers.sh`.
+- [x] `install-hooks.sh` copies an explicit core manifest, not `*.sh`.
+- [ ] Still open: `dn-translate-deb.sh`'s `$HERE/../../custom` path and the
+      interpreter choice (`dn-launch.c` vs the fork's glibc binaries) are not
+      yet parameters.
 
 ### P3 — Bind interfaces and pin versions
 - [ ] Name and version the prefix artifact and the core entry points.

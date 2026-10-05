@@ -22,10 +22,15 @@ HOOKS="$DEST/scripts/install"
 
 mkdir -p "$HOOKS" "$DEST/scripts/runtime" "$DEST/scripts/bench" "$DEST/custom"
 
-# scripts/install/*.sh is the whole hook set: dn-hook-{pre,post}.sh,
+# The core hook set (explicit manifest, so bootstrap-only scripts like
+# setup-runtime.sh are not shipped into the prefix): dn-hook-{pre,post}.sh,
 # dn-translate-deb.sh, patch-scripts-tree.sh, dn-fix-{alternatives,gcc-specs}.sh,
 # normalize-symlinks.sh, dn-debian-index.sh.
-cp -f "$HERE/scripts/install/"*.sh "$HOOKS/"
+for s in dn-hook-pre.sh dn-hook-post.sh dn-translate-deb.sh \
+         patch-scripts-tree.sh dn-fix-alternatives.sh dn-fix-gcc-specs.sh \
+         normalize-symlinks.sh dn-debian-index.sh; do
+  cp -f "$HERE/scripts/install/$s" "$HOOKS/"
+done
 chmod 755 "$HOOKS/"*.sh
 
 cp -f "$HERE/scripts/runtime/make-launchers.sh" "$DEST/scripts/runtime/"

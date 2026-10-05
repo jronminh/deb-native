@@ -252,7 +252,7 @@ static void launch_trace(char **args, int nss) {
      * other program runs untranslated, and says so. */
     if (g_glibc) launch_glibc(args);
     fprintf(stderr, "dn-run: %s needs dn-trace, which is not built "
-            "(pkg install make libtalloc, then run deb-native's install.sh); "
+            "(pkg install make libtalloc, then re-run the installer); "
             "running it untranslated; it may fail\n", args[0]);
     execv(args[0], args);
     die("execv");

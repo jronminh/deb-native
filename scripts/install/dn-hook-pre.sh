@@ -26,6 +26,9 @@ DN=${1:?usage: dn-hook-pre.sh PREFIX [DEB...]}
 shift
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
+# Prefer the prefix's own dpkg-query once it exists (steady state); borrow
+# Termux's only during bootstrap, before the prefix has dpkg.
+DPKGQ="$DN/usr/bin/dpkg-query"; [ -x "$DPKGQ" ] || DPKGQ="$TP/bin/dpkg-query"
 LOG="$DN/var/log/deb-native-hook.log"
 mkdir -p "$DN/var/log"
 
@@ -70,7 +73,7 @@ while IFS= read -r deb; do
     while IFS= read -r path; do
       [ -e "$DN$path" ] || [ -L "$DN$path" ] || continue
       if [ -d "$DN$path" ] && [ ! -L "$DN$path" ]; then continue; fi
-      owner=$("$TP/bin/dpkg-query" --admindir="$DN/var/lib/dpkg" -S "$path" 2>&1) && continue
+      owner=$("$DPKGQ" --admindir="$DN/var/lib/dpkg" -S "$path" 2>&1) && continue
       printf ' %s' "$path"
     done) || true
   if [ -n "$clash" ]; then

@@ -29,6 +29,9 @@ INSTDIR=${1:?usage: make-launchers.sh INSTDIR}
 case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
+# Prefer the prefix's own dpkg-query (steady state); borrow Termux's only
+# before the prefix has dpkg (bootstrap).
+DPKGQ="$INSTDIR/usr/bin/dpkg-query"; [ -x "$DPKGQ" ] || DPKGQ="$PREFIX_DIR/bin/dpkg-query"
 LIBDIR="$INSTDIR/usr/lib/deb-native"
 LAUNCHDIR="$LIBDIR/bin"
 LD="$INSTDIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
@@ -67,7 +70,7 @@ BASE_FILES="$tmp.base"
   [ -s "$INSTDIR/var/lib/deb-native/base-packages" ] && cat "$INSTDIR/var/lib/deb-native/base-packages"
   echo libc6; echo dpkg; echo apt
 } | while IFS= read -r p; do
-  "$PREFIX_DIR/bin/dpkg-query" --admindir="$INSTDIR/var/lib/dpkg" -L "$p:arm64" || true
+  "$DPKGQ" --admindir="$INSTDIR/var/lib/dpkg" -L "$p:arm64" || true
 done | sed "s|^/bin/|/usr/bin/|; s|^/sbin/|/usr/sbin/|; s|^|$INSTDIR|" > "$BASE_FILES"
 
 is_elf() {
