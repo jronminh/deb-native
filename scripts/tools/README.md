@@ -15,3 +15,8 @@ Standalone diagnostics, not part of any install or runtime path.
   `core` file references `build`/`bootstrap`/`adapter`/`product`. Accepted
   edges live in `module-edges.allow`, to be burned down in P2. `--list`
   prints the module membership.
+- `check-paths.py` — resolves each script's `$HERE/…` references and reports
+  the ones that no longer exist. Run after moving a script.
+- `check-interface.py` — enforces the core surface in `core/interface.tsv`:
+  every declared entry/source exists, and no non-core module calls a core
+  script that is not a declared entry. `--list` prints undeclared references.

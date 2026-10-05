@@ -96,10 +96,16 @@ Dependency direction (arrows point only downward, no cycles):
       interpreter choice (`dn-launch.c` vs the fork's glibc binaries) are not
       yet parameters.
 
-### P3 — Bind interfaces and pin versions
-- [ ] Name and version the prefix artifact and the core entry points.
+### P3 — Bind interfaces and pin versions (in progress)
+- [x] Declare the core surface in `core/interface.tsv` (entries, sources,
+      artifacts) and pin the version in `core/VERSION`; enforced by
+      `scripts/tools/check-interface.py` (non-core modules may call only the
+      declared entries).
+- [ ] Define the **prefix artifact** naming/versioning rule from
+      `core/VERSION` (the artifact bootstrap produces and a target consumes).
 - [ ] Add a **smoke test** that runs the core test suite against both adapter
-      instantiations (fixed prefix and dynamic prefix).
+      instantiations (fixed prefix and dynamic prefix) — blocked on a second
+      adapter (the dn-shell fork) existing in-tree.
 
 ### P4 — Enforce
 - [ ] Wire the check script and the smoke test into the normal loop (CI or
