@@ -14,11 +14,12 @@ int main(int argc, char **argv) {
     fprintf(stderr, "dn-perl: readlink /proc/self/exe failed\n");
     return 127;
   }
-  char perl[4096], p5[8192];
+  char perl[4096], p5[8192], dpkg[4096];
   snprintf(perl, sizeof perl, "%s/usr/bin/perl", inst);
-  if (access(perl, X_OK) != 0) {
-    /* Bootstrap: the prefix's perl isn't installed yet (the app model has no
-     * Termux, so the branch is then dead). */
+  snprintf(dpkg, sizeof dpkg, "%s/usr/bin/dpkg", inst);
+  if (access(dpkg, X_OK) != 0 || access(perl, X_OK) != 0) {
+    /* Bootstrap (no prefix dpkg yet): Termux's glibc perl. Steady state: the
+     * prefix's own (the app model has no Termux, so the branch is then dead). */
     const char *pfx = getenv("DN_TERMUX_PREFIX");
     if (!pfx || !*pfx) pfx = getenv("PREFIX");
     if (!pfx || !*pfx) pfx = "/data/data/com.termux/files/usr";
