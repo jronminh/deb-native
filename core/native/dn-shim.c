@@ -254,7 +254,7 @@ static char **bionic_env(char *const *envp) {
   static char entry[8192];
   if (want) snprintf(entry, sizeof entry, "LD_PRELOAD=%s", b);
   static char *out[2048];
-  /* PATH, too: dn-shell puts the prefix's and Termux's glibc tools ahead of
+  /* PATH, too: dn-sh puts the prefix's and Termux's glibc tools ahead of
    * Termux's Bionic ones for glibc scripts, but a Bionic child (Termux's
    * dpkg-realpath, a #!/system/bin/sh wrapper) carries termux-exec's Bionic
    * preload, and a glibc tool it runs by name (Debian's basename) dies
@@ -430,24 +430,24 @@ static const char *map_shebang_interp(const char *in, char *buf, size_t sz) {
      * dash/bash directly when installed -- real apt packages with the fused
      * loader as their own ELF interpreter, so the kernel following the rewritten
      * shebang already gets the shim/environment set up, no extra
-     * indirection needed. dn-shell is only the bootstrap-time fallback,
+     * indirection needed. dn-sh is only the bootstrap-time fallback,
      * kept here too for the same chicken-and-egg reason (a script the
      * shim encounters live, e.g. via system()/posix_spawn, before
      * dash/bash are installed). Runtime component audit item 4,
      * 2026-09-30 -- this was the one remaining place still hardcoded to
-     * dn-shell unconditionally after the translate-time scripts were
+     * dn-sh unconditionally after the translate-time scripts were
      * fixed. */
     if (!strcmp(in, "/bin/sh") || !strcmp(in, "/bin/dash") ||
         !strcmp(in, "/usr/bin/sh") || !strcmp(in, "/usr/bin/dash")) {
       snprintf(buf, sz, "%s/usr/bin/dash", root);
       if (access(buf, X_OK) == 0) return buf;
-      snprintf(buf, sz, "%s/usr/bin/dn-shell", root);
+      snprintf(buf, sz, "%s/usr/bin/dn-sh", root);
       return buf;
     }
     if (!strcmp(in, "/bin/bash") || !strcmp(in, "/usr/bin/bash")) {
       snprintf(buf, sz, "%s/usr/bin/bash", root);
       if (access(buf, X_OK) == 0) return buf;
-      snprintf(buf, sz, "%s/usr/bin/dn-shell", root);
+      snprintf(buf, sz, "%s/usr/bin/dn-sh", root);
       return buf;
     }
     if (!strncmp(in, "/usr/bin/perl", 13) || !strncmp(in, "/bin/perl", 9)) {
@@ -1895,7 +1895,7 @@ int posix_spawn(pid_t *pid, const char *path,
    * used to only classify glibc-vs-Bionic and skip the script/shebang
    * branch entirely, so a script spawned via posix_spawn (glibc's own
    * system()/popen() can use it internally) never got its shebang
-   * interpreter remapped to the prefix's loader/dn-shell the way execve's targets do,
+   * interpreter remapped to the prefix's loader/dn-sh the way execve's targets do,
    * and -- since a plain-text script fails target_is_glibc()'s ELF-magic
    * check -- was always treated as a Bionic target regardless of what it
    * actually needed. */

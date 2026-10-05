@@ -51,7 +51,7 @@ dpkg: error processing package ca-certificates:arm64 (--configure):
 ```
 
 **Root cause.** Most maintainer scripts have their shebang rewritten to
-`#!$INSTDIR/usr/bin/dn-shell` — the launcher, which sets `LD_PRELOAD` to the
+`#!$INSTDIR/usr/bin/dn-sh` — the launcher, which sets `LD_PRELOAD` to the
 path shim before the interpreter runs. A few are missed by that rewrite
 (`patch-scripts-tree.sh`) and keep a raw `#!$INSTDIR/usr/bin/dash`. On this
 prefix they are `ca-certificates`, `cpp`, `figlet`, `gcc` and

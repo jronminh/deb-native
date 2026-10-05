@@ -17,7 +17,7 @@ set -eu
 TREE=${1:?usage: patch-scripts-tree.sh PACKAGE_TREE INSTDIR}
 INSTDIR=${2:?usage: patch-scripts-tree.sh PACKAGE_TREE INSTDIR}
 case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
-WRAPPER="$INSTDIR/usr/bin/dn-shell"
+WRAPPER="$INSTDIR/usr/bin/dn-sh"
 
 for f in "$TREE/DEBIAN/preinst" "$TREE/DEBIAN/postinst" \
          "$TREE/DEBIAN/prerm" "$TREE/DEBIAN/postrm"; do

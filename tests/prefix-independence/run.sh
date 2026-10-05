@@ -13,7 +13,7 @@ set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 P=${1:?usage: run.sh PREFIX}
 case "$P" in /*) ;; *) P="$PWD/$P" ;; esac
-[ -x "$P/usr/bin/dn-shell" ] || { echo "not a deb-native prefix: $P" >&2; exit 1; }
+[ -x "$P/usr/bin/dn-sh" ] || { echo "not a deb-native prefix: $P" >&2; exit 1; }
 tp=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 HOME_REAL=${HOME:-/data/data/com.termux/files/home}
 
@@ -32,7 +32,7 @@ export TMPDIR
 EMPTY=$(mktemp -d)
 TMP=$(mktemp -d)
 trap 'rm -rf "$EMPTY" "$TMP"' EXIT
-in_ul() { TMPDIR="$TMP" DN_TERMUX_PREFIX="$EMPTY" "$P/usr/bin/dn-shell" -c "$1" 2>&1; }
+in_ul() { TMPDIR="$TMP" DN_TERMUX_PREFIX="$EMPTY" "$P/usr/bin/dn-sh" -c "$1" 2>&1; }
 
 # 1. shell + coreutils resolve inside the prefix
 case "$(in_ul 'command -v bash')" in "$P"/*) ;; *) fail "bash is not the prefix's";; esac
@@ -90,7 +90,7 @@ fi
 ok "resolv.conf is the prefix's own"
 
 # 9. the runtime commands are present
-for f in "$P/usr/bin/dn-shell" "$P/usr/lib/deb-native/dn-run" \
+for f in "$P/usr/bin/dn-sh" "$P/usr/lib/deb-native/dn-run" \
          "$P/usr/lib/deb-native/dn-shim.so" "$P/usr/lib/deb-native/bin/dn-adopt"; do
   [ -e "$f" ] || fail "missing runtime piece: $f"
 done
@@ -107,7 +107,7 @@ ok "runtime pieces present (dn-shell, dn-run, shim, dn-adopt)"
 HOST="$P/usr/lib/deb-native/host"
 if in_ul 'command -v readelf >/dev/null 2>&1'; then
   for b in "$P/usr/lib/deb-native/dn-run" "$P/usr/lib/deb-native/dn-trace" \
-           "$P/usr/bin/dn-shell" "$P/usr/bin/dn-perl"; do
+           "$P/usr/bin/dn-sh" "$P/usr/bin/dn-perl"; do
     [ -e "$b" ] || continue
     rp=$(in_ul "readelf -d '$b' 2>/dev/null | grep -Ei '(RPATH|RUNPATH)'" || true)
     case "$rp" in
@@ -133,7 +133,7 @@ fi
 if [ -e "$HOST/libtermux-exec-ld-preload.so" ] \
    && [ -e "$tp/lib/libtermux-exec-ld-preload.so" ] && [ -x /system/bin/sh ]; then
   got=$(/system/bin/sh -c 'LD_PRELOAD=$0 exec $1 -c "printf %s \"\$DN_BIONIC_PRELOAD\""' \
-        "$tp/lib/libtermux-exec-ld-preload.so" "$P/usr/bin/dn-shell" 2>/dev/null || true)
+        "$tp/lib/libtermux-exec-ld-preload.so" "$P/usr/bin/dn-sh" 2>/dev/null || true)
   case "$got" in
     "$P"/*) ok "Bionic preload remapped into the prefix" ;;
     *)      fail "DN_BIONIC_PRELOAD still points outside the prefix: ${got:-<empty>}" ;;

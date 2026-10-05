@@ -41,9 +41,9 @@ for a in dn-shim.so dn-run dn-trace; do
   [ -e "$CACHE/$a" ] || continue
   put "$CACHE/$a" "$LIBDIR/$a"
 done
-if [ -e "$CACHE/dn-shell" ]; then
-  put "$CACHE/dn-shell" "$BINDIR/dn-shell"
-  put "$CACHE/dn-shell" "$BINDIR/dn-perl"
+if [ -e "$CACHE/dn-sh" ]; then
+  put "$CACHE/dn-sh" "$BINDIR/dn-sh"
+  put "$CACHE/dn-sh" "$BINDIR/dn-perl"
 fi
 [ -e "$CACHE/adbwire" ] && put "$CACHE/adbwire" "$LIBDIR/adbwire"
 
@@ -153,7 +153,7 @@ if [ "\$real" != "\$dn" ] && [ "\$real" != / ]; then
   exit 125
 fi
 cd "$INSTDIR" || exit 125
-[ \$# -gt 0 ] || exec "$INSTDIR/usr/bin/dn-shell" -i
+[ \$# -gt 0 ] || exec "$INSTDIR/usr/bin/dn-sh" -i
 case "\$1" in
   /*) [ -e "$INSTDIR\$1" ] && { p="$INSTDIR\$1"; shift; set -- "\$p" "\$@"; } ;;
 esac

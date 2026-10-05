@@ -66,7 +66,7 @@ for rc in "$HOME/.bashrc" "$HOME/.profile" "$HOME/.bash_profile"; do
     fi
   fi
 done
-if [ -L "$HOME/.termux/shell" ] && [ -x "$ROOT/usr/bin/dn-shell" ]; then
+if [ -L "$HOME/.termux/shell" ] && [ -x "$ROOT/usr/bin/dn-sh" ]; then
   ok "shell interface installed (userland is the default session)"
 else
   warn "$HOME/.termux/shell missing (run make-shell-interface.sh)"

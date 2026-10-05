@@ -131,7 +131,7 @@ Dependency direction (arrows point only downward, no cycles):
    other `dn-shell` in the code is renamed to another `dn-*` name:
    - maintainer-script interpreter binary `usr/bin/dn-shell` -> `usr/bin/dn-sh`
      (sibling `dn-perl` keeps its name);
-   - adapter userland-entry wrapper `$TP/bin/dn-shell` -> `dn-login`
+   - adapter userland-entry wrapper `$TP/bin/dn-login` -> `dn-login`
      (matching `~/.dn-login`).
    A dedicated, context-aware rename (the string `dn-shell` also names the app,
    so a blind replace is unsafe). The shim rename (`path-redirect` ->

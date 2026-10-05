@@ -38,7 +38,7 @@ LD="$INSTDIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 
 [ -x "$LD" ] || { echo "E: no fused glibc loader (install the prefix first)" >&2; exit 1; }
 [ -x "$LIBDIR/dn-run" ] || { echo "E: no dn-run (run setup-runtime.sh)" >&2; exit 1; }
-[ -x "$INSTDIR/usr/bin/dn-shell" ] || { echo "E: no dn-shell (run setup-runtime.sh)" >&2; exit 1; }
+[ -x "$INSTDIR/usr/bin/dn-sh" ] || { echo "E: no dn-shell (run setup-runtime.sh)" >&2; exit 1; }
 
 mkdir -p "$LAUNCHDIR"
 tmp="$LAUNCHDIR/.tmp.$$"
@@ -108,7 +108,7 @@ expose() {
     case "$first" in
       "#!$INSTDIR/"*) ln -sfn "$f" "$LAUNCHDIR/$name" ;;
       '#!'*perl*)     wrapper "$name" "\"$INSTDIR/usr/bin/dn-perl\" \"$f\"" ;;
-      '#!'*)          wrapper "$name" "\"$INSTDIR/usr/bin/dn-shell\" \"$f\"" ;;
+      '#!'*)          wrapper "$name" "\"$INSTDIR/usr/bin/dn-sh\" \"$f\"" ;;
       *)              return 0 ;;
     esac
   fi

@@ -130,9 +130,9 @@ reselect `~/.termux/shell` and recurse).
 
 ## Crossing back: `dn-shell`
 
-From a Termux shell, `dn-shell` (`$PREFIX/bin/dn-shell`) enters the Debian
+From a Termux shell, `dn-shell` (`$PREFIX/bin/dn-login`) enters the Debian
 userland again — the explicit reverse direction, so the crossing works both
-ways. It is a thin wrapper that execs `$DN/usr/bin/dn-shell`.
+ways. It is a thin wrapper that execs `$DN/usr/bin/dn-sh`.
 
 ## Command set
 
@@ -210,7 +210,7 @@ exists): what dn-shell is, the `Docs`/`Contribute` links, and the
   locking the user out:
 
   ```sh
-  [ -x "$DN/usr/bin/dn-shell" ] && exec "$DN/usr/bin/dn-shell" "$@" \
+  [ -x "$DN/usr/bin/dn-sh" ] && exec "$DN/usr/bin/dn-sh" "$@" \
     || exec "$PREFIX/bin/bash" "$@"
   ```
 
@@ -218,7 +218,7 @@ exists): what dn-shell is, the `Docs`/`Contribute` links, and the
 
   ```sh
   rm -f ~/.termux/shell ~/.dn-login ~/.termux/motd.sh \
-        "$PREFIX/bin/termux-shell" "$PREFIX/bin/dn-shell"
+        "$PREFIX/bin/termux-shell" "$PREFIX/bin/dn-login"
   ```
 
 - The change is confined to `~/.termux/shell`, `~/.dn-login`,

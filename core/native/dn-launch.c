@@ -1,8 +1,8 @@
 /* dn-launch — the maintainer-script interpreter, as a real ELF binary.
  *
- * Replaces the earlier `dn-shell` being a shell script. A maintainer script
+ * Replaces the earlier `dn-sh` being a shell script. A maintainer script
  * whose shebang points at a *script* does not work: the kernel follows only
- * one `#!` level, so `#!$INSTDIR/usr/bin/dn-shell` where dn-shell is itself
+ * one `#!` level, so `#!$INSTDIR/usr/bin/dn-sh` where dn-sh is itself
  * `#!/system/bin/sh` leaves the kernel with nothing executable, dpkg falls
  * back to running the script under Android's Bionic /bin/sh, and the whole
  * glibc shim/PATH setup is skipped -- surfacing as the misleading
@@ -13,7 +13,7 @@
  * cross-toolchain needed). The kernel can execute it directly from a
  * shebang, and it then:
  *   - derives $INSTDIR from its own /proc/self/exe
- *     ($INSTDIR/usr/bin/dn-shell -> up three dirs),
+ *     ($INSTDIR/usr/bin/dn-sh -> up three dirs),
  *   - sets LD_PRELOAD (the dn-shim shim, a copy under
  *     $INSTDIR/lib/deb-native/), DN_INSTDIR, PATH (prefix first, then
  *     Termux's glibc coreutils, then Termux's own Bionic bin) and
@@ -24,7 +24,7 @@
  *     original argv, so the maintainer script runs. Falls back to Termux's
  *     glibc bash only if the prefix's own is not yet installed (true during
  *     early bootstrap, before `bash` reaches the base package set) -- once
- *     it is, dn-shell is standing on the prefix's own foundation, not an
+ *     it is, dn-sh is standing on the prefix's own foundation, not an
  *     external one, matching how every other glibc program here works.
  *     `dn-perl` still execs Termux's own perl deliberately (not a fallback
  *     gap): Termux's Perl is 5.42, trixie's `perl` package builds modules
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 
   char inst[4096];
   snprintf(inst, sizeof inst, "%s", self);
-  up_dirs(inst, 3); /* .../usr/bin/dn-shell -> INSTDIR */
+  up_dirs(inst, 3); /* .../usr/bin/dn-sh -> INSTDIR */
 
   const char *pfx = getenv("DN_TERMUX_PREFIX");
   if (!pfx || !*pfx) pfx = getenv("PREFIX");
@@ -155,6 +155,6 @@ int main(int argc, char **argv) {
   if (access(bash, X_OK) != 0)
     snprintf(bash, sizeof bash, "%s/glibc/bin/bash", pfx);
   execv(bash, argv);
-  perror("dn-shell: execv");
+  perror("dn-sh: execv");
   return 127;
 }

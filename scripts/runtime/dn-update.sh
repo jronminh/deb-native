@@ -39,7 +39,7 @@ target() {
     shim)           echo "$INST/usr/lib/deb-native/dn-shim.so" ;;
     run)            echo "$INST/usr/lib/deb-native/dn-run" ;;
     trace)          echo "$INST/usr/lib/deb-native/dn-trace" ;;
-    shell)          echo "$INST/usr/bin/dn-shell" ;;
+    shell)          echo "$INST/usr/bin/dn-sh" ;;
     perl)           echo "$INST/usr/bin/dn-perl" ;;
     libtalloc)      echo "$INST/usr/lib/deb-native/host/libtalloc.so.2" ;;
     libtermux-exec) echo "$INST/usr/lib/deb-native/host/libtermux-exec-ld-preload.so" ;;

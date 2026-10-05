@@ -67,9 +67,9 @@ fi
 
 # The maintainer-script launcher. One binary, dispatched by its own argv[0]
 # basename (dn-shell, dn-perl).
-if stale "$CACHE/dn-shell" "$SRC/dn-launch.c"; then
+if stale "$CACHE/dn-sh" "$SRC/dn-launch.c"; then
   echo "Building dn-shell ..."
-  clang -O2 -o "$CACHE/dn-shell" "$SRC/dn-launch.c"
+  clang -O2 -o "$CACHE/dn-sh" "$SRC/dn-launch.c"
 fi
 
 # adbwire (third_party/adbwire): termux-adb-bridge's daemonless

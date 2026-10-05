@@ -116,9 +116,9 @@ for d in usr/bin usr/sbin usr/games usr/libexec bin sbin; do
     interp=$(printf '%s' "$line" | sed -E 's/^#![[:space:]]*([^[:space:]]+).*/\1/')
     case "$interp" in
       /bin/sh|/usr/bin/sh|/bin/dash|/usr/bin/dash)
-        new="$DN/usr/bin/dash"; [ -x "$new" ] || new="$DN/usr/bin/dn-shell" ;;
+        new="$DN/usr/bin/dash"; [ -x "$new" ] || new="$DN/usr/bin/dn-sh" ;;
       /bin/bash|/usr/bin/bash)
-        new="$DN/usr/bin/bash"; [ -x "$new" ] || new="$DN/usr/bin/dn-shell" ;;
+        new="$DN/usr/bin/bash"; [ -x "$new" ] || new="$DN/usr/bin/dn-sh" ;;
       /usr/bin/perl|/bin/perl) new="$DN/usr/bin/dn-perl" ;;
       /usr/*|/bin/*|/sbin/*) new="$DN$interp" ;;
       *) continue ;;

@@ -53,7 +53,7 @@ if command -v patchelf >/dev/null 2>&1; then
         || echo "W: patchelf could not retarget $f; it keeps its Termux rpath"
     fi
   done
-  for f in "$BINDIR/dn-shell" "$BINDIR/dn-perl"; do
+  for f in "$BINDIR/dn-sh" "$BINDIR/dn-perl"; do
     if [ -f "$f" ]; then
       patchelf --set-rpath '$ORIGIN/../lib/deb-native/host' "$f" \
         || echo "W: patchelf could not retarget $f; it keeps its Termux rpath"

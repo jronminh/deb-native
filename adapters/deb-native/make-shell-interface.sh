@@ -15,7 +15,7 @@
 #   ~/.termux/shell        -> the wrapper.
 #   $PREFIX/bin/termux-shell  a clean, nested host (Termux) shell: drops the
 #                             userland-shim environment; `exit` returns.
-#   $PREFIX/bin/dn-shell      enter the userland from a host shell.
+#   $PREFIX/bin/dn-login      enter the userland from a host shell.
 #   ~/.termux/motd.sh         the dn-shell welcome (Termux login runs it).
 #   $INSTDIR/usr/lib/deb-native/priv/pkg
 #                             `pkg` is the host's package manager: inside the
@@ -36,7 +36,7 @@ PRIV="$INSTDIR/usr/lib/deb-native/priv"
 RC="$HOME_DIR/.bashrc"
 TERMUX_DIR="$HOME_DIR/.termux"
 
-[ -x "$INSTDIR/usr/bin/dn-shell" ] || { echo "E: no dn-shell in $INSTDIR (run setup-runtime.sh)" >&2; exit 1; }
+[ -x "$INSTDIR/usr/bin/dn-sh" ] || { echo "E: no dn-shell in $INSTDIR (run setup-runtime.sh)" >&2; exit 1; }
 
 mkdir -p "$PRIV" "$TERMUX_DIR" "$HOME_DIR/.local/bin"
 
@@ -87,11 +87,11 @@ LISTF=$(mktemp 2>/dev/null) || LISTF="$STATE/list.$$"
 if [ -r "$REG" ]; then
   while IFS="$(printf '\t')" read -r n p; do
     [ -n "$p" ] || continue
-    [ -x "$p/usr/bin/dn-shell" ] && printf '%s\t%s\n' "${n:-$(basename "$p")}" "$p"
+    [ -x "$p/usr/bin/dn-sh" ] && printf '%s\t%s\n' "${n:-$(basename "$p")}" "$p"
   done < "$REG" > "$LISTF"
 else
   for p in "$(dirname "$TP")"/*; do
-    [ -x "$p/usr/bin/dn-shell" ] && printf '%s\t%s\n' "$(basename "$p")" "$p"
+    [ -x "$p/usr/bin/dn-sh" ] && printf '%s\t%s\n' "$(basename "$p")" "$p"
   done > "$LISTF"
 fi
 count=$(grep -c . "$LISTF" 2>/dev/null || true)
@@ -102,7 +102,7 @@ enter() {  # PATH [args...]
   export PROMPT_COMMAND="PS1='\[\e[0;31m\]\w # \[\e[0m\]'"
   printf '%s\n' "$p" > "$STATE/last" 2>/dev/null
   rm -f "$LISTF" 2>/dev/null
-  exec "$p/usr/bin/dn-shell" "$@"
+  exec "$p/usr/bin/dn-sh" "$@"
 }
 host() { rm -f "$LISTF" 2>/dev/null; exec "$TP/bin/bash" "$@"; }
 
@@ -170,13 +170,13 @@ HOST
 ln -sfn "$TP/bin/termux-shell" "$HOME_DIR/.local/bin/termux-shell"
 
 # dn-shell: the explicit reverse crossing, host -> userland.
-gen "$TP/bin/dn-shell" <<'ENTER'
+gen "$TP/bin/dn-login" <<'ENTER'
 #!/system/bin/sh
 # deb-native dn-shell (generated; do not edit): enter the Debian userland
 # from a host shell. The default session is already the userland; this is
 # the reverse crossing from termux-shell. See docs/spec/userlands.md.
 export PROMPT_COMMAND="PS1='\[\e[0;31m\]\w # \[\e[0m\]'"
-exec "__INSTDIR__/usr/bin/dn-shell" "$@"
+exec "__INSTDIR__/usr/bin/dn-sh" "$@"
 ENTER
 
 # dn-list: the userlands the login selector would offer.
@@ -191,7 +191,7 @@ if [ -r "$REG" ]; then
   done < "$REG"
 else
   for p in "$(dirname "$TP")"/*; do
-    [ -x "$p/usr/bin/dn-shell" ] && printf '%-16s %s\n' "$(basename "$p")" "$p"
+    [ -x "$p/usr/bin/dn-sh" ] && printf '%-16s %s\n' "$(basename "$p")" "$p"
   done
 fi
 LIST
@@ -223,14 +223,14 @@ if [ "$#" -eq 0 ]; then
 fi
 arg=$1
 p=""
-if [ -x "$arg/usr/bin/dn-shell" ]; then
+if [ -x "$arg/usr/bin/dn-sh" ]; then
   p=$arg
 elif [ -r "$REG" ]; then
   while IFS="$(printf '\t')" read -r n path; do
     [ "$n" = "$arg" ] && p=$path
   done < "$REG"
 fi
-[ -n "$p" ] && [ -x "$p/usr/bin/dn-shell" ] \
+[ -n "$p" ] && [ -x "$p/usr/bin/dn-sh" ] \
   || { echo "dn-default: no such userland: $arg (see dn-default with no args)" >&2; exit 1; }
 printf '%s\n' "$p" > "$STATE/default"
 echo "default userland: $p"
