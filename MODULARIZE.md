@@ -62,6 +62,25 @@ Dependency direction (arrows point only downward, no cycles):
 - **adapter** exposes a small **parameter set**: prefix derivation, interpreter
   choice, `PATH` order, packaging paths.
 
+## Build vs Ship: two independent concerns
+
+Deliberately not mixed — this is what removes the chicken-and-egg from every
+target.
+
+- **Build** produces the prefix artifact: `deb-native-prefix-<version>-<arch>.tar.gz`
+  plus `var/lib/deb-native/prefix-manifest.tsv` (path -> sha256). It needs a
+  toolchain (gcc) and lives in `bootstrap/setup-apt-prefix.sh` (assemble the
+  prefix) and `build/package-prefix.sh` (package it). **Every bootstrap stage /
+  chicken-and-egg problem lives here and only here.** Environment: CI or a
+  gcc-capable host.
+- **Ship** delivers a prebuilt artifact to a target and runs it, with **no
+  toolchain and no building**. Consumers do the same thing: obtain the artifact,
+  extract it, fix up, run.
+  - `install.sh` (Termux) — download/extract the artifact, then `apt update`.
+  - the `dn-shell` app — extract the bundled asset on first run.
+- A **target never builds**; a **builder never needs the target**. The execution
+  layer (`core/`) and the adapter are the same on both sides.
+
 ## Phases
 
 ### P0 — Map and rules
