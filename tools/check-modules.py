@@ -3,13 +3,13 @@
 
 Two rules, from MODULARIZE.md:
   1. one home per file: every tracked path matches exactly one module in
-     scripts/tools/module-map.tsv;
+     tools/module-map.tsv;
   2. dependency direction: a `core` file must not reference a
      `build`/`bootstrap`/`adapter`/`product` file.
 
 The edge check is a heuristic: it scans non-comment lines of core files for
 identifying regexes of the non-core modules. Known, accepted edges live in
-scripts/tools/module-edges.allow (path<TAB>target), so they can be burned down
+tools/module-edges.allow (path<TAB>target), so they can be burned down
 to an empty file during P2.
 
 Usage: check-modules.py [--list]
@@ -22,18 +22,18 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(HERE))
+ROOT = os.path.dirname(HERE)
 MAP = os.path.join(HERE, "module-map.tsv")
 ALLOW = os.path.join(HERE, "module-edges.allow")
 
 # Regexes that identify a reference to a non-core module, per target module.
 # Word/boundary care matters: "install.sh" must not match "apt-install.sh".
 EDGE_PATTERNS = {
-    "build":     [r"build-dn-shim"],
-    "bootstrap": [r"scripts/bootstrap/", r"setup-apt-prefix", r"dn-install-glibc",
+    "build":     [r"build-dn-shim", r"build-core"],
+    "bootstrap": [r"bootstrap/", r"setup-apt-prefix", r"dn-install-glibc",
                   r"dn-apply-glibc-patch", r"dn-package-glibc",
                   r"dn-package-libc-bin", r"dn-standins"],
-    "adapter":   [r"make-shell-interface", r"make-apt-wrappers"],
+    "adapter":   [r"make-shell-interface", r"make-apt-wrappers", r"adapters/"],
     "product":   [r"(?<![\w-])install\.sh"],
 }
 COMMENT_PREFIXES = ("#", "//", "*", "/*", "<!--", ";")

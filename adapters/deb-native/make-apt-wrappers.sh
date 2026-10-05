@@ -48,7 +48,7 @@ done
 cat > "$LAUNCHDIR/termux-dn-doctor" <<EOF
 #!/system/bin/sh
 # deb-native doctor (generated; do not edit).
-exec sh "$REPO/scripts/tools/dn-doctor.sh" "$INSTDIR" "\$@"
+exec sh "$REPO/tools/dn-doctor.sh" "$INSTDIR" "\$@"
 EOF
 chmod 755 "$LAUNCHDIR/termux-dn-doctor"
 
@@ -63,7 +63,7 @@ ln -sfn "$INSTDIR/usr/bin/dn-sh" "$LAUNCHDIR/dn-sh"
 cat > "$LAUNCHDIR/dn-adopt" <<EOF
 #!/system/bin/sh
 # deb-native dn-adopt (generated; do not edit).
-exec sh "$REPO/scripts/runtime/dn-adopt.sh" "$INSTDIR" "\$@"
+exec sh "$REPO/core/runtime/dn-adopt.sh" "$INSTDIR" "\$@"
 EOF
 chmod 755 "$LAUNCHDIR/dn-adopt"
 
@@ -72,7 +72,7 @@ chmod 755 "$LAUNCHDIR/dn-adopt"
 cat > "$LAUNCHDIR/dn-update" <<EOF
 #!/system/bin/sh
 # deb-native dn-update (generated; do not edit).
-exec "$INSTDIR/usr/lib/deb-native/scripts/runtime/dn-update.sh" "\$@"
+exec "$INSTDIR/usr/lib/deb-native/core/runtime/dn-update.sh" "\$@"
 EOF
 chmod 755 "$LAUNCHDIR/dn-update"
 

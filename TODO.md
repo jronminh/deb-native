@@ -42,7 +42,7 @@ packaging needed -- `dn-package-glibc.sh` keeps the own-built `libc6`'s
 version string an exact match instead); the shim's redirect scope now
 covers `/lib`/`/bin`/`/sbin`; and `gcc`'s own default dynamic linker is
 repointed at the prefix's own fused glibc loader via a generated `specs` file
-(`scripts/install/dn-fix-gcc-specs.sh`, wired into `dn-hook-post.sh`) --
+(`core/install/dn-fix-gcc-specs.sh`, wired into `dn-hook-post.sh`) --
 GCC's own site-customization hook, no gcc/binutils patch or rebuild
 needed. `gcc -o hello hello.c && ./hello` now compiles **and runs**
 end to end (`docs/log/findings/gcc-hello-pt-interp-gap.md` has the full chain of fixes). `make`
@@ -309,7 +309,7 @@ loader to work, not investigated further).
 **`libc6` packaged and installed, 2026-10-01**: the validated patch is
 now the prefix's actual, running `libc6` — `dpkg -l libc6` shows `ii
 2.41-12+deb13u4`, replacing `dn-standins.sh`'s Termux-glibc stand-in.
-[`scripts/bootstrap/dn-package-glibc.sh`](scripts/bootstrap/dn-package-glibc.sh) builds it:
+[`bootstrap/dn-package-glibc.sh`](bootstrap/dn-package-glibc.sh) builds it:
 real Debian `libc6.deb` as a template (its maintainer
 scripts/triggers/symbols/doc are still accurate, reused as-is), payload
 replaced with this project's own build, relocated from the build's flat
@@ -352,7 +352,7 @@ hardcoded path instead of carrying it over as-is.
 
 **Open**:
 - **`libc-bin` / fused-loader migration**: packaging done 2026-10-03 --
-  `scripts/bootstrap/dn-package-libc-bin.sh` repackages this build's own
+  `bootstrap/dn-package-libc-bin.sh` repackages this build's own
   `ldconfig`/`ldd`/`getconf`/... as a real `libc-bin` `.deb`. It is
   *path*-sensitive (`ldconfig` writes the prefix's `ld.so.cache`), so
   unlike `libc6-dev` Debian's real one cannot be reused
@@ -482,7 +482,7 @@ symlink any more. The glibc bundle is unaffected at run time: the loader and
   the new default and rebuild/publish the `glibc-bundle` before the move is
   complete.
 - **CI and the patch helper**: `.github/workflows/build-glibc.yml`'s
-  `DN_PREFIX` and `scripts/bootstrap/dn-apply-glibc-patch.sh`'s example
+  `DN_PREFIX` and `bootstrap/dn-apply-glibc-patch.sh`'s example
   still name `home/.dn`; update with the retarget above.
 - **Migration from `~/.dn`**: an existing install is silently orphaned --
   nothing detects the old prefix or moves/removes it. Add a move/uninstall
@@ -561,7 +561,7 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   (`native/dn-shim.c:230-308`); make `install.sh` upgrade an existing
   prefix in place. Done when the harness passes run-by-name + DNS.
 - **M2 Package manager inside the prefix**: the stand-ins exec `$TP/bin/*`
-  (`scripts/bootstrap/dn-standins.sh:26-116`; drivers
+  (`bootstrap/dn-standins.sh:26-116`; drivers
   `setup-apt-prefix.sh:64,150-151,196-254`, `dn-install-glibc.sh:28,35,56`,
   `apt-install.sh:13,15`, `dn-hook-pre.sh:28,73`,
   `dn-fix-alternatives.sh:15,18,19`, `make-launchers.sh:70`). Instead of
@@ -592,7 +592,7 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   and runs the by-name/apt/DNS/toolchain/git suite; tag `v0.7.0-prealpha`.
 - **Dedup the redirect set**: `/usr /etc /var /opt /bin /sbin` is spelled
   in four places that must agree -- `native/dn-shim.c:200-212`,
-  `native/dn-run.c:221`, `scripts/install/normalize-symlinks.sh:16` and the
+  `native/dn-run.c:221`, `core/install/normalize-symlinks.sh:16` and the
   tracer binds -- into one source.
 
 **Decisions** (from the discussion):
@@ -669,7 +669,7 @@ that could not run, and makes software installed **outside apt** run.
   bootstrap requires the host patchelf, so the prefix's own patchelf is
   translated too.
 - The apt translate/index hooks are copied **inside** the prefix
-  (`scripts/runtime/install-hooks.sh`), so the prefix's apt no longer depends
+  (`core/runtime/install-hooks.sh`), so the prefix's apt no longer depends
   on the checkout's path (a moved checkout used to stop translation silently).
 - A foreign glibc binary (a vendor installer, a tarball) is **adopted at
   launch**: the shim's `do_exec` hands it to `dn-run`, which rewrites its
@@ -724,7 +724,7 @@ scripts, refusing the rest. Rule: translate what maps to a supervised
 process, refuse the rest. Test ladder: `cron` -> `redis`
 (system user + data dir) -> `dbus` (a socket in `/run`). Android may kill
 background services (phantom-process killer, battery optimization) —
-document the wake-lock/battery settings needed (see `scripts/bench/perf-run.sh`
+document the wake-lock/battery settings needed (see `tools/bench/perf-run.sh`
 for the mechanism).
 
 **`sudo`, three stackable kinds, never Android root**: pass-through
@@ -960,7 +960,7 @@ should re-read the rest of the runtime for the same class of misnomer.
 - [x] ~~A `gcc`-linked binary's `PT_INTERP` is a literal, unresolvable
   `/lib/ld-linux-aarch64.so.1` -- fails `cannot execute: required file not
   found` at the kernel level, before the shim ever runs~~ — fixed
-  2026-10-01: `scripts/install/dn-fix-gcc-specs.sh` (wired into
+  2026-10-01: `core/install/dn-fix-gcc-specs.sh` (wired into
   `dn-hook-post.sh`) writes a `specs` file next to each installed gcc
   version's `libgcc.a`, overriding just the `-dynamic-linker` string to
   the prefix loader's real path -- GCC's own site-customization hook (same mechanism

@@ -35,7 +35,7 @@ cannot: see [`../../docs/spec/tracer/bind-only.md`](../../docs/spec/tracer/bind-
 
 Safe mechanics for the three traps:
 
-- **absolute symlinks** — `scripts/install/normalize-symlinks.sh` rewrites absolute
+- **absolute symlinks** — `core/install/normalize-symlinks.sh` rewrites absolute
   targets under bound dirs to relative; run by `install.sh` after install.
 - **`..` across a bind** — detected in `normalize_guest_path()`, falls back to
   `canonicalize()`.
@@ -48,7 +48,7 @@ Safe mechanics for the three traps:
 
 `PROOT_NO_BIND_ONLY=1` forces the old canonicalize path (A/B and escape hatch).
 
-Benchmark (`scripts/bench/bench-tracer.sh`, medians on `fe2`, binds `$PREFIX:/usr`):
+Benchmark (`tools/bench/bench-tracer.sh`, medians on `fe2`, binds `$PREFIX:/usr`):
 
 | workload | og (stock proot) | fork-lite canonicalize | fork-lite bind-only |
 |---|---|---|---|

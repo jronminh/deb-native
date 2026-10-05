@@ -47,12 +47,12 @@ builds on, and the license each part is under.
 
 - <https://www.debian.org> — every package this project installs is
   Debian's own, unmodified except for the install-time translation
-  (`scripts/install/dn-translate-deb.sh`) this project adds.
+  (`core/install/dn-translate-deb.sh`) this project adds.
 - Used for: 0.5.0's `libc6` is Debian's real `glibc` source package
   (`glibc_2.41-12+deb13u4`, including Debian's own ~80-patch
   `debian/patches/series`), with the Termux-derived Android patch above
   applied on top and repackaged as a `.deb`
-  (`scripts/bootstrap/dn-package-glibc.sh`) — Debian's own maintainer
+  (`bootstrap/dn-package-glibc.sh`) — Debian's own maintainer
   scripts/triggers/symbols/doc are reused as-is, only the payload is
   this project's build. `glibc` itself is
   **LGPL-2.1-or-later** (with GPL-licensed pieces Debian's own packaging

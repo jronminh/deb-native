@@ -10,7 +10,7 @@ properly fixed; see "Revised open work" below.
 
 Tested by hand on-device against a real package from `deb.debian.org`
 (`hello_2.10-5_arm64.deb`, no maintainer scripts — chosen deliberately as
-the simplest possible case). Script: `scripts/survey/prototype-install.sh`.
+the simplest possible case). Script: `tools/survey/prototype-install.sh`.
 
 ## Contents
 
@@ -27,7 +27,7 @@ the simplest possible case). Script: `scripts/survey/prototype-install.sh`.
 ### Result: it works, end to end
 
 ```
-$ scripts/survey/prototype-install.sh hello.deb
+$ tools/survey/prototype-install.sh hello.deb
 ==> unpacking hello into ~/.termux-deb-bridge/root
 ==> configuring hello (dependency check bypassed — prototype only)
 ==> patching new ELF binaries with grun --configure

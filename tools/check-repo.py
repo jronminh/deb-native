@@ -27,7 +27,7 @@ What it checks:
      several times. This check never fails the run by itself -- it's a
      prompt to look, not a verdict.
 
-Usage: scripts/tools/check-repo.py [--root DIR]
+Usage: tools/check-repo.py [--root DIR]
 
 Exit status: nonzero if any broken link or broken anchor was found
 (check 1/2); the reachability report (check 3) never affects it.

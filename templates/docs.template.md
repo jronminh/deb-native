@@ -10,7 +10,7 @@ and Related docs sections; the body sections are yours.
   Contents  - one entry per `##` section, matching GitHub's anchors.
   Related   - the few docs a reader should open next.
 
-After writing or moving a doc, run `scripts/tools/check-repo.py` (broken
+After writing or moving a doc, run `tools/check-repo.py` (broken
 links and ToC anchors). Docs state only the current state; history lives
 in `docs/log/` (see `docs/README.md`).
 -->

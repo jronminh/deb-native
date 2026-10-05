@@ -31,7 +31,7 @@ largest section there).
 
 
 Status: **prototyped and verified working**, against a real gap (not a
-toy). `native/dn-shim.c` + `scripts/bootstrap/build-dn-shim.sh`.
+toy). `native/dn-shim.c` + `bootstrap/build-dn-shim.sh`.
 
 ### Overlay/view: confirmed dead on this device, with data
 
@@ -213,7 +213,7 @@ this project's own writable prefix.
 
 #### What actually worked: rewrite the script text, not the runtime
 
-`scripts/install/patch-maintainer-scripts.sh`, run between dpkg's `--unpack` and
+`core/install/patch-maintainer-scripts.sh`, run between dpkg's `--unpack` and
 `--configure` (already two separate steps in this project's pipeline):
 plain `sed`, rewriting any `/etc/`,
 `/usr/`, `/var/`, `/opt/` path component in a package's `postinst`/

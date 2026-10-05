@@ -10,7 +10,7 @@
 # Usage: build-core.sh
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd)
+ROOT=$(CDPATH= cd -- "$HERE/.." && pwd)
 SRC="$ROOT/core/native"
 TRACER="$ROOT/core/tracer"
 ADBWIRE_SRC="$ROOT/third_party/adbwire"

@@ -45,7 +45,7 @@ cache path needs is packaged.
   contains **no** `ldconfig`/`ldd` (verified: `dpkg-deb -c` grep is empty);
   those are in the separate **`libc-bin`** package. Our own-glibc build
   *did* produce `usr/sbin/ldconfig` and `usr/bin/ldd` in its destdir, but
-  `scripts/bootstrap/dn-package-glibc.sh` only repackaged **`libc6`** (and
+  `bootstrap/dn-package-glibc.sh` only repackaged **`libc6`** (and
   `libc6-dev`) -- `libc-bin` was left as Debian's, host-compiled build.
 
 ## Why it matters
@@ -58,7 +58,7 @@ no env-free way to find the prefix's libraries (the proof so far used
 
 ## Fix
 
-`scripts/bootstrap/dn-package-libc-bin.sh` -- the companion to
+`bootstrap/dn-package-libc-bin.sh` -- the companion to
 `dn-package-glibc.sh` -- repackages this build's glibc *programs* as a real
 `libc-bin` `.deb`: Debian's real `libc-bin` `.deb` as the template, its
 `usr/bin`/`usr/sbin` programs swapped for our build's, Debian's control

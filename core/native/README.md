@@ -3,7 +3,7 @@
 <!-- template: templates/readme.template.md -->
 
 The small set of C programs translated Debian programs actually run
-through. Built by `scripts/install/setup-runtime.sh` into each prefix;
+through. Built by `core/install/setup-runtime.sh` into each prefix;
 design background in [`../../docs/spec/shim/path-shim.md`](../../docs/spec/shim/path-shim.md)
 and [`../../docs/spec/design.md`](../../docs/spec/design.md).
 

@@ -9,30 +9,29 @@
 #
 # check-interface.py verifies every entry/source/cache path exists, and that no
 # non-core module calls a core script that is not declared as an `entry`.
-# Paths are for the CURRENT (partially moved) layout; P1 updates them.
 
 # --- entry points: callable by bootstrap / build / adapter / product -------
-entry	scripts/install/install-runtime.sh
-entry	scripts/install/dn-translate-deb.sh
-entry	scripts/install/patch-scripts-tree.sh
-entry	scripts/install/normalize-symlinks.sh
-entry	scripts/install/dn-fix-alternatives.sh
-entry	scripts/install/dn-fix-gcc-specs.sh
-entry	scripts/install/dn-hook-pre.sh
-entry	scripts/install/dn-hook-post.sh
-entry	scripts/install/dn-debian-index.sh
-entry	scripts/install/apt-install.sh
-entry	scripts/runtime/install-hooks.sh
-entry	scripts/runtime/make-launchers.sh
-entry	scripts/runtime/dn-adopt.sh
-entry	scripts/runtime/dn-update.sh
+entry	core/install/install-runtime.sh
+entry	core/install/dn-translate-deb.sh
+entry	core/install/patch-scripts-tree.sh
+entry	core/install/normalize-symlinks.sh
+entry	core/install/dn-fix-alternatives.sh
+entry	core/install/dn-fix-gcc-specs.sh
+entry	core/install/dn-hook-pre.sh
+entry	core/install/dn-hook-post.sh
+entry	core/install/dn-debian-index.sh
+entry	core/install/apt-install.sh
+entry	core/runtime/install-hooks.sh
+entry	core/runtime/make-launchers.sh
+entry	core/runtime/dn-adopt.sh
+entry	core/runtime/dn-update.sh
 
 # --- sources the build compiles --------------------------------------------
 source	core/native/dn-shim.c
 source	core/native/dn-run.c
 source	core/native/dn-launch.c
 source	core/tracer
-source	scripts/bench/scan-direct-syscalls.py
+source	core/bench/scan-direct-syscalls.py
 
 # --- artifacts build produces, and where install places them ---------------
 artifact	dn-shim.so	core/native/.build/dn-shim.so	usr/lib/deb-native/dn-shim.so

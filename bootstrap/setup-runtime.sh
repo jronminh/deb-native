@@ -20,6 +20,6 @@ GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
 
 [ -x "$GLIBC/bin/bash" ] || { echo "E: no glibc bash at $GLIBC/bin/bash (pkg install bash-glibc)" >&2; exit 1; }
 
-"$HERE/../bootstrap/build-core.sh"
-"$HERE/install-runtime.sh" "$INSTDIR"
-"$HERE/../../adapters/deb-native/vendor-host-libs.sh" "$INSTDIR"
+"$HERE/../build/build-core.sh"
+"$HERE/../core/install/install-runtime.sh" "$INSTDIR"
+"$HERE/../adapters/deb-native/vendor-host-libs.sh" "$INSTDIR"

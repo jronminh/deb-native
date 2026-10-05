@@ -87,7 +87,7 @@ regression remains (verified on CI and by a fresh on-device bootstrap).
 
 ## Install order in the bootstrap
 
-`scripts/bootstrap/setup-apt-prefix.sh`, in order:
+`bootstrap/setup-apt-prefix.sh`, in order:
 
 1. Build the runtime (`setup-runtime.sh`): shim, `dn-run`, `dn-shell`,
    `dn-trace`, priv wrappers.

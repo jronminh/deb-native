@@ -58,7 +58,7 @@ whole runtime's environment for the glibc process tree.
 Before 0.5.2 every one of those decisions was a C literal, so any change
 — one more `LD_PRELOAD` library, a new multiarch libdir, a package that
 needs its own env — meant editing `ld-dn.c` and recompiling it into every
-prefix (`scripts/install/setup-runtime.sh`); and a caller-set
+prefix (`core/install/setup-runtime.sh`); and a caller-set
 `LD_LIBRARY_PATH` was discarded rather than honoured.
 
 The goal is not "no binary at all" — ld-dn must stay a freestanding
@@ -350,11 +350,11 @@ Phased so each lands independently and is testable on `fe2`
    block, malformed line, oversized file.
 5. **Wire the shim/tracer.** Add `DN_REDIRECT_PREFIXES` consumption to
    `path-redirect.c` and config-driven bind roots to the tracer.
-6. **Benchmark.** Extend `scripts/bench/bench-tracer.sh` (or add a
+6. **Benchmark.** Extend `tools/bench/bench-tracer.sh` (or add a
    process-spawn microbench) to measure always-probe vs `DN_CONFIG`-gated
    on a spawn-heavy workload, and decide the cost contract from data.
 7. **Docs.** Update `native/README.md`, `path-shim.md`'s env section,
-   and this doc's status; run `scripts/tools/check-repo.py`.
+   and this doc's status; run `tools/check-repo.py`.
 
 Suggested order matches [`bind-only.md`](../spec/tracer/bind-only.md)'s style: land the
 no-op refactor first, A/B the cost, only then let config drive the

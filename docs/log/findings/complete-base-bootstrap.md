@@ -7,15 +7,15 @@ fresh prefix now reaches a fully-configured base set (28 packages) and
 installs a new package on top. One cosmetic remainder
 (`dpkg-statoverride` missing) noted but not blocking.
 
-Outcome: on a **fresh** prefix, `scripts/bootstrap/setup-apt-prefix.sh` +
-`scripts/bootstrap/bootstrap-base.sh` now bring the entire base set to
+Outcome: on a **fresh** prefix, `bootstrap/setup-apt-prefix.sh` +
+`bootstrap/bootstrap-base.sh` now bring the entire base set to
 `Status: install ok installed` (`ii`) — `base-files`, `base-passwd`,
 `dash`, `debianutils`, `debconf`, `cdebconf`, `openssl`,
 `ca-certificates`, `mawk`, and their real dependency libraries (28
 packages). Confirmed by `dpkg --admindir=.../var/lib/dpkg -l` and by a
 functional check inside the prefix (`/etc/os-release` reports Debian 13
 trixie; `dash`, `mawk`, `openssl` resolve to the prefix and run). Then
-`scripts/install/apt-install.sh` installs a *new* package on top: `hello` lands and
+`core/install/apt-install.sh` installs a *new* package on top: `hello` lands and
 prints `Hello, world!`.
 
 This closes the two gaps
@@ -47,7 +47,7 @@ coverage) and the chicken-and-egg it left open for a fresh prefix.
    with Termux's own `clang`) that derives `$INSTDIR` from
    `/proc/self/exe`, sets `LD_PRELOAD`/`DN_INSTDIR`/`PATH`/`DEBIAN_FRONTEND`,
    and `exec`s Termux's glibc `bash` (or, when invoked as `dn-perl`, glibc
-   `perl`). `scripts/install/setup-runtime.sh` builds it and installs
+   `perl`). `core/install/setup-runtime.sh` builds it and installs
    `dn-shell`/`dn-perl`.
 
 2. **The chicken-and-egg (no Debian `dash` on a fresh prefix).** The old
@@ -114,6 +114,6 @@ targets and strips it for Bionic/scripts — which is what let the old
 ### Files changed
 
 - `native/dn-launch.c` (new), `native/path-redirect.c` (extended),
-  `scripts/install/setup-runtime.sh` (new),
-  `scripts/install/patch-deb.sh`, `scripts/install/patch-maintainer-scripts.sh`,
-  `scripts/install/apt-install.sh`, `scripts/bootstrap/setup-apt-prefix.sh`.
+  `core/install/setup-runtime.sh` (new),
+  `core/install/patch-deb.sh`, `core/install/patch-maintainer-scripts.sh`,
+  `core/install/apt-install.sh`, `bootstrap/setup-apt-prefix.sh`.

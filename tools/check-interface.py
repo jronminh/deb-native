@@ -17,7 +17,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(HERE))
+ROOT = os.path.dirname(HERE)
 MAP = os.path.join(HERE, "module-map.tsv")
 IFACE = os.path.join(ROOT, "core", "interface.tsv")
 NONCORE = {"bootstrap", "build", "adapter", "product", "tools", "tests"}

@@ -46,7 +46,7 @@ Now (`native/path-redirect.c`):
   `$INSTDIR/...`, relative paths, `/dev`, `/proc`, `/system`) returns
   after that single compare instead of four `strlen`+`strncmp` rounds.
 - **`memcpy` instead of `snprintf`** to build the rewritten path.
-- `scripts/bootstrap/build-path-redirect.sh` now compiles with **`-O2`**; clang's
+- `bootstrap/build-path-redirect.sh` now compiles with **`-O2`**; clang's
   default is `-O0`, so the shim was previously built unoptimized.
 
 ## What the numbers actually say

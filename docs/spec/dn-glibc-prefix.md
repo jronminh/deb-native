@@ -183,7 +183,7 @@ nothing.
 ## The package set
 
 - **Ours (shipped prebuilt):** `libc6` (loader + shared libs) and `libc-bin`
-  (`ldconfig`, `ldd`, ...). Built by `scripts/bootstrap/dn-package-glibc.sh`
+  (`ldconfig`, `ldd`, ...). Built by `bootstrap/dn-package-glibc.sh`
   and `dn-package-libc-bin.sh`, `dpkg -i`'d and held.
 - **Debian, unmodified, version-matched:** `libc6-dev`, `libc-dev-bin`,
   `locales`, `libc-l10n` -- only version-sensitive, so they install straight
@@ -219,10 +219,10 @@ first build); the prefix never self-hosts glibc.
 
 Two strings change in the shipped scripts; both go from `ld-dn` to the loader:
 
-- `scripts/install/dn-translate-deb.sh` (`LD`): every translated glibc ELF's
+- `core/install/dn-translate-deb.sh` (`LD`): every translated glibc ELF's
   `PT_INTERP` becomes the fused loader, so the kernel loads it. The existing
   match (`*/ld-linux-aarch64.so.1`) is unchanged -- only the target.
-- `scripts/install/dn-fix-gcc-specs.sh` (`LDDN`): gcc's `*link` spec writes the
+- `core/install/dn-fix-gcc-specs.sh` (`LDDN`): gcc's `*link` spec writes the
   fused loader as `-dynamic-linker`, so a binary `gcc` links itself gets a
   resolvable `PT_INTERP` (the `ld-dn` fix at
   `findings/gcc-hello-pt-interp-gap.md`, retargeted).

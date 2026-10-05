@@ -2,7 +2,7 @@
 # Benchmark fork-lite (bind-only) against a reference proot on path-op-dense
 # workloads.  Run on the device (aarch64 Termux); needs a big tree to walk.
 #
-#   scripts/bench/bench-tracer.sh [REF_PROOT] [LITE_PROOT] [N_STAT] [RUNS]
+#   tools/bench/bench-tracer.sh [REF_PROOT] [LITE_PROOT] [N_STAT] [RUNS]
 #
 # Defaults bound Termux's own $PREFIX over the guest /usr, so both tracers
 # traverse the same large tree.  Reports `real` seconds per run.

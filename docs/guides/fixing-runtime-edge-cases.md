@@ -114,7 +114,7 @@ dn-shell -c "ldconfig"
 ```
 
 The fused prefix's `ldconfig` is our own prefix-targeted build
-(`scripts/bootstrap/dn-package-libc-bin.sh`), so it writes the prefix's
+(`bootstrap/dn-package-libc-bin.sh`), so it writes the prefix's
 cache rather than the host's.
 
 ## Layer 3: dynamic tags
@@ -137,7 +137,7 @@ every `.so`'s `RUNPATH`
 
 Some variables are consumed before any prefix code runs, or are needed by
 name (`PATH`, `HOME`, `TMPDIR`, `PYTHONPATH`, …). Those belong in the
-launchers (`scripts/runtime/make-launchers.sh`) or `dn-run`, not in a shim.
+launchers (`core/runtime/make-launchers.sh`) or `dn-run`, not in a shim.
 Anything you can express as an environment variable is a launcher change —
 no rebuild of the prefix's libraries.
 

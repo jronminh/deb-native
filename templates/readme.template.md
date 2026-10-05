@@ -10,7 +10,7 @@ to `<directory>/README.md`, then replace the placeholders.
     this way).
   - One bullet per file or subdirectory: ``<name>`` — one-line purpose.
 
-After adding or renaming a document, run `scripts/tools/check-repo.py`
+After adding or renaming a document, run `tools/check-repo.py`
 (broken links and ToC anchors).
 -->
 

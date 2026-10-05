@@ -1,4 +1,4 @@
-# scripts/bench/
+# tools/bench/
 
 <!-- template: templates/readme.template.md -->
 

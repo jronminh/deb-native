@@ -80,7 +80,7 @@ Historical transcript (`prototype-install.sh`, since removed; see
 [`classic-design.md`](classic-design.md)):
 
 ```
-$ scripts/survey/prototype-install.sh ciso.deb
+$ tools/survey/prototype-install.sh ciso.deb
 ==> seeding natively-satisfied dependencies into .../var/lib/dpkg
 seeded: libc6 <- glibc 2.44
 seeded: zlib1g <- zlib-glibc 1.3.2

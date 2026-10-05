@@ -66,21 +66,21 @@ Dependency direction (arrows point only downward, no cycles):
 
 ### P0 — Map and rules
 - [x] Assign every tracked file to exactly one module —
-      `scripts/tools/module-map.tsv`.
-- [x] Write the check — `scripts/tools/check-modules.py`: one home per file, and
+      `tools/module-map.tsv`.
+- [x] Write the check — `tools/check-modules.py`: one home per file, and
       no `core` file references `build`/`bootstrap`/`adapter`/`product`.
-      Accepted edges live in `scripts/tools/module-edges.allow` (2 entries, to
+      Accepted edges live in `tools/module-edges.allow` (2 entries, to
       burn down in P2).
 - [ ] Land the check: wire it into `.github/workflows/checks.yml` (P4).
 
-### P1 — Move-only restructure (in progress)
-- [ ] Create top-level `core/ build/ bootstrap/ adapters/<target>/ product/
-      tests/ docs/`.
-- [x] Move `core/native`, `core/tracer`, `core/custom`; compat symlinks left
-      at `native`, `tracer`, `custom`.
-- [ ] Move the rest (`scripts/**`, `install.sh`, the build/bootstrap split);
-      drop the compat symlinks in P5.
-- [x] No logic changes (`check-paths.py` guards the `$HERE` references).
+### P1 — Move-only restructure (done)
+- [x] Move `native/`, `tracer/`, `custom/` -> `core/` (compat symlinks left at
+      the old names).
+- [x] Move `scripts/**` -> `core/install`, `core/runtime`, `core/bench`,
+      `build/`, `bootstrap/`, `tools/`; `install.sh` stays at the repo root
+      (product) so the documented `curl | sh` URL is unchanged.
+- [x] No logic changes; `check-paths.py` guards the `$HERE` references.
+- [ ] Drop the `native`/`tracer`/`custom` compat symlinks (P5).
 
 ### P2 — Split the straddlers, parameterize the leaks
 - [x] Split `setup-runtime.sh` into `build-core` (build), `install-runtime`
@@ -99,7 +99,7 @@ Dependency direction (arrows point only downward, no cycles):
 ### P3 — Bind interfaces and pin versions (in progress)
 - [x] Declare the core surface in `core/interface.tsv` (entries, sources,
       artifacts) and pin the version in `core/VERSION`; enforced by
-      `scripts/tools/check-interface.py` (non-core modules may call only the
+      `tools/check-interface.py` (non-core modules may call only the
       declared entries).
 - [ ] Define the **prefix artifact** naming/versioning rule from
       `core/VERSION` (the artifact bootstrap produces and a target consumes).
@@ -161,14 +161,14 @@ The bootstrap's output — the one boundary a target consumes:
 
 | File | Mixes | Verdict |
 |---|---|---|
-| `scripts/install/setup-runtime.sh` | build core artifacts; install into prefix + generate `priv/`; vendor host libs + rpath | **split** into build / install / vendor |
-| `scripts/runtime/make-shell-interface.sh` | pure adapter (login, userland switch, motd, `pkg` guard, prefix registry) | **move** to adapter |
-| `scripts/install/dn-hook-pre.sh` | core hook; collision check calls the host `dpkg-query` | **parameterize** |
-| `scripts/install/dn-hook-post.sh` | core hook; host paths | **parameterize** |
-| `scripts/runtime/make-launchers.sh` | core logic; host `dpkg-query` + `BASE_FILES` | **parameterize** |
-| `scripts/runtime/make-apt-wrappers.sh` | host package-manager wrappers | **move/parameterize** |
-| `scripts/runtime/install-hooks.sh` | core staging; copies bootstrap scripts too | **core manifest** |
-| `scripts/install/dn-translate-deb.sh` | core; relative `$HERE/../../custom` layout assumption | **parameterize** |
-| `scripts/bootstrap/build-dn-shim.sh` | build recipe for a core source, using the bootstrap toolchain | **keep** (bootstrap builds a core source) |
+| `core/install/setup-runtime.sh` | build core artifacts; install into prefix + generate `priv/`; vendor host libs + rpath | **split** into build / install / vendor |
+| `core/runtime/make-shell-interface.sh` | pure adapter (login, userland switch, motd, `pkg` guard, prefix registry) | **move** to adapter |
+| `core/install/dn-hook-pre.sh` | core hook; collision check calls the host `dpkg-query` | **parameterize** |
+| `core/install/dn-hook-post.sh` | core hook; host paths | **parameterize** |
+| `core/runtime/make-launchers.sh` | core logic; host `dpkg-query` + `BASE_FILES` | **parameterize** |
+| `core/runtime/make-apt-wrappers.sh` | host package-manager wrappers | **move/parameterize** |
+| `core/runtime/install-hooks.sh` | core staging; copies bootstrap scripts too | **core manifest** |
+| `core/install/dn-translate-deb.sh` | core; relative `$HERE/../../custom` layout assumption | **parameterize** |
+| `bootstrap/build-dn-shim.sh` | build recipe for a core source, using the bootstrap toolchain | **keep** (bootstrap builds a core source) |
 | `install.sh` | bootstrap/product entry point that calls core | **keep** (product) |
 | `native/dn-launch.c` vs fork `dn-shell.c`/`dn-perl.c` | same invariant, different interpreter choice | **adapter parameter**, not a split |

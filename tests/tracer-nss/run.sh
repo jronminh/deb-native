@@ -5,7 +5,7 @@
 # Termux glibc reads its sysconfdir $PREFIX/glibc/etc (a host path), so dn-run
 # adds a bind of the prefix's /etc over it on the NSS route.
 #
-# Run on the device (Termux), after scripts/install/setup-runtime.sh INSTDIR.
+# Run on the device (Termux), after core/install/setup-runtime.sh INSTDIR.
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

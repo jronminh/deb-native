@@ -1,4 +1,4 @@
-# scripts/tools/
+# tools/
 
 <!-- template: templates/readme.template.md -->
 

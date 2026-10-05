@@ -52,7 +52,7 @@ dn-shell -c "gcc -o hello hello.c && ./hello"  # compile, link, run
 ```
 
 This works because of a fix already applied to this device's prefix
-(`scripts/install/dn-fix-gcc-specs.sh`, wired into `dn-hook-post.sh`):
+(`core/install/dn-fix-gcc-specs.sh`, wired into `dn-hook-post.sh`):
 plain `gcc` on Debian hardcodes `-dynamic-linker
 /lib/ld-linux-aarch64.so.1` into its link spec (baked into GCC's own
 build, `aarch64-linux.h`'s `GLIBC_DYNAMIC_LINKER` macro) — a path that
@@ -71,7 +71,7 @@ dn-shell -c "readelf -l hello | grep -A1 'program interpreter'"
 
 If that line instead shows the literal `/lib/ld-linux-aarch64.so.1`,
 the specs file is missing or stale — rerun
-`scripts/install/dn-fix-gcc-specs.sh` (it's idempotent, a no-op if
+`core/install/dn-fix-gcc-specs.sh` (it's idempotent, a no-op if
 `gcc` or the prefix's loader isn't present yet).
 
 ## `make` works

@@ -1,4 +1,4 @@
-# scripts/install/
+# core/install/
 
 <!-- template: templates/readme.template.md -->
 

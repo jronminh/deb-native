@@ -1,4 +1,4 @@
-# scripts/runtime/
+# core/runtime/
 
 <!-- template: templates/readme.template.md -->
 

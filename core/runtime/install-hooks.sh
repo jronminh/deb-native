@@ -29,19 +29,19 @@ mkdir -p "$HOOKS" "$DEST/scripts/runtime" "$DEST/scripts/bench" "$DEST/custom"
 for s in dn-hook-pre.sh dn-hook-post.sh dn-translate-deb.sh \
          patch-scripts-tree.sh dn-fix-alternatives.sh dn-fix-gcc-specs.sh \
          normalize-symlinks.sh dn-debian-index.sh; do
-  cp -f "$HERE/scripts/install/$s" "$HOOKS/"
+  cp -f "$HERE/core/install/$s" "$HOOKS/"
 done
 chmod 755 "$HOOKS/"*.sh
 
-cp -f "$HERE/scripts/runtime/make-launchers.sh" "$DEST/scripts/runtime/"
-chmod 755 "$DEST/scripts/runtime/make-launchers.sh"
+cp -f "$HERE/core/runtime/make-launchers.sh" "$DEST/core/runtime/"
+chmod 755 "$DEST/core/runtime/make-launchers.sh"
 
 # dn-update: the constrained overlay updater, run from the launcher dir.
-cp -f "$HERE/scripts/runtime/dn-update.sh" "$DEST/scripts/runtime/"
-chmod 755 "$DEST/scripts/runtime/dn-update.sh"
+cp -f "$HERE/core/runtime/dn-update.sh" "$DEST/core/runtime/"
+chmod 755 "$DEST/core/runtime/dn-update.sh"
 
-cp -f "$HERE/scripts/bench/scan-direct-syscalls.py" "$DEST/scripts/bench/"
-chmod 755 "$DEST/scripts/bench/scan-direct-syscalls.py"
+cp -f "$HERE/core/bench/scan-direct-syscalls.py" "$DEST/tools/bench/"
+chmod 755 "$DEST/core/bench/scan-direct-syscalls.py"
 
 # custom/<pkg>.sh — per-package fixes; the directory is usually empty.
 for f in "$HERE/core/custom/"*.sh; do

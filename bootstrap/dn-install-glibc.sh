@@ -51,7 +51,7 @@ trap 'rm -rf "$WORK"' EXIT
 # (priv/ first) instead of the raw host /bin/sh it shipped with.
 install_held() {  # DEB PACKAGE
   cp -f "$DEBS/$1" "$WORK/$1"
-  "$HERE/../install/dn-translate-deb.sh" "$WORK/$1" "$DN"
+  "$HERE/../core/install/dn-translate-deb.sh" "$WORK/$1" "$DN"
   $DPKG -i "$WORK/$1"
   echo "$2:arm64 hold" | "$TP/bin/dpkg" --admindir="$DN/var/lib/dpkg" --set-selections
 }

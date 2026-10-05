@@ -14,7 +14,7 @@
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO=$(CDPATH= cd -- "$HERE/../.." && pwd)
+REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
 TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 
 FIX=0

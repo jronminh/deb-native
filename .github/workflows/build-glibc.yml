@@ -53,7 +53,7 @@ jobs:
 
       - name: Apply this project's Android patch
         run: |
-          scripts/bootstrap/dn-apply-glibc-patch.sh src/work "${DN_PREFIX}"
+          bootstrap/dn-apply-glibc-patch.sh src/work "${DN_PREFIX}"
 
       - name: Configure
         run: |

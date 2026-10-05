@@ -1,0 +1,30 @@
+# module-map.tsv — every tracked path belongs to exactly one module.
+#
+# Columns: module <TAB> regex (Python re, matched with re.search on the repo path).
+# check-modules.py requires EXACTLY one module to match each file; keep the
+# rules non-overlapping.
+
+meta	^\.github/
+meta	^templates/
+meta	^\.gitignore$
+meta	^(AGENTS|CLAUDE|CONTRIBUTING|CREDITS|MODULARIZE|README|SECURITY|TODO)\.md$
+meta	^LICENSE$
+meta	^(native|tracer|custom)$
+
+docs	^docs/
+
+third_party	^third_party/
+
+tests	^tests/
+
+tools	^tools/
+
+product	^install\.sh$
+
+adapter	^adapters/
+
+build	^build/
+
+bootstrap	^bootstrap/
+
+core	^core/

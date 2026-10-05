@@ -25,7 +25,7 @@ case "$PREFIX" in
   *) echo "E: PREFIX must be an absolute path: $PREFIX" >&2; exit 1 ;;
 esac
 [ -d "$SRC" ] || { echo "E: $SRC is not a directory" >&2; exit 1; }
-HERE=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 PATCH="$HERE/third_party/glibc-android-patches/dn-glibc-android.patch"
 
 echo "Applying dn-glibc-android.patch to $SRC for prefix $PREFIX ..."

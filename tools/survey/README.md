@@ -1,4 +1,4 @@
-# scripts/survey/
+# tools/survey/
 
 <!-- template: templates/readme.template.md -->
 

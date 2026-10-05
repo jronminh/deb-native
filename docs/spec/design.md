@@ -69,7 +69,7 @@ as a foreign architecture instead of this section's `aarch64` relabel.
 What follows is kept as the record of the proposal, with the divergence
 noted; the rest —
 the self-contained-prefix idea itself, the stand-in packages, the launcher
-wrappers — is what got built (`scripts/bootstrap/setup-apt-prefix.sh`).
+wrappers — is what got built (`bootstrap/setup-apt-prefix.sh`).
 
 This is the principle `sudo-less` uses on Debian: **apt and dpkg own their
 root.** When the place packages live is apt/dpkg's own `/`, dpkg's normal
