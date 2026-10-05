@@ -67,12 +67,22 @@ Dependency direction (arrows point only downward, no cycles):
 Deliberately not mixed — this is what removes the chicken-and-egg from every
 target.
 
-- **Build** produces the prefix artifact: `deb-native-prefix-<version>-<arch>.tar.gz`
-  plus `var/lib/deb-native/prefix-manifest.tsv` (path -> sha256). It needs a
-  toolchain (gcc) and lives in `bootstrap/setup-apt-prefix.sh` (assemble the
-  prefix) and `build/package-prefix.sh` (package it). **Every bootstrap stage /
-  chicken-and-egg problem lives here and only here.** Environment: CI or a
-  gcc-capable host.
+- **Build** produces the prefix artifact
+  (`deb-native-prefix-<version>-<arch>.tar.gz` + manifest) and splits by weight:
+  - **B1 — glibc** (heavy): build the project's own glibc into `libc6.deb` +
+    `libc-bin.deb` and the patched glibc files (the "10-file swap", from
+    `third_party/glibc-android-patches`). That bundle **is** `DN_GLIBC_DEBS`.
+  - **B2 — overlay** (light, plain gcc): build the runtime overlay —
+    `dn-shim.so`, `dn-run`, the interpreters `dn-sh`/`dn-perl`, and the
+    hook/launcher scripts. Pure gcc against the prefix's glibc; no glibc source,
+    no cross-toolchain.
+  - **B3 — assemble**: seed B1's files, install B1's debs, place B2's overlay,
+    install the base → a prefix.
+  - **B4 — package**: `build/package-prefix.sh` → tarball + manifest.
+
+  Only **B1** is genuinely heavy and version-critical; **B2** is an ordinary
+  gcc build. **Every bootstrap stage / chicken-and-egg problem lives here and
+  only here.** Environment: CI or a gcc-capable host.
 - **Ship** delivers a prebuilt artifact to a target and runs it, with **no
   toolchain and no building**. Consumers do the same thing: obtain the artifact,
   extract it, fix up, run.
