@@ -9,7 +9,7 @@ INSTDIR=${1:?usage: install-runtime.sh INSTDIR}
 case "$INSTDIR" in /*) ;; *) INSTDIR="$PWD/$INSTDIR" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd)
-SRC="$ROOT/native"
+SRC="$ROOT/core/native"
 CACHE="$SRC/.build"
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}

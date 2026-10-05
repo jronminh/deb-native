@@ -11,8 +11,8 @@
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd)
-SRC="$ROOT/native"
-TRACER="$ROOT/tracer"
+SRC="$ROOT/core/native"
+TRACER="$ROOT/core/tracer"
 ADBWIRE_SRC="$ROOT/third_party/adbwire"
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}

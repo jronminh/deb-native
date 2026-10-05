@@ -12,6 +12,7 @@ meta	^templates/
 meta	^\.gitignore$
 meta	^(AGENTS|CLAUDE|CONTRIBUTING|CREDITS|MODULARIZE|README|SECURITY|TODO)\.md$
 meta	^LICENSE$
+meta	^(native|tracer|custom)$
 meta	^scripts/README\.md$
 
 docs	^docs/
@@ -29,9 +30,7 @@ build	^scripts/bootstrap/(build-path-redirect|build-core)\.sh$
 bootstrap	^scripts/bootstrap/(?!build-path-redirect\.sh$|build-core\.sh$)
 bootstrap	^scripts/install/setup-runtime\.sh$
 
-core	^native/
-core	^tracer/
-core	^custom/
+core	^core/
 core	^scripts/install/(dn-translate-deb|patch-scripts-tree|normalize-symlinks|dn-fix-alternatives|dn-hook-pre|dn-hook-post|install-runtime|dn-debian-index|dn-fix-gcc-specs|apt-install)\.sh$
 core	^scripts/install/README\.md$
 core	^scripts/runtime/(dn-adopt|dn-update|install-hooks|make-launchers)\.sh$

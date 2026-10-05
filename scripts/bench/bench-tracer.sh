@@ -10,7 +10,7 @@ set -eu
 
 T=${PREFIX:-/data/data/com.termux/files/usr}
 REF=${1:-$T/bin/proot}
-LITE=${2:-$(CDPATH= cd -- "$(dirname -- "$0")/../../tracer" && pwd)/proot}
+LITE=${2:-$(CDPATH= cd -- "$(dirname -- "$0")/../../core/tracer" && pwd)/proot}
 N=${3:-20000}
 RUNS=${4:-3}
 

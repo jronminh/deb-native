@@ -9,7 +9,7 @@
 # hooks' relative paths still resolve:
 #   dn-hook-post.sh      -> $HOOKS/../runtime/make-launchers.sh
 #   make-launchers.sh    -> $HOOKS/../bench/scan-direct-syscalls.py
-#   dn-translate-deb.sh  -> $HOOKS/../../custom/<pkg>.sh
+#   dn-translate-deb.sh  -> $HOOKS/../../core/custom/<pkg>.sh
 # Idempotent: re-run to refresh after an update (install.sh does).
 #
 # Usage: install-hooks.sh INSTDIR
@@ -44,7 +44,7 @@ cp -f "$HERE/scripts/bench/scan-direct-syscalls.py" "$DEST/scripts/bench/"
 chmod 755 "$DEST/scripts/bench/scan-direct-syscalls.py"
 
 # custom/<pkg>.sh — per-package fixes; the directory is usually empty.
-for f in "$HERE/custom/"*.sh; do
+for f in "$HERE/core/custom/"*.sh; do
   [ -e "$f" ] || continue
   cp -f "$f" "$DEST/custom/"
 done

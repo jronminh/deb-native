@@ -73,12 +73,14 @@ Dependency direction (arrows point only downward, no cycles):
       burn down in P2).
 - [ ] Land the check: wire it into `.github/workflows/checks.yml` (P4).
 
-### P1 — Move-only restructure
+### P1 — Move-only restructure (in progress)
 - [ ] Create top-level `core/ build/ bootstrap/ adapters/<target>/ product/
       tests/ docs/`.
-- [ ] Move files per the P0 map. Leave **compat symlinks** at old paths so
-      nothing breaks.
-- [ ] No logic changes in P1.
+- [x] Move `core/native`, `core/tracer`, `core/custom`; compat symlinks left
+      at `native`, `tracer`, `custom`.
+- [ ] Move the rest (`scripts/**`, `install.sh`, the build/bootstrap split);
+      drop the compat symlinks in P5.
+- [x] No logic changes (`check-paths.py` guards the `$HERE` references).
 
 ### P2 — Split the straddlers, parameterize the leaks
 - [x] Split `setup-runtime.sh` into `build-core` (build), `install-runtime`

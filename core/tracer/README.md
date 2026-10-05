@@ -10,7 +10,7 @@ derived files keep proot's GPLv2-or-later headers and copyright.
 Why it exists: rewriting a syscall's path arguments requires `ptrace` —
 seccomp user-notification can inspect and inject fds but cannot modify
 arguments — so proot's `ptrace` core is the hard part worth reusing. See
-[`../docs/spec/tracer/direct-usage.md`](../docs/spec/tracer/direct-usage.md).
+[`../../docs/spec/tracer/direct-usage.md`](../../docs/spec/tracer/direct-usage.md).
 
 ## Status
 
@@ -31,7 +31,7 @@ static binary reads through a bind. **The bind-only fast path has landed**
 resolve the rest. This is correct only because deb-native's scope guarantees
 rootfs `/` (no chroot), flat top-level binds, and a symlink-normalized guest
 tree. **It is not a general proot optimization** — it assumes what stock proot
-cannot: see [`../docs/spec/tracer/bind-only.md`](../docs/spec/tracer/bind-only.md).
+cannot: see [`../../docs/spec/tracer/bind-only.md`](../../docs/spec/tracer/bind-only.md).
 
 Safe mechanics for the three traps:
 
@@ -62,13 +62,13 @@ gain is the fast path, not the extension prune); the walk is I/O-bound.
 
 - upstream: `termux/proot` @ `d4d2a19081c3c07f75250e4ce2980b9fa2f5720f`
   (2026-09-24), itself a fork of `proot-me/PRoot`.
-- license: GPL-2.0-or-later (see each file's header and `../LICENSE`).
+- license: GPL-2.0-or-later (see each file's header and `../../LICENSE`).
 - imported from a `--depth 1` clone on 2026-09-26.
 
 ## Build
 
 ```
-cd tracer
+cd core/tracer
 make CC=clang        # produces ./dn-trace
 ```
 
@@ -96,7 +96,7 @@ Drop (done):
   `cli/dn-trace.c`: `dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--] PROGRAM`,
   guest root = host `/`, cwd = the current one, a `-b` with a missing host
   path skipped. The same arguments work with Termux's `proot`, which
-  `native/dn-run.c` falls back to.
+  `core/native/dn-run.c` falls back to.
 - `loader/`, its load script (`execve/exit.c`), `execve/ldso.c`,
   `execve/auxv.c`, `syscall/heap.c` (brk emulation) and the qemu runner:
   the kernel now execs the translated program itself (`execve/enter.c`).

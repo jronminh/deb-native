@@ -13,7 +13,7 @@ G=${DN_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/../.." && pwd)
 ROOT=${DN_INSTDIR:-$HOME/.cache/deb-native-shimtest/root}
-SHIM=$REPO/native/path-redirect.so
+SHIM=$REPO/core/native/path-redirect.so
 TEST=$HERE/test
 
 [ -x "$G/bin/true" ] || { echo "no glibc side-install at $G (set DN_GLIBC_ROOT)"; exit 2; }

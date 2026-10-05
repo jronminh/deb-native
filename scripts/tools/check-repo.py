@@ -60,6 +60,8 @@ def check_links(root: str) -> list[str]:
         and "/.git/" not in f
     ]
     for f in files:
+        if os.path.realpath(f) != os.path.abspath(f):
+            continue  # reached through a compat symlink; check the real path
         try:
             text = open(f, encoding="utf-8", errors="ignore").read()
         except OSError:
