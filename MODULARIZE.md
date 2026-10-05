@@ -65,10 +65,13 @@ Dependency direction (arrows point only downward, no cycles):
 ## Phases
 
 ### P0 — Map and rules
-- [ ] Assign every tracked file to exactly one module (seed list in Appendix A).
-- [ ] Write a **check script** enforcing: `core` imports nothing from
-      `build`/`bootstrap`/`adapter`; one home per file.
-- [ ] Land the check (run locally, no CI required yet).
+- [x] Assign every tracked file to exactly one module —
+      `scripts/tools/module-map.tsv`.
+- [x] Write the check — `scripts/tools/check-modules.py`: one home per file, and
+      no `core` file references `build`/`bootstrap`/`adapter`/`product`.
+      Accepted edges live in `scripts/tools/module-edges.allow` (2 entries, to
+      burn down in P2).
+- [ ] Land the check: wire it into `.github/workflows/checks.yml` (P4).
 
 ### P1 — Move-only restructure
 - [ ] Create top-level `core/ build/ bootstrap/ adapters/<target>/ product/

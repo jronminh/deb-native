@@ -1,0 +1,9 @@
+# module-edges.allow — accepted core -> non-core edges, to burn down in P2.
+#
+# Format: path <TAB> target-module. An entry here suppresses a check-modules.py
+# edge violation for that (file, target). The goal is an empty file after P2.
+
+# Real edge, removed when setup-runtime.sh is split (P2):
+scripts/install/setup-runtime.sh	build
+# Not a dependency: a user-facing message string in dn-run.c.
+native/dn-run.c	product
