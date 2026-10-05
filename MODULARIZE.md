@@ -91,6 +91,25 @@ target.
 - A **target never builds**; a **builder never needs the target**. The execution
   layer (`core/`) and the adapter are the same on both sides.
 
+### Ship is two phases; only the first is target-specific
+
+- **Phase A — target-native trigger**: run the shell the target already has.
+  - app: `/system/bin/sh` + toybox (`tar xzf`) — always present, no glibc.
+  - Termux: the Termux prefix shell (bash/dash + coreutils).
+  Job: extract the artifact into the target location (plus relocation, only if
+  the prefix is not fully relocatable).
+- **Phase B — prefix-native finish**: once the prefix runs, use the prefix's own
+  shell to refresh the loader cache, normalize symlinks, and `apt update`. This
+  logic is identical for every target and lives in `core/`.
+
+Only the Phase-A trigger differs per target, and it lives in the adapter. A
+fully relocatable prefix (loader/shim self-derive; no baked absolute paths)
+reduces Phase A to `tar xzf` — one line naming the target's shell.
+
+**Goal: ship the smallest artifact.** Build trims it (`build/trim-prefix.sh`)
+and packages it (`build/package-prefix.sh`); the floor is `apt`+`dpkg`+`bash`
+plus their dependency closure, `glibc`, and the deb-native overlay.
+
 ## Phases
 
 ### P0 — Map and rules
