@@ -17,7 +17,7 @@ BINDIR="$INSTDIR/usr/bin"
 LIBDIR="$INSTDIR/usr/lib/deb-native"
 # The privilege layer (docs/spec/design.md, TODO.md "sudo"): every command
 # an unprivileged prefix has to fake or redirect lives here, first on a
-# maintainer script's PATH (dn-launch.c), so a Debian package's real
+# maintainer script's PATH (dn-child.h), so a Debian package's real
 # chown/update-alternatives never shadows it, and a later sudo/fake-root
 # mode can replace this one directory.
 PRIV="$LIBDIR/priv"
@@ -41,9 +41,20 @@ for a in dn-shim.so dn-run dn-trace; do
   [ -e "$CACHE/$a" ] || continue
   put "$CACHE/$a" "$LIBDIR/$a"
 done
-if [ -e "$CACHE/dn-sh" ]; then
-  put "$CACHE/dn-sh" "$BINDIR/dn-sh"
-  put "$CACHE/dn-sh" "$BINDIR/dn-perl"
+# The maintainer-script interpreters: real glibc ELFs built with the prefix's
+# own gcc and repointed at the prefix's fused loader (fork model). The kernel
+# runs them from a maintainer script's shebang; each derives INSTDIR from its
+# own path (up three dirs). Needs the prefix's gcc; warn if absent.
+LD="$INSTDIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+GCC="$INSTDIR/usr/bin/gcc"; [ -x "$GCC" ] || GCC=$(command -v gcc || true)
+if [ -n "$GCC" ] && command -v patchelf >/dev/null 2>&1; then
+  for n in dn-sh dn-perl; do
+    "$GCC" -O2 -o "$CACHE/$n" "$SRC/$n.c" || { echo "W: could not build $n"; continue; }
+    patchelf --set-interpreter "$LD" "$CACHE/$n" || { echo "W: patchelf failed for $n"; continue; }
+    put "$CACHE/$n" "$BINDIR/$n"
+  done
+else
+  echo "W: no prefix gcc / patchelf; maintainer-script interpreters (dn-sh, dn-perl) not built"
 fi
 [ -e "$CACHE/adbwire" ] && put "$CACHE/adbwire" "$LIBDIR/adbwire"
 

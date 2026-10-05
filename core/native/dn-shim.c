@@ -217,6 +217,7 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
       case 'l': pre = "/lib"; break;
       case 'b': pre = "/bin"; break;
       case 's': pre = "/sbin"; prelen = 5; break;
+      case 'm': pre = "/mnt"; break;
       default: return path;
     }
     if (strncmp(path, pre, prelen) != 0) return path;
@@ -279,7 +280,11 @@ static char **bionic_env(char *const *envp) {
      * linker partially honors it too, and finds glibc's libc.so.6 where
      * it expects its own. Drop both unconditionally for a Bionic child. */
     if (!strncmp(*e, "LD_LIBRARY_PATH=", 16) || !strncmp(*e, "COMPILER_PATH=", 14)) continue;
+#ifdef DN_APK
+    if (!strncmp(*e, "PATH=", 5) && (g_root && strstr(*e, g_root))) {
+#else
     if (!strncmp(*e, "PATH=", 5) && (strstr(*e, "/glibc/bin") || (g_root && strstr(*e, g_root)))) {
+#endif
       char tail[16384] = "";
       size_t hl = 0, tl = 0;
       const char *p = *e + 5;
@@ -287,9 +292,14 @@ static char **bionic_env(char *const *envp) {
       while (*p) {
         const char *c = strchr(p, ':');
         size_t len = c ? (size_t)(c - p) : strlen(p);
+#ifdef DN_APK
+        int glibc = (g_root && len >= g_rootlen && !memcmp(p, g_root, g_rootlen) &&
+                     (len == g_rootlen || p[g_rootlen] == '/'));
+#else
         int glibc = (len >= 10 && !memcmp(p + len - 10, "/glibc/bin", 10)) ||
                     (g_root && len >= g_rootlen && !memcmp(p, g_root, g_rootlen) &&
                      (len == g_rootlen || p[g_rootlen] == '/'));
+#endif
         if (glibc) {
           if (tl + len + 2 < sizeof tail) { if (tl) tail[tl++] = ':'; memcpy(tail + tl, p, len); tl += len; tail[tl] = 0; }
         } else if (hl + len + 2 < sizeof path_entry) {
@@ -339,9 +349,13 @@ static int elf_glibc_interp(int fd, const unsigned char *hdr, ssize_t n) {
      * child) applied to it, which can point its own PATH lookups at
      * Termux's own binaries instead of the prefix's (found 2026-09-30
      * root-causing a segfault: find -exec test / env test). */
+#ifdef DN_APK
+    return strstr(interp, "ld-linux") != NULL;
+#else
     return strstr(interp, "ld-linux") != NULL && strstr(interp, "glibc") != NULL
                ? 1
                : (strstr(interp, "/glibc/") != NULL || strstr(interp, "ld-linux") != NULL);
+#endif
   }
   return 0;
 }

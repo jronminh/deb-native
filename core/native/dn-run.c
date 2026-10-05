@@ -33,12 +33,14 @@
 static char instdir[4096];
 static int g_glibc;   /* the target is a glibc ELF (classify) */
 
+#ifndef DN_APK
 static const char *termux_prefix(void) {
   const char *p = getenv("DN_TERMUX_PREFIX");
   if (!p || !*p) p = getenv("PREFIX");
   if (!p || !*p) p = "/data/data/com.termux/files/usr";
   return p;
 }
+#endif
 
 /* .../usr/lib/deb-native/dn-run -> ... (strip filename + 3 dirs) */
 static int derive_instdir(char *out, size_t sz) {
@@ -143,7 +145,9 @@ static int classify(const char *path, int *nss, char *interp, size_t isz) {
 }
 
 static void set_path(void) {
+#ifndef DN_APK
   const char *p = termux_prefix();
+#endif
   const char *home = getenv("HOME");
   char path[8192];
   /* Prefix dirs first, plus $HOME/.local/bin (host-layer commands:
@@ -154,6 +158,7 @@ static void set_path(void) {
            "%s/usr/lib/deb-native/bin:%s/.local/bin",
            instdir, instdir, instdir, instdir, instdir, instdir,
            (home && *home) ? home : "/nonexistent");
+#ifndef DN_APK
   {
     char dpkg[4096];
     snprintf(dpkg, sizeof dpkg, "%s/usr/bin/dpkg", instdir);
@@ -162,6 +167,7 @@ static void set_path(void) {
       snprintf(path + l, sizeof path - l, ":%s/glibc/bin:%s/bin", p, p);
     }
   }
+#endif
   setenv("PATH", path, 1);
 }
 
@@ -203,6 +209,7 @@ static void launch_glibc(char **args) {
    * inherited host preload (on Termux, termux-exec, built for another glibc).
    * Preserve it for a Bionic child the shim may exec: capture before
    * unsetting. */
+#ifndef DN_APK
   const char *inh = getenv("LD_PRELOAD");
   if (inh && *inh && !strstr(inh, "dn-shim.so")) {
     /* Prefer the prefix's vendored copy (setup-runtime.sh) so a Bionic child
@@ -215,6 +222,7 @@ static void launch_glibc(char **args) {
     else
       setenv("DN_BIONIC_PRELOAD", inh, 1);
   }
+#endif
   unsetenv("LD_PRELOAD");
   setenv("DN_INSTDIR", instdir, 1);
   set_path();
@@ -260,6 +268,16 @@ static void launch_trace(char **args, int nss) {
 
   set_path();
   setenv("DN_INSTDIR", instdir, 1);
+  /* The tracer builds its glue rootfs under its own temp directory (P_tmpdir
+   * is /tmp, which is not writable on Android). Point it at the prefix's own
+   * tmp, which the binds below also map to the tracee's /tmp. */
+  {
+    char tmpd[4096];
+    snprintf(tmpd, sizeof tmpd, "%s/tmp", instdir);
+    mkdir(tmpd, 0777);
+    setenv("PROOT_TMP_DIR", tmpd, 1);
+    setenv("TMPDIR", tmpd, 1);
+  }
   /* No tracee inherits termux-exec or our shim: the tracer rewrites at the
    * syscall layer. termux-exec would rewrite a Bionic child's
    * execve("/usr/...") to $PREFIX/... before the tracer sees it, and for a

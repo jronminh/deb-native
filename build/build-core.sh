@@ -3,9 +3,10 @@
 # installer. No prefix is touched (build stage; MODULARIZE.md P2).
 #
 # Artifacts: dn-shim.so (the shim), dn-run (launcher/classifier),
-# dn-trace (the syscall tracer, optional), dn-shell/dn-perl (the
-# maintainer-script interpreter), adbwire (optional). Built once per checkout
-# into $SRC/.build; install-runtime.sh copies them into a prefix.
+# dn-trace (the syscall tracer, optional), adbwire (optional). Built once per
+# checkout into $SRC/.build; install-runtime.sh copies them into a prefix. The
+# maintainer-script interpreters (dn-sh, dn-perl) are built by install-runtime
+# instead, since they need the prefix's own gcc and loader (fork model).
 #
 # Usage: build-core.sh
 set -eu
@@ -65,12 +66,8 @@ else
   echo "W: no dn-trace built; only the shim route is available."
 fi
 
-# The maintainer-script launcher. One binary, dispatched by its own argv[0]
-# basename (dn-shell, dn-perl).
-if stale "$CACHE/dn-sh" "$SRC/dn-launch.c"; then
-  echo "Building dn-shell ..."
-  clang -O2 -o "$CACHE/dn-sh" "$SRC/dn-launch.c"
-fi
+# The maintainer-script interpreters (dn-sh, dn-perl) are built by
+# install-runtime.sh, not here: they need the prefix's own gcc and loader.
 
 # adbwire (third_party/adbwire): termux-adb-bridge's daemonless
 # Wireless-Debugging ADB client, so `dn-adbwire` can run one command per

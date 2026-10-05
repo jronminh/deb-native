@@ -29,7 +29,9 @@ entry	core/runtime/dn-update.sh
 # --- sources the build compiles --------------------------------------------
 source	core/native/dn-shim.c
 source	core/native/dn-run.c
-source	core/native/dn-launch.c
+source	core/native/dn-sh.c
+source	core/native/dn-perl.c
+source	core/native/dn-child.h
 source	core/tracer
 source	core/bench/scan-direct-syscalls.py
 
@@ -38,5 +40,5 @@ artifact	dn-shim.so	core/native/.build/dn-shim.so	usr/lib/deb-native/dn-shim.so
 artifact	dn-run	core/native/.build/dn-run	usr/lib/deb-native/dn-run
 artifact	dn-trace	core/native/.build/dn-trace	usr/lib/deb-native/dn-trace
 artifact	dn-sh	core/native/.build/dn-sh	usr/bin/dn-sh
-artifact	dn-perl	core/native/.build/dn-sh	usr/bin/dn-perl
+artifact	dn-perl	core/native/.build/dn-perl	usr/bin/dn-perl
 artifact	adbwire	core/native/.build/adbwire	usr/lib/deb-native/adbwire

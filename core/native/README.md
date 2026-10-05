@@ -3,7 +3,7 @@
 <!-- template: templates/readme.template.md -->
 
 The small set of C programs translated Debian programs actually run
-through. Built by `core/install/setup-runtime.sh` into each prefix;
+through. Built by `bootstrap/setup-runtime.sh` into each prefix;
 design background in [`../../docs/spec/shim/path-shim.md`](../../docs/spec/shim/path-shim.md)
 and [`../../docs/spec/design.md`](../../docs/spec/design.md).
 
@@ -14,7 +14,10 @@ and [`../../docs/spec/design.md`](../../docs/spec/design.md).
   abandoned — removed from the tree; see
   [`../../docs/spec/shim/path-shim.md`](../../docs/spec/shim/path-shim.md), "Dead end,
   fully explored" for the record.
-- `dn-launch.c` — the maintainer-script interpreter, as a real ELF binary
-  (not a shell script — the kernel follows only one `#!` level).
+- `dn-sh.c` / `dn-perl.c` / `dn-child.h` — the maintainer-script
+  interpreters: two tiny glibc ELFs (shared setup in `dn-child.h`) the kernel
+  runs from a shebang (not a shell script — the kernel follows only one `#!`
+  level). Built by `install-runtime.sh` with the prefix's own gcc, repointed
+  at the fused loader.
 - `dn-run.c` — the runtime launch dispatcher: classifies a target's ELF
   at launch and picks the shim, plain exec, or the tracer.
