@@ -161,6 +161,27 @@ banner
 kv "prefix" "$DNPREFIX"
 [ $# -gt 0 ] && kv "packages" "$*"
 
+# Ship mode (MODULARIZE.md "Ship is two phases"): with a prebuilt artifact,
+# install = Phase A (extract, target-native) + Phase B (dn-finish, prefix-native).
+# No toolchain, no bootstrap. Without DN_PREFIX_IMAGE, build (below).
+if [ -n "${DN_PREFIX_IMAGE:-}" ]; then
+    step "extracting the prebuilt prefix"
+    IMG=$DN_PREFIX_IMAGE
+    case "$IMG" in
+        http://*|https://*) curl -fsSL "$IMG" -o "$DNPREFIX.tgz" || fail "download failed"; IMG="$DNPREFIX.tgz" ;;
+    esac
+    [ -f "$IMG" ] || fail "no such prefix image: $IMG"
+    mkdir -p "$DNPREFIX"
+    tar xzf "$IMG" -C "$DNPREFIX" || fail "extract failed"
+    step "finishing the prefix"
+    sh "$DNPREFIX/usr/lib/deb-native/scripts/runtime/dn-finish.sh" "$DNPREFIX" --apt-update || true
+    out ""
+    out "$(printf '%s done%s' "$G" "$R")"
+    kv "prefix" "$DNPREFIX"
+    kv "source" "shipped image"
+    exit 0
+fi
+
 if [ ! -s "$DNPREFIX/var/lib/dpkg/status" ]; then
     step "bootstrapping the Debian glibc base"
     "$HERE/bootstrap/setup-apt-prefix.sh" "$DNPREFIX"
