@@ -44,6 +44,10 @@ chmod 755 "$DEST/scripts/runtime/dn-update.sh"
 cp -f "$HERE/core/runtime/dn-adopt.sh" "$DEST/scripts/runtime/"
 chmod 755 "$DEST/scripts/runtime/dn-adopt.sh"
 
+# dn-finish: the one-shot prefix-native finish (Phase B of ship).
+cp -f "$HERE/core/runtime/dn-finish.sh" "$DEST/scripts/runtime/"
+chmod 755 "$DEST/scripts/runtime/dn-finish.sh"
+
 cp -f "$HERE/core/bench/scan-direct-syscalls.py" "$DEST/scripts/bench/"
 chmod 755 "$DEST/scripts/bench/scan-direct-syscalls.py"
 

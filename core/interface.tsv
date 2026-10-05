@@ -26,6 +26,7 @@ entry	core/runtime/install-hooks.sh
 entry	core/runtime/make-launchers.sh
 entry	core/runtime/dn-adopt.sh
 entry	core/runtime/dn-update.sh
+entry	core/runtime/dn-finish.sh
 
 # --- sources the build compiles --------------------------------------------
 source	core/native/dn-shim.c

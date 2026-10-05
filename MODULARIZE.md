@@ -130,6 +130,24 @@ Enough to boot `apt` and let the prefix expand itself; nothing more:
 Everything else is trimmed; the floor above is never crossed (or a later
 `apt install` breaks).
 
+### Post-build pipelines (after the artifact exists)
+
+In order, and each owned by one place:
+
+1. **Deploy (Phase A, target-native)** — obtain the artifact, extract to the
+   target path, relocate if it was not built for that exact path. Owner: the
+   target adapter (`system/bin/sh`+toybox, or the Termux shell).
+2. **Finish (Phase B, prefix-native)** — `core/runtime/dn-finish.sh`: restore the
+   patched glibc, refresh the loader cache, normalize symlinks, fix alternatives,
+   regenerate launchers, optionally `apt update`. Identical for every target.
+3. **Install (runtime)** — `apt install` → the prefix's hooks
+   (`dn-hook-pre` → `dn-translate-deb`; `dn-hook-post` → glibc-swap guard,
+   alternatives, symlinks, launchers, gcc specs).
+4. **Update** — `dn-update` for the overlay (per the manifest), `apt upgrade`
+   for the base; the post-invoke glibc-swap guard covers the latter.
+5. **Run** — launcher → `dn-run` classifies the ELF → prefix loader + shim, or
+   the tracer, or adoption.
+
 ## Phases
 
 ### P0 — Map and rules
