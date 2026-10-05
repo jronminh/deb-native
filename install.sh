@@ -170,8 +170,8 @@ else
     "$HERE/scripts/install/setup-runtime.sh" "$DNPREFIX"
     "$HERE/scripts/runtime/install-hooks.sh" "$DNPREFIX"
     "$HERE/scripts/runtime/make-launchers.sh" "$DNPREFIX"
-    "$HERE/scripts/runtime/make-apt-wrappers.sh" "$DNPREFIX"
-    "$HERE/scripts/runtime/make-shell-interface.sh" "$DNPREFIX"
+    "$HERE/adapters/deb-native/make-apt-wrappers.sh" "$DNPREFIX"
+    "$HERE/adapters/deb-native/make-shell-interface.sh" "$DNPREFIX"
 fi
 
 if [ $# -gt 0 ]; then

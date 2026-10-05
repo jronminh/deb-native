@@ -12,7 +12,7 @@ build-time dependency, not a hierarchy — `TODO.md` "0.7.0" is about making
 runtime need nothing from it). This doc fixes the interface model that keeps
 the siblings coherent: the Debian userland is the default session, and the
 Termux userland is reached through one explicit, nested command. Installed
-by `scripts/runtime/make-shell-interface.sh`.
+by `adapters/deb-native/make-shell-interface.sh`.
 
 ## Contents
 

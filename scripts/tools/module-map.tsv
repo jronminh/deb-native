@@ -22,8 +22,7 @@ tests	^tests/
 
 product	^install\.sh$
 
-adapter	^scripts/runtime/make-shell-interface\.sh$
-adapter	^scripts/runtime/make-apt-wrappers\.sh$
+adapter	^adapters/
 
 build	^scripts/bootstrap/build-path-redirect\.sh$
 

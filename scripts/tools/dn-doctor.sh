@@ -102,7 +102,7 @@ else
   [ -n "$stale" ] && warn "0.1.x routing wrappers still on PATH:$stale"
   [ -x "$LAUNCHDIR/termux-apt" ] || warn "no termux-apt/termux-dpkg (run make-apt-wrappers.sh)"
   if [ "$FIX" = 1 ] && [ -d "$ROOT" ]; then
-    sh "$REPO/scripts/runtime/make-apt-wrappers.sh" "$ROOT" && ok "regenerated wrappers"
+    sh "$REPO/adapters/deb-native/make-apt-wrappers.sh" "$ROOT" && ok "regenerated wrappers"
   fi
 fi
 
@@ -115,7 +115,7 @@ else
 fi
 
 if [ "$FIX" = 1 ] && [ -d "$LAUNCHDIR" ]; then
-  sh "$REPO/scripts/runtime/make-shell-interface.sh" "$ROOT" && ok "reinstalled the shell interface (start a new session)"
+  sh "$REPO/adapters/deb-native/make-shell-interface.sh" "$ROOT" && ok "reinstalled the shell interface (start a new session)"
 fi
 
 [ "$fail" = 0 ] && echo "==> ok" || echo "==> problems found (re-run with --fix to repair)"

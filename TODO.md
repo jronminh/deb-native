@@ -571,7 +571,7 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
 - **M3 No cross-damage**: move our host-layer files (`termux-shell`,
   `dn-shell`, the entry) out of `$PREFIX/bin` into a host-layer dir beside
   `$DN`, leaving at most symlinks
-  (`scripts/runtime/make-shell-interface.sh:82-102`); stop any write into
+  (`adapters/deb-native/make-shell-interface.sh:82-102`); stop any write into
   `$PREFIX` (launchers, `update-alternatives`/`dpkg-divert` wrappers); keep
   `$HOME` shared but never touch Termux's dotfiles. Done when nothing of
   ours writes into `$PREFIX` and deleting `$DN` leaves Termux's login
