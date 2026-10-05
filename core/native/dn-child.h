@@ -69,16 +69,6 @@ static int dn_prepare_child(char *inst, size_t sz) {
   }
 
   setenv("LD_PRELOAD", shim, 1);
-  /* Bootstrap/steady: let the child's loader find the prefix's libraries
-   * directly, before ldconfig has refreshed the prefix cache (a trigger can
-   * run bash before the libs it needs are in ld.so.cache). Prefix first. */
-  {
-    char lp[8192];
-    const char *e = getenv("LD_LIBRARY_PATH");
-    snprintf(lp, sizeof lp, "%s/usr/lib/aarch64-linux-gnu:%s/usr/lib%s%s",
-             inst, inst, (e && *e) ? ":" : "", (e && *e) ? e : "");
-    setenv("LD_LIBRARY_PATH", lp, 1);
-  }
   setenv("DN_INSTDIR", inst, 1);
   setenv("PATH", path, 1);
   setenv("DEBIAN_FRONTEND", "noninteractive", 1);

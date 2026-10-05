@@ -23,6 +23,14 @@ int main(int argc, char **argv) {
     if (!pfx || !*pfx) pfx = getenv("PREFIX");
     if (!pfx || !*pfx) pfx = "/data/data/com.termux/files/usr";
     snprintf(bash, sizeof bash, "%s/glibc/bin/bash", pfx);
+  } else {
+    /* Prefix bash: let its loader find the prefix libs before ldconfig has
+     * refreshed the prefix cache. */
+    char lp[8192];
+    const char *e = getenv("LD_LIBRARY_PATH");
+    snprintf(lp, sizeof lp, "%s/usr/lib/aarch64-linux-gnu:%s/usr/lib%s%s",
+             inst, inst, (e && *e) ? ":" : "", (e && *e) ? e : "");
+    setenv("LD_LIBRARY_PATH", lp, 1);
   }
   execv(bash, argv);
   perror("dn-sh: execv");

@@ -24,6 +24,13 @@ int main(int argc, char **argv) {
     if (!pfx || !*pfx) pfx = getenv("PREFIX");
     if (!pfx || !*pfx) pfx = "/data/data/com.termux/files/usr";
     snprintf(perl, sizeof perl, "%s/glibc/bin/perl", pfx);
+  } else {
+    /* Prefix perl: help its loader find the prefix libs. */
+    char lp[8192];
+    const char *e = getenv("LD_LIBRARY_PATH");
+    snprintf(lp, sizeof lp, "%s/usr/lib/aarch64-linux-gnu:%s/usr/lib%s%s",
+             inst, inst, (e && *e) ? ":" : "", (e && *e) ? e : "");
+    setenv("LD_LIBRARY_PATH", lp, 1);
   }
   snprintf(p5, sizeof p5,
            "%s/usr/share/perl5:%s/usr/lib/aarch64-linux-gnu/perl5",
