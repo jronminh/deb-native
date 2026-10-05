@@ -14,10 +14,10 @@ int main(int argc, char **argv) {
     fprintf(stderr, "dn-perl: readlink /proc/self/exe failed\n");
     return 127;
   }
-  char perl[4096], p5[8192], dpkg[4096];
+  char perl[4096], p5[8192], mark[4096];
   snprintf(perl, sizeof perl, "%s/usr/bin/perl", inst);
-  snprintf(dpkg, sizeof dpkg, "%s/usr/bin/dpkg", inst);
-  if (access(dpkg, X_OK) != 0 || access(perl, X_OK) != 0) {
+  snprintf(mark, sizeof mark, "%s/var/lib/deb-native/base-packages", inst);
+  if (access(mark, R_OK) != 0 || access(perl, X_OK) != 0) {
     /* Bootstrap (no prefix dpkg yet): Termux's glibc perl. Steady state: the
      * prefix's own (the app model has no Termux, so the branch is then dead). */
     const char *pfx = getenv("DN_TERMUX_PREFIX");

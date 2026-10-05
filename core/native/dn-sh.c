@@ -13,12 +13,12 @@ int main(int argc, char **argv) {
     fprintf(stderr, "dn-sh: readlink /proc/self/exe failed\n");
     return 127;
   }
-  char bash[4096], dpkg[4096];
+  char bash[4096], mark[4096];
   snprintf(bash, sizeof bash, "%s/usr/bin/bash", inst);
-  snprintf(dpkg, sizeof dpkg, "%s/usr/bin/dpkg", inst);
-  /* Bootstrap (no prefix dpkg yet): use Termux's glibc bash -- the prefix's
-   * own bash may not have its libraries yet. Steady state: the prefix's. */
-  if (access(dpkg, X_OK) != 0 || access(bash, X_OK) != 0) {
+  snprintf(mark, sizeof mark, "%s/var/lib/deb-native/base-packages", inst);
+  /* Bootstrap (base not installed yet): use Termux's glibc bash -- patched for
+   * Android and with all libs present. Steady state: the prefix's own. */
+  if (access(mark, R_OK) != 0 || access(bash, X_OK) != 0) {
     const char *pfx = getenv("DN_TERMUX_PREFIX");
     if (!pfx || !*pfx) pfx = getenv("PREFIX");
     if (!pfx || !*pfx) pfx = "/data/data/com.termux/files/usr";
