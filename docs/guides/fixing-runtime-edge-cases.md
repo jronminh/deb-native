@@ -81,7 +81,7 @@ go to Layer 5.
 
 ## Layer 1: the shim
 
-`native/dn-shim.c` interposes the libc functions that take a path
+`core/native/dn-shim.c` interposes the libc functions that take a path
 (`open`/`stat`/`execve`/…) and rewrites `/usr`, `/etc`, `/var`, `/opt`,
 `/root`, `/lib`, `/bin`, `/sbin` to `<prefix>/…`. It is loaded once per
 program — via `<prefix>/etc/ld.so.preload` — and it derives the
@@ -89,7 +89,7 @@ prefix from its own load path, so nothing has to be injected with it.
 
 If a path is being read but the debug line never shows it, the entry point
 is missing from the shim's coverage. Add just that function to
-`native/dn-shim.c` (same pattern as its neighbours), rebuild the shim,
+`core/native/dn-shim.c` (same pattern as its neighbours), rebuild the shim,
 and reinstall it at `<prefix>/usr/lib/deb-native/dn-shim.so`. The
 `ld.so.preload` string does not change. `../spec/shim/shim-coverage.md` is the
 current coverage list and the technique for measuring it.

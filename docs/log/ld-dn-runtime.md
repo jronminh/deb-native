@@ -3,7 +3,7 @@
 <!-- template: templates/docs.template.md -->
 
 The runtime companion to [`ld-dn-config.md`](ld-dn-config.md): that doc
-covers the *policy data*; this one covers what `native/ld-dn.c` (the
+covers the *policy data*; this one covers what `core/native/ld-dn.c` (the
 interpreter trampoline, slated for rename to `dn-interp`, `TODO.md`
 "Runtime overhaul") actually *does*, as a phase model with line anchors --
 for reviewing or re-reading the file, and for future reference when the
@@ -35,7 +35,7 @@ Living doc: tracks the shipped code, not a proposal.
   doc is the deepest look at the runtime one.
 - [`dn-glibc-prefix.md`](../spec/dn-glibc-prefix.md) -- the next-gen prefix that
   replaces this trampoline with glibc's own prefix-built loader.
-- `native/README.md` -- the other `native/` C programs.
+- `core/native/README.md` -- the other `core/native/` C programs.
 
 ## What it is
 
@@ -45,12 +45,12 @@ kernel runs it *first*, as the program's interpreter, however the program
 was started. It does not re-exec and it does not link anything: it
 transforms the current process in place, then jumps into glibc's real
 dynamic loader with a stack it built itself. The header comment
-(`native/ld-dn.c:1-33`) states this whole design in prose.
+(`core/native/ld-dn.c:1-33`) states this whole design in prose.
 
 ## The phases
 
 The phases below are execution stages, not the file's layout. Line numbers
-are for `native/ld-dn.c` as of the commit that added this doc.
+are for `core/native/ld-dn.c` as of the commit that added this doc.
 
 **Fidelity is an assumption, not a proven fact.** The phase walkthrough
 below describes `ld-dn` as reproducing the kernel's interpreter handoff
@@ -192,7 +192,7 @@ to the decision; `dn-glibc-prefix.md` is the live design.
    of `ld-dn`.
 4. Optionally keep the policy-as-data flexibility by having the loader read
    `$DN/etc/deb-native/ld-dn.conf` once the prefix is known.
-5. Retire `native/ld-dn.c`; point `setup-runtime.sh` and the tests at the
+5. Retire `core/native/ld-dn.c`; point `setup-runtime.sh` and the tests at the
    patched loader.
 
 **Pros.**

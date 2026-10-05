@@ -65,7 +65,7 @@ Defaults, meant to be configurable per prefix:
 
 ## Mechanism
 
-- `dn-shell` (`native/dn-launch.c`): read the real `$HOME`, compute
+- `dn-shell` (`core/native/dn-launch.c`): read the real `$HOME`, compute
   `.dn/<basename(instdir)>`, `mkdir -p` it, then `setenv("HOME", ...)` before
   exec'ing the prefix bash. Program writes then land in `.dn` by construction.
 - Keep the **real** home path for the shared `$HOME/.local/bin` on `PATH`.

@@ -2,7 +2,7 @@
 
 <!-- template: templates/docs.template.md -->
 
-How `native/dn-shim.c` fakes the Debian layout without a kernel
+How `core/native/dn-shim.c` fakes the Debian layout without a kernel
 view — the one gap left once everything else (dynamic linker search
 path, interpreter module paths, the ELF interpreter itself) was already
 solved elsewhere — and the ways a glibc target can actually be made to
@@ -31,7 +31,7 @@ largest section there).
 
 
 Status: **prototyped and verified working**, against a real gap (not a
-toy). `native/dn-shim.c` + `bootstrap/build-dn-shim.sh`.
+toy). `core/native/dn-shim.c` + `bootstrap/build-dn-shim.sh`.
 
 ### Overlay/view: confirmed dead on this device, with data
 
@@ -87,7 +87,7 @@ remaining row.
 
 ### The mechanism: libc call interposition, not a filesystem view
 
-`native/dn-shim.c` is our own shim — a glibc shared object we build
+`core/native/dn-shim.c` is our own shim — a glibc shared object we build
 and preload into the process. It overrides
 `open`, `openat`, `fopen`, `stat`, `fstatat`, and the older `__fxstatat`,
 rewriting any path starting with a configured prefix
@@ -128,7 +128,7 @@ With the shim:
 
 ```
 $ DN_REDIRECT_FROM=/usr/share/figlet DN_REDIRECT_TO=<font root> \
-  LD_PRELOAD=native/dn-shim.so \
+  LD_PRELOAD=core/native/dn-shim.so \
   ld-linux-aarch64.so.1 figlet-figlet "termux deb bridge"
  _                                       _      _
 | |_ ___ _ __ _ __ ___  _   ___  __   __| | ___| |__
@@ -142,7 +142,7 @@ rewrite for verification (`/usr/share/figlet/standard.flf -> .../standard.flf`).
 
 Termux ships `*-glibc` packages' **runtime** libraries
 (`termux-pacman/glibc-packages`) but not a full glibc **cross-toolchain**
-for building new ones on-device. Compiling `native/dn-shim.c`
+for building new ones on-device. Compiling `core/native/dn-shim.c`
 against Termux's own glibc, using Termux's own Bionic-hosted `clang`,
 needed:
 
@@ -181,7 +181,7 @@ is dead here, this project needed its own answer.
 #### Dead end, fully explored: a Bionic preload shim
 
 First attempt: a Bionic build of `dn-shim.c`'s idea
-(`native/dn-shim-bionic.c`, plain `clang`, no cross-compile needed —
+(`core/native/dn-shim-bionic.c`, plain `clang`, no cross-compile needed —
 Bionic is native here), generalized to a wholesale `/usr`, `/etc`, `/var`,
 `/opt` → `$INSTDIR` mapping (the same four directories the view
 overlaid), `LD_PRELOAD`ed into dpkg's environment before it forks

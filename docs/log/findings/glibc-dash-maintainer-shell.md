@@ -34,7 +34,7 @@ rather than building a new Bionic-side mechanism.
 
 ### What's built and confirmed working in isolation
 
-- `native/path-redirect.c` generalized from one hardcoded `FROM`/`TO`
+- `core/native/path-redirect.c` generalized from one hardcoded `FROM`/`TO`
   pair to a wholesale `/usr`, `/etc`, `/var`, `/opt` → `$DN_INSTDIR`
   mapping (same four directories sudo-less's view overlaid), plus
   `open64`/`stat64`/`lstat64`/`access`/`execv`/`execve` interceptors

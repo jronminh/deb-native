@@ -1,4 +1,4 @@
-# tracer/ — fork-lite
+# core/tracer/ — fork-lite
 
 <!-- template: templates/readme.template.md -->
 

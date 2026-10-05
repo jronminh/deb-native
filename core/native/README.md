@@ -1,4 +1,4 @@
-# native/
+# core/native/
 
 <!-- template: templates/readme.template.md -->
 

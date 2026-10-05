@@ -4,8 +4,8 @@
 
 What goes wrong when **running** a prefix program (as opposed to installing
 it), grouped by cause. Each is tagged with what handles it: **shim** = our
-libc interposer (`native/dn-shim.c`), **tracer** = fork-lite
-(`tracer/`), **—** = nothing today. Coverage of the shim itself is in
+libc interposer (`core/native/dn-shim.c`), **tracer** = fork-lite
+(`core/tracer/`), **—** = nothing today. Coverage of the shim itself is in
 [`shim-coverage.md`](shim-coverage.md); the syscall boundary in
 [`syscall-boundary.md`](../../reference/syscall-boundary.md).
 

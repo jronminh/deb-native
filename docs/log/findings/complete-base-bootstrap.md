@@ -43,7 +43,7 @@ coverage) and the chicken-and-egg it left open for a fresh prefix.
    `/bin/sh`, the glibc `LD_PRELOAD` never applies, and the run surfaces as
    the misleading
    `CANNOT LINK EXECUTABLE "/bin/sh": library "libc.so.6" not found`.
-   **Fix:** `native/dn-launch.c` — a tiny **Bionic ELF** launcher (built
+   **Fix:** `core/native/dn-launch.c` — a tiny **Bionic ELF** launcher (built
    with Termux's own `clang`) that derives `$INSTDIR` from
    `/proc/self/exe`, sets `LD_PRELOAD`/`DN_INSTDIR`/`PATH`/`DEBIAN_FRONTEND`,
    and `exec`s Termux's glibc `bash` (or, when invoked as `dn-perl`, glibc
@@ -64,7 +64,7 @@ coverage) and the chicken-and-egg it left open for a fresh prefix.
    existing component with `chdir()`, not `stat()` (confirmed by strace:
    `mkdirat("$INSTDIR/var") = EEXIST` then `chdir("/var") = ENOENT`, the
    real `/var` being absent on Android), which coreutils reads as "not a
-   directory". **Fix:** `chdir` interposer in `native/path-redirect.c`.
+   directory". **Fix:** `chdir` interposer in `core/native/path-redirect.c`.
    Every `mkdir -p` on a path whose parent already exists was failing
    because of this.
 
@@ -113,7 +113,7 @@ targets and strips it for Bionic/scripts — which is what let the old
 
 ### Files changed
 
-- `native/dn-launch.c` (new), `native/path-redirect.c` (extended),
+- `core/native/dn-launch.c` (new), `core/native/path-redirect.c` (extended),
   `core/install/setup-runtime.sh` (new),
   `core/install/patch-deb.sh`, `core/install/patch-maintainer-scripts.sh`,
   `core/install/apt-install.sh`, `bootstrap/setup-apt-prefix.sh`.

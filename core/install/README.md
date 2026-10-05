@@ -22,7 +22,7 @@ for the current one.
   after.
 - `dn-translate-deb.sh` — translates one `.deb` in place: ELF interpreter,
   library path, `#!` lines, maintainer scripts, hard links, per-package
-  fixes from `custom/`.
+  fixes from `core/custom/`.
 - `dn-debian-index.sh` — rewrites `Architecture: all` -> `arm64` in a
   downloaded Debian package index.
 - `patch-scripts-tree.sh` — rewrites an extracted package's maintainer

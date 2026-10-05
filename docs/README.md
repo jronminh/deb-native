@@ -10,7 +10,7 @@ where it feels thematically closest, and add it to that directory's
 
 - [`spec/`](spec/README.md) — the project's own design: what it does and
   how, as it stands right now. Read these as ground truth; update them
-  when the design changes. Subdirs: `shim/`, `tracer/`.
+  when the design changes. Subdirs: `shim/`, `core/tracer/`.
 - [`reference/`](reference/README.md) — look-up material, not a design of
   ours: facts about the platform, ABI and formats the project leans on,
   the support contract, and the known-issues catalog.

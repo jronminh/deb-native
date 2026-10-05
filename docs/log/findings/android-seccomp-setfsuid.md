@@ -41,7 +41,7 @@ ncurses TUI) died; `--noediting` and `-c` (no readline) were unaffected.
 
 ## Fix
 
-`native/path-redirect.c` now overrides `setfsuid`/`setfsgid` as silent no-ops
+`core/native/path-redirect.c` now overrides `setfsuid`/`setfsgid` as silent no-ops
 returning the current uid/gid. They are deliberately **not** in the
 `FAKE_SETID` helper, which falls through to `real()` when fake-root is off --
 the seccomp trap fires either way, so the fallthrough would still SIGSYS. A

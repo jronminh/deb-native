@@ -71,7 +71,7 @@ debconf.postinst[5]: .: /usr/share/debconf/confmodule: No such file or directory
 ln: failed to create symbolic link '/usr/lib/ssl': No such file or directory
 ```
 
-But `native/path-redirect.c`'s `LD_PRELOAD` shim **cannot help here**, for
+But `core/native/path-redirect.c`'s `LD_PRELOAD` shim **cannot help here**, for
 a reason not previously documented: maintainer scripts run under
 `--force-script-chrootless` execute via **Termux's own Bionic `/bin/sh`**,
 not a glibc process. `LD_PRELOAD=path-redirect.so` names a glibc `.so`

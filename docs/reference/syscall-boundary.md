@@ -64,7 +64,7 @@ The count is small, but the point is structural, not numerical.
 
 ## The gap is routing, not the count
 
-`native/dn-run.c` classifies a binary by `PT_INTERP` and routes it: glibc →
+`core/native/dn-run.c` classifies a binary by `PT_INTERP` and routes it: glibc →
 the shim, static → `proot`. **`abbtr` is a PIE (dynamic) executable that emits
 `svc #0` itself**, so it is routed to the shim — which cannot see any of its 38
 syscalls. "Has a dynamic interpreter" is not the same as "all its filesystem
@@ -90,7 +90,7 @@ it, which is why `getpwnam` returned `NOTFOUND` even under `proot`.
 
 Fix: on the NSS route, bind the prefix's `/etc` over Termux glibc's sysconfdir
 (`-b $INSTDIR/etc:$PREFIX/glibc/etc`). Then `getpwnam("dnshim")` resolves in
-the prefix. `native/dn-run.c` now gives a glibc ELF an **NSS-import attribute**
+the prefix. `core/native/dn-run.c` now gives a glibc ELF an **NSS-import attribute**
 (scan for `getpwnam`/`getpwuid`/`getaddrinfo`/… in the binary) and routes it
 through the tracer (`dn-trace`, else Termux `proot`) with that bind; static
 binaries take the tracer route too. Verified by `tests/tracer-nss/run.sh`

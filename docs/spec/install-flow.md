@@ -52,7 +52,7 @@ goes through this once.
    parallel by `dn-translate-deb.sh` directly (the prefix's own apt hooks
    don't exist yet at this point in the bootstrap) — `Architecture: all`
    -> `arm64`, ELF interpreter -> the prefix's own fused glibc loader, maintainer-script shebangs ->
-   `dn-shell`, per-package fixes from `custom/`.
+   `dn-shell`, per-package fixes from `core/custom/`.
 
 3. **Unpack, then configure, the whole base in one dpkg call.** `dpkg
    --unpack` on every translated base `.deb` (libraries first, tools

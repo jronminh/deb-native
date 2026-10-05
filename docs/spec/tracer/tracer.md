@@ -39,18 +39,18 @@ A Debian program in the prefix normally never meets the tracer:
 | **makes its own syscalls** (inline `svc`, `syscall()`) | the shim cannot see them (`scan-direct-syscalls.py`) | **yes** |
 | **glibc NSS lookups** (`getpwnam`, `getaddrinfo`, ...) | libc-internal, not interposable | **yes** |
 
-`native/dn-run.c` routes the last three to `usr/lib/deb-native/dn-trace`
+`core/native/dn-run.c` routes the last three to `usr/lib/deb-native/dn-trace`
 (no fallback to Termux's `proot` since 0.2.3). A static binary also *needs* the
 tracer to survive: Android's app seccomp filter kills calls such as
 `set_robust_list` with SIGSYS (untraced, Debian's static `busybox find` dies),
-and the tracer's SIGSYS emulation (`tracer/tracee/seccomp.c`) answers them.
+and the tracer's SIGSYS emulation (`core/tracer/tracee/seccomp.c`) answers them.
 
 ## What changed in 0.2.0
 
 ### 1. Built at setup
 
-`core/install/setup-runtime.sh` builds `tracer/` (`make CC=clang`, from clean) when
-`make` and `libtalloc` are installed and copies `tracer/dn-trace` into the
+`core/install/setup-runtime.sh` builds `core/tracer/` (`make CC=clang`, from clean) when
+`make` and `libtalloc` are installed and copies `core/tracer/dn-trace` into the
 prefix. Without them it prints
 
     W: tracer not built (needs: pkg install make libtalloc); static programs will run untranslated
@@ -60,7 +60,7 @@ packages are optional requirements in the README.
 
 ### 2. `dn-trace` front end
 
-`tracer/cli/dn-trace.c` replaces PRoot's command line (`cli/cli.c`,
+`core/tracer/cli/dn-trace.c` replaces PRoot's command line (`cli/cli.c`,
 `cli/proot.c`: option tables, help, qemu, `-r`/`-w`/`-0`, the pruned
 extensions' options):
 

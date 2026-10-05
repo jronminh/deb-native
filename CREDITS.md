@@ -9,10 +9,10 @@ builds on, and the license each part is under.
   <https://github.com/proot-me/PRoot>)
 - License: **GPL-2.0-or-later**. Copyright STMicroelectronics and the PRoot
   contributors.
-- Used for: `tracer/` is a reduced fork of `termux/proot`
+- Used for: `core/tracer/` is a reduced fork of `termux/proot`
   (arm64-only, path handling, extensions removed). The original copyright and
   license headers are kept in every derived file; see
-  [`tracer/README.md`](tracer/README.md) for the pinned commit and the exact
+  [`core/tracer/README.md`](core/tracer/README.md) for the pinned commit and the exact
   set of changes. The `ptrace` syscall-interception core — the hard part — is
   theirs.
 - Why a fork and not a fresh tracer: rewriting a syscall's path arguments
@@ -63,10 +63,10 @@ builds on, and the license each part is under.
 - <https://www.samba.org> (`lib/talloc/` in the `samba` source package) —
   **LGPL-3.0-or-later**, copyright Andrew Tridgell, Jelmer Vernooij and
   the Samba Team.
-- Used for: a build-time and run-time dependency of `tracer/` (`dn-trace`),
+- Used for: a build-time and run-time dependency of `core/tracer/` (`dn-trace`),
   inherited from PRoot's own build requirements — PRoot's hierarchical
   memory allocation is built on talloc, unchanged by this project's fork.
-  Optional at install (`pkg install make libtalloc`, `tracer/README.md`);
+  Optional at install (`pkg install make libtalloc`, `core/tracer/README.md`);
   without it, static binaries and programs making their own syscalls run
   untranslated instead of failing to build.
 
@@ -103,4 +103,4 @@ builds on, and the license each part is under.
 ## License
 
 `deb-native` is **GPL-3.0-or-later** ([`LICENSE`](LICENSE)). The GPL-2.0-or-later
-PRoot code in `tracer/` is compatible with it and keeps its own headers.
+PRoot code in `core/tracer/` is compatible with it and keeps its own headers.

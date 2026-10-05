@@ -31,7 +31,7 @@ here first, then get promoted into the boundary doc / `path-shim.md`.
 Which mechanism reaches the access libc interposition cannot:
 
 1. extend the existing **`proot`** route (syscall-level, already wired for
-   static in `native/dn-run.c`);
+   static in `core/native/dn-run.c`);
 2. add a **`syscall()` interposer** to the shim (cheap; covers only the
    explicit-wrapper case);
 3. build a **`ptrace` / `SECCOMP_RET_USER_NOTIF` tracer** (the endgame).
@@ -57,7 +57,7 @@ Which mechanism reaches the access libc interposition cannot:
   positives where disassembly gives 6).
 - `tests/shim-libc/` — the on-device harness; extend it for the `syscall()`
   test (Q2).
-- `native/dn-run.c` — the current `PT_INTERP` classifier.
+- `core/native/dn-run.c` — the current `PT_INTERP` classifier.
 - Corpus on the phone (from [`shim-coverage.md`](../shim/shim-coverage.md)):
   `~/debcorpus/{Packages.gz,sel.tsv,debs/,root/}`.
 
@@ -73,7 +73,7 @@ python3 ~/deb-native/core/bench/scan-direct-syscalls.py ~/debcorpus/root --verif
 
 ### Existing: `proot` (Termux's)
 
-`native/dn-run.c` route #2 execs `proot -b <instdir>/<dir>:/<dir>` for
+`core/native/dn-run.c` route #2 execs `proot -b <instdir>/<dir>:/<dir>` for
 binaries with no `PT_INTERP`. It is a `ptrace` syscall interceptor: it traps
 each syscall and rewrites the path arguments, so it is *syscall-level* and
 therefore covers cases 2–5 (libc-internal / static bindings, inline `svc`,

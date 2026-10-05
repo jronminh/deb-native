@@ -2,7 +2,7 @@
 
 <!-- template: templates/docs.template.md -->
 
-Audit of `tracer/` (fork-lite, the reduced arm64-only PRoot) to turn it into a
+Audit of `core/tracer/` (fork-lite, the reduced arm64-only PRoot) to turn it into a
 **bind-only** path tracer suited to this project's scope. Findings only; no
 code changed. Method: read the actual tree, cite `file:line`. See
 [`direct-usage.md`](direct-usage.md) for the fork-lite plan and

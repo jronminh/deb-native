@@ -146,7 +146,7 @@ below, oldest first, matching the original file's order.
   it to **SIGSYS** on `setfsuid`, trapped by Android seccomp; libtinfo/ncurses
   (`tput`, terminfo) calls it, so readline -- and thus every interactive bash
   -- died. Fixed by overriding `setfsuid`/`setfsgid` as no-ops in
-  `native/path-redirect.c` (outside `FAKE_SETID`, since the trap ignores
+  `core/native/path-redirect.c` (outside `FAKE_SETID`, since the trap ignores
   fake-root). Rebuilt shim: interactive shell + `tput` work again. The
   `~/.dn-login` chooser's own exit-0 bug is deferred -- `~/.termux/shell`
   now points straight at the prefix `dn-shell`.
@@ -189,7 +189,7 @@ below, oldest first, matching the original file's order.
   **Repo change**: the apt translate/index hooks were pointed at an absolute
   path into the checkout, so a moved/removed checkout silently stopped runtime
   translation. `install-hooks.sh` now copies the hook set (+
-  `make-launchers.sh`, `scan-direct-syscalls.py`, `custom/`) into the prefix and
+  `make-launchers.sh`, `scan-direct-syscalls.py`, `core/custom/`) into the prefix and
   `setup-apt-prefix.sh` points `apt.conf` at the prefix copies; `install.sh`
   refresh re-copies. Prefixes bootstrapped before need a one-time re-point.
 - [`merged-usr-alternative-links.md`](merged-usr-alternative-links.md) —

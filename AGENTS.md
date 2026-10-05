@@ -16,13 +16,13 @@ Three path mechanisms:
 
 - **Maintainer scripts** — plain-text path rewrite before `dpkg` runs them
   (`core/install/patch-scripts-tree.sh`).
-- **Dynamic glibc binaries** — `native/dn-shim.c`, an `LD_PRELOAD` shim
+- **Dynamic glibc binaries** — `core/native/dn-shim.c`, an `LD_PRELOAD` shim
   interposing path-taking libc functions (`/usr /etc /var /opt` →
   `$INSTDIR`). **This layer is complete** — see `docs/spec/shim/shim-coverage.md`.
 - **Syscall level** — for what the shim cannot see (static binaries, inline
   `svc #0`, explicit `syscall()`, libc-internal NSS reads). Today this is
-  `proot` (fallback, wired in `native/dn-run.c`); it is being replaced by
-  **fork-lite**, our own reduced proot, in `tracer/`.
+  `proot` (fallback, wired in `core/native/dn-run.c`); it is being replaced by
+  **fork-lite**, our own reduced proot, in `core/tracer/`.
 
 `sudo-less` (`~/sudo-less`) is the same idea on a real Debian host using a
 mount-namespace "view"; the view is impossible here, so these mechanisms
@@ -48,8 +48,8 @@ idea shipping soonest, not for understanding every failure.
 
 `scripts/` and `docs/` each have a `README.md` at every level
 (`core/install/README.md`, `docs/spec/README.md`, ...) indexing what's
-in that directory; so do `native/`, `tests/`,
-`third_party/glibc-android-patches/`, `custom/`, and `tracer/`. Read the
+in that directory; so do `core/native/`, `tests/`,
+`third_party/glibc-android-patches/`, `core/custom/`, and `core/tracer/`. Read the
 relevant one before working in a directory or guessing a file's purpose
 from its name. Start from `docs/README.md` and `scripts/README.md`.
 Every `README.md` and content doc follows a stable template in
@@ -68,7 +68,7 @@ history. `docs/log/findings/` is the chronological engineering log,
 one entry per file.
 `docs/reference/android-platform.md` has the Android enforcement-gate taxonomy
 (seccomp/capability/SELinux) — read before scoping 0.5.0 work.
-`tracer/README.md` has fork-lite's provenance, build, and prune status.
+`core/tracer/README.md` has fork-lite's provenance, build, and prune status.
 `TODO.md` is the roadmap.
 
 ## Current state (2026-09-26)
@@ -80,7 +80,7 @@ one entry per file.
   **Direct-syscall binaries (cases 3/4) are routed too**: `scan-direct-syscalls.py
   --trace-list` + `make-launchers.sh` tag them `dn-run --trace` at install time;
   static binaries use the tracer as before.
-- **fork-lite** (`tracer/`): proot base imported and pruned — extensions
+- **fork-lite** (`core/tracer/`): proot base imported and pruned — extensions
   removed (framework kept) and made AArch64-only. It **builds on `fe2`**
   (`make CC=clang`, needs `libtalloc`) and a static binary reads through a
   `-b` bind. **Bind-only fast path landed** (`docs/spec/tracer/bind-only.md`,
@@ -92,8 +92,8 @@ one entry per file.
 
 ## Layout
 
-See each directory's own `README.md` (`native/README.md`,
-`tracer/README.md`, `tests/README.md`, `scripts/README.md` and its
+See each directory's own `README.md` (`core/native/README.md`,
+`core/tracer/README.md`, `tests/README.md`, `scripts/README.md` and its
 per-subdirectory ones) — kept current there, not duplicated here.
 
 ## Where truth lives / workflow

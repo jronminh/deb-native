@@ -6,7 +6,7 @@
 into glibc's own loader; `docs/log/ld-dn-runtime.md`, "Alternative: fuse
 into the loader"; `TODO.md`, "Runtime overhaul"): recon showed glibc can
 already do the shim-injection and library-search jobs from files, so the
-only piece missing was the prefix the shim needs. `native/path-redirect.c`
+only piece missing was the prefix the shim needs. `core/native/path-redirect.c`
 now derives that prefix from its own load path, with no injected env.
 Proven on `fe2`.
 
@@ -47,7 +47,7 @@ shim cannot know the prefix.
 
 ## What changed
 
-`native/path-redirect.c`'s `dn_init()` now keeps `DN_INSTDIR` when set,
+`core/native/path-redirect.c`'s `dn_init()` now keeps `DN_INSTDIR` when set,
 but falls back to `dladdr()` when it is not: the shim's own load path is
 `<prefix>/usr/lib/deb-native/path-redirect.so` (wherever it is listed, in
 `ld.so.preload` or `LD_PRELOAD`), so stripping that suffix yields the

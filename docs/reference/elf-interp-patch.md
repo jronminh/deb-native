@@ -58,7 +58,7 @@ esac
 
 (`core/install/dn-translate-deb.sh`, ~lines 73-81). `$LD` is
 `$DN/usr/lib/deb-native/ld-dn` — the absolute, prefix-rooted path to
-`native/ld-dn.c`'s built binary. `patchelf --print-interpreter` fails
+`core/native/ld-dn.c`'s built binary. `patchelf --print-interpreter` fails
 (captured, not treated as an error) for static binaries and libraries,
 which have no `PT_INTERP` segment at all; those are left untouched. A
 file whose interpreter is already `$LD` (re-running the translator, or
@@ -80,11 +80,11 @@ be read to find the program header table. Three fields locate it
 - `e_phnum` — number of entries.
 
 Reading the table is `e_phnum` consecutive `e_phentsize`-byte structs
-starting at `e_phoff`. `native/ld-dn.c` does exactly this twice: once
+starting at `e_phoff`. `core/native/ld-dn.c` does exactly this twice: once
 implicitly (the kernel already built `AT_PHDR`/`AT_PHNUM` for the
 *translated program itself* by the time `ld-dn` runs — see "The runtime
 side" below) and once explicitly for the real loader it maps
-(`native/ld-dn.c:555`, `pread64` of `eh.e_phnum * sizeof(Phdr)` bytes
+(`core/native/ld-dn.c:555`, `pread64` of `eh.e_phnum * sizeof(Phdr)` bytes
 starting at `eh.e_phoff`).
 
 **Extended phnum (`PN_XNUM`).** If a file has 0xffff (65535) or more
@@ -94,9 +94,9 @@ real count is instead stored in the section header table's first
 entry's `sh_info` (`elf(5)`, `PN_XNUM`). No binary in this project's
 scope comes remotely close to 65535 program headers — loader stubs and
 Debian programs both have a handful — so this case is unverified in
-practice here and not handled by `native/ld-dn.c`'s own phdr reader
+practice here and not handled by `core/native/ld-dn.c`'s own phdr reader
 (which takes `e_phnum` at face value and bounds it to a 32-entry local
-array, `native/ld-dn.c:205`, `g_ph[32]`, dying if a mapped loader
+array, `core/native/ld-dn.c:205`, `g_ph[32]`, dying if a mapped loader
 exceeds that). Worth flagging if `dn-elf` (below) is ever pointed at
 an unusual binary, but not a real-world risk for glibc loaders or
 Debian arm64 programs.
@@ -145,7 +145,7 @@ version-specific — it follows from the field semantics in `elf(5)`
 too.)
 
 This is exactly the pair `patchelf --set-interpreter` and `ld-dn.c`'s
-own `PT_INTERP` scan (`native/ld-dn.c:500`, `interp = (const char
+own `PT_INTERP` scan (`core/native/ld-dn.c:500`, `interp = (const char
 *)(bias + pp[i].p_vaddr)`) both have to keep consistent — `ld-dn.c`
 reads via `p_vaddr` because by the time it runs the *kernel has
 already mapped the program*, so the string is sitting in memory at its
@@ -244,10 +244,10 @@ entry did.
 - **Extended phnum.** Not handled (see above) — unverified in practice,
   believed irrelevant at this project's binary sizes.
 - **64-bit LE aarch64 only.** Every struct offset and field width in
-  this doc, and in `native/ld-dn.c`'s own hand-rolled `Ehdr`/`Phdr`
-  structs (`native/ld-dn.c:39-50`), assumes `ELFCLASS64` +
+  this doc, and in `core/native/ld-dn.c`'s own hand-rolled `Ehdr`/`Phdr`
+  structs (`core/native/ld-dn.c:39-50`), assumes `ELFCLASS64` +
   `ELFDATA2LSB` (`Elf64_*`, not `Elf32_*`) and `EM_AARCH64` (machine
-  value 183, checked at `native/ld-dn.c:552`). deb-native only ever
+  value 183, checked at `core/native/ld-dn.c:552`). deb-native only ever
   targets Debian `arm64`; nothing here generalizes to 32-bit ELF or a
   different byte order without separate struct layouts.
 - **Only ever one `PT_INTERP` entry.** `elf(5)`: "it may not occur more
@@ -259,7 +259,7 @@ entry did.
 
 The static patch only changes *what path the kernel will read as the
 interpreter*; the interesting work happens at `execve()` time inside
-`native/ld-dn.c`, which this doc does not re-describe in full (see
+`core/native/ld-dn.c`, which this doc does not re-describe in full (see
 `design.md` and `ld-dn-config.md`). Briefly, so the connection to the
 field above is concrete:
 
@@ -268,10 +268,10 @@ field above is concrete:
    control to it with the original program's initial stack (`AT_PHDR`
    and `AT_ENTRY` still describe the original program, not the
    interpreter).
-2. `native/ld-dn.c` is that file. It re-derives `$DN` by scanning the
+2. `core/native/ld-dn.c` is that file. It re-derives `$DN` by scanning the
    *original program's* already-mapped program headers (the kernel's
    `AT_PHDR` points at the executable, not the interpreter) for
-   `PT_INTERP` again (`native/ld-dn.c:500`) and stripping the known
+   `PT_INTERP` again (`core/native/ld-dn.c:500`) and stripping the known
    `/usr/lib/deb-native/ld-dn` suffix. That string is exactly the field
    this doc patches, read back out of memory.
 3. It then opens glibc's real loader (`ld-linux-aarch64.so.1`, never
@@ -279,7 +279,7 @@ field above is concrete:
    *its* `Ehdr`/`PT_LOAD` headers, maps those segments manually with
    `mmap`, and rewrites the `AT_BASE` auxv entry to point at that
    mapping before jumping to the real loader's entry point
-   (`native/ld-dn.c:547-593`). `AT_BASE` is how a dynamic loader
+   (`core/native/ld-dn.c:547-593`). `AT_BASE` is how a dynamic loader
    normally learns its own load address; `ld-dn` fakes that handoff
    so glibc's loader thinks it was invoked the normal way.
 
@@ -299,7 +299,7 @@ per process launch.
   what Debian shipped.
 - **Section headers**, beyond what `patchelf`'s own `.interp`/program
   header sync requires. deb-native's own runtime code
-  (`native/ld-dn.c`) never reads section headers at all — only program
+  (`core/native/ld-dn.c`) never reads section headers at all — only program
   headers, which is all `execve()` itself needs too.
 - **Libraries and static binaries.** `patchelf --print-interpreter`
   failing (no `PT_INTERP` segment) is the signal to skip a file

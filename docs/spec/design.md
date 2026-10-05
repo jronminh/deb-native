@@ -44,7 +44,7 @@ real ELF loading. The only thing faked is the **layout** — that `/usr /etc /va
 "installed" and "runs":
 
 - the prefix (where files actually land) and the path interposition;
-- the maintainer-script exec path (`native/dn-launch.c`), because `preinst`/
+- the maintainer-script exec path (`core/native/dn-launch.c`), because `preinst`/
   `postinst` run outside the process we control;
 - dpkg's own state, which is real bookkeeping, not a bluff.
 
@@ -144,7 +144,7 @@ Phase A (built): translation on the device, in the prefix's apt hooks:
 
 | Hook | Step |
 |---|---|
-| `DPkg::Pre-Install-Pkgs` | per `.deb`, via `dn-hook-pre.sh` -> `dn-translate-deb.sh`: control relabel; ELFs repointed at the `libc6` stand-in (`$DN/usr/lib/ld-linux-aarch64.so.1`, `RUNPATH` `$DN/usr/lib/aarch64-linux-gnu` first, shared libraries too) before any maintainer script runs; `custom/<package>.sh` fixes; maintainer-script shebangs -> `dn-shell` (`patch-scripts-tree.sh`) |
+| `DPkg::Pre-Install-Pkgs` | per `.deb`, via `dn-hook-pre.sh` -> `dn-translate-deb.sh`: control relabel; ELFs repointed at the `libc6` stand-in (`$DN/usr/lib/ld-linux-aarch64.so.1`, `RUNPATH` `$DN/usr/lib/aarch64-linux-gnu` first, shared libraries too) before any maintainer script runs; `core/custom/<package>.sh` fixes; maintainer-script shebangs -> `dn-shell` (`patch-scripts-tree.sh`) |
 | `DPkg::Post-Invoke` | alternatives links made relative at once (`dn-fix-alternatives.sh`); new packages' absolute symlinks made relative; launchers for their programs (and for alternatives links to them); stale launchers dropped |
 
 Phase B (not built): the same translation at **repo build time**
@@ -215,7 +215,7 @@ glibc patch, the `setuid`/`setgid`/... "0" bucket,
 [`android-platform.md`](../reference/android-platform.md)) stays unapplied for the
 same reason -- nothing about fake-root is being extended.
 
-**Mechanism:** the shim (`native/dn-shim.c`) fakes
+**Mechanism:** the shim (`core/native/dn-shim.c`) fakes
 `get[e]uid`/`get[e]gid`/`getres[ug]id`/`getgroups` -> `0`, `stat`
 ownership, no-ops `chown`/`set*id`/`setgroups`/`initgroups`, and rewrites
 `USER`/`LOGNAME` in the environ array; `dn-trace` does the same at syscall

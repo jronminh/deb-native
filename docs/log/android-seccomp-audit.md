@@ -135,7 +135,7 @@ Plan (not yet run):
    against the two allowlist TXT files above to get the arm64 allowlist as
    actually assembled (not just the two app-specific files quoted in
    Phase 1).
-2. Build a small static-binary harness (reuse `tracer/`'s test pattern,
+2. Build a small static-binary harness (reuse `core/tracer/`'s test pattern,
    `tests/tracer-nss/run.sh` as a template) that calls each candidate
    syscall directly (raw `syscall(nr, ...)`, no libc wrapper, so bionic's
    own allowed-by-construction wrappers don't mask the filter) and records
@@ -208,7 +208,7 @@ any portable program's error handling expects or can catch.
 program issues is identical whether it came from Debian's own glibc
 (0.5.0) or Termux's current one -- what happens to it (kill vs. clean
 errno) is decided entirely at the kernel/tracer boundary, after the
-syscall has already left the library. This is purely `tracer/tracee/
+syscall has already left the library. This is purely `core/tracer/tracee/
 seccomp.c`'s job: it already catches `SIGSYS` and substitutes a return
 value for `set_robust_list` (currently a fake success, harmless because
 that call is best-effort/informational). Extending the same mechanism to
@@ -253,11 +253,11 @@ trapped syscall number and arguments (arm64: `uc_mcontext.regs[8]` and
 (safe only for the no-op/best-effort Gate-A syscalls, never for anything
 Gate B/C already answers with a clean errno).
 
-**Where to install it: `native/ld-dn.c`, not `path-redirect.so`'s
+**Where to install it: `core/native/ld-dn.c`, not `path-redirect.so`'s
 constructor.** Checked the actual code and corrected a wrong assumption
 along the way -- the shim is *not* embedded in `ld-dn`; they are two
-separate build artifacts (`native/ld-dn.c` compiles to a standalone
-freestanding ELF, `native/path-redirect.c` compiles separately to
+separate build artifacts (`core/native/ld-dn.c` compiles to a standalone
+freestanding ELF, `core/native/path-redirect.c` compiles separately to
 `path-redirect.so` via `bootstrap/build-path-redirect.sh`). `ld-dn` only
 *writes* `LD_PRELOAD=.../path-redirect.so` into the new environment/stack it
 hands to glibc's real loader (`ld-dn.c:145-146`) -- it never maps the shim
@@ -293,7 +293,7 @@ needing `ptrace` at all.
 **Not started; not yet a full plan.** Open before implementation: the exact
 freestanding `rt_sigaction`/`sigreturn` sequence in `ld-dn.c`'s style (no
 libc), the shared candidate-syscall table's home (a header both `ld-dn.c`
-and `tracer/syscall/exit.c` include, to avoid the two lists drifting apart),
+and `core/tracer/syscall/exit.c` include, to avoid the two lists drifting apart),
 and on-device verification that Android's filter action for a Gate-A
 syscall is actually a catchable `SIGSYS` delivery (not `RET_KILL_PROCESS`,
 which would deliver nothing to catch) -- assumed from this doc's own
@@ -624,7 +624,7 @@ checking actual output: the "failed" `sysd-syscallsT` file this
 produced was in fact complete and correct, and running the exact same
 `make-syscalls.sh`/`gcc-14 -E` invocations by hand (40x in a loop) never
 crashed once. **Root cause: `PATH="$DN/usr/bin:$PATH"`** (set to help
-`gcc-14` find the prefix's binutils, before realizing `native/ld-dn.c`'s
+`gcc-14` find the prefix's binutils, before realizing `core/native/ld-dn.c`'s
 `COMPILER_PATH` fix from earlier today already makes that unnecessary)
 put this project's own glibc coreutils **ahead of Termux's own** --
 `mkinstalldirs`'s plain `mkdir` calls, and other trivial utility
@@ -801,7 +801,7 @@ scans flags it). Before deciding how to route such a binary automatically,
 we need to actually see which syscalls a traced program hits that get
 blocked — today that information exists but is discarded silently.
 
-**Found**: `tracer/tracee/seccomp.c`'s SIGSYS handler already has a
+**Found**: `core/tracer/tracee/seccomp.c`'s SIGSYS handler already has a
 generic `default:` case (`handle_seccomp_event_common()`) that answers
 *any* syscall this device's seccomp policy blocks with a clean `-ENOSYS`,
 whether or not the tracer's own syscall table (`sysnums-arm64.h`) has a

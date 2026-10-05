@@ -41,7 +41,7 @@ through the shim, matching a real chroot more closely) vs. extending the
 existing targeted dispatch with just the three missing merged-usr
 aliases. Chose the latter (full detail: `docs/spec/shim/shim-coverage.md`'s
 now-resolved "the five-prefix view may be too narrow" section) --
-`native/path-redirect.c`'s `rewrite()` now also dispatches `/lib`, `/bin`
+`core/native/path-redirect.c`'s `rewrite()` now also dispatches `/lib`, `/bin`
 (second byte `'l'`/`'b'`, default `prelen = 4`) and `/sbin` (`'s'`,
 `prelen = 5`); none collide with the existing five. These are Debian's
 own merged-usr symlinks into `/usr/{lib,bin,sbin}`, which the prefix's
@@ -57,7 +57,7 @@ now finds `libc.so.6` and links `hello` successfully, no errors.
 resolves `PT_INTERP` itself at `execve()` time, before any userspace
 code (the shim included) runs -- so the `/lib` redirect above, which
 works at the libc-call layer, cannot reach this. This is the same
-problem `native/ld-dn.c` exists to solve for installed Debian packages
+problem `core/native/ld-dn.c` exists to solve for installed Debian packages
 (their `PT_INTERP` gets pointed at `ld-dn.c`'s real, resolvable path as
 part of the install pipeline), but a binary freshly built with `gcc`
 inside the prefix was never put through that step.

@@ -34,7 +34,7 @@ Checked from `https://pkgs.tailscale.com/stable/debian` (it is **not** in
 
 - `usr/sbin/tailscaled` and `usr/bin/tailscale`: **statically linked Go**
   binaries (no `PT_INTERP`, no `NEEDED`). **The libc shim cannot redirect
-  them** — this is a `tracer/` (fork-lite) case, not a shim case.
+  them** — this is a `core/tracer/` (fork-lite) case, not a shim case.
 - control scripts: **no `preinst`**; `postinst` only calls
   `deb-systemd-helper`/`systemctl`, every call `|| true` and gated on
   `/run/systemd/system`, so it **degrades gracefully without systemd**.

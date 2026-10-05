@@ -15,7 +15,7 @@ a pointer left here — see each file's own note.
   taxonomy, the glibc patch catalog), plus the on-device glibc build
   attempt log.
 - `ld-dn-runtime.md` + `ld-dn-config.md` — the retired interpreter
-  trampoline `native/ld-dn.c` (replaced by the prefix's own fused glibc
+  trampoline `core/native/ld-dn.c` (replaced by the prefix's own fused glibc
   loader in 0.6.0+s.1): its execution phases and its prefix config policy.
   Moved here from `../spec/` when `ld-dn` was retired.
 - `survey-0.2.0.md` (+ `survey-0.2.0/`, its raw data) — the 0.2.0-prealpha

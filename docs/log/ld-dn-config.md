@@ -2,13 +2,13 @@
 
 <!-- template: templates/docs.template.md -->
 
-Spec for `native/ld-dn.c`'s runtime policy: the preload libraries,
+Spec for `core/native/ld-dn.c`'s runtime policy: the preload libraries,
 library search dirs, `COMPILER_PATH`, the env it sets and strips, the
 loader it jumps to, and per-program overrides come from a small config
 file read at exec time, not compiled into the binary. **Status: the
 config layer landed in 0.5.2-prealpha; honouring the caller's
 `LD_LIBRARY_PATH` landed in 0.5.3-prealpha.** The loader reads
-`$DN/etc/deb-native/ld-dn.conf` (shipped as `native/ld-dn.conf`),
+`$DN/etc/deb-native/ld-dn.conf` (shipped as `core/native/ld-dn.conf`),
 compiled defaults reproduce the pre-config behaviour when the file is
 absent, and the shim reads `DN_REDIRECT_PREFIXES`. As-built specifics
 and deviations are in [Status](#status).
@@ -49,7 +49,7 @@ surrounding mechanism.
 ## Why: the policy is compiled in
 
 ld-dn is the first code a Debian program runs: every translated binary
-names it as `PT_INTERP` (`native/ld-dn.c:1`), so the kernel enters it
+names it as `PT_INTERP` (`core/native/ld-dn.c:1`), so the kernel enters it
 before glibc, before `main`, for **every process**. It is also the
 earliest point that knows the prefix — it derives `$DN` from its own
 path (`ld-dn.c:128-138`). That makes it the natural place to decide the
@@ -151,7 +151,7 @@ in the shim.
 
 Path: `$DN/etc/deb-native/ld-dn.conf`.
 
-A checked-in default lives at `native/ld-dn.conf` and
+A checked-in default lives at `core/native/ld-dn.conf` and
 `setup-runtime.sh` copies it to that path (alongside
 `path-redirect.so`/`dn-run`/`ld-dn`, `setup-runtime.sh:39-77`). If the
 file is missing, the compiled defaults apply — this is the bootstrap
@@ -268,7 +268,7 @@ path suffix (e.g. `[/usr/bin/git]`). No globs in v1.
 This is the payoff of the whole design: a package that needs an extra
 `LD_PRELOAD`, a special `LOCPATH`, or a suppressed variable gets a
 block in one file, in the prefix, with no rebuild and no change to
-`dn-translate-deb.sh` or `custom/<package>.sh`.
+`dn-translate-deb.sh` or `core/custom/<package>.sh`.
 
 Override semantics: a block's `env`/`preload` **add** to the global
 policy for that program; a directive `reset` inside a block (future)
@@ -341,7 +341,7 @@ Phased so each lands independently and is testable on `fe2`
 2. **Reader.** Add `openat`/`read`/`close` config reader + parser into
    the arena, behind `DN_CONFIG`; compiled defaults when unset. Add a
    `DN_DEBUG_CONFIG=1` dump of the resolved policy to fd 2.
-3. **Ship the default file.** Add `native/ld-dn.conf` reproducing today's
+3. **Ship the default file.** Add `core/native/ld-dn.conf` reproducing today's
    policy; copy it in `setup-runtime.sh`. Verify a prefix with and
    without the file behaves identically.
 4. **Directives.** Implement `loader`, `lib-add`, `preload`, `env`,
@@ -353,7 +353,7 @@ Phased so each lands independently and is testable on `fe2`
 6. **Benchmark.** Extend `tools/bench/bench-tracer.sh` (or add a
    process-spawn microbench) to measure always-probe vs `DN_CONFIG`-gated
    on a spawn-heavy workload, and decide the cost contract from data.
-7. **Docs.** Update `native/README.md`, `path-shim.md`'s env section,
+7. **Docs.** Update `core/native/README.md`, `path-shim.md`'s env section,
    and this doc's status; run `tools/check-repo.py`.
 
 Suggested order matches [`bind-only.md`](../spec/tracer/bind-only.md)'s style: land the
@@ -371,26 +371,26 @@ and oversized-value/oversized-file cases that must fail open), and an
 on-prefix `gcc` build of a shared library runs with `LD_LIBRARY_PATH=.`
 and fails without it. As built, against the plan above:
 
-- **Implementation** — `native/ld-dn.c` splits into prefix discovery, a
+- **Implementation** — `core/native/ld-dn.c` splits into prefix discovery, a
   `policy` table (lib / preload / env / unset / shim-prefix), a
   freestanding reader (`openat` + `read` into a 16 KiB in-place buffer),
   and an emitter; the stack rebuild counts entries from the policy, not a
-  literal `+5`. Defaults and `native/ld-dn.conf` reproduce the
+  literal `+5`. Defaults and `core/native/ld-dn.conf` reproduce the
   pre-config environment exactly.
 - **`LD_LIBRARY_PATH`** (0.5.3) — the caller's value is merged after the
   fixed prefix dirs, deduplicated, instead of discarded, and
   `DN_EXTRA_LIB_PATH` was removed; the standard `LD_LIBRARY_PATH=dir
   ./prog` is the one way to add a project's own libraries
   (`docs/guides/gcc-glibc-dev.md`).
-- **Config file** — `native/ld-dn.conf`, installed once by
+- **Config file** — `core/native/ld-dn.conf`, installed once by
   `setup-runtime.sh` to `$INSTDIR/etc/deb-native/ld-dn.conf` (never
   overwritten, so a prefix's edits survive a reinstall).
 - **Directives** — `loader`, `lib-add`, `no-default-lib`, `preload`,
   `no-default-preload`, `env`, `unset`, `shim-prefix`, `[program]`.
-- **Shim** — `native/path-redirect.c` reads `DN_REDIRECT_PREFIXES`; its
+- **Shim** — `core/native/path-redirect.c` reads `DN_REDIRECT_PREFIXES`; its
   compiled `/usr /etc /var /opt /root /lib /bin /sbin` set is the default
   when unset, and `shim-prefix` replaces it. Since 0.5.4 the shipped
-  `native/ld-dn.conf` sets `shim-prefix` active, so the config — not the
+  `core/native/ld-dn.conf` sets `shim-prefix` active, so the config — not the
   shim's compiled switch — is the source for an installed prefix.
 - **Diagnostics** — `DN_REDIRECT_DEBUG=1` dumps the resolved policy;
   config problems warn to stderr and the bad line is skipped, never
@@ -419,7 +419,7 @@ the caller's `LD_LIBRARY_PATH` merged, `DN_PRELOAD` kept minimal, additive
 - **Program matching** — basename + path-suffix sufficient, or does a
   real globbing need case appear? Keep globs out until one does.
 - **Where `[program]` rules are authored** — hand-edited in the prefix,
-  or generated by `custom/<package>.sh` / a translate-time hook so a
+  or generated by `core/custom/<package>.sh` / a translate-time hook so a
   package's needs travel with its install?
 - **Can the tracer consume the same file directly** (it is a normal
   libc program), rather than only via ld-dn's env?

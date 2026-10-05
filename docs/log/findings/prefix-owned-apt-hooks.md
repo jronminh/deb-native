@@ -37,7 +37,7 @@ skips a missing hook, so installs went back to untranslated silently.
   - `core/install/*.sh` (the hooks + helpers),
   - `core/runtime/make-launchers.sh` (`dn-hook-post.sh` calls it),
   - `core/bench/scan-direct-syscalls.py` (`make-launchers.sh` calls it),
-  - `custom/*.sh` (per-package fixes; `dn-translate-deb.sh` calls
+  - `core/custom/*.sh` (per-package fixes; `dn-translate-deb.sh` calls
     `$HERE/../../custom/<pkg>.sh`).
 - `setup-apt-prefix.sh` calls it and points `apt.conf` at
   `$DN/usr/lib/deb-native/core/install/...` instead of the checkout.

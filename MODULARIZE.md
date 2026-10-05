@@ -160,7 +160,7 @@ In order, and each owned by one place:
 - [ ] Land the check: wire it into `.github/workflows/checks.yml` (P4).
 
 ### P1 — Move-only restructure (done)
-- [x] Move `native/`, `tracer/`, `custom/` -> `core/` (compat symlinks left at
+- [x] Move `core/native/`, `core/tracer/`, `core/custom/` -> `core/` (compat symlinks left at
       the old names).
 - [x] Move `scripts/**` -> `core/install`, `core/runtime`, `core/bench`,
       `build/`, `bootstrap/`, `tools/`; `install.sh` stays at the repo root
@@ -257,4 +257,4 @@ The bootstrap's output — the one boundary a target consumes:
 | `core/install/dn-translate-deb.sh` | core; relative `$HERE/../../custom` layout assumption | **parameterize** |
 | `bootstrap/build-dn-shim.sh` | build recipe for a core source, using the bootstrap toolchain | **keep** (bootstrap builds a core source) |
 | `install.sh` | bootstrap/product entry point that calls core | **keep** (product) |
-| `native/dn-launch.c` vs fork `dn-shell.c`/`dn-perl.c` | same invariant, different interpreter choice | **adapter parameter**, not a split |
+| `core/native/dn-launch.c` vs fork `dn-shell.c`/`dn-perl.c` | same invariant, different interpreter choice | **adapter parameter**, not a split |

@@ -213,7 +213,7 @@ regressions.
   binary on update; re-adopt it or disable the updater (`dn-adopt.sh`).
 - **`base-files`' custom patch** is applied by exact-line `sed` and refuses
   loudly if upstream changes those lines, so a newer `base-files` breaks the
-  custom fix (`custom/base-files.sh`).
+  custom fix (`core/custom/base-files.sh`).
 - **Tailscale native is not started:** static Go binaries cannot be
   shim-redirected, `/dev/net/tun` is root-only, and there is no systemd;
   run it via the tracer or with explicit `--state`/`--socket`

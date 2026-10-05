@@ -35,7 +35,7 @@ Living doc: it tracks the shipped pipeline, not a proposal.
 |---|---|---|---|
 | 0 | `apt update` — index | `core/install/dn-debian-index.sh`: rewrite `Architecture: all` -> `arm64` | prefix's own apt |
 | 1 | resolve + download | real `apt`, run through the `$DN/bin/apt*` launchers | prefix's own apt/dpkg |
-| 2 | `DPkg::Pre-Install-Pkgs` | `dn-hook-pre.sh` -> `dn-translate-deb.sh` (+ `patch-scripts-tree.sh`, `custom/`), then a collision check | `.deb` translation |
+| 2 | `DPkg::Pre-Install-Pkgs` | `dn-hook-pre.sh` -> `dn-translate-deb.sh` (+ `patch-scripts-tree.sh`, `core/custom/`), then a collision check | `.deb` translation |
 | 3 | `dpkg --unpack` — `preinst` | `preinst` through the prefix's `dn-shell` | maintainer script + shim |
 | 4 | `dpkg --configure` — `postinst` | `postinst`/`configure` + dpkg helpers/triggers | maintainer script + shim |
 | 5 | `DPkg::Post-Invoke` | `dn-hook-post.sh` -> `dn-fix-alternatives.sh` -> `normalize-symlinks.sh` -> `make-launchers.sh` -> `dn-fix-gcc-specs.sh` | prefix fixups |
@@ -61,7 +61,7 @@ launchers that pass the prefix explicitly (`APT_CONFIG`, `--admindir`,
 arguments for a direct `dpkg -i`, and for every `.deb` about to be unpacked:
 `dn-translate-deb.sh` relabels the control file, repoints ELFs at the `libc6`
 stand-in, rewrites maintainer-script shebangs to the prefix's shell
-(`patch-scripts-tree.sh`) and applies `custom/<package>.sh` fixes -- in one
+(`patch-scripts-tree.sh`) and applies `core/custom/<package>.sh` fixes -- in one
 unpack/repack, several packages in parallel (`DN_JOBS`). A collision check then
 refuses a `.deb` that would overwrite a file no package owns (deb-native's own
 runtime/launchers). **A failure here fails the hook, so apt runs nothing.**
@@ -71,7 +71,7 @@ Because translation happens here, `apt-install.sh` itself is a plain
 **3. Unpack, `preinst`.** dpkg unpacks the translated files into the prefix;
 `preinst` runs as a maintainer script inside dpkg's `--unpack`, i.e. before
 `--configure`, and outside the process deb-native controls -- the reason the
-maintainer-script exec path exists (`native/dn-launch.c`).
+maintainer-script exec path exists (`core/native/dn-launch.c`).
 
 **4. Configure, `postinst`.** dpkg runs `postinst`/`configure` and triggers.
 dpkg's helpers are wrapped so they compute prefix paths themselves

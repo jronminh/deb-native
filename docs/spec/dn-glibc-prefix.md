@@ -3,7 +3,7 @@
 <!-- template: templates/docs.template.md -->
 
 The next-generation prefix: the runtime's loader is glibc's own, built for the
-prefix, and `native/ld-dn.c` is retired. This doc covers how a package gets in
+prefix, and `core/native/ld-dn.c` is retired. This doc covers how a package gets in
 (**packaging**) and how the compiler toolchain fits (**the GCC lifecycle**),
 for the prefix this branch is preparing to make installable. The proxy
 runtime it replaces: [`ld-dn-runtime.md`](../log/ld-dn-runtime.md) and its
@@ -87,7 +87,7 @@ of `dn-glibc-android.patch`): skip the `state.preloadlist` (`LD_PRELOAD`)
 source in `dl_main`, keeping `--preload` and the `ld.so.preload` file. Why
 this is safe: the prefix's shim is delivered by `ld.so.preload`, not the env,
 so dropping `LD_PRELOAD` costs nothing and restores `ld-dn`'s sanitization.
-`native/dn-run.c` was updated to match: it no longer injects the shim via
+`core/native/dn-run.c` was updated to match: it no longer injects the shim via
 `LD_PRELOAD`, only drops the inherited host preload.
 
 This fixed-prefix build needs no runtime derivation: every path is

@@ -13,7 +13,7 @@ project's own `apt-get` while chasing the 0.5.0 own-glibc build blocker,
 inside glibc's own loader startup, right after it re-resolved `cc1`'s own
 path. Original suspicion (recorded in `TODO.md` at the time) was that this
 was specific to `ET_EXEC` (non-PIE) binaries at the runtime-loader level —
-a `ld-dn`/`native/ld-dn.c` bug. It was not.
+a `ld-dn`/`core/native/ld-dn.c` bug. It was not.
 
 ## Contents
 
@@ -82,7 +82,7 @@ named the reason a per-file `RUNPATH` rewrite was needed in the first
 place — `RUNPATH` is not inherited transitively (a library's own
 `RUNPATH` does not help *its* dependencies' search), so every `.so` in a
 package needed the same rewrite, not just the top-level executable.
-`LD_LIBRARY_PATH`, set once by `ld-dn` (`native/ld-dn.c`, which already
+`LD_LIBRARY_PATH`, set once by `ld-dn` (`core/native/ld-dn.c`, which already
 builds a custom environment for every program it launches — `LD_PRELOAD`,
 `DN_INSTDIR`) is consulted for every library load in the whole process,
 transitively, for free. Checked for a kernel-native shortcut first
@@ -95,7 +95,7 @@ directly") — no shortcut exists, `--set-interpreter`
 stays a required static patch (and is not itself buggy: tested alone
 above, clean on `ET_EXEC`).
 
-Landed: `native/ld-dn.c` now also sets `LD_LIBRARY_PATH` (prefix lib dirs)
+Landed: `core/native/ld-dn.c` now also sets `LD_LIBRARY_PATH` (prefix lib dirs)
 and `COMPILER_PATH` (found separately, same session: gcc's own subprogram
 search — `cc1`, `as`, `ld` — does not fall back to a plain `$PATH` walk
 the way a shell does, only its own compiled-in target-triplet directories

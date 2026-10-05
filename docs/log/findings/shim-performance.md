@@ -3,7 +3,7 @@
 <!-- template: templates/docs.template.md -->
 
 **Impact: Repo change.** Optimization work landed in
-`native/path-redirect.c` and its build script; no end-to-end
+`core/native/path-redirect.c` and its build script; no end-to-end
 percentage is claimed (measurement was too noisy), but what changed
 in the code is solid and unconditional.
 
@@ -34,7 +34,7 @@ snprintf(buf, bufsz, "%s%s", root, path)   # on a match
 getenv("DN_REDIRECT_DEBUG")     # on a match
 ```
 
-Now (`native/path-redirect.c`):
+Now (`core/native/path-redirect.c`):
 
 - **Cached at load.** An `__attribute__((constructor))` reads
   `DN_INSTDIR`, its length, `DN_REDIRECT_DEBUG` and `DN_BIONIC_PRELOAD`

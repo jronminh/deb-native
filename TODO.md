@@ -166,7 +166,7 @@ as a fallback.
 where apt/dpkg/maintainer scripts run as root. Only the identity is
 faked; no right is gained, nothing is recorded.
 
-**Status**: released. The shim (`native/dn-shim.c`) fakes
+**Status**: released. The shim (`core/native/dn-shim.c`) fakes
 `get[e]uid`/`get[e]gid`/`getres[ug]id`/`getgroups` -> 0, `stat` ownership,
 no-ops `chown`/`set*id`/`setgroups`/`initgroups`, and `USER`/`LOGNAME` in
 the environ array; `dn-trace` does the same at syscall exit for static
@@ -205,7 +205,7 @@ the note above)**:
    (`docs/spec/shim/shim-coverage.md`, `docs/reference/syscall-boundary.md`) — glibc's NSS
    opens through a private, link-time-bound symbol no `LD_PRELOAD`
    reaches. 0.5.0's own-glibc is the real fix (below). Cheaper interim,
-   not started: narrow `native/dn-run.c`'s `classify()`/`has_nss_import()`
+   not started: narrow `core/native/dn-run.c`'s `classify()`/`has_nss_import()`
    (routes a whole process to the tracer for its entire lifetime just for
    *importing* an NSS symbol, regardless of whether it's called) — measure
    the false-positive rate on the survey sample first. Newly relevant, not
@@ -365,7 +365,7 @@ hardcoded path instead of carrying it over as-is.
   needed after all: `elf/rtld.c` ignores the inherited `LD_PRELOAD`
   (`dn-glibc-android.patch`) because `ld-dn` used to sanitize the env and a
   host preload (Termux's termux-exec) aborts a fused program;
-  `native/dn-run.c` updated to match. `ld-dn` is now retired (0.6.0+s.1).
+  `core/native/dn-run.c` updated to match. `ld-dn` is now retired (0.6.0+s.1).
   Still open: register `libc-bin` with `dpkg` (currently unpacked by hand).
 - **`libc-l10n`/`locales`**: still pinned to -1 in
   `setup-apt-prefix.sh`; the same exact-version-match reasoning as
@@ -380,7 +380,7 @@ hardcoded path instead of carrying it over as-is.
   job stays exactly static binaries + raw `syscall()`):
   1. **Clean death instead of a kill** (Gate A only): a syscall absent
      from Android's seccomp allowlist `SIGSYS`-kills the whole process
-     instead of returning `ENOSYS`; `tracer/tracee/seccomp.c` already
+     instead of returning `ENOSYS`; `core/tracer/tracee/seccomp.c` already
      does this for `set_robust_list` — extend it to other Gate-A
      syscalls (starting with `io_uring_setup`/`_enter`/`_register`).
      Needs `dn-run.c`'s `classify()` extended too (an `io_uring`-linked
@@ -392,16 +392,16 @@ hardcoded path instead of carrying it over as-is.
 
 ## 0.5.2: a config-driven loader (released)
 
-**Goal**: `native/ld-dn.c`'s policy stops being C literals -- extending it
+**Goal**: `core/native/ld-dn.c`'s policy stops being C literals -- extending it
 (preloads, library search dirs, extra env, redirect roots, per-program
 overrides) is a config edit in the prefix, no rebuild.
 
 **Status**: released 2026-10-02. The loader reads
-`$DN/etc/deb-native/ld-dn.conf` (shipped as `native/ld-dn.conf`), and
+`$DN/etc/deb-native/ld-dn.conf` (shipped as `core/native/ld-dn.conf`), and
 compiled defaults reproduce the pre-0.5.2 environment when the file is
 absent, so a fresh prefix still bootstraps. `setup-runtime.sh` installs
 the file once (a prefix's own edits survive a reinstall) and replaces
-binaries atomically. `native/dn-shim.c` consumes
+binaries atomically. `core/native/dn-shim.c` consumes
 `DN_REDIRECT_PREFIXES`, so `ld-dn.conf`'s `shim-prefix` changes the shim's
 redirect roots with no rebuild. `tests/ld-dn-config/run.sh` covers
 defaults, the default file, overrides, per-program blocks and fail-open.
@@ -421,7 +421,7 @@ Design and as-built detail:
 glibc mechanism, not a project-specific escape hatch -- and there is
 exactly one documented way to do it.
 
-**Status**: released 2026-10-02. `native/ld-dn.c` merges the caller's
+**Status**: released 2026-10-02. `core/native/ld-dn.c` merges the caller's
 `LD_LIBRARY_PATH` after the two fixed prefix dirs, deduplicated, instead
 of discarding it; `DN_EXTRA_LIB_PATH` is removed. Both `docs/guides/`
 guides now document only `LD_LIBRARY_PATH`
@@ -440,12 +440,12 @@ fails without it. Design:
 prefix down; and the config file, not a compiled default, is the source
 for an installed prefix.
 
-**Status**: released 2026-10-02. `native/ld-dn.c` no longer `die`s on a
+**Status**: released 2026-10-02. `core/native/ld-dn.c` no longer `die`s on a
 value too long for its cell or a full table -- `env`, `lib-add`,
 `preload`, `loader` and `shim-prefix` overflows now warn and skip, as the
 "fail open" design always claimed (previously one oversized `env` value
 or `lib-add` path killed every prefix program with exit 127).
-`native/ld-dn.conf` sets `shim-prefix` active, so the redirect roots come
+`core/native/ld-dn.conf` sets `shim-prefix` active, so the redirect roots come
 from the config rather than the shim's compiled switch, and it documents
 that global directives must precede the first `[program]` block.
 `tests/ld-dn-config/run.sh` covers oversized values, an oversized file
@@ -509,7 +509,7 @@ under `termux/files/` -- no rank, only the bootstrap-time borrow
 **Progress 2026-10-04 (P4 proven on branch `0.7.0`)**: a real Debian
 `apt`/`dpkg` now installs and runs *inside the prefix*, with no apt rebuild
 or patch -- the shim "fools" it. Two shim gaps closed in
-`native/dn-shim.c`: (1) `system()`/`popen()`/`pclose()` -- glibc runs
+`core/native/dn-shim.c`: (1) `system()`/`popen()`/`pclose()` -- glibc runs
 `/bin/sh` through libc-internal calls the shim never saw, so apt's hardcoded
 `Args[0]="/bin/sh"` hooks hit Bionic toybox and aborted; now routed to the
 prefix's own `dash`. (2) `link()`/`linkat()` fall back to a copy -- Android
@@ -552,13 +552,13 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   `DN_REDIRECT_DEBUG` and a log of any `$PREFIX` exec/read from the shim,
   `dn-run` and `dn-launch`. Done when the failing list matches reality.
 - **M1 Core runtime self-sufficient**: drop `$PREFIX/glibc/bin` and
-  `$PREFIX/bin` from PATH (`native/dn-run.c:143-151`,
-  `native/dn-launch.c:77-81`) and give the prefix its own coreutils / bash /
-  perl (`native/dn-launch.c:101,114`); own the resolver instead of the
+  `$PREFIX/bin` from PATH (`core/native/dn-run.c:143-151`,
+  `core/native/dn-launch.c:77-81`) and give the prefix its own coreutils / bash /
+  perl (`core/native/dn-launch.c:101,114`); own the resolver instead of the
   `$TP/etc/resolv.conf` symlink (`setup-apt-prefix.sh:169`) and the
-  `$PREFIX/glibc/etc` NSS bind (`native/dn-run.c:184-186,237`); replace
+  `$PREFIX/glibc/etc` NSS bind (`core/native/dn-run.c:184-186,237`); replace
   termux-exec with our own shebang handling, or drop it
-  (`native/dn-shim.c:230-308`); make `install.sh` upgrade an existing
+  (`core/native/dn-shim.c:230-308`); make `install.sh` upgrade an existing
   prefix in place. Done when the harness passes run-by-name + DNS.
 - **M2 Package manager inside the prefix**: the stand-ins exec `$TP/bin/*`
   (`bootstrap/dn-standins.sh:26-116`; drivers
@@ -591,8 +591,8 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
 - **M4 Acceptance and release**: a CI job that simulates the broken prefix
   and runs the by-name/apt/DNS/toolchain/git suite; tag `v0.7.0-prealpha`.
 - **Dedup the redirect set**: `/usr /etc /var /opt /bin /sbin` is spelled
-  in four places that must agree -- `native/dn-shim.c:200-212`,
-  `native/dn-run.c:221`, `core/install/normalize-symlinks.sh:16` and the
+  in four places that must agree -- `core/native/dn-shim.c:200-212`,
+  `core/native/dn-run.c:221`, `core/install/normalize-symlinks.sh:16` and the
   tracer binds -- into one source.
 
 **Decisions** (from the discussion):
@@ -653,7 +653,7 @@ Bionic children.
   PATH/priv fallbacks.
 
 Not needed: **no CI bundle rebuild** -- the loader/shim self-derive the live
-prefix (`native/dn-shim.c` `dn_init` via `dladdr`; glibc-patch commits
+prefix (`core/native/dn-shim.c` `dn_init` via `dladdr`; glibc-patch commits
 `90f2528`, `297909d`, `1a4780d`, `9b328eb`, `59985d9`), and the shim code is
 kept from the local build (`dn-install-glibc.sh`). Only a static program /
 `ldconfig` falls back to the compiled prefix (0.6.1 Tier 1).
@@ -824,7 +824,7 @@ entries.
   The routing/wiring decision itself is still explicitly next-plan, not
   now; but the analysis pass needs visibility data to design against,
   which didn't exist before, so that groundwork was done 2026-10-01:
-  `tracer/tracee/seccomp.c`'s SIGSYS `default` case (already a generic
+  `core/tracer/tracee/seccomp.c`'s SIGSYS `default` case (already a generic
   catch-all for any blocked syscall, known or not) now `note()`s the
   syscall's name and raw number before returning `ENOSYS`, visible at
   default verbosity. Confirmed against `busybox-static`'s `true`
@@ -840,8 +840,8 @@ entries.
 
 ## Runtime component audit (debt from rapid early development)
 
-**Goal**: the runtime support components (`native/dn-shim.c` the
-shim, `native/ld-dn.c` the loader stub, `native/dn-launch.c`/`dn-run.c`,
+**Goal**: the runtime support components (`core/native/dn-shim.c` the
+shim, `core/native/ld-dn.c` the loader stub, `core/native/dn-launch.c`/`dn-run.c`,
 the translate-time scripts that wire them together) were built fast,
 iteratively, patch-by-patch as each new failure surfaced (`docs/log/findings/`
 is the record of that) -- not from a single coherent design pass. That's a
@@ -910,7 +910,7 @@ not chased down.
 ## Runtime overhaul
 
 **Goal**: the runtime pieces were named and built as the design evolved, and
-some names now misdescribe what the code actually does. `native/ld-dn.c`
+some names now misdescribe what the code actually does. `core/native/ld-dn.c`
 was the clearest case -- its name read as "deb-native's ld-linux" (a
 loader), but it was an **interpreter trampoline** in the `PT_INTERP` slot,
 preparing the environment and doing the kernel-side handoff before glibc's

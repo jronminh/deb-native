@@ -16,7 +16,7 @@ first launch** instead of failing, with no session-wide tracing.
 
 ## Trigger
 
-The shim's `do_exec` (`native/path-redirect.c`) already intercepts every
+The shim's `do_exec` (`core/native/path-redirect.c`) already intercepts every
 `execve` a prefix process makes. It now also reads the target's `PT_INTERP`
 and, when that loader **does not exist on the device** (`/lib/ld-linux-aarch64.so.1`),
 hands the exec to `dn-run` instead of letting the kernel fail with ENOENT.
@@ -26,7 +26,7 @@ no global tracer needed.
 
 ## Action
 
-`dn-run` (`native/dn-run.c`) calls `try_adopt`: run the prefix's own
+`dn-run` (`core/native/dn-run.c`) calls `try_adopt`: run the prefix's own
 `patchelf --set-interpreter .../ld-linux-aarch64.so.1 <binary>`, so the kernel
 can start it and `/proc/self/exe` stays the program (Bun/Node SEA safe). If the
 rewrite succeeds, the binary is exec'd natively; on the next run its interpreter

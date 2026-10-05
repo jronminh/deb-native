@@ -17,11 +17,11 @@ by name, unprivileged.
 
 Three path mechanisms:
 - **Maintainer scripts** — plain-text path rewrite (`core/install/patch-scripts-tree.sh`).
-- **Dynamic glibc binaries** — `native/dn-shim.c`, an `LD_PRELOAD`
+- **Dynamic glibc binaries** — `core/native/dn-shim.c`, an `LD_PRELOAD`
   shim interposing path-taking libc functions. Complete at its layer —
   `docs/spec/shim/shim-coverage.md`.
-- **Syscall level / can't-be-shimmed cases** — `tracer/` (`dn-trace`, a
-  reduced fork of PRoot's ptrace core), wired via `native/dn-run.c`. Done,
+- **Syscall level / can't-be-shimmed cases** — `core/tracer/` (`dn-trace`, a
+  reduced fork of PRoot's ptrace core), wired via `core/native/dn-run.c`. Done,
   not a TODO — replaced the old `proot` fallback in 0.2.3.
 
 Every translated program's `PT_INTERP` points at the prefix's own fused
@@ -31,7 +31,7 @@ no `/lib/ld-linux-aarch64.so.1`. That loader is Debian's glibc source with
 this project's Android compatibility patches (the ten-file swap,
 `docs/spec/deploy.md`); it derives the live prefix from its own path at run
 time, reads the path shim from `$DN/etc/ld.so.preload`, and the prefix's
-library dirs from `$DN/usr/etc/ld.so.cache`. The old `native/ld-dn.c`
+library dirs from `$DN/usr/etc/ld.so.cache`. The old `core/native/ld-dn.c`
 trampoline is retired. Prefer a launch-time env var / loader path over a
 static per-`.deb` ELF patch when both would solve the same problem — one
 code path, no risk of `patchelf` miscomputing a binary's layout (see
@@ -58,8 +58,8 @@ idea shipping soonest, not for understanding every failure.
 Every directory that holds more than one or two files has its own
 `README.md` indexing what's in it and what each file is for — `scripts/`
 and `docs/` each have one at every level (`core/install/README.md`,
-`docs/spec/README.md`, ...), and so do `native/`, `tests/`,
-`third_party/glibc-android-patches/`, `custom/`, and `tracer/`. Read the
+`docs/spec/README.md`, ...), and so do `core/native/`, `tests/`,
+`third_party/glibc-android-patches/`, `core/custom/`, and `core/tracer/`. Read the
 relevant one before working in a directory, or before guessing a file's
 purpose from its name alone — it's cheaper and more current than
 re-deriving it from the code, and these are the first thing to update
