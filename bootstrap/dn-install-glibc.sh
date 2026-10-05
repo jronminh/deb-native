@@ -34,9 +34,12 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # docs/spec/dn-glibc-prefix.md "Install order").
 DPKG="$TP/bin/dpkg --admindir=$DN/var/lib/dpkg --instdir=$DN --force-not-root --force-script-chrootless --force-depends"
 
-for f in libc6.deb libc-bin.deb dn-shim.so; do
-  [ -e "$DEBS/$f" ] || { echo "E: $DEBS/$f not found (dn-install-glibc.sh needs libc6.deb, libc-bin.deb, dn-shim.so)" >&2; exit 1; }
+for f in libc6.deb libc-bin.deb; do
+  [ -e "$DEBS/$f" ] || { echo "E: $DEBS/$f not found (dn-install-glibc.sh needs libc6.deb, libc-bin.deb, and a shim)" >&2; exit 1; }
 done
+# The shim: prefer the current name, accept the pre-rename path-redirect.so.
+SHIM_SRC="$DEBS/dn-shim.so"; [ -e "$SHIM_SRC" ] || SHIM_SRC="$DEBS/path-redirect.so"
+[ -e "$SHIM_SRC" ] || { echo "E: no shim in $DEBS (dn-shim.so or path-redirect.so)" >&2; exit 1; }
 [ -d "$DEBS/files" ] || { echo "E: $DEBS/files not found (the 10 patched glibc files)" >&2; exit 1; }
 
 WORK=$(mktemp -d)
@@ -84,7 +87,7 @@ mkdir -p "$LIBDIR"
 # to the bundle's prebuilt shim if the local build is missing -- the rolling
 # glibc-bundle predates these fixes.
 if [ ! -e "$LIBDIR/dn-shim.so" ]; then
-  cp -f "$DEBS/dn-shim.so" "$LIBDIR/dn-shim.so"
+  cp -f "$SHIM_SRC" "$LIBDIR/dn-shim.so"
 fi
 chmod 755 "$LIBDIR/dn-shim.so"
 

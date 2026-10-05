@@ -142,7 +142,7 @@ if [ -z "${DN_INSTALL_LOG:-}" ]; then
     [ -t 1 ] && DN_COLOR=1 && export DN_COLOR
     rcf=$(mktemp)
     { sh "$HERE/install.sh" "$DNPREFIX" "$@" 2>&1; echo $? > "$rcf"; } | render
-    rc=$(cat "$rcf"); rm -f "$rcf"
+    rc=$(cat "$rcf" 2>/dev/null); rm -f "$rcf"; rc=${rc:-1}
     if [ "$rc" != 0 ]; then
         printf '\n%s install failed (exit %s); the end of the log:%s\n' "$Y" "$rc" "$R"
         tail -n 15 "$DN_INSTALL_LOG" | sed 's/^/   /'
