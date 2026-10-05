@@ -110,6 +110,26 @@ reduces Phase A to `tar xzf` — one line naming the target's shell.
 and packages it (`build/package-prefix.sh`); the floor is `apt`+`dpkg`+`bash`
 plus their dependency closure, `glibc`, and the deb-native overlay.
 
+### The minimal prefix (the shipped floor)
+
+Enough to boot `apt` and let the prefix expand itself; nothing more:
+
+- **deb-native overlay** (`core/`): `dn-shim.so`, `dn-run`, `dn-trace`, the
+  interpreters, the hook/launcher scripts, `priv/`.
+- **`apt`, `dpkg`, `bash`**, and **`patchelf`** — patchelf is required by
+  `dn-translate-deb.sh` on every runtime install (~0.3 MB; its deps are
+  already present).
+- **`glibc`** (`libc6` + `libc-bin`).
+- **The dependency closure** of the above: `libapt-pkg`, `libstdc++`, a crypto
+  library plus `gpgv`, `zlib`, `liblzma`/`libbz2`/`libzstd`, `libtinfo`/
+  `libreadline`, ...
+- **Maintainer-script essentials**: `coreutils`, `sed`, `grep`, `mawk`, `tar`,
+  `gzip`, `xz`, `dash`, `debconf`/`cdebconf`, `base-files`, `base-passwd`,
+  `debianutils`, `debian-archive-keyring`, `ca-certificates`.
+
+Everything else is trimmed; the floor above is never crossed (or a later
+`apt install` breaks).
+
 ## Phases
 
 ### P0 — Map and rules
