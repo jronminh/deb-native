@@ -1,0 +1,8 @@
+# module-edges.allow — accepted core -> non-core edges.
+#
+# Format: path <TAB> target-module. An entry here suppresses a check-modules.py
+# edge violation for that (file, target).
+#
+# Empty: P2 moved the build orchestration out of core (setup-runtime.sh is now
+# a bootstrap orchestrator), so core has no edge to build/bootstrap/adapter.
+# Keep this file empty; add an entry only with a comment explaining why.

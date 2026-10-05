@@ -1,5 +1,5 @@
 #!/bin/sh
-# On-device smoke test for native/path-redirect.c (the glibc libc-level
+# On-device smoke test for native/dn-shim.c (the glibc libc-level
 # path shim). Run this in Termux, where clang can target the glibc
 # side-install. It builds the shim + a glibc test binary, sets up a fake
 # $DN_INSTDIR root, runs every libc entry point the shim intercepts against
@@ -13,11 +13,11 @@ G=${DN_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/../.." && pwd)
 ROOT=${DN_INSTDIR:-$HOME/.cache/deb-native-shimtest/root}
-SHIM=$REPO/native/path-redirect.so
+SHIM=$REPO/core/native/dn-shim.so
 TEST=$HERE/test
 
 [ -x "$G/bin/true" ] || { echo "no glibc side-install at $G (set DN_GLIBC_ROOT)"; exit 2; }
-[ -f "$SHIM" ] || sh "$REPO/scripts/bootstrap/build-path-redirect.sh"
+[ -f "$SHIM" ] || sh "$REPO/bootstrap/build-dn-shim.sh"
 
 rm -rf "$ROOT"
 mkdir -p "$ROOT/etc" "$ROOT/usr/bin" "$ROOT/var" "$ROOT/opt"
@@ -63,7 +63,7 @@ for p in \
   /etc/zz_mkstempsXXXXXX.txt /etc/zz_mkostempsXXXXXX.txt \
   /usr/bin/zz_nope /usr/bin/zz_true
 do
-  check "[path-redirect] $p -> "
+  check "[dn-shim] $p -> "
 done
 
 # mkstemp/mkostemp/mkstemps/mkostemps/mkdtemp templates must be handed back
@@ -93,7 +93,7 @@ if [ -e /etc/zz_creat ]; then echo "leaked into real /etc"; fail=1; fi
 echo "NSS probe: $(grep -h '^NSS_' "$OUT" | tr '\n' ' ')"
 
 if [ "$fail" -eq 0 ]; then
-  echo "PASS: shim-libc ($(grep -c 'path-redirect\]' "$OUT") rewrites, fake root $ROOT)"
+  echo "PASS: shim-libc ($(grep -c 'dn-shim\]' "$OUT") rewrites, fake root $ROOT)"
 else
   echo "FAIL (output in $OUT)"; sed -n '1,200p' "$OUT"; exit 1
 fi

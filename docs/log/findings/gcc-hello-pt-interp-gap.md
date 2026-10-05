@@ -82,7 +82,7 @@ dynamic-linker literal to `ld-dn`'s real path
 `ld-dn`'s path; `readelf -l hello` confirms the `PT_INTERP` segment
 changed accordingly, and `./hello` runs and prints its output.
 
-Promoted to a real fix: `scripts/install/dn-fix-gcc-specs.sh` (new),
+Promoted to a real fix: `core/install/dn-fix-gcc-specs.sh` (new),
 wired into `dn-hook-post.sh` (apt's `DPkg::Post-Invoke`, so it reruns
 after every `apt install`/`upgrade`, not just once at bootstrap). For
 every `$DN/usr/lib/gcc/*/*` version directory with a matching gcc binary

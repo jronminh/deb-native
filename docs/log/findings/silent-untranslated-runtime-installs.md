@@ -57,11 +57,11 @@ run.
 
 ## Fix
 
-- `scripts/install/dn-translate-deb.sh`: a preflight that aborts (non-zero) if
+- `core/install/dn-translate-deb.sh`: a preflight that aborts (non-zero) if
   `patchelf` is absent or does not run, before the loop. A missing translator
   now fails the bootstrap or the apt hook loudly instead of shipping broken
   binaries.
-- `scripts/bootstrap/setup-apt-prefix.sh`: require a working host `patchelf`
+- `bootstrap/setup-apt-prefix.sh`: require a working host `patchelf`
   up front (`pkg install patchelf`), so the base's own patchelf is translated
   and the runtime path has a runnable translator.
 

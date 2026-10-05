@@ -16,8 +16,8 @@ loading. Goal: a package reaches `dpkg` status `ii` and its program runs
 by name, unprivileged.
 
 Three path mechanisms:
-- **Maintainer scripts** — plain-text path rewrite (`scripts/install/patch-scripts-tree.sh`).
-- **Dynamic glibc binaries** — `native/path-redirect.c`, an `LD_PRELOAD`
+- **Maintainer scripts** — plain-text path rewrite (`core/install/patch-scripts-tree.sh`).
+- **Dynamic glibc binaries** — `native/dn-shim.c`, an `LD_PRELOAD`
   shim interposing path-taking libc functions. Complete at its layer —
   `docs/spec/shim/shim-coverage.md`.
 - **Syscall level / can't-be-shimmed cases** — `tracer/` (`dn-trace`, a
@@ -57,7 +57,7 @@ idea shipping soonest, not for understanding every failure.
 
 Every directory that holds more than one or two files has its own
 `README.md` indexing what's in it and what each file is for — `scripts/`
-and `docs/` each have one at every level (`scripts/install/README.md`,
+and `docs/` each have one at every level (`core/install/README.md`,
 `docs/spec/README.md`, ...), and so do `native/`, `tests/`,
 `third_party/glibc-android-patches/`, `custom/`, and `tracer/`. Read the
 relevant one before working in a directory, or before guessing a file's
@@ -65,7 +65,7 @@ purpose from its name alone — it's cheaper and more current than
 re-deriving it from the code, and these are the first thing to update
 when a file moves or a new one is added. Start from
 [`docs/README.md`](docs/README.md) (which doc kind goes where) and
-[`scripts/README.md`](scripts/README.md) (which lifecycle stage a script
+[`MODULARIZE.md`](MODULARIZE.md) (which lifecycle stage a script
 belongs to) for the two biggest trees.
 
 Every `README.md` and every content doc under `docs/` follows a stable
@@ -82,7 +82,7 @@ the only history is `docs/log/`. A retired mechanism's spec moves to
 ([`docs/README.md`](docs/README.md)).
 
 After moving, renaming, or deleting a doc or a script, run
-`scripts/tools/check-repo.py` — it catches broken markdown links, broken
+`tools/check-repo.py` — it catches broken markdown links, broken
 table-of-contents anchors, and scripts nothing calls any more (reported,
 not failed on, since some of that is deliberate: `bench/`, `survey/`,
 and similar are meant to be run by hand). This project has found and

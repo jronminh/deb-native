@@ -179,7 +179,7 @@ to the decision; `dn-glibc-prefix.md` is the live design.
 **Plan sketch.**
 
 1. Build on the project's own-glibc fork (`third_party/glibc-android-patches/`,
-   `scripts/bootstrap/dn-package-glibc.sh`); the loader already has to be the
+   `bootstrap/dn-package-glibc.sh`); the loader already has to be the
    Android-seccomp-patched one, so this rides on that work.
 2. Patch the loader's early init (`elf/rtld.c`, and the search-path/preload
    setup around `elf/dl-load.c`) to, before it maps any dependency:

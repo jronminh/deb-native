@@ -80,7 +80,7 @@ scope as an exception.
   anything.
 - **glibc-dynamic is an assumption, not a promise.** A program that is
   statically linked, or that reaches the filesystem with a raw `syscall()`,
-  is not path-redirected by the shim. That is the syscall tracer's job, and
+  is not dn-shimed by the shim. That is the syscall tracer's job, and
   until it exists those programs are best-effort — see
   [`shim-coverage.md`](../spec/shim/shim-coverage.md#the-real-boundary).
 

@@ -2,7 +2,7 @@
 
 <!-- template: templates/docs.template.md -->
 
-Which libc entry points `native/path-redirect.c` has to cover for the packages
+Which libc entry points `native/dn-shim.c` has to cover for the packages
 we support, and the ones it does not. The scope is [`standard.md`](../../reference/standard.md);
 the design is [`path-shim.md`](path-shim.md).
 
@@ -65,11 +65,11 @@ under `/etc`; and the admin operations (`mount`, `chroot`, …).
 
 ## Method
 
-1. **Scope the corpus** — `scripts/survey/scope-sample.py` reads a Debian
+1. **Scope the corpus** — `tools/survey/scope-sample.py` reads a Debian
    `binary-arm64/Packages` index and selects the packages whose `Section` is
    in `standard.md`'s user scope. This is the whole point of choosing a scope:
    it drops the archive from ~64 000 binary packages to the sample below.
-2. **Collect imported symbols** — `scripts/bench/scan-libc-symbols.sh` walks every
+2. **Collect imported symbols** — `tools/bench/scan-libc-symbols.sh` walks every
    ELF in the corpus, reads the undefined entries of `.dynsym`
    (`readelf --dyn-syms`), and counts them; it marks an ELF with no dynamic
    section as `STATIC_ELF`.
@@ -81,9 +81,9 @@ Reproduce (one command at a time, on the phone):
 ```
 mkdir -p ~/debcorpus/debs && cd ~/debcorpus
 curl -s -o Packages.gz https://deb.debian.org/debian/dists/stable/main/binary-arm64/Packages.gz
-python3 ~/deb-native/scripts/survey/scope-sample.py Packages.gz > sel.tsv 2> scope.txt
+python3 ~/deb-native/tools/survey/scope-sample.py Packages.gz > sel.tsv 2> scope.txt
 cut -f2 sel.tsv | while read u; do curl -s -o debs/$(basename "$u") "$u"; done
-sh ~/deb-native/scripts/bench/scan-libc-symbols.sh --debs debs > scan-apps.txt
+sh ~/deb-native/tools/bench/scan-libc-symbols.sh --debs debs > scan-apps.txt
 ```
 
 ### Corpus measured
@@ -130,7 +130,7 @@ intercepted. The counts are `app / base` imports across the corpus:
 
 ### Gaps found — and closed
 
-Nine genuine gaps were all closed in `native/path-redirect.c`:
+Nine genuine gaps were all closed in `native/dn-shim.c`:
 `__xstat`/`__lxstat` (legacy pre-2.33 stat entry points; `__fxstat` is
 fd-based and needs no redirect), `__fxstatat64` (the 64-bit `fstatat`, which
 Bun/Node call directly -- without it the real owner leaked past fake-root and
@@ -251,7 +251,7 @@ paths internally. That is exactly the "program hardcodes the literal `/bin/x`
 or `/lib/x.so`" gap predicted below, just surfaced by the compiler toolchain
 instead of found by corpus inspection first.
 
-Fix: `path-redirect.c`'s `rewrite()` now also dispatches `/lib` and `/bin`
+Fix: `dn-shim.c`'s `rewrite()` now also dispatches `/lib` and `/bin`
 (second byte `'l'`/`'b'`, default `prelen = 4`) and `/sbin` (second byte
 `'s'`, `prelen = 5` like `/root`) — none collide with the existing five.
 These three are Debian's merged-usr symlinks into `/usr/{lib,bin,sbin}`
@@ -260,7 +260,7 @@ anyway (the prefix's own `base-files` sets them up the same way, confirmed:
 redirecting the literal prefix and then following the real symlink lands in
 the same place `/usr/...` already did — this completes that existing
 coverage rather than adding a new one. `/bin/sh` etc.'s execve-specific
-carve-out (`path-redirect.c:307-313`, line numbers now shifted by this
+carve-out (`dn-shim.c:307-313`, line numbers now shifted by this
 addition) is unaffected and still separately necessary (execve, not
 open/stat).
 

@@ -6,7 +6,7 @@ deb-native's static "binary surgery" on a `.deb`'s ELF files is exactly
 one field: the `PT_INTERP` program header's pathname, rewritten from
 `/lib/ld-linux-aarch64.so.1` to the prefix's own fused glibc loader
 `$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`
-(`scripts/install/dn-translate-deb.sh`, via `patchelf`). (Before
+(`core/install/dn-translate-deb.sh`, via `patchelf`). (Before
 0.6.0+s.1 the target was the `ld-dn` trampoline, since retired — this doc
 kept the old target in places below.) This doc
 documents precisely which bytes that touches, why the kernel only ever
@@ -44,7 +44,7 @@ tool's only remaining use.
 
 ## What gets patched, and when
 
-`scripts/install/dn-translate-deb.sh` runs once per `.deb`, before
+`core/install/dn-translate-deb.sh` runs once per `.deb`, before
 `dpkg` ever installs it (so maintainer scripts never run against an
 unpatched binary). For every regular file whose first 4 bytes are the
 ELF magic (`7f 45 4c 46`):
@@ -56,7 +56,7 @@ case "$interp" in
 esac
 ```
 
-(`scripts/install/dn-translate-deb.sh`, ~lines 73-81). `$LD` is
+(`core/install/dn-translate-deb.sh`, ~lines 73-81). `$LD` is
 `$DN/usr/lib/deb-native/ld-dn` — the absolute, prefix-rooted path to
 `native/ld-dn.c`'s built binary. `patchelf --print-interpreter` fails
 (captured, not treated as an error) for static binaries and libraries,

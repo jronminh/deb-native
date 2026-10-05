@@ -28,7 +28,7 @@ Read [`AGENTS.md`](AGENTS.md) first; it is the conventions doc. The essentials:
 - **Docs state only the current state**; history lives in `docs/log/`. New docs
   and directory READMEs follow [`templates/`](templates/README.md).
 - After moving or renaming a doc or script, run
-  `scripts/tools/check-repo.py`.
+  `tools/check-repo.py`.
 
 CI on pull requests runs only **static** checks (`check-repo.py`, shell and
 Python syntax); it cannot run the program. Say what you tested, and on what.

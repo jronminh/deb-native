@@ -1,8 +1,8 @@
-# The path-redirect shim: design and delivery
+# The dn-shim shim: design and delivery
 
 <!-- template: templates/docs.template.md -->
 
-How `native/path-redirect.c` fakes the Debian layout without a kernel
+How `native/dn-shim.c` fakes the Debian layout without a kernel
 view — the one gap left once everything else (dynamic linker search
 path, interpreter module paths, the ELF interpreter itself) was already
 solved elsewhere — and the ways a glibc target can actually be made to
@@ -31,7 +31,7 @@ largest section there).
 
 
 Status: **prototyped and verified working**, against a real gap (not a
-toy). `native/path-redirect.c` + `scripts/bootstrap/build-path-redirect.sh`.
+toy). `native/dn-shim.c` + `bootstrap/build-dn-shim.sh`.
 
 ### Overlay/view: confirmed dead on this device, with data
 
@@ -87,7 +87,7 @@ remaining row.
 
 ### The mechanism: libc call interposition, not a filesystem view
 
-`native/path-redirect.c` is our own shim — a glibc shared object we build
+`native/dn-shim.c` is our own shim — a glibc shared object we build
 and preload into the process. It overrides
 `open`, `openat`, `fopen`, `stat`, `fstatat`, and the older `__fxstatat`,
 rewriting any path starting with a configured prefix
@@ -128,7 +128,7 @@ With the shim:
 
 ```
 $ DN_REDIRECT_FROM=/usr/share/figlet DN_REDIRECT_TO=<font root> \
-  LD_PRELOAD=native/path-redirect.so \
+  LD_PRELOAD=native/dn-shim.so \
   ld-linux-aarch64.so.1 figlet-figlet "termux deb bridge"
  _                                       _      _
 | |_ ___ _ __ _ __ ___  _   ___  __   __| | ___| |__
@@ -142,7 +142,7 @@ rewrite for verification (`/usr/share/figlet/standard.flf -> .../standard.flf`).
 
 Termux ships `*-glibc` packages' **runtime** libraries
 (`termux-pacman/glibc-packages`) but not a full glibc **cross-toolchain**
-for building new ones on-device. Compiling `native/path-redirect.c`
+for building new ones on-device. Compiling `native/dn-shim.c`
 against Termux's own glibc, using Termux's own Bionic-hosted `clang`,
 needed:
 
@@ -180,8 +180,8 @@ is dead here, this project needed its own answer.
 
 #### Dead end, fully explored: a Bionic preload shim
 
-First attempt: a Bionic build of `path-redirect.c`'s idea
-(`native/path-redirect-bionic.c`, plain `clang`, no cross-compile needed —
+First attempt: a Bionic build of `dn-shim.c`'s idea
+(`native/dn-shim-bionic.c`, plain `clang`, no cross-compile needed —
 Bionic is native here), generalized to a wholesale `/usr`, `/etc`, `/var`,
 `/opt` → `$INSTDIR` mapping (the same four directories the view
 overlaid), `LD_PRELOAD`ed into dpkg's environment before it forks
@@ -213,7 +213,7 @@ this project's own writable prefix.
 
 #### What actually worked: rewrite the script text, not the runtime
 
-`scripts/install/patch-maintainer-scripts.sh`, run between dpkg's `--unpack` and
+`core/install/patch-maintainer-scripts.sh`, run between dpkg's `--unpack` and
 `--configure` (already two separate steps in this project's pipeline):
 plain `sed`, rewriting any `/etc/`,
 `/usr/`, `/var/`, `/opt/` path component in a package's `postinst`/
@@ -287,7 +287,7 @@ baked-in they are:
    The same effect with nothing in the environment to scrub; Termux already
    launches glibc programs through an explicit interpreter.
 3. **Baked into the ELF** at install time — e.g.
-   `patchelf --add-rpath $SHIMDIR --add-needed libpath-redirect.so /prog`,
+   `patchelf --add-rpath $SHIMDIR --add-needed libdn-shim.so /prog`,
    so the loader loads the shim on every run regardless of the environment.
 4. **`DT_AUDIT` / `DT_DEPAUDIT`** — a loader audit module whose `la_symbind`
    returns an alternative symbol address. It is the loader's supported

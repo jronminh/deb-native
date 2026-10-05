@@ -18,7 +18,7 @@ live in their own docs, listed below.
 
 ## Related docs
 
-- [`path-shim.md`](shim/path-shim.md) — the path-redirect shim: design,
+- [`path-shim.md`](shim/path-shim.md) — the dn-shim shim: design,
   verification, delivery mechanisms. Split out of this doc.
 - [`native-reuse.md`](../notes/native-reuse.md) — native dependency reuse
   (`native-seed.sh`, since superseded). Split out of this doc.
@@ -69,7 +69,7 @@ as a foreign architecture instead of this section's `aarch64` relabel.
 What follows is kept as the record of the proposal, with the divergence
 noted; the rest —
 the self-contained-prefix idea itself, the stand-in packages, the launcher
-wrappers — is what got built (`scripts/bootstrap/setup-apt-prefix.sh`).
+wrappers — is what got built (`bootstrap/setup-apt-prefix.sh`).
 
 This is the principle `sudo-less` uses on Debian: **apt and dpkg own their
 root.** When the place packages live is apt/dpkg's own `/`, dpkg's normal
@@ -215,7 +215,7 @@ glibc patch, the `setuid`/`setgid`/... "0" bucket,
 [`android-platform.md`](../reference/android-platform.md)) stays unapplied for the
 same reason -- nothing about fake-root is being extended.
 
-**Mechanism:** the shim (`native/path-redirect.c`) fakes
+**Mechanism:** the shim (`native/dn-shim.c`) fakes
 `get[e]uid`/`get[e]gid`/`getres[ug]id`/`getgroups` -> `0`, `stat`
 ownership, no-ops `chown`/`set*id`/`setgroups`/`initgroups`, and rewrites
 `USER`/`LOGNAME` in the environ array; `dn-trace` does the same at syscall

@@ -258,7 +258,7 @@ constructor.** Checked the actual code and corrected a wrong assumption
 along the way -- the shim is *not* embedded in `ld-dn`; they are two
 separate build artifacts (`native/ld-dn.c` compiles to a standalone
 freestanding ELF, `native/path-redirect.c` compiles separately to
-`path-redirect.so` via `scripts/bootstrap/build-path-redirect.sh`). `ld-dn` only
+`path-redirect.so` via `bootstrap/build-path-redirect.sh`). `ld-dn` only
 *writes* `LD_PRELOAD=.../path-redirect.so` into the new environment/stack it
 hands to glibc's real loader (`ld-dn.c:145-146`) -- it never maps the shim
 itself. The real sequence for a translated Debian program:
@@ -327,7 +327,7 @@ deferred, not a current goal.
 even reach a syscall question.** Tested directly: downloaded the real
 `libc6_2.41-12+deb13u4_arm64.deb` from `deb.debian.org`, ran it through
 the project's actual translation pipeline
-(`scripts/install/dn-translate-deb.sh`, against a live `~/.dn` prefix) to get a
+(`core/install/dn-translate-deb.sh`, against a live `~/.dn` prefix) to get a
 faithfully-`patchelf`'d `libc.so.6`/`ld-linux-aarch64.so.1` (confirmed
 `PT_INTERP`/`RUNPATH` correctly repointed into the prefix), then ran the
 minimal `hello` package's binary (the same one

@@ -4,7 +4,7 @@
 
 **Impact: Repo change.** The runtime translate/index hooks the prefix's apt
 runs were pointed at an absolute path into the deb-native **checkout**
-(`<checkout>/scripts/install/...`). Moving or removing the checkout silently
+(`<checkout>/core/install/...`). Moving or removing the checkout silently
 stopped translating runtime installs (the second half of
 [`silent-untranslated-runtime-installs.md`](silent-untranslated-runtime-installs.md)).
 
@@ -31,16 +31,16 @@ skips a missing hook, so installs went back to untranslated silently.
 
 ## Fix
 
-- New `scripts/runtime/install-hooks.sh` copies the hook set and everything they
+- New `core/runtime/install-hooks.sh` copies the hook set and everything they
   call **inside** the prefix under `$DN/usr/lib/deb-native/`, keeping the repo
   layout so the hooks' relative paths still resolve:
-  - `scripts/install/*.sh` (the hooks + helpers),
-  - `scripts/runtime/make-launchers.sh` (`dn-hook-post.sh` calls it),
-  - `scripts/bench/scan-direct-syscalls.py` (`make-launchers.sh` calls it),
+  - `core/install/*.sh` (the hooks + helpers),
+  - `core/runtime/make-launchers.sh` (`dn-hook-post.sh` calls it),
+  - `core/bench/scan-direct-syscalls.py` (`make-launchers.sh` calls it),
   - `custom/*.sh` (per-package fixes; `dn-translate-deb.sh` calls
     `$HERE/../../custom/<pkg>.sh`).
 - `setup-apt-prefix.sh` calls it and points `apt.conf` at
-  `$DN/usr/lib/deb-native/scripts/install/...` instead of the checkout.
+  `$DN/usr/lib/deb-native/core/install/...` instead of the checkout.
 - `install.sh`'s refresh branch calls it too, so an update refreshes the copies.
 
 Moving the checkout no longer affects a prefix's apt.

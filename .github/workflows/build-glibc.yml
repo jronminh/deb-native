@@ -53,7 +53,7 @@ jobs:
 
       - name: Apply this project's Android patch
         run: |
-          scripts/bootstrap/dn-apply-glibc-patch.sh src/work "${DN_PREFIX}"
+          bootstrap/dn-apply-glibc-patch.sh src/work "${DN_PREFIX}"
 
       - name: Configure
         run: |
@@ -143,7 +143,7 @@ jobs:
           # header set is incomplete (no gnu/stubs-lp64.h), and the shim only
           # uses old libc symbols, satisfied by the prefix's 2.41 at runtime.
           gcc -O2 -fPIC -shared \
-            -o path-redirect.so "$GITHUB_WORKSPACE/native/path-redirect.c" -ldl
+            -o dn-shim.so "$GITHUB_WORKSPACE/native/dn-shim.c" -ldl
           tar -C "$B" -czf "$GITHUB_WORKSPACE/dn-glibc-bundle.tar.gz" .
 
       - name: Publish the bundle to the rolling release

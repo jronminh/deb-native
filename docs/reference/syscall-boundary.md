@@ -116,7 +116,7 @@ ran with no redirection at all (host `/etc`, `/usr`, …).
 
 A binary that issues its own syscalls is routed to the tracer, same as NSS:
 
-- `scripts/bench/scan-direct-syscalls.py DIR --trace-list` prints the ELFs that need
+- `core/bench/scan-direct-syscalls.py DIR --trace-list` prints the ELFs that need
   it: a `syscall` symbol import (case 3) or an `objdump`-verified `svc #0`
   (case 4). Detection is disassembly, not a byte search — a whole-file grep for
   `svc #0` flags 111 binaries, `objdump` confirms 6.
@@ -134,7 +134,7 @@ PIE + 7 `ET_EXEC` programs — a small tail, but structural.
 
 ## Method
 
-`scripts/bench/scan-direct-syscalls.py` reports the cases above: it parses the ELF,
+`core/bench/scan-direct-syscalls.py` reports the cases above: it parses the ELF,
 scans **only** executable sections at 4-byte alignment for `svc #0` as a
 candidate filter, and disassembles each candidate with `objdump` to remove
 literal-pool false positives. The warning that motivated it: a whole-file byte
@@ -142,7 +142,7 @@ grep for `svc #0` flags **111** binaries; disassembly confirms **6**. Data is
 not code.
 
 ```
-python3 scripts/bench/scan-direct-syscalls.py DIR --verify --list
+python3 core/bench/scan-direct-syscalls.py DIR --verify --list
 ```
 
 ## Options, cheapest first

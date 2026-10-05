@@ -8,9 +8,9 @@ in [`wiring-real-apt.md`](wiring-real-apt.md), the next entry.
 
 Following sudo-less's own methodology (`docs/survey-2026-09.md`,
 `dev/survey.sh`): a random, reproducible sample of real Debian packages,
-each installed into a fresh isolated prefix. `scripts/survey/sample-packages.py`
+each installed into a fresh isolated prefix. `tools/survey/sample-packages.py`
 (seed `20260925`, ≤2 per section, ≤5MB, excluding required/important/
-standard-priority and metapackages) + `scripts/survey/survey.sh`.
+standard-priority and metapackages) + `tools/survey/survey.sh`.
 
 ## Contents
 
@@ -56,7 +56,7 @@ golang-github-bep-tmc-dev depends on golang-github-frankban-quicktest-dev; ...
 These are **ordinary Debian package dependencies** — other `.deb`s that
 would need to be downloaded and installed too, exactly what `apt-get
 install` does automatically by walking the dependency graph. **This
-project has never actually done that.** `scripts/survey/prototype-install.sh`
+project has never actually done that.** `tools/survey/prototype-install.sh`
 only ever unpacks the *one* `.deb` it's given, plus whatever
 `native-seed.sh`'s small stub table covers. `design.md`
 always intended real `apt` (not bare `dpkg`) for exactly this reason — but
@@ -95,7 +95,7 @@ something else — unknown).
 
 ### Raw data
 
-`scripts/survey/survey.sh` + `scripts/survey/sample-packages.py` are committed and
+`tools/survey/survey.sh` + `tools/survey/sample-packages.py` are committed and
 reproducible (same seed `20260925`) — re-running produces the same 30
 packages. Full per-package log kept locally during this run
 (`OUT/logs/*.log`), not committed (large, single-run artifact).

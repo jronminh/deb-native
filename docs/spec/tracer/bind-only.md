@@ -153,7 +153,7 @@ The core bind-only path plus the safe mechanics for the three traps landed:
   per-component `lstat`.  `normalize_guest_path()` returns -1 on `..`, which
   falls back to `canonicalize()` (trap 2).  Disable with `PROOT_NO_BIND_ONLY=1`
   to force the old path (A/B).
-- **Trap 1 (absolute symlinks)** — `scripts/install/normalize-symlinks.sh` rewrites
+- **Trap 1 (absolute symlinks)** — `core/install/normalize-symlinks.sh` rewrites
   absolute targets under bound dirs to relative, idempotently (5-pass cap).
   Wired into `install.sh` after install.  Demonstrated: an absolute `/etc/x`
   symlink fails under bind-only, passes after normalizing.
@@ -161,7 +161,7 @@ The core bind-only path plus the safe mechanics for the three traps landed:
   host prefix for getcwd/readlink/`/proc/self/cwd`.  Verified.
 - **Verified on `fe2`**: bind read; `..` clamp (`/etc/../../etc/x`) matches
   canonicalize; absolute-symlink before/after; `/proc/self/cwd` -> `/etc`.
-- **Benchmark** — `scripts/bench/bench-tracer.sh`, medians on `fe2`, binds
+- **Benchmark** — `tools/bench/bench-tracer.sh`, medians on `fe2`, binds
   `$PREFIX:/usr`:
 
   | workload | og (stock proot) | fork-lite canonicalize | fork-lite bind-only |

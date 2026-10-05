@@ -15,7 +15,7 @@ Direct follow-up to a design correction mid-session: instead of chasing
 real Debian assumes is "always already there" (`Priority: required`/
 `important` — `base-files`, `base-passwd`, `dash`, `debianutils`,
 `debconf`, `cdebconf`, plus `openssl`/`ca-certificates`) as **one bootstrap
-transaction**, via a new `scripts/bootstrap/bootstrap-base.sh`.
+transaction**, via a new `bootstrap/bootstrap-base.sh`.
 
 ## Contents
 

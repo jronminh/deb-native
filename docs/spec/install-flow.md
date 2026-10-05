@@ -36,7 +36,7 @@ goes through this once.
 1. **Runtime first, before anything else.** `setup-apt-prefix.sh` calls
    `setup-runtime.sh` directly, before the prefix's own dpkg database
    even exists. It builds/installs:
-   - the **shim** `path-redirect.so` (glibc layer);
+   - the **shim** `dn-shim.so` (glibc layer);
    - **`dn-run`**, the launch classifier, and **`dn-shell`/`dn-perl`**;
    - the **tracer** as `dn-trace` when `make` and `libtalloc` are present;
      without it, `dn-run` warns and runs those programs untranslated (no

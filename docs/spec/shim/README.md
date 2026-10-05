@@ -2,7 +2,7 @@
 
 <!-- template: templates/readme.template.md -->
 
-The path-redirect shim: the mechanism, what it covers, and what escapes
+The dn-shim shim: the mechanism, what it covers, and what escapes
 it. What libc interposition *cannot* see at all is a platform fact and
 lives in [`../../reference/syscall-boundary.md`](../../reference/syscall-boundary.md).
 

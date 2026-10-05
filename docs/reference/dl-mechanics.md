@@ -111,7 +111,7 @@ Three sources **accumulate** (all are applied, in this order):
 Handled by `handle_preload_list` (`elf/rtld.c:850`, called from `:1805`,
 `:1814`, `:1825`), then loaded by `_dl_map_object_deps` (`:1928`).
 Preloaded objects are placed first in the link map, so they can interpose
-symbols -- which is precisely how deb-native's `path-redirect.so` shim
+symbols -- which is precisely how deb-native's `dn-shim.so` shim
 works today, via the `ld.so.preload` file.
 
 ## Auditing

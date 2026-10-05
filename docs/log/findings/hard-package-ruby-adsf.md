@@ -25,7 +25,7 @@ single-file leaf tool like `ciso`/`figlet`.
 
 ### Real bug found and fixed along the way: apt's own dpkg invocation shape
 
-`scripts/install/apt-install.sh` originally ran a single `apt-get install`, relying
+`core/install/apt-install.sh` originally ran a single `apt-get install`, relying
 on `DPkg::Pre-Invoke` to run `patch-maintainer-scripts.sh` between unpack
 and configure (`design.md`'s original plan). It never fired at the
 right time: **apt calls dpkg once, and dpkg itself unpacks and configures

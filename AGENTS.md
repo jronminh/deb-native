@@ -15,8 +15,8 @@ name**, unprivileged. "Install and run, not emulate" — no isolation.
 Three path mechanisms:
 
 - **Maintainer scripts** — plain-text path rewrite before `dpkg` runs them
-  (`scripts/install/patch-scripts-tree.sh`).
-- **Dynamic glibc binaries** — `native/path-redirect.c`, an `LD_PRELOAD` shim
+  (`core/install/patch-scripts-tree.sh`).
+- **Dynamic glibc binaries** — `native/dn-shim.c`, an `LD_PRELOAD` shim
   interposing path-taking libc functions (`/usr /etc /var /opt` →
   `$INSTDIR`). **This layer is complete** — see `docs/spec/shim/shim-coverage.md`.
 - **Syscall level** — for what the shim cannot see (static binaries, inline
@@ -47,7 +47,7 @@ idea shipping soonest, not for understanding every failure.
 ## Repository layout: read the directory's own README.md first
 
 `scripts/` and `docs/` each have a `README.md` at every level
-(`scripts/install/README.md`, `docs/spec/README.md`, ...) indexing what's
+(`core/install/README.md`, `docs/spec/README.md`, ...) indexing what's
 in that directory; so do `native/`, `tests/`,
 `third_party/glibc-android-patches/`, `custom/`, and `tracer/`. Read the
 relevant one before working in a directory or guessing a file's purpose
@@ -57,7 +57,7 @@ Every `README.md` and content doc follows a stable template in
 of improvising a layout when adding a new one; each template carries its
 how-to in an HTML comment, so it does not show in the rendered doc. After
 moving/renaming/deleting a doc or a script, run
-`scripts/tools/check-repo.py` (broken links, broken ToC anchors, scripts
+`tools/check-repo.py` (broken links, broken ToC anchors, scripts
 nothing calls any more).
 
 `docs/spec/design.md` is the live design doc (scope, the 0.2.0
@@ -84,7 +84,7 @@ one entry per file.
   removed (framework kept) and made AArch64-only. It **builds on `fe2`**
   (`make CC=clang`, needs `libtalloc`) and a static binary reads through a
   `-b` bind. **Bind-only fast path landed** (`docs/spec/tracer/bind-only.md`,
-  `scripts/install/normalize-symlinks.sh`, ~1.6x stat-dense; `PROOT_NO_BIND_ONLY=1`
+  `core/install/normalize-symlinks.sh`, ~1.6x stat-dense; `PROOT_NO_BIND_ONLY=1`
   reverts). **Next: replace `cli/` with our `dn-trace` binder** (bind
   `$INSTDIR` over `/usr /etc /var /opt`, handle missing paths), then point
   `dn-run.c` at it and test static / `abbtr` / NSS.

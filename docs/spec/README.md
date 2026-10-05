@@ -29,7 +29,7 @@ designs live in [`../notes/`](../notes/README.md).
 
 Subdirectories, each with its own index:
 
-- [`shim/`](shim/README.md) — the path-redirect shim and what it does not
+- [`shim/`](shim/README.md) — the dn-shim shim and what it does not
   cover.
 - [`tracer/`](tracer/README.md) — the syscall tracer (`dn-trace`) and its
   bind-only path.

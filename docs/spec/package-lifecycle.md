@@ -26,14 +26,14 @@ Living doc: it tracks the shipped pipeline, not a proposal.
 - [`path-shim.md`](shim/path-shim.md) — the shim and maintainer-script layers.
 - [`tracer.md`](tracer/tracer.md) — `dn-trace`, the syscall layer at run time.
 - [`syscall-boundary.md`](../reference/syscall-boundary.md) — what the shim cannot see.
-- `scripts/install/README.md`, `scripts/runtime/README.md`,
-  `scripts/bootstrap/README.md` — the scripts per lifecycle category.
+- `core/install/README.md`, `core/runtime/README.md`,
+  `bootstrap/README.md` — the scripts per lifecycle category.
 
 ## Stage map
 
 | # | Stage (apt/dpkg) | What fires | Layer |
 |---|---|---|---|
-| 0 | `apt update` — index | `scripts/install/dn-debian-index.sh`: rewrite `Architecture: all` -> `arm64` | prefix's own apt |
+| 0 | `apt update` — index | `core/install/dn-debian-index.sh`: rewrite `Architecture: all` -> `arm64` | prefix's own apt |
 | 1 | resolve + download | real `apt`, run through the `$DN/bin/apt*` launchers | prefix's own apt/dpkg |
 | 2 | `DPkg::Pre-Install-Pkgs` | `dn-hook-pre.sh` -> `dn-translate-deb.sh` (+ `patch-scripts-tree.sh`, `custom/`), then a collision check | `.deb` translation |
 | 3 | `dpkg --unpack` — `preinst` | `preinst` through the prefix's `dn-shell` | maintainer script + shim |

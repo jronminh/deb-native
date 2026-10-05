@@ -38,7 +38,7 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
   - `elf/rtld.c`: ignore the inherited `LD_PRELOAD` (skip the
     `state.preloadlist` source in `dl_main`; `--preload` and the
     `ld.so.preload` file are kept). deb-native's own addition, not Termux's:
-    the fused loader delivers the path-redirect shim via `ld.so.preload`
+    the fused loader delivers the dn-shim shim via `ld.so.preload`
     instead of the env, and a host `LD_PRELOAD` (Termux's
     `libtermux-exec-ld-preload.so`) is built for another glibc and would
     otherwise abort every prefix program at startup
@@ -85,7 +85,7 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
 `set-fakesyscalls.patch` hunks touching `setegid.c`/`seteuid.c`/`setgid.c`/
 `setregid.c`/`setresgid.c`/`setresuid.c`/`setreuid.c`/`setuid.c`/
 `local-setxid.h` — these unconditionally fake `set*id` success, the same
-shape as `native/path-redirect.c`'s own fake-root mechanism, so forking
+shape as `native/dn-shim.c`'s own fake-root mechanism, so forking
 them now would reinstate that behavior at the glibc layer independent of
 whatever this project decides fake-root's future is. Split out of
 `gpkg/glibc/set-fakesyscalls.patch` and kept here, unapplied, as
@@ -124,12 +124,12 @@ tar xf glibc_2.41-12+deb13u4.debian.tar.xz -C pristine
 cp -r pristine work
 
 # 2. Apply this patch, substituting the target prefix for @TERMUX_PREFIX@
-# (../../scripts/bootstrap/dn-apply-glibc-patch.sh) -- new files (the
+# (../../bootstrap/dn-apply-glibc-patch.sh) -- new files (the
 # fakesyscall.json substitutes, android_passwd_group.c, shmem-android.c,
 # the generated disabled-syscall.h, ...) are part of the diff (as new-file
 # hunks against /dev/null) and land automatically; nothing to copy in by
 # hand.
-../../scripts/bootstrap/dn-apply-glibc-patch.sh work /data/data/com.termux/files/home/.dn
+../../bootstrap/dn-apply-glibc-patch.sh work /data/data/com.termux/files/home/.dn
 ```
 
 `work/` is then ready for `configure --prefix=<the same prefix>/usr`. This
@@ -158,7 +158,7 @@ fresh, apply the new patch for the same prefix, diff the result against
 
 ```sh
 cp -r pristine /tmp/roundtrip
-../../scripts/bootstrap/dn-apply-glibc-patch.sh /tmp/roundtrip /data/data/com.termux/files/home/.dn
+../../bootstrap/dn-apply-glibc-patch.sh /tmp/roundtrip /data/data/com.termux/files/home/.dn
 diff -rq --exclude='.pc' --exclude='debian' /tmp/roundtrip work   # expect nothing
 ```
 
@@ -212,7 +212,7 @@ cache file (`libc.so.6`, `gconv-modules.cache`) has that path baked in as
 a literal string (checked with `strings`), and the prefix's `ld.so.cache`
 covers both locations regardless.
 
-**Packaging as `libc6`**: [`scripts/bootstrap/dn-package-glibc.sh`](../../scripts/bootstrap/dn-package-glibc.sh)
+**Packaging as `libc6`**: [`bootstrap/dn-package-glibc.sh`](../../bootstrap/dn-package-glibc.sh)
 takes a real Debian `libc6_<ver>_arm64.deb` (`apt-get download
 libc6=<ver>`, matching version) as a template -- reusing Debian's own
 maintainer scripts/triggers/symbols/doc rather than reinventing them --
@@ -228,7 +228,7 @@ objdir/elf/ld.so --library-path "$DESTDIR/usr/lib" \
   "$DESTDIR/usr/sbin/iconvconfig" --nostdlib \
   -o "$DESTDIR/usr/lib/gconv/gconv-modules.cache" "$DESTDIR/usr/lib/gconv"
 
-scripts/bootstrap/dn-package-glibc.sh libc6_<ver>_arm64.deb "$DESTDIR" out.deb
+bootstrap/dn-package-glibc.sh libc6_<ver>_arm64.deb "$DESTDIR" out.deb
 dpkg -i out.deb   # not apt-get -- see TODO.md's Runtime component audit
                    # for why apt-get's own hook pipeline needed separate
                    # fixing; dpkg -i is the lower-risk path regardless
@@ -244,7 +244,7 @@ real NSS identities, previously-installed packages (`tree`, `figlet`,
 ...) keep running, and the full regression battery from the runtime
 component audit (`find -exec test`, a fresh `apt-get install`) stays
 clean. **`libc-bin` packaged 2026-10-03**:
-[`scripts/bootstrap/dn-package-libc-bin.sh`](../../scripts/bootstrap/dn-package-libc-bin.sh)
+[`bootstrap/dn-package-libc-bin.sh`](../../bootstrap/dn-package-libc-bin.sh)
 is the companion to `dn-package-glibc.sh` (below) -- it takes a real Debian
 `libc-bin_<ver>_arm64.deb` as a template and swaps in this build's own
 `usr/bin`/`usr/sbin` programs (`ldconfig`, `ldd`, `getconf`, `locale`, ...).

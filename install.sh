@@ -42,7 +42,7 @@ kv() { out "$(printf '   %s%-10s%s %s' "$D" "$1" "$R" "$2")"; }
 fail() { printf '%s error:%s %s\n' "$Y" "$R" "$*" >&2; exit 1; }
 
 # Piped (curl | sh) or run outside a checkout: fetch the repo, then re-exec.
-if [ ! -f "$HERE/scripts/bootstrap/setup-apt-prefix.sh" ]; then
+if [ ! -f "$HERE/bootstrap/setup-apt-prefix.sh" ]; then
     banner
     command -v git || fail "git is required (pkg install git)"
     printf '\n%s[1/1]%s fetching deb-native (%s) into %s\n' "$C" "$R" "$REF" "$DIR"
@@ -142,7 +142,7 @@ if [ -z "${DN_INSTALL_LOG:-}" ]; then
     [ -t 1 ] && DN_COLOR=1 && export DN_COLOR
     rcf=$(mktemp)
     { sh "$HERE/install.sh" "$DNPREFIX" "$@" 2>&1; echo $? > "$rcf"; } | render
-    rc=$(cat "$rcf"); rm -f "$rcf"
+    rc=$(cat "$rcf" 2>/dev/null); rm -f "$rcf"; rc=${rc:-1}
     if [ "$rc" != 0 ]; then
         printf '\n%s install failed (exit %s); the end of the log:%s\n' "$Y" "$rc" "$R"
         tail -n 15 "$DN_INSTALL_LOG" | sed 's/^/   /'
@@ -161,26 +161,47 @@ banner
 kv "prefix" "$DNPREFIX"
 [ $# -gt 0 ] && kv "packages" "$*"
 
+# Ship mode (MODULARIZE.md "Ship is two phases"): with a prebuilt artifact,
+# install = Phase A (extract, target-native) + Phase B (dn-finish, prefix-native).
+# No toolchain, no bootstrap. Without DN_PREFIX_IMAGE, build (below).
+if [ -n "${DN_PREFIX_IMAGE:-}" ]; then
+    step "extracting the prebuilt prefix"
+    IMG=$DN_PREFIX_IMAGE
+    case "$IMG" in
+        http://*|https://*) curl -fsSL "$IMG" -o "$DNPREFIX.tgz" || fail "download failed"; IMG="$DNPREFIX.tgz" ;;
+    esac
+    [ -f "$IMG" ] || fail "no such prefix image: $IMG"
+    mkdir -p "$DNPREFIX"
+    tar xzf "$IMG" -C "$DNPREFIX" || fail "extract failed"
+    step "finishing the prefix"
+    sh "$DNPREFIX/usr/lib/deb-native/scripts/runtime/dn-finish.sh" "$DNPREFIX" --apt-update || true
+    out ""
+    out "$(printf '%s done%s' "$G" "$R")"
+    kv "prefix" "$DNPREFIX"
+    kv "source" "shipped image"
+    exit 0
+fi
+
 if [ ! -s "$DNPREFIX/var/lib/dpkg/status" ]; then
     step "bootstrapping the Debian glibc base"
-    "$HERE/scripts/bootstrap/setup-apt-prefix.sh" "$DNPREFIX"
+    "$HERE/bootstrap/setup-apt-prefix.sh" "$DNPREFIX"
 else
     step "refreshing the existing prefix"
     kv "state" "reused (already bootstrapped)"
-    "$HERE/scripts/install/setup-runtime.sh" "$DNPREFIX"
-    "$HERE/scripts/runtime/install-hooks.sh" "$DNPREFIX"
-    "$HERE/scripts/runtime/make-launchers.sh" "$DNPREFIX"
-    "$HERE/scripts/runtime/make-apt-wrappers.sh" "$DNPREFIX"
-    "$HERE/scripts/runtime/make-shell-interface.sh" "$DNPREFIX"
+    "$HERE/bootstrap/setup-runtime.sh" "$DNPREFIX"
+    "$HERE/core/runtime/install-hooks.sh" "$DNPREFIX"
+    "$HERE/core/runtime/make-launchers.sh" "$DNPREFIX"
+    "$HERE/adapters/deb-native/make-apt-wrappers.sh" "$DNPREFIX"
+    "$HERE/adapters/deb-native/make-shell-interface.sh" "$DNPREFIX"
 fi
 
 if [ $# -gt 0 ]; then
     step "installing: $*"
-    "$HERE/scripts/install/apt-install.sh" "$DNPREFIX" "$@"
+    "$HERE/core/install/apt-install.sh" "$DNPREFIX" "$@"
 fi
 
 step "normalizing prefix symlinks"
-"$HERE/scripts/install/normalize-symlinks.sh" "$DNPREFIX"
+"$HERE/core/install/normalize-symlinks.sh" "$DNPREFIX"
 
 # --- summary ---------------------------------------------------------------
 T1=$(date +%s)
