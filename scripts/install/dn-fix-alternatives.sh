@@ -6,8 +6,8 @@
 # gone until they are rewritten -- and when the group is awk, so is every
 # script that would rewrite them (reinstalling mawk broke awk exactly this
 # way). So this runs right after each update-alternatives call
-# (the priv/ wrapper setup-runtime.sh writes), with Termux's own gawk by
-# full path: never an alternatives link.
+# (the priv/ wrapper setup-runtime.sh writes), with a real awk binary from
+# the prefix (mawk) by full path: never the `awk` alternatives link.
 #
 # Usage: dn-fix-alternatives.sh PREFIX
 set -u
@@ -15,8 +15,11 @@ P=${1:?usage: dn-fix-alternatives.sh PREFIX}
 TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 # Called from a maintainer script, PATH has glibc tools first while this
 # Bionic shell may carry termux-exec's preload: use Termux's own tools.
-PATH="$TP/bin:$PATH"
-AWK="$TP/bin/gawk"
+PATH="$P/usr/bin:$TP/bin:$PATH"
+AWK="$P/usr/bin/mawk"
+[ -x "$AWK" ] || AWK="$P/usr/bin/gawk"
+[ -x "$AWK" ] || AWK="$TP/bin/gawk"
+[ -x "$AWK" ] || AWK="$TP/bin/awk"
 ADMIN="$P/var/lib/dpkg/alternatives"
 [ -d "$ADMIN" ] || exit 0
 
