@@ -127,10 +127,15 @@ Dependency direction (arrows point only downward, no cycles):
 2. **Bootstrap** stays an in-repo subtree; extract a repo only if needed (P5).
 3. **Interpreter choice** is an **adapter parameter**; the glibc interpreters
    replace the Bionic `dn-launch.c` when the fork model lands.
-4. **`dn-shell` disambiguation** — the generated **userland-entry** script
-   keeps the name `dn-shell`; the maintainer-script **interpreter** is renamed
-   (proposed: `dn-maint`). Deferred until the fork model lands, since it
-   replaces `dn-launch.c` anyway.
+4. **`dn-shell` disambiguation** — the **app/repo** keeps `dn-shell`; every
+   other `dn-shell` in the code is renamed to another `dn-*` name:
+   - maintainer-script interpreter binary `usr/bin/dn-shell` -> `usr/bin/dn-sh`
+     (sibling `dn-perl` keeps its name);
+   - adapter userland-entry wrapper `$TP/bin/dn-shell` -> `dn-login`
+     (matching `~/.dn-login`).
+   A dedicated, context-aware rename (the string `dn-shell` also names the app,
+   so a blind replace is unsafe). The shim rename (`path-redirect` ->
+   `dn-shim`, matching the fork) is done.
 
 ### Prefix artifact (decided)
 
