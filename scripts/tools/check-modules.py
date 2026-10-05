@@ -29,7 +29,7 @@ ALLOW = os.path.join(HERE, "module-edges.allow")
 # Regexes that identify a reference to a non-core module, per target module.
 # Word/boundary care matters: "install.sh" must not match "apt-install.sh".
 EDGE_PATTERNS = {
-    "build":     [r"build-path-redirect"],
+    "build":     [r"build-dn-shim"],
     "bootstrap": [r"scripts/bootstrap/", r"setup-apt-prefix", r"dn-install-glibc",
                   r"dn-apply-glibc-patch", r"dn-package-glibc",
                   r"dn-package-libc-bin", r"dn-standins"],

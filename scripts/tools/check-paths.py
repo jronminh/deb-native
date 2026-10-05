@@ -80,6 +80,8 @@ def main():
                 suffix = m.group(1)
                 if "$" in suffix:
                     continue
+                if suffix.endswith(".so"):
+                    continue      # a build output, not a committed input
                 target = os.path.normpath(os.path.join(base, suffix))
                 if "*" in target or "?" in target:
                     target = os.path.dirname(target)

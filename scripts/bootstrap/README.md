@@ -19,5 +19,5 @@ Build the prefix itself, once. See [`../../docs/spec/design.md`](../../docs/spec
   (`ldconfig`, `ldd`, `getconf`, `locale`, ...) as a real `libc-bin` `.deb`
   — needed because `ldconfig` is path-sensitive (writes the prefix's
   `ld.so.cache`), unlike `libc6-dev`/`libc-dev-bin`.
-- `build-path-redirect.sh` — cross-compiles `native/path-redirect.c`
+- `build-dn-shim.sh` — cross-compiles `native/dn-shim.c`
   (the shim) into a glibc shared library with Termux's own clang.

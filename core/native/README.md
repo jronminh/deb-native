@@ -7,7 +7,7 @@ through. Built by `scripts/install/setup-runtime.sh` into each prefix;
 design background in [`../../docs/spec/shim/path-shim.md`](../../docs/spec/shim/path-shim.md)
 and [`../../docs/spec/design.md`](../../docs/spec/design.md).
 
-- `path-redirect.c` — the shim: a library that rewrites
+- `dn-shim.c` — the shim: a library that rewrites
   `/usr /etc /var /opt /root` into the prefix for glibc dynamic binaries,
   loaded via the prefix's `etc/ld.so.preload`.
   A Bionic build of the same idea for maintainer scripts was tried and

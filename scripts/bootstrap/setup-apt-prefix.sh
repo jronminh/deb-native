@@ -9,7 +9,7 @@
 #
 # Every fresh prefix is dn-glibc, out of the box: the fused loader, not
 # ld-dn. DN_GLIBC_DEBS (required) is a directory holding Debian's real
-# libc6.deb and libc-bin.deb, the fused path-redirect.so, and a files/
+# libc6.deb and libc-bin.deb, the fused dn-shim.so, and a files/
 # tree with the 10 patched glibc files (docs/spec/deploy.md) --
 # dn-install-glibc.sh's usage comment has the details; how those get built
 # and distributed is a separate, still-open question, not this script's.
@@ -47,7 +47,7 @@ NEWPREFIX=${1:?usage: setup-apt-prefix.sh NEWPREFIX [suite]}
 case "$NEWPREFIX" in /*) ;; *) NEWPREFIX="$PWD/$NEWPREFIX" ;; esac
 SUITE=${2:-stable}
 # The glibc bundle (DN_GLIBC_DEBS): a dir with libc6.deb, libc-bin.deb,
-# path-redirect.so and files/ (dn-install-glibc.sh).  When unset, fetch the
+# dn-shim.so and files/ (dn-install-glibc.sh).  When unset, fetch the
 # rolling bundle published by .github/workflows/build-glibc.yml.
 if [ -z "${DN_GLIBC_DEBS:-}" ]; then
   DN_BUNDLE_TMP=$(mktemp -d)

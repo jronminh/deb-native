@@ -14,7 +14,7 @@
  * shebang, and it then:
  *   - derives $INSTDIR from its own /proc/self/exe
  *     ($INSTDIR/usr/bin/dn-shell -> up three dirs),
- *   - sets LD_PRELOAD (the path-redirect shim, a copy under
+ *   - sets LD_PRELOAD (the dn-shim shim, a copy under
  *     $INSTDIR/lib/deb-native/), DN_INSTDIR, PATH (prefix first, then
  *     Termux's glibc coreutils, then Termux's own Bionic bin) and
  *     DEBIAN_FRONTEND,
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
   if (!pfx || !*pfx) pfx = "/data/data/com.termux/files/usr";
 
   char shim[4096];
-  snprintf(shim, sizeof shim, "%s/usr/lib/deb-native/path-redirect.so", inst);
+  snprintf(shim, sizeof shim, "%s/usr/lib/deb-native/dn-shim.so", inst);
   char path[8192];
   /* priv/ first: the privilege layer (no-op chown/chgrp/dpkg-statoverride,
    * the update-alternatives and dpkg-divert wrappers) must win over any
@@ -102,12 +102,12 @@ int main(int argc, char **argv) {
 
   /* Preserve whatever preload we inherited (on Termux, termux-exec) so the
    * shim can hand it back to a Bionic child it execs -- see bionic_env()
-   * in path-redirect.c. Never capture our own shim. Capture before we
+   * in dn-shim.c. Never capture our own shim. Capture before we
    * overwrite LD_PRELOAD. Prefer the prefix's own vendored copy
    * (setup-runtime.sh) so a Bionic child needs nothing under Termux's tree
    * at runtime; the inherited path is a bootstrap-only fallback. */
   const char *inh = getenv("LD_PRELOAD");
-  if (inh && *inh && !strstr(inh, "path-redirect.so")) {
+  if (inh && *inh && !strstr(inh, "dn-shim.so")) {
     char hostpre[4096];
     snprintf(hostpre, sizeof hostpre,
              "%s/usr/lib/deb-native/host/libtermux-exec-ld-preload.so", inst);

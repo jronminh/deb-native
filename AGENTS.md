@@ -16,7 +16,7 @@ Three path mechanisms:
 
 - **Maintainer scripts** — plain-text path rewrite before `dpkg` runs them
   (`scripts/install/patch-scripts-tree.sh`).
-- **Dynamic glibc binaries** — `native/path-redirect.c`, an `LD_PRELOAD` shim
+- **Dynamic glibc binaries** — `native/dn-shim.c`, an `LD_PRELOAD` shim
   interposing path-taking libc functions (`/usr /etc /var /opt` →
   `$INSTDIR`). **This layer is complete** — see `docs/spec/shim/shim-coverage.md`.
 - **Syscall level** — for what the shim cannot see (static binaries, inline

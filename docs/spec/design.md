@@ -18,7 +18,7 @@ live in their own docs, listed below.
 
 ## Related docs
 
-- [`path-shim.md`](shim/path-shim.md) — the path-redirect shim: design,
+- [`path-shim.md`](shim/path-shim.md) — the dn-shim shim: design,
   verification, delivery mechanisms. Split out of this doc.
 - [`native-reuse.md`](../notes/native-reuse.md) — native dependency reuse
   (`native-seed.sh`, since superseded). Split out of this doc.
@@ -215,7 +215,7 @@ glibc patch, the `setuid`/`setgid`/... "0" bucket,
 [`android-platform.md`](../reference/android-platform.md)) stays unapplied for the
 same reason -- nothing about fake-root is being extended.
 
-**Mechanism:** the shim (`native/path-redirect.c`) fakes
+**Mechanism:** the shim (`native/dn-shim.c`) fakes
 `get[e]uid`/`get[e]gid`/`getres[ug]id`/`getgroups` -> `0`, `stat`
 ownership, no-ops `chown`/`set*id`/`setgroups`/`initgroups`, and rewrites
 `USER`/`LOGNAME` in the environ array; `dn-trace` does the same at syscall

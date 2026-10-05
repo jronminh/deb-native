@@ -85,7 +85,7 @@ touching at all.
    user namespaces at all here, not merely an SELinux policy denial. Plain
    `unshare(CLONE_NEWNS)` alone fails with `EPERM` as expected (needs
    `CAP_SYS_ADMIN`). FUSE is also closed (`/dev/fuse`: permission denied,
-   no `fusermount`). Replaced by our userspace path-redirect shim
+   no `fusermount`). Replaced by our userspace dn-shim shim
    instead — see [`path-shim.md`](../spec/shim/path-shim.md), verified working against
    a real package (`figlet`).
 

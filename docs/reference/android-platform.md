@@ -276,7 +276,7 @@ adopting it reinforces this project's single view or punctures it.
    with no way to tell "harmless no-op" from "a real privilege change was
    wanted." This duplicates, at the glibc layer, what this project's own
    fake-root shim does at a different layer
-   (`native/path-redirect.c`'s `chown`/`set*id`/`setgroups`/`initgroups`
+   (`native/dn-shim.c`'s `chown`/`set*id`/`setgroups`/`initgroups`
    refused-for-lack-of-rights -> succeed). **Parked, not forked**, pending
    fake-root's own direction — forking this bucket as-is would reinstate
    that behavior unconditionally at the glibc layer independent of

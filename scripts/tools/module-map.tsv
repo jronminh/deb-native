@@ -25,9 +25,9 @@ product	^install\.sh$
 
 adapter	^adapters/
 
-build	^scripts/bootstrap/(build-path-redirect|build-core)\.sh$
+build	^scripts/bootstrap/(build-dn-shim|build-core)\.sh$
 
-bootstrap	^scripts/bootstrap/(?!build-path-redirect\.sh$|build-core\.sh$)
+bootstrap	^scripts/bootstrap/(?!build-dn-shim\.sh$|build-core\.sh$)
 bootstrap	^scripts/install/setup-runtime\.sh$
 
 core	^core/

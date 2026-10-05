@@ -38,7 +38,7 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
   - `elf/rtld.c`: ignore the inherited `LD_PRELOAD` (skip the
     `state.preloadlist` source in `dl_main`; `--preload` and the
     `ld.so.preload` file are kept). deb-native's own addition, not Termux's:
-    the fused loader delivers the path-redirect shim via `ld.so.preload`
+    the fused loader delivers the dn-shim shim via `ld.so.preload`
     instead of the env, and a host `LD_PRELOAD` (Termux's
     `libtermux-exec-ld-preload.so`) is built for another glibc and would
     otherwise abort every prefix program at startup
@@ -85,7 +85,7 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
 `set-fakesyscalls.patch` hunks touching `setegid.c`/`seteuid.c`/`setgid.c`/
 `setregid.c`/`setresgid.c`/`setresuid.c`/`setreuid.c`/`setuid.c`/
 `local-setxid.h` — these unconditionally fake `set*id` success, the same
-shape as `native/path-redirect.c`'s own fake-root mechanism, so forking
+shape as `native/dn-shim.c`'s own fake-root mechanism, so forking
 them now would reinstate that behavior at the glibc layer independent of
 whatever this project decides fake-root's future is. Split out of
 `gpkg/glibc/set-fakesyscalls.patch` and kept here, unapplied, as

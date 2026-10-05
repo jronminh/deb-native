@@ -91,7 +91,7 @@ ok "resolv.conf is the prefix's own"
 
 # 9. the runtime commands are present
 for f in "$P/usr/bin/dn-shell" "$P/usr/lib/deb-native/dn-run" \
-         "$P/usr/lib/deb-native/path-redirect.so" "$P/usr/lib/deb-native/bin/dn-adopt"; do
+         "$P/usr/lib/deb-native/dn-shim.so" "$P/usr/lib/deb-native/bin/dn-adopt"; do
   [ -e "$f" ] || fail "missing runtime piece: $f"
 done
 [ -x "$P/usr/lib/deb-native/dn-trace" ] && ok "dn-trace present" \
@@ -128,7 +128,7 @@ fi
 #     remapped onto the prefix's own copy, so a Bionic child needs no $tp.
 #     Launch through a Bionic parent (/system/bin/sh, the login's own shell,
 #     no shim): a *shimmed* glibc parent rewrites LD_PRELOAD for its Bionic
-#     children (path-redirect.c bionic_env), so it cannot hand dn-shell the
+#     children (dn-shim.c bionic_env), so it cannot hand dn-shell the
 #     inherited preload directly.
 if [ -e "$HOST/libtermux-exec-ld-preload.so" ] \
    && [ -e "$tp/lib/libtermux-exec-ld-preload.so" ] && [ -x /system/bin/sh ]; then

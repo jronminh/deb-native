@@ -9,7 +9,7 @@
 # "-dynamic-linker /lib/ld-linux-aarch64...so.1" into its *link spec --
 # a real Debian path that doesn't exist on this Android device (no root, no
 # chroot). The kernel resolves PT_INTERP itself at execve() time, before any
-# userspace code (the path-redirect shim included) runs, so nothing at the
+# userspace code (the dn-shim shim included) runs, so nothing at the
 # libc-interposition layer can fix this; it has to be the string gcc's
 # linker invocation writes into the ELF in the first place.
 #

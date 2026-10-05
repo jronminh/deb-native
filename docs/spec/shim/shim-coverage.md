@@ -2,7 +2,7 @@
 
 <!-- template: templates/docs.template.md -->
 
-Which libc entry points `native/path-redirect.c` has to cover for the packages
+Which libc entry points `native/dn-shim.c` has to cover for the packages
 we support, and the ones it does not. The scope is [`standard.md`](../../reference/standard.md);
 the design is [`path-shim.md`](path-shim.md).
 
@@ -130,7 +130,7 @@ intercepted. The counts are `app / base` imports across the corpus:
 
 ### Gaps found — and closed
 
-Nine genuine gaps were all closed in `native/path-redirect.c`:
+Nine genuine gaps were all closed in `native/dn-shim.c`:
 `__xstat`/`__lxstat` (legacy pre-2.33 stat entry points; `__fxstat` is
 fd-based and needs no redirect), `__fxstatat64` (the 64-bit `fstatat`, which
 Bun/Node call directly -- without it the real owner leaked past fake-root and
@@ -251,7 +251,7 @@ paths internally. That is exactly the "program hardcodes the literal `/bin/x`
 or `/lib/x.so`" gap predicted below, just surfaced by the compiler toolchain
 instead of found by corpus inspection first.
 
-Fix: `path-redirect.c`'s `rewrite()` now also dispatches `/lib` and `/bin`
+Fix: `dn-shim.c`'s `rewrite()` now also dispatches `/lib` and `/bin`
 (second byte `'l'`/`'b'`, default `prelen = 4`) and `/sbin` (second byte
 `'s'`, `prelen = 5` like `/root`) — none collide with the existing five.
 These three are Debian's merged-usr symlinks into `/usr/{lib,bin,sbin}`
@@ -260,7 +260,7 @@ anyway (the prefix's own `base-files` sets them up the same way, confirmed:
 redirecting the literal prefix and then following the real symlink lands in
 the same place `/usr/...` already did — this completes that existing
 coverage rather than adding a new one. `/bin/sh` etc.'s execve-specific
-carve-out (`path-redirect.c:307-313`, line numbers now shifted by this
+carve-out (`dn-shim.c:307-313`, line numbers now shifted by this
 addition) is unaffected and still separately necessary (execve, not
 open/stat).
 

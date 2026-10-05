@@ -1,5 +1,5 @@
 #!/bin/sh
-# Cross-compile native/path-redirect.c into a glibc shared library, using
+# Cross-compile native/dn-shim.c into a glibc shared library, using
 # Termux's own clang (Bionic-hosted) targeting Termux's glibc side-install
 # — the same technique Termux's own termux-pacman/glibc-packages build
 # uses, discovered by trial and error (see docs/spec/shim/path-shim.md
@@ -23,12 +23,12 @@
 set -eu
 GLIBC=${DN_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-OUT=${1:-$HERE/core/native/path-redirect.so}
+OUT=${1:-$HERE/core/native/dn-shim.so}
 
 echo "Building ${OUT##*/} ..."
 clang --target=aarch64-linux-gnu --sysroot=/ -O2 -fPIC -shared \
       -nostartfiles -nodefaultlibs \
       -I"$GLIBC/include" -L"$GLIBC/lib" \
       -Wl,-dynamic-linker,"$GLIBC/lib/ld-linux-aarch64.so.1" \
-      -o "$OUT" "$HERE/core/native/path-redirect.c" -lc -ldl
+      -o "$OUT" "$HERE/core/native/dn-shim.c" -lc -ldl
 

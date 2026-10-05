@@ -5,7 +5,7 @@
 On-device smoke tests. Run in Termux; not run in CI (no Android device
 there).
 
-- `shim-libc/` — asserts every libc entry point `native/path-redirect.c`
+- `shim-libc/` — asserts every libc entry point `native/dn-shim.c`
   intercepts actually rewrites a path under `/etc` or `/usr` into a fake
   prefix root. See [`../docs/spec/shim/shim-coverage.md`](../docs/spec/shim/shim-coverage.md).
 - `tracer-nss/` — proves the tracer route resolves glibc's statically-bound

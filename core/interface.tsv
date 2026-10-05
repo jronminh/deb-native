@@ -28,14 +28,14 @@ entry	scripts/runtime/dn-adopt.sh
 entry	scripts/runtime/dn-update.sh
 
 # --- sources the build compiles --------------------------------------------
-source	core/native/path-redirect.c
+source	core/native/dn-shim.c
 source	core/native/dn-run.c
 source	core/native/dn-launch.c
 source	core/tracer
 source	scripts/bench/scan-direct-syscalls.py
 
 # --- artifacts build produces, and where install places them ---------------
-artifact	path-redirect.so	core/native/.build/path-redirect.so	usr/lib/deb-native/path-redirect.so
+artifact	dn-shim.so	core/native/.build/dn-shim.so	usr/lib/deb-native/dn-shim.so
 artifact	dn-run	core/native/.build/dn-run	usr/lib/deb-native/dn-run
 artifact	dn-trace	core/native/.build/dn-trace	usr/lib/deb-native/dn-trace
 artifact	dn-shell	core/native/.build/dn-shell	usr/bin/dn-shell

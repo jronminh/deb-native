@@ -116,18 +116,33 @@ Dependency direction (arrows point only downward, no cycles):
 - [ ] `core` (shared), `bootstrap` (or keep as subtree), `adapter`.
 - [ ] `dn-shell` consumes the **pinned prefix artifact**, never bootstrap code.
 
-## Decisions to settle before P1
+## Decisions (resolved 2026-10-05)
 
-1. **Which model is canonical** — fold the fork's model (dynamic/relocatable
-   prefix, vendored glibc, `dn-shim`, split glibc interpreters) **into core**,
-   or make the fork the new core and have `deb-native` track it?
-2. **Bootstrap stays a subtree** in-repo, or splits out? (Recommendation:
-   subtree first.)
-3. **Interpreter choice** (`dn-launch.c` Bionic single binary vs
-   `dn-shell.c`/`dn-perl.c` glibc) — settle it as an **adapter parameter**.
-4. **Disambiguate the name `dn-shell`** — it currently means three things: the
-   maintainer-script interpreter, the generated userland-entry script, and the
-   app. Core must keep clean names.
+1. **Canonical model** — the **fork's** model: dynamic/relocatable prefix,
+   vendored glibc, `dn-shim`, split glibc interpreters (`dn-shell`/`dn-perl`).
+   `deb-native`'s fixed-prefix, Termux-backed model is the older variant.
+   *Blocker:* the fork's C sources (`dn-shim.c`, `dn-shell.c`, `dn-perl.c`,
+   `dn-child.h`) are not in this tree or any branch — they must be supplied
+   before core can adopt this model.
+2. **Bootstrap** stays an in-repo subtree; extract a repo only if needed (P5).
+3. **Interpreter choice** is an **adapter parameter**; the glibc interpreters
+   replace the Bionic `dn-launch.c` when the fork model lands.
+4. **`dn-shell` disambiguation** — the generated **userland-entry** script
+   keeps the name `dn-shell`; the maintainer-script **interpreter** is renamed
+   (proposed: `dn-maint`). Deferred until the fork model lands, since it
+   replaces `dn-launch.c` anyway.
+
+### Prefix artifact (decided)
+
+The bootstrap's output — the one boundary a target consumes:
+
+- **Name:** `deb-native-prefix-<version>-<arch>.tar.gz`, `<version>` read from
+  `core/VERSION`, `<arch>` = `arm64`.
+- **Contents:** the prefix tree (`usr/`, `etc/`, `var/`, `opt/`) plus a manifest
+  at `var/lib/deb-native/prefix-manifest.tsv` listing each component and its
+  sha256, so `dn-update` can verify an overlay component.
+- **Consumer:** a target adapter (e.g. `dn-shell`) packages the tarball as an
+  app asset and pins the version; it never runs bootstrap code (P5).
 
 ## Warnings
 
@@ -149,6 +164,6 @@ Dependency direction (arrows point only downward, no cycles):
 | `scripts/runtime/make-apt-wrappers.sh` | host package-manager wrappers | **move/parameterize** |
 | `scripts/runtime/install-hooks.sh` | core staging; copies bootstrap scripts too | **core manifest** |
 | `scripts/install/dn-translate-deb.sh` | core; relative `$HERE/../../custom` layout assumption | **parameterize** |
-| `scripts/bootstrap/build-path-redirect.sh` | build recipe for a core source, using the bootstrap toolchain | **keep** (bootstrap builds a core source) |
+| `scripts/bootstrap/build-dn-shim.sh` | build recipe for a core source, using the bootstrap toolchain | **keep** (bootstrap builds a core source) |
 | `install.sh` | bootstrap/product entry point that calls core | **keep** (product) |
 | `native/dn-launch.c` vs fork `dn-shell.c`/`dn-perl.c` | same invariant, different interpreter choice | **adapter parameter**, not a split |

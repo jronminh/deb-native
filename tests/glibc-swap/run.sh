@@ -72,7 +72,7 @@ info "every binary's interpreter is the prefix's own ld-linux (no ld-dn)"
 PRE=$P/etc/ld.so.preload
 [ -f "$PRE" ] || fail "no $PRE"
 shim=$(head -n1 "$PRE")
-[ "$shim" = "$P/usr/lib/deb-native/path-redirect.so" ] \
+[ "$shim" = "$P/usr/lib/deb-native/dn-shim.so" ] \
   || fail "ld.so.preload points elsewhere: '$shim'"
 [ -x "$shim" ] || fail "shim not executable: $shim"
 [ -s "$P/usr/etc/ld.so.cache" ] || fail "ld.so.cache missing/empty (ldconfig did not run)"

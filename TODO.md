@@ -166,7 +166,7 @@ as a fallback.
 where apt/dpkg/maintainer scripts run as root. Only the identity is
 faked; no right is gained, nothing is recorded.
 
-**Status**: released. The shim (`native/path-redirect.c`) fakes
+**Status**: released. The shim (`native/dn-shim.c`) fakes
 `get[e]uid`/`get[e]gid`/`getres[ug]id`/`getgroups` -> 0, `stat` ownership,
 no-ops `chown`/`set*id`/`setgroups`/`initgroups`, and `USER`/`LOGNAME` in
 the environ array; `dn-trace` does the same at syscall exit for static
@@ -401,7 +401,7 @@ overrides) is a config edit in the prefix, no rebuild.
 compiled defaults reproduce the pre-0.5.2 environment when the file is
 absent, so a fresh prefix still bootstraps. `setup-runtime.sh` installs
 the file once (a prefix's own edits survive a reinstall) and replaces
-binaries atomically. `native/path-redirect.c` consumes
+binaries atomically. `native/dn-shim.c` consumes
 `DN_REDIRECT_PREFIXES`, so `ld-dn.conf`'s `shim-prefix` changes the shim's
 redirect roots with no rebuild. `tests/ld-dn-config/run.sh` covers
 defaults, the default file, overrides, per-program blocks and fail-open.
@@ -509,7 +509,7 @@ under `termux/files/` -- no rank, only the bootstrap-time borrow
 **Progress 2026-10-04 (P4 proven on branch `0.7.0`)**: a real Debian
 `apt`/`dpkg` now installs and runs *inside the prefix*, with no apt rebuild
 or patch -- the shim "fools" it. Two shim gaps closed in
-`native/path-redirect.c`: (1) `system()`/`popen()`/`pclose()` -- glibc runs
+`native/dn-shim.c`: (1) `system()`/`popen()`/`pclose()` -- glibc runs
 `/bin/sh` through libc-internal calls the shim never saw, so apt's hardcoded
 `Args[0]="/bin/sh"` hooks hit Bionic toybox and aborted; now routed to the
 prefix's own `dash`. (2) `link()`/`linkat()` fall back to a copy -- Android
@@ -558,7 +558,7 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   `$TP/etc/resolv.conf` symlink (`setup-apt-prefix.sh:169`) and the
   `$PREFIX/glibc/etc` NSS bind (`native/dn-run.c:184-186,237`); replace
   termux-exec with our own shebang handling, or drop it
-  (`native/path-redirect.c:230-308`); make `install.sh` upgrade an existing
+  (`native/dn-shim.c:230-308`); make `install.sh` upgrade an existing
   prefix in place. Done when the harness passes run-by-name + DNS.
 - **M2 Package manager inside the prefix**: the stand-ins exec `$TP/bin/*`
   (`scripts/bootstrap/dn-standins.sh:26-116`; drivers
@@ -591,7 +591,7 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
 - **M4 Acceptance and release**: a CI job that simulates the broken prefix
   and runs the by-name/apt/DNS/toolchain/git suite; tag `v0.7.0-prealpha`.
 - **Dedup the redirect set**: `/usr /etc /var /opt /bin /sbin` is spelled
-  in four places that must agree -- `native/path-redirect.c:200-212`,
+  in four places that must agree -- `native/dn-shim.c:200-212`,
   `native/dn-run.c:221`, `scripts/install/normalize-symlinks.sh:16` and the
   tracer binds -- into one source.
 
@@ -653,7 +653,7 @@ Bionic children.
   PATH/priv fallbacks.
 
 Not needed: **no CI bundle rebuild** -- the loader/shim self-derive the live
-prefix (`native/path-redirect.c` `dn_init` via `dladdr`; glibc-patch commits
+prefix (`native/dn-shim.c` `dn_init` via `dladdr`; glibc-patch commits
 `90f2528`, `297909d`, `1a4780d`, `9b328eb`, `59985d9`), and the shim code is
 kept from the local build (`dn-install-glibc.sh`). Only a static program /
 `ldconfig` falls back to the compiled prefix (0.6.1 Tier 1).
@@ -764,7 +764,7 @@ untranslated. Tracked in
 [GitHub issue #1](https://github.com/jronminh/deb-native/issues/1).
 
 **Fixed 2026-09-30 (runtime component audit, below, has the full
-writeup)**: a real, root cause bug — `path-redirect.c`'s
+writeup)**: a real, root cause bug — `dn-shim.c`'s
 `target_is_glibc()` checked a target's `PT_INTERP` for `"ld-linux"`/
 `"/glibc/"`, which never matches this project's own translated binaries
 (rewritten to `ld-dn` by `dn-translate-deb.sh`) — misclassifying nearly
@@ -840,7 +840,7 @@ entries.
 
 ## Runtime component audit (debt from rapid early development)
 
-**Goal**: the runtime support components (`native/path-redirect.c` the
+**Goal**: the runtime support components (`native/dn-shim.c` the
 shim, `native/ld-dn.c` the loader stub, `native/dn-launch.c`/`dn-run.c`,
 the translate-time scripts that wire them together) were built fast,
 iteratively, patch-by-patch as each new failure surfaced (`docs/log/findings/`
@@ -853,13 +853,13 @@ not just reactively when something crashes.
 
 **Status**: first full pass done, 2026-09-30, all five items closed out.
 Diagnostic-first approach worked where reading-the-source-alone hadn't:
-temporary debug instrumentation in `path-redirect.c` (kept, gated on the
+temporary debug instrumentation in `dn-shim.c` (kept, gated on the
 existing `DN_REDIRECT_DEBUG` env var, zero cost when unset) found the
 actual mechanism behind the `find -exec test`/`env test` segfault in one
 run, after source-reading alone had produced a confident, wrong
 prediction. Three real bugs found and fixed, all one root pattern:
 
-- **`path-redirect.c`'s `target_is_glibc()`** checked `PT_INTERP` for
+- **`dn-shim.c`'s `target_is_glibc()`** checked `PT_INTERP` for
   `"ld-linux"`/`"/glibc/"` — never matches this project's own translated
   binaries (`ld-dn`), so it misclassified nearly every prefix glibc
   program as Bionic. Consequence: `bionic_env()`'s `PATH`-reordering
@@ -950,7 +950,7 @@ should re-read the rest of the runtime for the same class of misnomer.
   (`docs/log/android-seccomp-audit.md`). Same reasoning noted in
   `third_party/glibc-android-patches/README.md`'s manual recipe for when
   the real own-glibc build replaces the stand-in.
-- [x] ~~`path-redirect.c`'s shim only redirected `/usr`, `/etc`, `/var`,
+- [x] ~~`dn-shim.c`'s shim only redirected `/usr`, `/etc`, `/var`,
   `/opt`, `/root` -- `ld` couldn't find `/lib/aarch64-linux-gnu/libc.so.6`
   linking a plain `gcc -o hello hello.c`~~ — fixed 2026-10-01: added
   `/lib`, `/bin`, `/sbin` as three more redirected prefixes (Debian's own

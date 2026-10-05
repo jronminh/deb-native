@@ -9,7 +9,7 @@
 # Usage: dn-install-glibc.sh PREFIX DEBS_DIR
 #   DEBS_DIR/libc6.deb          Debian's real libc6 (not our own build).
 #   DEBS_DIR/libc-bin.deb       Debian's real libc-bin.
-#   DEBS_DIR/path-redirect.so   the shim, built against THIS prefix's own
+#   DEBS_DIR/dn-shim.so   the shim, built against THIS prefix's own
 #                                glibc (symbol versioning: a shim built
 #                                against Termux's glibc aborts under this
 #                                loader).
@@ -34,8 +34,8 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # docs/spec/dn-glibc-prefix.md "Install order").
 DPKG="$TP/bin/dpkg --admindir=$DN/var/lib/dpkg --instdir=$DN --force-not-root --force-script-chrootless --force-depends"
 
-for f in libc6.deb libc-bin.deb path-redirect.so; do
-  [ -e "$DEBS/$f" ] || { echo "E: $DEBS/$f not found (dn-install-glibc.sh needs libc6.deb, libc-bin.deb, path-redirect.so)" >&2; exit 1; }
+for f in libc6.deb libc-bin.deb dn-shim.so; do
+  [ -e "$DEBS/$f" ] || { echo "E: $DEBS/$f not found (dn-install-glibc.sh needs libc6.deb, libc-bin.deb, dn-shim.so)" >&2; exit 1; }
 done
 [ -d "$DEBS/files" ] || { echo "E: $DEBS/files not found (the 10 patched glibc files)" >&2; exit 1; }
 
@@ -79,17 +79,17 @@ done
 LIBDIR="$DN/usr/lib/deb-native"
 mkdir -p "$LIBDIR"
 # Keep the shim setup-runtime.sh just built from this checkout's
-# native/path-redirect.c (0.7.0: it carries the system()/popen()/pclose() and
+# native/dn-shim.c (0.7.0: it carries the system()/popen()/pclose() and
 # link()/linkat() fallbacks the Debian apt/dpkg deploy needs). Only fall back
 # to the bundle's prebuilt shim if the local build is missing -- the rolling
 # glibc-bundle predates these fixes.
-if [ ! -e "$LIBDIR/path-redirect.so" ]; then
-  cp -f "$DEBS/path-redirect.so" "$LIBDIR/path-redirect.so"
+if [ ! -e "$LIBDIR/dn-shim.so" ]; then
+  cp -f "$DEBS/dn-shim.so" "$LIBDIR/dn-shim.so"
 fi
-chmod 755 "$LIBDIR/path-redirect.so"
+chmod 755 "$LIBDIR/dn-shim.so"
 
 mkdir -p "$DN/etc"
-printf '%s\n' "$LIBDIR/path-redirect.so" > "$DN/etc/ld.so.preload"
+printf '%s\n' "$LIBDIR/dn-shim.so" > "$DN/etc/ld.so.preload"
 
 # SYSCONFDIR for this build is <prefix>/usr/etc (configure --prefix=$DN/usr).
 # libc-bin's own ./etc/ld.so.conf (the guest /etc) is a different file our

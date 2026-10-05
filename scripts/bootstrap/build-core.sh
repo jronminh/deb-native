@@ -2,7 +2,7 @@
 # Build the runtime artifacts from source into a cache shared with the
 # installer. No prefix is touched (build stage; MODULARIZE.md P2).
 #
-# Artifacts: path-redirect.so (the shim), dn-run (launcher/classifier),
+# Artifacts: dn-shim.so (the shim), dn-run (launcher/classifier),
 # dn-trace (the syscall tracer, optional), dn-shell/dn-perl (the
 # maintainer-script interpreter), adbwire (optional). Built once per checkout
 # into $SRC/.build; install-runtime.sh copies them into a prefix.
@@ -20,9 +20,9 @@ CACHE="$SRC/.build"
 mkdir -p "$CACHE"
 stale() { [ ! -e "$1" ] || [ "$2" -nt "$1" ]; }   # ARTIFACT SOURCE
 
-# The path-redirect shim (glibc LD_PRELOAD library).
-if stale "$CACHE/path-redirect.so" "$SRC/path-redirect.c"; then
-  "$HERE/build-path-redirect.sh" "$CACHE/path-redirect.so"
+# The dn-shim shim (glibc LD_PRELOAD library).
+if stale "$CACHE/dn-shim.so" "$SRC/dn-shim.c"; then
+  "$HERE/build-dn-shim.sh" "$CACHE/dn-shim.so"
 fi
 
 # Launch dispatcher: classifies a target's ELF PT_INTERP at launch and picks

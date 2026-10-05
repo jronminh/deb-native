@@ -57,7 +57,7 @@ plain `gcc` on Debian hardcodes `-dynamic-linker
 /lib/ld-linux-aarch64.so.1` into its link spec (baked into GCC's own
 build, `aarch64-linux.h`'s `GLIBC_DYNAMIC_LINKER` macro) — a path that
 does not exist on Android and that the kernel resolves itself at
-`execve()` time, before the path-redirect shim or anything else in
+`execve()` time, before the dn-shim shim or anything else in
 userspace ever runs. The fix is a `specs` file dropped next to each
 installed `gcc` version's `libgcc.a` (GCC's own site-customization
 hook, no `gcc`/`binutils` patch or rebuild) that swaps just that one

@@ -4,7 +4,7 @@
  *   dn-run REAL [args...]
  * and this decides, at launch, which mechanism REAL needs:
  *
- *   glibc      -> LD_PRELOAD the path-redirect shim (+ DN_INSTDIR, PATH), exec
+ *   glibc      -> LD_PRELOAD the dn-shim shim (+ DN_INSTDIR, PATH), exec
  *   glibc + NSS -> syscall tracer: statically-bound libc NSS reads are
  *             invisible to the shim, and Termux glibc's sysconfdir is a host
  *             path, so bind $INSTDIR/etc over it
@@ -124,7 +124,7 @@ static int classify(const char *path, int *nss, char *interp, size_t isz) {
      * ld-linux match below. A glibc binary that slipped through to
      * C_DYNOTHER would get a bare execv() with no NSS check, silently
      * skipping the tracer routing this function exists for. Same
-     * classification as path-redirect.c's target_is_glibc() (runtime
+     * classification as dn-shim.c's target_is_glibc() (runtime
      * component audit, 2026-09-30). */
     if (strstr(in, "ld-linux")) {
       *nss = has_nss_import(fd);
@@ -197,14 +197,14 @@ static int try_adopt(const char *path) {
 }
 
 static void launch_glibc(char **args) {
-  /* Fused loader (dn-glibc): the path-redirect shim is delivered by
+  /* Fused loader (dn-glibc): the dn-shim shim is delivered by
    * <prefix>/etc/ld.so.preload and the loader ignores LD_PRELOAD
    * (docs/spec/dn-glibc-prefix.md), so do not inject it here -- just drop the
    * inherited host preload (on Termux, termux-exec, built for another glibc).
    * Preserve it for a Bionic child the shim may exec: capture before
    * unsetting. */
   const char *inh = getenv("LD_PRELOAD");
-  if (inh && *inh && !strstr(inh, "path-redirect.so")) {
+  if (inh && *inh && !strstr(inh, "dn-shim.so")) {
     /* Prefer the prefix's vendored copy (setup-runtime.sh) so a Bionic child
      * the shim may exec needs nothing under Termux's tree at runtime. */
     char hostpre[4096];

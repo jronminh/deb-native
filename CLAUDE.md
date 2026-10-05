@@ -17,7 +17,7 @@ by name, unprivileged.
 
 Three path mechanisms:
 - **Maintainer scripts** — plain-text path rewrite (`scripts/install/patch-scripts-tree.sh`).
-- **Dynamic glibc binaries** — `native/path-redirect.c`, an `LD_PRELOAD`
+- **Dynamic glibc binaries** — `native/dn-shim.c`, an `LD_PRELOAD`
   shim interposing path-taking libc functions. Complete at its layer —
   `docs/spec/shim/shim-coverage.md`.
 - **Syscall level / can't-be-shimmed cases** — `tracer/` (`dn-trace`, a

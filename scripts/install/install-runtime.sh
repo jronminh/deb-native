@@ -37,7 +37,7 @@ put() {                                            # FROM TO
 
 # Copy the built artifacts; skip any that build-core.sh did not produce
 # (the tracer and adbwire are optional).
-for a in path-redirect.so dn-run dn-trace; do
+for a in dn-shim.so dn-run dn-trace; do
   [ -e "$CACHE/$a" ] || continue
   put "$CACHE/$a" "$LIBDIR/$a"
 done

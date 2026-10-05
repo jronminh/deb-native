@@ -115,9 +115,9 @@ static void dn_init(void) {
   if (!g_root) {
     /* Nothing injected DN_INSTDIR (fused-loader mode): derive the prefix
      * from this shim's own load path, which is
-     * <prefix>/usr/lib/deb-native/path-redirect.so wherever it is listed
+     * <prefix>/usr/lib/deb-native/dn-shim.so wherever it is listed
      * (ld.so.preload / LD_PRELOAD). dladdr() reports that path. */
-    static const char suffix[] = "/usr/lib/deb-native/path-redirect.so";
+    static const char suffix[] = "/usr/lib/deb-native/dn-shim.so";
     static char rootbuf[4096];
     Dl_info info;
     if (dladdr((void *)&dn_init, &info) && info.dli_fname) {
@@ -132,7 +132,7 @@ static void dn_init(void) {
   g_rootlen = g_root ? strlen(g_root) : 0;
   g_debug = getenv("DN_REDIRECT_DEBUG") != NULL;
   if (g_debug)
-    fprintf(stderr, "[path-redirect] root=%s\n", g_root ? g_root : "(null)");
+    fprintf(stderr, "[dn-shim] root=%s\n", g_root ? g_root : "(null)");
   g_bionic_preload = getenv("DN_BIONIC_PRELOAD");
   const char *rp = getenv("DN_REDIRECT_PREFIXES");
   if (rp && *rp) {
@@ -227,7 +227,7 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
   if (g_rootlen + plen + 1 > bufsz) return path;
   memcpy(buf, g_root, g_rootlen);
   memcpy(buf + g_rootlen, path, plen + 1);
-  if (g_debug) fprintf(stderr, "[path-redirect] %s -> %s\n", path, buf);
+  if (g_debug) fprintf(stderr, "[dn-shim] %s -> %s\n", path, buf);
   return buf;
 }
 
@@ -242,7 +242,7 @@ static const char *rewrite(const char *path, char *buf, size_t bufsz) {
  * system-wide can break Termux packages, so we must not.
  *
  * The launcher/wrapper captures whatever LD_PRELOAD it inherited (i.e.
- * termux-exec) into DN_BIONIC_PRELOAD before installing the path-redirect
+ * termux-exec) into DN_BIONIC_PRELOAD before installing the dn-shim
  * shim. Here we put that back for a Bionic child; if there was none (e.g.
  * running under dpkg, which has no preload), LD_PRELOAD is removed.
  */
@@ -308,10 +308,10 @@ static char **bionic_env(char *const *envp) {
   if (want && !saw && n < 2045) out[n++] = entry;
   out[n] = NULL;
   if (g_debug) {
-    fprintf(stderr, "[path-redirect] bionic_env: %d entries out:\n", n);
+    fprintf(stderr, "[dn-shim] bionic_env: %d entries out:\n", n);
     for (int i = 0; i < n; i++)
       if (!strncmp(out[i], "LD_", 3) || !strncmp(out[i], "PATH=", 5) || !strncmp(out[i], "COMPILER_PATH", 13))
-        fprintf(stderr, "[path-redirect]   %s\n", out[i]);
+        fprintf(stderr, "[dn-shim]   %s\n", out[i]);
   }
   return out;
 }
@@ -1064,9 +1064,9 @@ static int do_exec(execve_t real, const char *rp, char *const argv[],
                    char *const envp[]) {
   char interp[256], sarg[256];
   char ibuf[4096];
-  if (g_debug) fprintf(stderr, "[path-redirect] do_exec: rp=%s\n", rp ? rp : "(null)");
+  if (g_debug) fprintf(stderr, "[dn-shim] do_exec: rp=%s\n", rp ? rp : "(null)");
   if (target_is_script(rp, interp, sizeof interp, sarg, sizeof sarg)) {
-    if (g_debug) fprintf(stderr, "[path-redirect] do_exec: script branch, interp=%s\n", interp);
+    if (g_debug) fprintf(stderr, "[dn-shim] do_exec: script branch, interp=%s\n", interp);
     const char *iw = map_shebang_interp(interp, ibuf, sizeof ibuf);
     if (iw && access(iw, X_OK) == 0) {
       static char *na[1024];
@@ -1109,10 +1109,10 @@ static int do_exec(execve_t real, const char *rp, char *const argv[],
         return real(dnrun, na, bionic_env(envp));
       }
     }
-    if (g_debug) fprintf(stderr, "[path-redirect] do_exec: glibc branch (LD_PRELOAD kept), rp=%s\n", rp);
+    if (g_debug) fprintf(stderr, "[dn-shim] do_exec: glibc branch (LD_PRELOAD kept), rp=%s\n", rp);
     return real(rp, argv, envp);
   }
-  if (g_debug) fprintf(stderr, "[path-redirect] do_exec: bionic branch (LD_PRELOAD stripped), rp=%s\n", rp);
+  if (g_debug) fprintf(stderr, "[dn-shim] do_exec: bionic branch (LD_PRELOAD stripped), rp=%s\n", rp);
   return real(rp, argv, bionic_env(envp));
 }
 
@@ -1120,7 +1120,7 @@ int execve(const char *pathname, char *const argv[], char *const envp[]) {
   static execve_t real;
   if (!real) real = (execve_t)dlsym(RTLD_NEXT, "execve");
   char buf[4096];
-  if (g_debug) fprintf(stderr, "[path-redirect] execve() called: pathname=%s\n", pathname ? pathname : "(null)");
+  if (g_debug) fprintf(stderr, "[dn-shim] execve() called: pathname=%s\n", pathname ? pathname : "(null)");
   return do_exec(real, rewrite(pathname, buf, sizeof buf), argv, envp);
 }
 
@@ -1141,7 +1141,7 @@ int execv(const char *pathname, char *const argv[]) {
 static int path_search_exec(const char *file, char *const argv[], char *const envp[]) {
   if (strchr(file, '/')) return execve(file, argv, envp);
   const char *path = getenv("PATH");
-  if (g_debug) fprintf(stderr, "[path-redirect] path_search_exec: file=%s PATH=%s\n", file, path ? path : "(null)");
+  if (g_debug) fprintf(stderr, "[dn-shim] path_search_exec: file=%s PATH=%s\n", file, path ? path : "(null)");
   if (!path || !*path) path = "/bin:/usr/bin";
   char buf[4096];
   const char *p = path;
@@ -1155,7 +1155,7 @@ static int path_search_exec(const char *file, char *const argv[], char *const en
       if (len + 1 + fl < sizeof buf) {
         memcpy(buf + len + 1, file, fl + 1);
         if (access(buf, X_OK) == 0) {
-          if (g_debug) fprintf(stderr, "[path-redirect] path_search_exec: found %s\n", buf);
+          if (g_debug) fprintf(stderr, "[dn-shim] path_search_exec: found %s\n", buf);
           return execve(buf, argv, envp);
         }
       }
@@ -1164,13 +1164,13 @@ static int path_search_exec(const char *file, char *const argv[], char *const en
     p = end + 1;
   }
   if (access(file, X_OK) == 0) return execve(file, argv, envp);
-  if (g_debug) fprintf(stderr, "[path-redirect] path_search_exec: ENOENT for %s\n", file);
+  if (g_debug) fprintf(stderr, "[dn-shim] path_search_exec: ENOENT for %s\n", file);
   errno = ENOENT;
   return -1;
 }
 
 int execvp(const char *file, char *const argv[]) {
-  if (g_debug) fprintf(stderr, "[path-redirect] execvp() called: file=%s\n", file ? file : "(null)");
+  if (g_debug) fprintf(stderr, "[dn-shim] execvp() called: file=%s\n", file ? file : "(null)");
   return path_search_exec(file, argv, environ);
 }
 

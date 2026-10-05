@@ -52,7 +52,7 @@
 #include "arch.h"
 
 /* deb-native fake root: a traced program sees itself as root, as prefix
- * programs do through the shim (native/path-redirect.c, dn_init): the
+ * programs do through the shim (native/dn-shim.c, dn_init): the
  * identity calls report 0, files owned by the real uid/gid show as
  * root's, and set*id()/chown() refused only for lack of rights succeed.
  * Nothing is recorded; no right is gained. DN_ID=user (in dn-trace's
