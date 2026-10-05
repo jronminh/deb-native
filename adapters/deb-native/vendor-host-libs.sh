@@ -53,12 +53,8 @@ if command -v patchelf >/dev/null 2>&1; then
         || echo "W: patchelf could not retarget $f; it keeps its Termux rpath"
     fi
   done
-  for f in "$BINDIR/dn-sh" "$BINDIR/dn-perl"; do
-    if [ -f "$f" ]; then
-      patchelf --set-rpath '$ORIGIN/../lib/deb-native/host' "$f" \
-        || echo "W: patchelf could not retarget $f; it keeps its Termux rpath"
-    fi
-  done
+  # The maintainer-script interpreters (dn-sh, dn-perl) are glibc ELFs now;
+  # install-runtime.sh sets their interpreter and rpath, so leave them alone.
 else
   echo "W: patchelf not found; the Bionic host binaries keep their Termux rpath"
 fi
