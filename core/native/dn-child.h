@@ -54,6 +54,20 @@ static int dn_prepare_child(char *inst, size_t sz) {
            inst, inst, inst, inst, inst, inst, inst,
            (home && *home) ? home : "/nonexistent");
 
+  /* Bootstrap: before the prefix has its own dpkg, append Termux's glibc and
+   * Bionic dirs so maintainer scripts find a shell's coreutils (0.7.0 R1). */
+  {
+    char d[4096];
+    snprintf(d, sizeof d, "%s/usr/bin/dpkg", inst);
+    if (access(d, X_OK) != 0) {
+      const char *pfx = getenv("DN_TERMUX_PREFIX");
+      if (!pfx || !*pfx) pfx = getenv("PREFIX");
+      if (!pfx || !*pfx) pfx = "/data/data/com.termux/files/usr";
+      size_t l = strlen(path);
+      snprintf(path + l, sizeof path - l, ":%s/glibc/bin:%s/bin", pfx, pfx);
+    }
+  }
+
   setenv("LD_PRELOAD", shim, 1);
   setenv("DN_INSTDIR", inst, 1);
   setenv("PATH", path, 1);

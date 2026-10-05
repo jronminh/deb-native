@@ -41,17 +41,11 @@ for a in dn-shim.so dn-run dn-trace; do
   [ -e "$CACHE/$a" ] || continue
   put "$CACHE/$a" "$LIBDIR/$a"
 done
-# The maintainer-script interpreters were built by build-core.sh (glibc ELFs
-# via the host clang); point them at the prefix's fused loader and install.
-LD="$INSTDIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+# The maintainer-script interpreters are Bionic executables built by
+# build-core.sh; just install them (no loader/rpath needed).
 for n in dn-sh dn-perl; do
   [ -e "$CACHE/$n" ] || { echo "W: no $n in the build cache; interpreter missing"; continue; }
   put "$CACHE/$n" "$BINDIR/$n"
-  if command -v patchelf >/dev/null 2>&1; then
-    patchelf --set-interpreter "$LD" "$BINDIR/$n" || true
-    # find libc.so.6 next to the loader; $ORIGIN keeps it relocatable
-    patchelf --set-rpath '$ORIGIN/../lib/aarch64-linux-gnu' "$BINDIR/$n" || true
-  fi
 done
 [ -e "$CACHE/adbwire" ] && put "$CACHE/adbwire" "$LIBDIR/adbwire"
 
