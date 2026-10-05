@@ -47,7 +47,11 @@ LD="$INSTDIR/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 for n in dn-sh dn-perl; do
   [ -e "$CACHE/$n" ] || { echo "W: no $n in the build cache; interpreter missing"; continue; }
   put "$CACHE/$n" "$BINDIR/$n"
-  if command -v patchelf >/dev/null 2>&1; then patchelf --set-interpreter "$LD" "$BINDIR/$n" || true; fi
+  if command -v patchelf >/dev/null 2>&1; then
+    patchelf --set-interpreter "$LD" "$BINDIR/$n" || true
+    # find libc.so.6 next to the loader; $ORIGIN keeps it relocatable
+    patchelf --set-rpath '$ORIGIN/../lib/aarch64-linux-gnu' "$BINDIR/$n" || true
+  fi
 done
 [ -e "$CACHE/adbwire" ] && put "$CACHE/adbwire" "$LIBDIR/adbwire"
 
