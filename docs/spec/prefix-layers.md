@@ -46,12 +46,13 @@ The smallest prefix a host can install and enter. Its acceptance test is the
 same one every install ends with (`prefix-contract.md`): **the prefix's
 shell runs**.
 
-Seed packages (their files, from dpkg's own lists): `libc6`, `bash`, `dash`,
-`coreutils`, `sed`, `grep`, `tar`, `gzip`, `findutils`, `mawk`,
-`debianutils`, `base-files`, `base-passwd`, `libtinfo6`, `ca-certificates`,
-`patchelf` with `libstdc++6` and `libgcc-s1`. Every library their ELFs need
-(`DT_NEEDED`) is added until the set is closed. Plus the overlay: `dn-shell`,
-`dn-shim.so`, `dn-run`, `dn-trace`, `dn-elf`, `etc/ld.so.preload`, the loader
+Seed packages: Debian's **Essential** set (`base-files`, `base-passwd`,
+`bash`, `coreutils`, `dash`, `debianutils`, `diffutils`, `dpkg`, `findutils`,
+`grep`, `gzip`, `hostname`, `init-system-helpers`, `libc-bin`,
+`ncurses-base`, `ncurses-bin`, `perl-base`, `sed`, `tar`, plus `libc6`). Every
+library their ELFs need (`DT_NEEDED`) is added until the set is closed. Plus
+the overlay: `dn-shim.so`,
+`dn-run`, `dn-trace`, `dn-elf`, `etc/ld.so.preload`, the loader
 configuration, and the small `etc` files a shell and a resolver read
 (`passwd`, `group`, `hosts`, `nsswitch.conf`, `profile`, `bash.bashrc`,
 `inputrc`), and `etc/resolv.conf` as the link to the host's DNS file
@@ -106,7 +107,6 @@ to run and for apt to fetch the rest:
 - the essentials that package scripts call: `coreutils`, `sed`, `grep`, `gzip`,
   `tar`, `xz-utils`, `findutils`, `mawk`, `debianutils`, `base-files`,
   `base-passwd`, `login.defs`, `perl-base`, `libcrypt1`;
-- the tools the translation hook needs: `patchelf`;
 - the keyring apt verifies the mirror with: `debian-archive-keyring`.
 
 The rest of the 76 packages are not shipped. The prefix restores them itself

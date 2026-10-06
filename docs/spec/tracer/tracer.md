@@ -34,7 +34,7 @@ A Debian program in the prefix normally never meets the tracer:
 | program | how it runs | tracer? |
 |---|---|---|
 | dynamic glibc (every translated `.deb`) | its `PT_INTERP` is the prefix's own fused glibc loader, which reads the path shim from `ld.so.preload` and finds libraries via `ld.so.cache` | no |
-| script | its `#!` points into the prefix (or `dn-shell`/`dn-perl`) | no |
+| script | its `#!` points into the prefix (`bash`/`perl`) | no |
 | **static binary** | no loader, the shim cannot see it | **yes** |
 | **makes its own syscalls** (inline `svc`, `syscall()`) | the shim cannot see them (`scan-direct-syscalls.py`) | **yes** |
 | **glibc NSS lookups** (`getpwnam`, `getaddrinfo`, ...) | libc-internal, not interposable | **yes** |

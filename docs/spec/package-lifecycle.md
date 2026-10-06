@@ -33,7 +33,7 @@ Living doc: it tracks the shipped pipeline, not a proposal.
 | 0 | `apt update` — index | `scripts/prefix/dn-debian-index.sh`: rewrite `Architecture: all` -> `arm64` | prefix's own apt |
 | 1 | resolve + download | real `apt`, run through the `$DN/bin/apt*` launchers | prefix's own apt/dpkg |
 | 2 | `DPkg::Pre-Install-Pkgs` | `dn-hook-pre.sh` -> `dn-translate-deb.sh` (+ `patch-scripts-tree.sh`, `scripts/prefix/custom/`), then a collision check | `.deb` translation |
-| 3 | `dpkg --unpack` — `preinst` | `preinst` through the prefix's `dn-shell` | maintainer script + shim |
+| 3 | `dpkg --unpack` — `preinst` | `preinst` through the prefix's `bash` | maintainer script + shim |
 | 4 | `dpkg --configure` — `postinst` | `postinst`/`configure` + dpkg helpers/triggers | maintainer script + shim |
 | 5 | `DPkg::Post-Invoke` | `dn-hook-post.sh` -> `dn-fix-alternatives.sh` -> `normalize-symlinks.sh` -> `make-launchers.sh` -> `dn-fix-gcc-specs.sh` | prefix fixups |
 | 6 | run by name | launcher -> `dn-run` classifies, then the prefix loader/shim/`dn-trace` | runtime |

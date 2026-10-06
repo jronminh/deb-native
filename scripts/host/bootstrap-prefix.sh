@@ -16,8 +16,8 @@
 # is the result; re-running after a partial failure is safe (apt skips what is
 # installed).
 set -eu
-# The prefix root: dn-shell sets DN_INSTDIR; otherwise it is found from this
-# script's own location.
+# The prefix root: DN_INSTDIR when the caller set it; otherwise it is found
+# from this script's own location.
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 DN=${DN_INSTDIR:-$(CDPATH= cd -- "$HERE/../../../../.." && pwd)}
 PATH=$DN/usr/lib/deb-native/priv:$DN/usr/sbin:$DN/usr/bin:$DN/sbin:$DN/bin:$PATH

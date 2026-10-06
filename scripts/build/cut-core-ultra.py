@@ -14,10 +14,10 @@ import shutil
 import struct
 import sys
 
-SEED = ("libc6 bash dash coreutils sed grep tar gzip findutils libtinfo6 "
-        "base-files base-passwd debianutils mawk patchelf libstdc++6 "
-        "libgcc-s1 ca-certificates").split()
-EXTRA = ["usr/bin/dn-shell", "usr/lib/deb-native/dn-shim.so",
+SEED = ("libc6 libc-bin base-files base-passwd bash dash coreutils debianutils "
+        "diffutils dpkg findutils grep gzip hostname init-system-helpers "
+        "ncurses-base ncurses-bin perl-base sed tar").split()
+EXTRA = ["usr/lib/deb-native/dn-shim.so",
          "usr/lib/deb-native/dn-run", "usr/lib/deb-native/dn-trace",
          "etc/ld.so.preload", "usr/etc/ld.so.conf", "usr/etc/ld.so.conf.d",
          "etc/hosts", "etc/nsswitch.conf", "etc/host.conf", "etc/gai.conf",

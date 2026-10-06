@@ -51,7 +51,7 @@ both to be absolute. Moving a prefix therefore means rewriting those paths --
 
 Relocation is split so that the hard part happens where tools are:
 
-- **at build time**, with a toolchain and `patchelf`, every glibc ELF's
+- **at build time**, with a toolchain and `dn-elf`, every glibc ELF's
   `PT_INTERP` is given a fixed **capacity** (256 bytes), and the build records
   each one's **file offset**;
 - **at install time**, the host's shell overwrites those bytes with `dd` and
@@ -156,7 +156,7 @@ loader=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 relocate=.dn/relocate.sh
 install=.dn/install.sh
 bootstrap=.dn/bootstrap.sh
-entry=usr/bin/dn-shell -i
+entry=usr/bin/bash -i
 size=200
 ```
 
@@ -261,7 +261,7 @@ is 86).
 The build guarantees these, so relocation stays the steps above:
 
 1. **Every glibc ELF's `PT_INTERP` has the full capacity** (256 bytes): the
-   build sets a 255-character placeholder with `patchelf` (the only point
+   build sets a 255-character placeholder with `dn-elf` (the only point
    where its layout rewrite runs, and where the result can be checked), then
    writes the real loader path and a NUL at its start, and records the
    offset.

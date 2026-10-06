@@ -118,8 +118,8 @@ fix_gcc_specs() {
 # 3. Launchers. Only static programs get one: they have no PT_INTERP, so the
 #    kernel loads them with nothing to set up, and the shim cannot see their
 #    syscalls. Dynamic programs run directly through the prefix's loader and
-#    need no entry. Regenerated from scratch on every run; termux-*, dn-shell
-#    and dn-adopt are left alone.
+#    need no entry. Regenerated from scratch on every run; termux-* and
+#    dn-adopt are left alone.
 make_launchers() {
   LIBDIR="$DN/usr/lib/deb-native"
   LAUNCHDIR="$LIBDIR/bin"
@@ -130,7 +130,7 @@ make_launchers() {
 
   for e in "$LAUNCHDIR"/*; do
     [ -e "$e" ] || [ -L "$e" ] || continue
-    case "${e##*/}" in termux-*|dn-shell|dn-adopt) continue ;; esac
+    case "${e##*/}" in termux-*|dn-adopt) continue ;; esac
     rm -f "$e"
   done
 
@@ -146,7 +146,7 @@ make_launchers() {
     for f in "$d"/*; do
       [ -f "$f" ] && [ -x "$f" ] || continue
       name=${f##*/}
-      case "$name" in dn-shell|dn-adopt|termux-*|apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split) continue ;; esac
+      case "$name" in dn-adopt|termux-*|apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split) continue ;; esac
       grep -qxF "$f" "$BASE" && continue
       [ "$(head -c4 "$f" | od -An -tx1 | tr -d ' \n')" = 7f454c46 ] || continue
       [ -z "$("$ELF" get-interp "$f" 2>/dev/null)" ] || continue

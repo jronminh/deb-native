@@ -1,6 +1,6 @@
 /* dn-child.h — shared setup for the maintainer-script interpreters.
  *
- * `dn-run` (and dn-shell) need the same environment set up before they exec a
+ * `dn-run` needs the same environment set up before it execs a
  * program. A
  * shebang interpreter must be a real ELF: the kernel follows only one `#!`
  * level, so an interpreter that is itself a script leaves dpkg falling back
@@ -61,7 +61,7 @@ static inline void dn_build_path(const char *inst, char *path, size_t sz) {
            (home && *home) ? home : "/nonexistent");
 }
 
-/* Derive $INSTDIR and set the environment of a dn-shell child.
+/* Derive $INSTDIR and set the environment of a child.
  * Returns 0 on success, -1 if /proc/self/exe could not be read. inst must be
  * at least 4096 bytes. */
 static inline int dn_prepare_child(char *inst, size_t sz) {

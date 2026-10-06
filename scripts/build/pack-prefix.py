@@ -208,7 +208,7 @@ def main():
               "relocate=.dn/relocate.sh", "install=.dn/install.sh"]
     if has_profile:
         lines.append("bootstrap=.dn/bootstrap.sh")
-    lines += ["entry=usr/bin/dn-shell -i", f"size={size_mib}"]
+    lines += ["entry=usr/bin/bash -i", f"size={size_mib}"]
     with open(os.path.join(dn, "contract"), "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"pack-prefix: {a.name}: {len(elf)} elf, {len(text)} text, "

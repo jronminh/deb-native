@@ -14,7 +14,7 @@
 # Every .deb about to be unpacked is prepared in place, before dpkg sees it:
 #   1. dn-translate-deb.sh: Architecture all -> arm64, custom/ fixes, ELFs
 #      repointed at the libc6 stand-in, maintainer-script shebangs ->
-#      dn-shell -- one unpack/repack;
+#      the prefix's `bash`/`perl` -- one unpack/repack;
 #   2. collision check: refuse a file that exists in the prefix but no
 #      package owns -- deb-native's own runtime and launchers.
 # Any failure fails the hook, and apt then runs nothing.
