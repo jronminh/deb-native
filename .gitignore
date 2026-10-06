@@ -17,3 +17,4 @@ tests/tracer-nss/nss-probe
 # Core dumps (kept distinct from the core/ module directory).
 core.[0-9]*
 *.core
+core/native/.build-glibc/
