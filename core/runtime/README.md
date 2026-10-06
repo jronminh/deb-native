@@ -13,6 +13,14 @@ Front end used after a prefix already exists. See
   an allowlist; the updater for the parts `apt` cannot touch.
 - `make-launchers.sh` — exposes a prefix's installed programs by name:
   one launcher entry per program, first on `PATH`.
+- `ship-prefix.sh` — the one install path every host uses for a prefix
+  artifact: read `.dn/contract` without extracting, check it, extract, run
+  the prefix's relocation script, check its shell runs
+  ([`../../docs/spec/prefix-contract.md`](../../docs/spec/prefix-contract.md)).
+  POSIX sh for the host's own shell (Android `mksh` + toybox is enough).
+- `relocate.sh` — copied into every artifact as `.dn/relocate.sh`: rewrites
+  the build path to where the prefix landed, `PT_INTERP` by byte patch at the
+  offsets in `.dn/baked-paths`, text with `sed -i`. Run by the host's shell.
 - `install-hooks.sh` — copies the apt translate/index hook scripts (and the
   files they call) inside the prefix, so the prefix's own `apt` translates
   packages without depending on the checkout's path.

@@ -27,6 +27,8 @@ entry	core/runtime/make-launchers.sh
 entry	core/runtime/dn-adopt.sh
 entry	core/runtime/dn-update.sh
 entry	core/runtime/dn-finish.sh
+entry	core/runtime/ship-prefix.sh
+entry	core/runtime/relocate.sh
 
 # --- sources the build compiles --------------------------------------------
 source	core/native/dn-shim.c
