@@ -29,6 +29,8 @@
 #                 `name ver arch` per line (a .dn/packages file). Required.
 #   DN_PROFILE    optional: a file of package names written as .dn/profile
 #                 (the packages the prefix restores from the mirror)
+#   STAGE_OUT     optional: copy the built tree here before packaging, so a
+#                 caller can cut core-ultra from it (cut-core-ultra.py)
 #   OUT           output tarball
 #
 # Usage: DN_GLIBC_PREFIX=... DN_OVERLAY=... PREFIX_ROOT=... DEB_LIST=... \
@@ -43,6 +45,7 @@ OUT=${2:?usage: build-core-deb.sh BASE OUT.tar.gz}
 MIRROR=${DEB_MIRROR:-http://deb.debian.org/debian}
 SUITE=${DEB_SUITE:-trixie}
 SECURITY=${DEB_SECURITY:-http://security.debian.org/debian-security}
+STAGE_OUT=${STAGE_OUT:-}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd)
 LOADER=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
@@ -203,6 +206,7 @@ done
 #    and the stash of the patched glibc files that dn-fix-glibc restores.
 #    The apt configuration names the hooks by their installed path.
 sh "$ROOT/scripts/host/install-hooks.sh" "$STAGE"
+mkdir -p "$STAGE/usr/lib/deb-native/scripts/runtime"
 cp -f "$ROOT/scripts/host/bootstrap-prefix.sh" "$STAGE/usr/lib/deb-native/scripts/runtime/"
 # The alternatives that mawk's configure step would make: the package manager's
 # and the hooks' awk is the link, not the file (a shipped tree is not configured).
@@ -213,6 +217,17 @@ echo "$PATCHED" | while IFS= read -r rel; do
   mkdir -p "$GS/$(dirname "$rel")"
   cp -f "$DN_GLIBC_PREFIX/$rel" "$GS/$rel"
 done
+
+# The loader configuration the overlay needs. With a package-derived BASE these
+# may be absent, so the build writes them (the paths are baked and relocated
+# with the rest by install.sh).
+mkdir -p "$STAGE/etc" "$STAGE/usr/etc/ld.so.conf.d"
+[ -e "$STAGE/etc/ld.so.preload" ] || \
+  printf '%s\n' "$PREFIX_ROOT/usr/lib/deb-native/dn-shim.so" > "$STAGE/etc/ld.so.preload"
+[ -e "$STAGE/usr/etc/ld.so.conf" ] || \
+  printf 'include %s/usr/etc/ld.so.conf.d/*.conf\n' "$PREFIX_ROOT" > "$STAGE/usr/etc/ld.so.conf"
+[ -e "$STAGE/usr/etc/ld.so.conf.d/dn.conf" ] || \
+  printf '%s/usr/lib/aarch64-linux-gnu\n%s/usr/lib\n' "$PREFIX_ROOT" "$PREFIX_ROOT" > "$STAGE/usr/etc/ld.so.conf.d/dn.conf"
 HK=$PREFIX_ROOT/usr/lib/deb-native/scripts/install
 mkdir -p "$STAGE/etc/apt/apt.conf.d"
 cat > "$STAGE/etc/apt/apt.conf.d/50deb-native" <<CONF
@@ -241,6 +256,13 @@ SRC
 if [ -n "${DN_PROFILE:-}" ]; then
   mkdir -p "$STAGE/.dn"
   cp -f "$DN_PROFILE" "$STAGE/.dn/profile"
+fi
+
+# Keep the built tree when a caller wants to cut core-ultra from it.
+if [ -n "$STAGE_OUT" ]; then
+  rm -rf "$STAGE_OUT"
+  cp -a "$STAGE" "$STAGE_OUT"
+  echo "build-core-deb: tree kept in $STAGE_OUT"
 fi
 
 sh "$ROOT/scripts/build/package-prefix.sh" "$STAGE" --root "$PREFIX_ROOT" --name core-deb \
