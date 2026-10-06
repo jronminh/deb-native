@@ -7,7 +7,7 @@ merely suspected. Each entry says how to reproduce it, what happens, and the
 known root cause or workaround. Future work lives in [`TODO.md`](../../TODO.md);
 whole classes of "what the shim/tracer cannot reach" live in
 [`syscall-boundary.md`](syscall-boundary.md),
-[`../spec/shim/runtime-failures.md`](../spec/shim/runtime-failures.md) and
+[`../spec/shim/shim-coverage.md`](../spec/shim/shim-coverage.md) and
 [`android-platform.md`](android-platform.md).
 
 ## Contents
@@ -20,7 +20,7 @@ whole classes of "what the shim/tracer cannot reach" live in
 
 - [`../spec/design.md`](../spec/design.md) — the path shim and the
   maintainer-script mechanism these issues hit.
-- [`../spec/shim/runtime-failures.md`](../spec/shim/runtime-failures.md) — the
+- [`../spec/shim/shim-coverage.md`](../spec/shim/shim-coverage.md) — the
   path-shim failure modes.
 - [`syscall-boundary.md`](syscall-boundary.md), [`android-platform.md`](android-platform.md)
   — what libc interposition cannot see, and the platform's enforcement gates.
@@ -138,18 +138,18 @@ The host workarounds are installed for you in
 By design, not bugs; see the linked specs.
 
 - **Paths not redirected:** `/tmp`, `/run`, `/proc`, `/sys`, `/lib64` are left
-  to the host (`shim/runtime-failures.md`, `shim/shim-coverage.md`). A missing
+  to the host (`shim/shim-coverage.md`). A missing
   `/tmp` is a common source of write/ENOENT failures.
 - **No shim without `LD_PRELOAD`:** an emptied environment (`env -i`, setuid),
   an absolute-path invocation that bypasses the launchers, or a Bionic child
   all lose the shim and see the real root
-  (`shim/runtime-failures.md`).
+  (`shim/shim-coverage.md`).
 - **No init/service manager and no child reaper:** a package shipping a unit
   installs but the service does not run, and double-forked zombies accumulate
   (services are a roadmap item).
 - **`uname` reports the platform**, and `os-release`/`lsb_release`/`systemd`/
   `dbus` may be absent, so programs branching on them can misbehave
-  (`shim/runtime-failures.md`).
+  (`shim/shim-coverage.md`).
 - **Two package managers share the home dir** when the host has its own
   (`~/.config`, `~/.cache`, `~/.local` collide).
 - **`--force-architecture` for `arm64` vs `aarch64`** is still in use and

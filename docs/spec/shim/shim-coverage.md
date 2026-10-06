@@ -14,6 +14,7 @@ the design is [`path-shim.md`](path-shim.md).
 - [Results](#results)
 - [Resolved (2026-10-01): `/lib`, `/bin`, `/sbin` added; `/run`, `/lib64` still open](#resolved-2026-10-01-lib-bin-sbin-added-run-lib64-still-open)
 - [Next steps](#next-steps)
+- [Runtime failure modes](#runtime-failure-modes)
 
 ## Related docs
 
@@ -285,3 +286,113 @@ Still open, deliberately not added yet (no measured need so far):
       `STATIC_ELF`, so the tracer's first targets are named.
 - [ ] Re-run on a wider/`sid` sample and on the in-scope set of `sudo-less`'s
       survey list once the classifier exists.
+
+## Runtime failure modes
+
+What goes wrong when **running** a prefix program (as opposed to installing
+it), grouped by cause. Each is tagged with what handles it: **shim** = the
+libc interposer (`src/dn-shim.c`), **tracer** = `dn-trace` (`src/tracer/`),
+**—** = nothing today. Coverage at the shim's layer is above; the syscall
+boundary is [`syscall-boundary.md`](../../reference/syscall-boundary.md).
+
+### A. Path / filesystem access
+
+- **Static binaries** (Go, musl, `bash-static`) — no dynamic linker, no shim →
+  they read the real root. *tracer*
+- **Inline `svc` in dynamic binaries** (Go/Rust cgo, inline asm) — syscalls
+  bypass libc. *tracer*
+- **Explicit `syscall()`** — a public symbol, so interposable in principle. *shim*
+- **libc-internal opens** (NSS, `__open_nocancel`, loader) — never cross the
+  PLT. *tracer*
+- **Symlink targets** — the kernel follows an absolute `/usr/…` target against
+  the *real* root; the shim only rewrites the argument.
+  `normalize-symlinks` fixes prefix symlinks, but runtime-created or
+  outside-prefix ones escape. *partial*
+- **`/proc`, `/sys`** — not redirected; programs see the platform reality.
+- **`/tmp`, `/run`, `/var/run`** — `/tmp` is not one of the redirected
+  directories and the platform has no real `/tmp`; `/run` is not redirected
+  (only `/var/run`). Common write/ENOENT failures. *—*
+- **Hard links / cross-FS `rename`** — prefix root vs `/tmp`/sdcard; some
+  filesystems cannot hardlink. *—*
+- **Uncovered syscalls** — `io_uring`, `open_by_handle_at`, the new mount API,
+  `fanotify_mark`, `sendmmsg`. *tracer (mostly)*
+
+### B. Dynamic loading
+
+- **Absolute `DT_NEEDED`/`RUNPATH`** (`/usr/lib/…`) — the loader opens
+  internally, not through the PLT. Mitigated by the loader's own search path
+  and `LD_LIBRARY_PATH`, not universally. *partial*
+- **The cache/preload files** — read from the real root.
+- **NSS / `gconv` / locale modules** — loader-internal absolute paths; a
+  missing `gconv-modules` can abort `iconv` (and thus many programs).
+
+### C. Exec & process creation
+
+- **Shebang under a non-glibc parent** — the kernel resolves `#!/bin/sh`
+  against the real root; the shim rewrites it only when the *caller* is
+  shimmed.
+- **Environment cleared** (`env -i`, setuid) → `LD_PRELOAD` lost → **no shim at
+  all**. *bake into ELFs / `DT_AUDIT`*
+- **Launcher-only** — running a prefix binary by absolute path, not through a
+  generated launcher, sets no shim.
+- **`system()` / `popen` / `posix_spawn` / `execveat` / `fexecve`** — mostly
+  covered; fd-based exec and libc-internal spawns can slip.
+- **Non-glibc children** — the shim deliberately strips an inherited preload,
+  so redirection ends at that fork (by design).
+
+### D. Identity & OS assumptions
+
+- **`uname` reports the platform**, and **`os-release` exists only under the
+  shim** → static binaries and anything evading the shim see "other-linux".
+- **No systemd / dbus / `lsb_release`** → programs that branch on them take
+  wrong paths or fail (`systemctl`, `sd_notify`).
+- **Distro / codename branches** in installers and apps.
+
+### E. Privilege & kernel
+
+- **Root-only ops** — mount, `pivot_root`, `chroot`, `swapon`, netlink,
+  netfilter, TUN, raw sockets, ports <1024, `mknod`.
+- **setuid/setgid/file caps** — do not work (and the loader strips the preload
+  for them anyway).
+- **SysV IPC** (`shmget`/`semget`/`msgget`) — blocked.
+- **`/dev/shm`, `memfd`** — may be absent.
+- **seccomp / SELinux** — an app-wide filter stacks; some syscalls are denied
+  regardless.
+- **System users/groups** (`adduser`).
+
+### F. Services & process model
+
+- **No init/service manager** — `systemctl`/`service`/`update-rc.d` no-op or
+  fail; daemons must be started by hand.
+- **No reaper** — double-forked children accumulate as zombies.
+- **Logging** — `/var/log`, journald absent; syslog sockets may not exist.
+- **`/run` sockets, PID files** — path mismatches (see A).
+- **DNS/resolvconf assumptions** (`systemd-resolved`); userspace networking
+  avoids some of this by design.
+
+### G. Delivery / environment
+
+- **`LD_PRELOAD` fragility** (see C) — the shim is a convention, not a
+  guarantee; any environment reset silently disables redirection.
+- **PATH ordering** — redirection only applies when launched through our
+  launchers.
+- **Two package managers sharing the home dir** — `~/.config`, `~/.cache`,
+  `~/.local` collide.
+
+### H. Tracer-specific
+
+- **`io_uring`** not intercepted (the path is in a shared ring).
+- **`ptrace` overhead**; a bind requires the host path to exist.
+- **`clone3` / `vfork` / `fexecve`** tracee-tracking edge cases.
+- **Dropped extensions** (`link2symlink` for hardlink quirks, `sysvipc`) may
+  resurface.
+
+### Highest risk in practice
+
+1. **Env reset / static / inline syscalls** → silent loss of redirection
+   (needs the tracer and/or baking the shim into ELFs).
+2. **`/tmp` and `/run` not redirected** → very common write / ENOENT failures.
+3. **Loader-internal absolute paths** (NSS/gconv/locale, absolute
+   `DT_NEEDED`).
+4. **No systemd/dbus** → anything service-shaped.
+5. **Root-only network/namespace ops** → TUN, iptables, raw sockets.
