@@ -55,15 +55,15 @@ Seed packages (their files, from dpkg's own lists): `libc6`, `bash`, `dash`,
 `debianutils`, `base-files`, `base-passwd`, `libtinfo6`, `ca-certificates`,
 `patchelf` with `libstdc++6` and `libgcc-s1`. Every library their ELFs need
 (`DT_NEEDED`) is added until the set is closed. Plus the overlay: `dn-shell`,
-`dn-shim.so`, `dn-run`, `etc/ld.so.preload`, the loader configuration, and
-the small `etc` files a shell and a resolver read (`passwd`, `group`,
-`hosts`, `nsswitch.conf`, `profile`, `bash.bashrc`, `inputrc`), and
-`etc/resolv.conf` as the link to the host's DNS file (`prefix-contract.md`,
-build invariant 7).
+`dn-shim.so`, `dn-run`, `dn-trace`, `dn-elf`, `etc/ld.so.preload`, the loader
+configuration, and the small `etc` files a shell and a resolver read
+(`passwd`, `group`, `hosts`, `nsswitch.conf`, `profile`, `bash.bashrc`,
+`inputrc`), and `etc/resolv.conf` as the link to the host's DNS file
+(`prefix-contract.md`, build invariant 7).
 
-`patchelf` and `dn-run` are in it so a foreign glibc binary dropped into the
-prefix is **adopted on first run** (`dn-run` repoints its interpreter at the
-prefix loader) -- what makes core-ultra a blueprint.
+`dn-run` (with `dn-elf`) is in it so a foreign glibc binary dropped into the
+prefix is **adopted on first run** (`dn-run` has `dn-elf` repoint its
+interpreter at the prefix loader) -- what makes core-ultra a blueprint.
 
 **`.dn/packages`** lists the Debian packages a prefix contains, one per
 line (`package<TAB>version<TAB>arch`). core-ultra has no `dpkg` database, so

@@ -73,7 +73,7 @@ target.
     `libc-bin.deb` and the patched glibc files (the "10-file swap", from
     `third_party/glibc-android-patches`). That bundle **is** `DN_GLIBC_DEBS`.
   - **B2 — overlay** (light, plain gcc): build the runtime overlay —
-    `dn-shim.so`, `dn-run`, the interpreters `dn-sh`/`dn-perl`, and the
+    `dn-shim.so`, `dn-run`, `dn-trace`, `dn-elf`, and the
     hook/launcher scripts. Pure gcc against the prefix's glibc; no glibc source,
     no cross-toolchain.
   - **B3 — assemble**: seed B1's files, install B1's debs, place B2's overlay,
