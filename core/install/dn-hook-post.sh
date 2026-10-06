@@ -91,7 +91,6 @@ normalize_symlinks() {
     done < "$tmp"
   done
   rm -f "$tmp"
-  echo "Normalized symlinks in $ROOT ($pass pass(es))."
   return 0
 }
 
@@ -156,7 +155,6 @@ make_launchers() {
     done
   done
   rm -f "$tmp" "$BASE"
-  echo "Updated launchers in $LAUNCHDIR ($(ls -1 "$LAUNCHDIR" | wc -l) entries)."
   return 0
 }
 
