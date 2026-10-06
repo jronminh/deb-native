@@ -2,12 +2,9 @@
 
 <!-- template: templates/docs.template.md -->
 
-The next-generation prefix: the runtime's loader is glibc's own, built for the
-prefix, and `src/ld-dn.c` is retired. This doc covers how a package gets in
-(**packaging**) and how the compiler toolchain fits (**the GCC lifecycle**),
-for the prefix this branch is preparing to make installable. The proxy
-runtime it replaces: `ld-dn-runtime.md` and its
-"Alternative: fuse into the loader" section.
+The prefix's loader is glibc's own, built for the prefix. This doc covers how
+a package gets in (**packaging**) and how the compiler toolchain fits
+(**the GCC lifecycle**).
 
 Status: shipped (0.6.0+s.1). The mechanism is proven on the phone
 (`fused-shim-self-derives-prefix.md`); the packaging, install order and
@@ -15,7 +12,7 @@ run-time prefix self-derivation below are what shipped.
 
 ## Contents
 
-- [What changes, and what does not](#what-changes-and-what-does-not)
+- [What the prefix supplies](#what-the-prefix-supplies)
 - [One small loader patch](#one-small-loader-patch)
 - [Fixed paths](#fixed-paths)
 - [Runtime prefix self-derivation](#runtime-prefix-self-derivation)
@@ -27,8 +24,6 @@ run-time prefix self-derivation below are what shipped.
 
 ## Related docs
 
-- `ld-dn-runtime.md` -- the trampoline being retired; its
-  fuse section is this doc's origin.
 - [`dl-mechanics.md`](../reference/dl-mechanics.md) -- the glibc mechanisms this leans on
   (`ld.so.preload`, `ld.so.cache`), and why they keep the patch small.
 - [`package-lifecycle.md`](package-lifecycle.md) -- one package's install
@@ -43,20 +38,14 @@ run-time prefix self-derivation below are what shipped.
   -- the exact 10 files the patch affects; the set [Runtime prefix
   self-derivation](#runtime-prefix-self-derivation) makes prefix-agnostic.
 
-## What changes, and what does not
+## What the prefix supplies
 
-`ld-dn` was a freestanding `PT_INTERP` the kernel ran first, to derive the
-prefix and set up the shim + library path. In the `dn-glibc` prefix the kernel
-loads glibc's real loader instead, and the prefix is supplied by glibc's own
-mechanisms. Concretely:
-
-| concern | `ld-dn` era | `dn-glibc` prefix |
-| --- | --- | --- |
-| interpreter | `$DN/usr/lib/deb-native/ld-dn` | `$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1` |
-| prefix derivation | `ld-dn` parses the program's `PT_INTERP` (C2) | baked at glibc configure time (`--prefix=$DN/usr`) |
-| shim injection | `ld-dn` builds `LD_PRELOAD` | `$DN/etc/ld.so.preload` |
-| library path | `ld-dn` builds `LD_LIBRARY_PATH` | `$DN/usr/etc/ld.so.cache` (ours, via `ldconfig`) |
-| env added | `DN_INSTDIR`, `LD_PRELOAD`, `LD_LIBRARY_PATH` | none |
+The kernel loads glibc's real loader, and the prefix is supplied by glibc's
+own mechanisms: the interpreter is
+`$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`; the prefix is baked at
+glibc configure time (`--prefix=$DN/usr`); the shim is injected by
+`$DN/etc/ld.so.preload`; the library path comes from the loader's own search
+(the cache and the compiled `libdir`); no `DN_*`/`LD_*` env is added.
 
 Everything else in the per-package pipeline is unchanged: `dn-translate-deb.sh`
 still rewrites `PT_INTERP` and maintainer-script shebangs, `dn-hook-post.sh`
@@ -65,9 +54,8 @@ still fixes alternatives/symlinks/launchers, and the `.deb` template crafts
 
 ## One small loader patch
 
-The plan sketch in `ld-dn-runtime.md` imagined patching `elf/rtld.c` /
-`elf/dl-load.c` to derive the prefix and inject the preload. For a
-**fixed-prefix** build that is mostly unnecessary: configuring glibc
+For a **fixed-prefix** build, patching `elf/rtld.c` / `elf/dl-load.c` to derive
+the prefix and inject the preload is mostly unnecessary: configuring glibc
 `--prefix=$DN/usr` already bakes every path the runtime needs
 (`elf/rtld.c` reads `SYSCONFDIR "/ld.so.preload"`, the cache/conf come from
 `SYSCONFDIR`, and the default search dir is the compiled `libdir`), so the
@@ -211,19 +199,13 @@ glibc is itself compiled outside the fresh prefix (a build host's gcc; see
 
 ## The two interpreter targets
 
-Two strings change in the shipped scripts; both go from `ld-dn` to the loader:
+Two strings name the loader in the shipped scripts:
 
 - `scripts/prefix/dn-translate-deb.sh` (`LD`): every translated glibc ELF's
-  `PT_INTERP` becomes the fused loader, so the kernel loads it. The existing
-  match (`*/ld-linux-aarch64.so.1`) is unchanged -- only the target.
-- `scripts/prefix/dn-fix-gcc-specs.sh` (`LDDN`): gcc's `*link` spec writes the
-  fused loader as `-dynamic-linker`, so a binary `gcc` links itself gets a
-  resolvable `PT_INTERP` (the `ld-dn` fix at
-  `findings/gcc-hello-pt-interp-gap.md`, retargeted).
-
-Both are also the transition seam: pointing them back at
-`$DN/usr/lib/deb-native/ld-dn` restores the trampoline pipeline while the
-fused path is still being brought up.
+  `PT_INTERP` becomes the fused loader, so the kernel loads it.
+- the gcc `specs` writer: gcc's `*link` spec writes the fused loader as
+  `-dynamic-linker`, so a binary `gcc` links itself gets a resolvable
+  `PT_INTERP`.
 
 ## The GCC lifecycle
 
@@ -242,7 +224,7 @@ like any package (`gcc-14`, `cpp`, `binutils`, `libgcc-s1`, `libstdc++6`,
 
 So `gcc -o prog prog.c` emits `PT_INTERP` = the fused loader, and `./prog` runs
 env-free, with the shim (from `ld.so.preload`) and the prefix libs (from
-`ld.so.cache`). No `dn-run`, no `ld-dn`.
+`ld.so.cache`). No `dn-run`.
 
 **(b) Bootstrap tool -- what builds our glibc.** This is the chicken-and-egg
 from the install order: glibc needs a compiler, but the compiler needs glibc.
@@ -254,6 +236,6 @@ own `gcc` is never used to build its own glibc; it is purely the consumer above.
 
 The fused loader only covers **glibc-dynamic** ELFs. Static binaries, Bionic
 binaries, and programs making raw syscalls never reach the loader and still
-need `dn-run` + `dn-trace` (`make-launchers.sh` classification,
+need `dn-run` + `dn-trace` (the post-hook classification,
 [`tracer.md`](tracer/tracer.md), [`syscall-boundary.md`](../reference/syscall-boundary.md)). The
-fused loader removes `ld-dn`, not the tracer.
+fused loader does not remove the tracer.
