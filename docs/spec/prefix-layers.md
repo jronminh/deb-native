@@ -96,6 +96,32 @@ Run-time adoption (`dn-run` repointing a foreign binary's interpreter on its
 first run) stays in core-ultra for binaries a user brings in later; it is not
 how a specialized prefix is made.
 
+## Minimal core-deb and its restore
+
+core-deb is shipped **minimal**: 42 packages, enough for the shell, apt and dpkg
+to run and for apt to fetch the rest:
+
+- the runtime of the shell and the package manager: `libc6`, `libc-bin`,
+  `libgcc-s1`, `libstdc++6`, `libtinfo6`, `libmd0`, `libselinux1`, `zlib1g`,
+  `liblzma5`, `libzstd1`, `libbz2-1.0`, `libapt-pkg7.0`, `apt`, `dpkg`, `bash`,
+  `dash`, `libgpg-error0`, `libgcrypt20`, `sqv`, `libnettle8t64`,
+  `libhogweed6t64`, `libgmp10`, `libssl3t64`, `libseccomp2`, `libsystemd0`,
+  `ca-certificates`;
+- the essentials that package scripts call: `coreutils`, `sed`, `grep`, `gzip`,
+  `tar`, `xz-utils`, `findutils`, `mawk`, `debianutils`, `base-files`,
+  `base-passwd`, `login.defs`, `perl-base`, `libcrypt1`;
+- the tools the translation hook needs: `patchelf`;
+- the keyring apt verifies the mirror with: `debian-archive-keyring`.
+
+The rest of the 76 packages are not shipped. The prefix restores them itself
+with apt, from the mirror, once: `apt-get update`, then `apt-get install` of the
+34 packages listed in the artifact's `.dn/profile`. The prefix's own bash runs
+these steps, with no pinned versions. The two glibc packages, `libc6` and
+`libc-bin`, are held (dpkg hold) so apt never replaces the patched files; the
+post-invoke hook restores them if a package pulls them in.
+
+`.dn/profile` is a plain list of package names, one per line.
+
 ## Naming
 
 `core-ultra` and `core-deb` name **prefix layers**. The repository's `core/`
