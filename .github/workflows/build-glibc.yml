@@ -1,15 +1,11 @@
-name: Build own-glibc (test)
+name: Build the glibc runtime
 
-# Manual, exploratory build for 0.5.0's own-glibc milestone (see TODO.md).
-# Builds Debian's real glibc source + this project's Android patch
-# (patches/dn-glibc-android.patch) on a real
-# aarch64 Linux runner -- sidesteps the Termux/clang blocker found on-device
-# (glibc's configure requires a GCC-only builtin-redirection behavior clang
-# has never implemented; no real GCC cross-toolchain exists in Termux).
-# Output is a tarball artifact to copy onto a phone and test through the
-# existing ld-dn + shim pipeline -- this workflow does not run on Android
-# and proves nothing about runtime behavior there, only that the patched
-# source configures and builds.
+# Builds the glibc side of deb-native on an arm64 Linux runner:
+#   - the glibc bundle: Debian's real libc6/libc-bin, repackaged with this
+#     project's own Android-patched build (patches/dn-glibc-android.patch),
+#     published as the rolling `glibc-bundle` release;
+#   - the runtime overlay (dn-shim.so, dn-run, dn-trace, dn-elf).
+# Packaging the prefix tarball is separate -- see docs/spec/prefix-layers.md.
 
 on:
   workflow_dispatch: {}
@@ -17,7 +13,7 @@ on:
 env:
   GLIBC_VERSION: "2.41"
   GLIBC_DEB_VERSION: "2.41-12+deb13u4"
-  DN_PREFIX: "/data/data/com.termux/files/home/.dn"
+  DN_PREFIX: "/data/local/deb-native"
 
 jobs:
   build:
@@ -33,7 +29,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential quilt bison gawk gettext python3 \
-            xz-utils file rdfind symlinks netbase gperf texinfo
+            xz-utils file rdfind symlinks netbase gperf texinfo \
+            make libtalloc-dev
 
       - name: Fetch Debian's real glibc source
         run: |
@@ -118,9 +115,8 @@ jobs:
           retention-days: 14
 
       # The install bundle (DN_GLIBC_DEBS): the 10 patched files laid out
-      # relative to a prefix, Debian's own libc6/libc-bin to install first,
-      # and the shim built against this build's glibc.  setup-apt-prefix.sh
-      # downloads it from the rolling release when DN_GLIBC_DEBS is unset.
+      # relative to a prefix, Debian's own libc6/libc-bin, and the shim built
+      # against this build's glibc. Published as the rolling `glibc-bundle`.
       - name: Assemble the install bundle
         run: |
           set -eu
@@ -153,5 +149,14 @@ jobs:
           gh release view glibc-bundle >/dev/null 2>&1 || \
             gh release create glibc-bundle --prerelease \
               --title "dn-glibc install bundle (rolling)" \
-              --notes "Rolling bundle for setup-apt-prefix.sh: the 10 patched glibc files, Debian's libc6/libc-bin, and the shim. Built by .github/workflows/build-glibc.yml."
+              --notes "Rolling bundle: the 10 patched glibc files, Debian's libc6/libc-bin, and the shim. Built by .github/workflows/build-glibc.yml."
           gh release upload glibc-bundle dn-glibc-bundle.tar.gz --clobber
+
+      - name: Build the runtime overlay
+        run: scripts/build/build-overlay-glibc.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dn-overlay
+          path: src/.build-glibc/
+          retention-days: 14
