@@ -80,6 +80,66 @@ pre-translated repo, 0.4.0's lighter base (own section below), and *true
 fusion rebuilt on the 0.2 core* (the translator/priv layer, with Termux's
 prefix as the root — frozen until alpha).
 
+## Prefix artifacts: the contract, core-ultra/core-deb, one ship path (design, 2026-10-06)
+
+Design: `docs/spec/prefix-contract.md` (the `.dn/` contract, byte-patch
+self-relocation, build invariants, one ship path) and
+`docs/spec/prefix-layers.md` (core-ultra, core-deb, specialized prefixes).
+Verified by experiment (artifacts cut from the 0.7.1-dev prefix, installed
+with Android `mksh` + toybox only); nothing below is built into the repo yet.
+
+**Critical path -- real artifacts from the build:**
+
+- [ ] `build/package-prefix.sh` applies the build invariants and writes `.dn/`:
+      256-byte `PT_INTERP` capacity on every glibc ELF (placeholder with
+      `patchelf`, then the real loader path) with offsets in
+      `.dn/baked-paths`; `text` entries; no `ld.so.cache`; every symlink
+      relative (the 44 absolute launcher links); `home/`, `root -> home`,
+      `mnt -> ../mnt`, `etc/resolv.conf -> ../../app/etc/resolv.conf`;
+      `.dn/contract`, `.dn/packages`, `.dn/relocate.sh` (new source in
+      `core/`). Fail the build if a binary names the build path outside
+      `PT_INTERP`. The scratch experiment did all of this in Python.
+- [ ] Produce `core-ultra` and `core-deb` artifacts with it.
+
+**Bugs found on the way:**
+
+- [ ] `build/relocate-prefix.sh` and `adapters/termux/deploy.sh` repoint every
+      ELF that has an interpreter, the Bionic `dn-run`/`dn-trace`
+      (`/system/bin/linker64`) included, which breaks every launcher; and
+      rewrite only five text files (139 carry the path in the core prefix).
+      Superseded by `relocate.sh`; until then, skip non-glibc interpreters.
+- [ ] `make-launchers.sh` runs after `normalize-symlinks.sh` in the post-hook,
+      so launcher symlinks stay absolute.
+- [ ] The `/data/data/com.termux/files/deb-native` prefix's
+      `priv/update-alternatives` calls `.../scripts/install/dn-fix-alternatives.sh`
+      (the pre-`core/` path); surfaced by `pkg install clang` on 2026-10-06.
+- [ ] `install.sh`'s default glibc bundle URL (`releases/download/glibc-bundle/`)
+      returned 404 on 2026-10-06; a fresh bootstrap with the local bundle then
+      failed configuring the base (`dpkg-divert`: `libmd.so.0` not found;
+      `realpath`: `libc.so.6` not found). Not investigated.
+
+**Later:**
+
+- [ ] Build `core-ultra` from its own recipe instead of cutting it from the
+      full prefix; `core-deb` = that recipe + the Debian layer (reorders
+      `bootstrap/setup-apt-prefix.sh`).
+- [ ] `dn-run`/`dn-trace` with the prefix's gcc against its glibc (no Bionic
+      toolchain needed); the only reason they are Bionic -- `ldconfig` run
+      through the tracer during the glibc swap -- goes with "no
+      `ld.so.cache`". Open: the shim preloaded into them (`access()` rewrite
+      trap, the tracer's own paths). core-ultra has no `dn-trace` today.
+- [ ] Termux: the three install paths (default in-place bootstrap,
+      `DN_PREFIX_IMAGE`, `adapters/termux/deploy.sh`) become the one ship
+      path; the in-place bootstrap moves to the build stage; the Termux host
+      keeps its DNS in `app/etc/resolv.conf` beside the prefixes.
+- [ ] Bootstrap on a poor host: where the first artifact comes from, and
+      core-deb building the next artifacts (core-ultra, core-deb, specialized).
+- [ ] The `claude` specialized prefix: core-ultra recipe + the Claude binary,
+      treated as a glibc ELF at build time.
+- [ ] `dn-elf` replacing `patchelf` at build time (`elf-interp-patch.md`).
+- [ ] core-ultra size: most `gconv` modules (20 of 92 MB); terminfo is
+      missing from the trimmed prefix.
+
 ## 0.2.0: a self-contained prefix (released)
 
 **Goal**: the prefix is a small, complete Debian system of its own — its

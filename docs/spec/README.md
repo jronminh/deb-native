@@ -26,6 +26,12 @@ designs live in [`../notes/`](../notes/README.md).
 - `deploy.md` — how a `dn-glibc` prefix is deployed: install Debian's real
   `libc6`/`libc-bin`, then swap in the patched files; the rest of the
   bootstrap is unchanged.
+- `prefix-contract.md` — the `.dn/` directory every prefix artifact carries:
+  the contract a host reads without running code, the files that carry the
+  build path, and the relocation script the host's own shell runs.
+- `prefix-layers.md` — the prefixes the recipe builds: core-ultra (the
+  minimal prefix, a shell), core-deb (plus `apt`/`dpkg`), and specialized
+  prefixes; each its own artifact.
 
 Subdirectories, each with its own index:
 

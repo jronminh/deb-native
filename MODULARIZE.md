@@ -84,63 +84,70 @@ target.
   gcc build. **Every bootstrap stage / chicken-and-egg problem lives here and
   only here.** Environment: CI or a gcc-capable host.
 - **Ship** delivers a prebuilt artifact to a target and runs it, with **no
-  toolchain and no building**. Consumers do the same thing: obtain the artifact,
-  extract it, fix up, run.
-  - `install.sh` (Termux) — download/extract the artifact, then `apt update`.
-  - the `dn-shell` app — extract the bundled asset on first run.
+  toolchain and no building**. There is **exactly one ship path**, the same on
+  every target (`docs/spec/prefix-contract.md`): read the artifact's
+  `.dn/contract`, check it, extract, and run its relocation script when it
+  landed elsewhere than its build path.
+  - `install.sh` (Termux) — obtain the artifact, then the one ship path. It
+    never builds: with no artifact for its destination it stops and says so.
+    The whole of build -- toolchain -> components -> assembled prefix ->
+    tarball -- is a separate stage, run wherever a toolchain is (CI, or this
+    device as a build host), and its only output is the tarball.
+  - the `dn-shell` app — the one ship path on the bundled asset
+    (`dn-prefix install`).
 - A **target never builds**; a **builder never needs the target**. The execution
   layer (`core/`) and the adapter are the same on both sides.
 
-### Ship is two phases; only the first is target-specific
+### Ship is the host's shell only
 
-- **Phase A — target-native trigger**: run the shell the target already has.
-  - app: `/system/bin/sh` + toybox (`tar xzf`) — always present, no glibc.
-  - Termux: the Termux prefix shell (bash/dash + coreutils).
-  Job: extract the artifact into the target location (plus relocation, only if
-  the prefix is not fully relocatable).
-- **Phase B — prefix-native finish**: once the prefix runs, use the prefix's own
-  shell to refresh the loader cache, normalize symlinks, and `apt update`. This
-  logic is identical for every target and lives in `core/`.
-
-Only the Phase-A trigger differs per target, and it lives in the adapter. A
-fully relocatable prefix (loader/shim self-derive; no baked absolute paths)
-reduces Phase A to `tar xzf` — one line naming the target's shell.
+Shipping runs entirely in the shell the target already has (app:
+`/system/bin/sh` + toybox; Termux: the Termux shell), with the same steps on
+every target (`docs/spec/prefix-contract.md`): read `.dn/contract` without
+extracting, check it, extract, and -- only when the prefix landed somewhere
+other than its build path -- run the prefix's own `.dn/relocate.sh` with that
+same shell. The relocation script is the prefix's logic: it overwrites each
+`PT_INTERP` string in place with `dd`, at the offset and within the capacity
+the build recorded in `.dn/baked-paths`, and rewrites text with `sed -i`. No
+ELF tool and no program of the prefix runs during an install; the host never
+edits a file inside a prefix. Nothing else
+runs at install: what depends on the running system belongs to the prefix's
+`boot.d`/`login.d` hooks.
 
 **Goal: ship the smallest artifact.** Build trims it (`build/trim-prefix.sh`)
 and packages it (`build/package-prefix.sh`); the floor is `apt`+`dpkg`+`bash`
 plus their dependency closure, `glibc`, and the deb-native overlay.
 
-### The minimal prefix (the shipped floor)
+### The minimal prefix and the layers above it
 
-Enough to boot `apt` and let the prefix expand itself; nothing more:
+Two prefixes are built (`docs/spec/prefix-layers.md`):
 
-- **deb-native overlay** (`core/`): `dn-shim.so`, `dn-run`, `dn-trace`, the
-  interpreters, the hook/launcher scripts, `priv/`.
-- **`apt`, `dpkg`, `bash`**, and **`patchelf`** — patchelf is required by
-  `dn-translate-deb.sh` on every runtime install (~0.3 MB; its deps are
-  already present).
-- **`glibc`** (`libc6` + `libc-bin`).
-- **The dependency closure** of the above: `libapt-pkg`, `libstdc++`, a crypto
-  library plus `gpgv`, `zlib`, `liblzma`/`libbz2`/`libzstd`, `libtinfo`/
-  `libreadline`, ...
-- **Maintainer-script essentials**: `coreutils`, `sed`, `grep`, `mawk`, `tar`,
-  `gzip`, `xz`, `dash`, `debconf`/`cdebconf`, `base-files`, `base-passwd`,
-  `debianutils`, `debian-archive-keyring`, `ca-certificates`.
+- **core-ultra** -- the minimal prefix, done when its shell runs: the
+  patched glibc, the shim, `dn-run`, `dn-shell`, `bash`/`dash`, basic tools,
+  `patchelf`, CA certificates, and `.dn/packages` (the Debian packages it
+  contains). The blueprint for specialized prefixes.
+- **core-deb** -- the core-ultra recipe plus the Debian layer: `apt`,
+  `dpkg` and their closure (`libapt-pkg`, `libstdc++`, `gpgv`, compression
+  libraries, ...), the translation hooks, `priv/`, the launchers, the
+  maintainer-script interpreters and essentials (`debconf`/`cdebconf`, `xz`,
+  `debian-archive-keyring`, ...). The floor for `apt install` (never trimmed
+  below, or a later install breaks).
 
-Everything else is trimmed; the floor above is never crossed (or a later
-`apt install` breaks).
+The layering is build-time only: each is its own artifact, installed once and
+complete; nothing is added into an installed prefix as a module.
 
 ### Post-build pipelines (after the artifact exists)
 
 In order, and each owned by one place:
 
-1. **Deploy (Phase A, target-native)** — obtain the artifact, extract to the
-   target path, relocate if it was not built for that exact path. Owner: the
-   target adapter (`system/bin/sh`+toybox, or the Termux shell).
-2. **Finish (Phase B, prefix-native)** — `core/runtime/dn-finish.sh`: restore the
-   patched glibc, refresh the loader cache, normalize symlinks, fix alternatives,
-   regenerate launchers, optionally `apt update`. Identical for every target.
-3. **Install (runtime)** — `apt install` → the prefix's hooks
+1. **Deploy** — obtain the artifact, read and check `.dn/contract`, extract,
+   run `.dn/relocate.sh` when the prefix landed elsewhere than its build path.
+   Owner: the target's host shell (`/system/bin/sh`+toybox, or the Termux
+   shell); the steps are identical.
+2. **Finish (build side)** — `core/runtime/dn-finish.sh`'s steps (patched
+   glibc, symlinks, alternatives, launchers) run at build time, before
+   packaging; none is needed at install (`docs/spec/prefix-contract.md`,
+   "Build invariants").
+3. **Package install (runtime)** — `apt install` → the prefix's hooks
    (`dn-hook-pre` → `dn-translate-deb`; `dn-hook-post` → glibc-swap guard,
    alternatives, symlinks, launchers, gcc specs).
 4. **Update** — `dn-update` for the overlay (per the manifest), `apt upgrade`
@@ -232,6 +239,11 @@ The bootstrap's output — the one boundary a target consumes:
 - **Contents:** the prefix tree (`usr/`, `etc/`, `var/`, `opt/`) plus a manifest
   at `var/lib/deb-native/prefix-manifest.tsv` listing each component and its
   sha256, so `dn-update` can verify an overlay component.
+- **Install interface:** a `.dn/` directory at the root -- the contract a host
+  reads without running code, the map of every byte range that names the
+  build path, and a relocation script the host's own shell runs
+  (`docs/spec/prefix-contract.md`, design, not yet built). The artifact is
+  not relocated at build time; one artifact installs at any path.
 - **Consumer:** a target adapter (e.g. `dn-shell`) packages the tarball as an
   app asset and pins the version; it never runs bootstrap code (P5).
 
