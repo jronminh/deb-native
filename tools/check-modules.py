@@ -33,7 +33,7 @@ EDGE_PATTERNS = {
     "bootstrap": [r"bootstrap/", r"setup-apt-prefix", r"dn-install-glibc",
                   r"dn-apply-glibc-patch", r"dn-package-glibc",
                   r"dn-package-libc-bin", r"dn-standins"],
-    "adapter":   [r"make-shell-interface", r"make-apt-wrappers", r"adapters/"],
+    "adapter":   [r"make-shell-interface", r"adapters/"],
     "product":   [r"(?<![\w-])install\.sh"],
 }
 COMMENT_PREFIXES = ("#", "//", "*", "/*", "<!--", ";")
