@@ -182,7 +182,7 @@ Concretely, by failure mode (same table as sudo-less's `view.md`):
 | interpreter only searches compiled-in module paths (Python/Perl/Node/...) | wrapper sets the interpreter's own search-path env var (`PYTHONPATH`, `PERL5LIB`, `NODE_PATH`, ...) to the prefix's copy before `exec`ing — this is exactly the case sudo-less's own docs call out as **not** solvable by env vars *for the view's other cases*, but it's the right tool specifically for module search paths |
 | `ldd` can't find a library the package ships | wrapper sets `LD_LIBRARY_PATH` to the prefix's lib dir before `exec` — same caveat as above: fine for this one case, not a general substitute for the view |
 | ELF binary is a glibc build, needs glibc-runner | wrapper (or the binary's patched ELF interpreter directly, per the existing manual glibc-runner method) invokes it against the glibc side-install |
-| binary/script has a hardcoded absolute path to its own data (`/usr/share/figlet`, `/etc/redis/redis.conf`) it reads directly, not through a library call the above env vars cover | **solved** — see [`path-shim.md`](../spec/shim/path-shim.md): our own shim (`core/native/dn-shim.c`) intercepts `open`/`openat`/`fopen`/`stat`/`fstatat` and rewrites the path, verified against `figlet`'s real `/usr/share/figlet` lookup |
+| binary/script has a hardcoded absolute path to its own data (`/usr/share/figlet`, `/etc/redis/redis.conf`) it reads directly, not through a library call the above env vars cover | **solved** — see [`path-shim.md`](../spec/shim/path-shim.md): our own shim (`src/dn-shim.c`) intercepts `open`/`openat`/`fopen`/`stat`/`fstatat` and rewrites the path, verified against `figlet`'s real `/usr/share/figlet` lookup |
 
 ### What this used to not solve (now closed)
 

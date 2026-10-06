@@ -17,7 +17,6 @@ existing answer (`proot`) already applies.
 - [Solved (2026-09-26): NSS, case 2](#solved-2026-09-26-nss-case-2)
 - [Status by case (2026-09-26)](#status-by-case-2026-09-26)
 - [Solved (2026-09-26): the direct-syscall attribute (cases 3/4)](#solved-2026-09-26-the-direct-syscall-attribute-cases-34)
-- [Method](#method)
 - [Options, cheapest first](#options-cheapest-first)
 - [Open questions](#open-questions)
 
@@ -64,7 +63,7 @@ The count is small, but the point is structural, not numerical.
 
 ## The gap is routing, not the count
 
-`core/native/dn-run.c` classifies a binary by `PT_INTERP` and routes it: glibc →
+`src/dn-run.c` classifies a binary by `PT_INTERP` and routes it: glibc →
 the shim, static → `proot`. **`abbtr` is a PIE (dynamic) executable that emits
 `svc #0` itself**, so it is routed to the shim — which cannot see any of its 38
 syscalls. "Has a dynamic interpreter" is not the same as "all its filesystem
@@ -90,7 +89,7 @@ it, which is why `getpwnam` returned `NOTFOUND` even under `proot`.
 
 Fix: on the NSS route, bind the prefix's `/etc` over Termux glibc's sysconfdir
 (`-b $INSTDIR/etc:$PREFIX/glibc/etc`). Then `getpwnam("dnshim")` resolves in
-the prefix. `core/native/dn-run.c` now gives a glibc ELF an **NSS-import attribute**
+the prefix. `src/dn-run.c` now gives a glibc ELF an **NSS-import attribute**
 (scan for `getpwnam`/`getpwuid`/`getaddrinfo`/… in the binary) and routes it
 through the tracer (`dn-trace`, else Termux `proot`) with that bind; static
 binaries take the tracer route too. Verified by `tests/tracer-nss/run.sh`
@@ -114,36 +113,17 @@ ran with no redirection at all (host `/etc`, `/usr`, …).
 
 ## Solved (2026-09-26): the direct-syscall attribute (cases 3/4)
 
-A binary that issues its own syscalls is routed to the tracer, same as NSS:
+A binary that issues its own syscalls is routed to the tracer, same as NSS.
+The install-time scan finds the ELFs that need it — a `syscall` symbol import
+(case 3) or an `objdump`-verified `svc #0` (case 4) — and those programs run
+`dn-run --trace`, forced to the tracer route. Cost is tracer overhead on those
+binaries only; the shim stays fast for the rest.
 
-- `core/bench/scan-direct-syscalls.py DIR --trace-list` prints the ELFs that need
-  it: a `syscall` symbol import (case 3) or an `objdump`-verified `svc #0`
-  (case 4). Detection is disassembly, not a byte search — a whole-file grep for
-  `svc #0` flags 111 binaries, `objdump` confirms 6.
-- `make-launchers.sh` runs it **once at install time** over the bin dirs and
-  generates `dn-run --trace REAL` wrappers for those programs, so launch stays
-  a cheap file read.
-- `dn-run --trace` forces the tracer route. Cost is tracer overhead on those
-  binaries only; the shim stays fast for the rest.
-
-Measured on `fe2`: `--trace-list` over the corpus flags `abbtr`, `brz`, `c2hs`,
-`angelfish`, `happy`, the Go tools, and the static `busybox`/`bash-static`; a
-launcher generated for `abbtr` gets `--trace`, `figlet` does not. Scale: 6
-`svc` emitters + 12 `syscall` importers in the 258-package corpus, out of 246
-PIE + 7 `ET_EXEC` programs — a small tail, but structural.
-
-## Method
-
-`core/bench/scan-direct-syscalls.py` reports the cases above: it parses the ELF,
-scans **only** executable sections at 4-byte alignment for `svc #0` as a
-candidate filter, and disassembles each candidate with `objdump` to remove
-literal-pool false positives. The warning that motivated it: a whole-file byte
-grep for `svc #0` flags **111** binaries; disassembly confirms **6**. Data is
-not code.
-
-```
-python3 core/bench/scan-direct-syscalls.py DIR --verify --list
-```
+Detection is disassembly, not a byte search: a whole-file grep for `svc #0`
+flags 111 binaries; disassembly confirms 6. It parses each ELF, scans **only**
+executable sections at 4-byte alignment for `svc #0` as a candidate filter,
+and disassembles each candidate with `objdump` to remove literal-pool false
+positives. Data is not code.
 
 ## Options, cheapest first
 

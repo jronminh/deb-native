@@ -3,7 +3,7 @@
 <!-- template: templates/docs.template.md -->
 
 The next-generation prefix: the runtime's loader is glibc's own, built for the
-prefix, and `core/native/ld-dn.c` is retired. This doc covers how a package gets in
+prefix, and `src/ld-dn.c` is retired. This doc covers how a package gets in
 (**packaging**) and how the compiler toolchain fits (**the GCC lifecycle**),
 for the prefix this branch is preparing to make installable. The proxy
 runtime it replaces: `ld-dn-runtime.md` and its
@@ -178,7 +178,7 @@ nothing.
 ## The package set
 
 - **Ours (shipped prebuilt):** `libc6` (loader + shared libs) and `libc-bin`
-  (`ldconfig`, `ldd`, ...). Built by `bootstrap/dn-package-glibc.sh`
+  (`ldconfig`, `ldd`, ...). Built by `scripts/glibc/dn-package-glibc.sh`
   and `dn-package-libc-bin.sh`, `dpkg -i`'d and held.
 - **Debian, unmodified, version-matched:** `libc6-dev`, `libc-dev-bin`,
   `locales`, `libc-l10n` -- only version-sensitive, so they install straight
@@ -213,10 +213,10 @@ glibc is itself compiled outside the fresh prefix (a build host's gcc; see
 
 Two strings change in the shipped scripts; both go from `ld-dn` to the loader:
 
-- `core/install/dn-translate-deb.sh` (`LD`): every translated glibc ELF's
+- `scripts/prefix/dn-translate-deb.sh` (`LD`): every translated glibc ELF's
   `PT_INTERP` becomes the fused loader, so the kernel loads it. The existing
   match (`*/ld-linux-aarch64.so.1`) is unchanged -- only the target.
-- `core/install/dn-fix-gcc-specs.sh` (`LDDN`): gcc's `*link` spec writes the
+- `scripts/prefix/dn-fix-gcc-specs.sh` (`LDDN`): gcc's `*link` spec writes the
   fused loader as `-dynamic-linker`, so a binary `gcc` links itself gets a
   resolvable `PT_INTERP` (the `ld-dn` fix at
   `findings/gcc-hello-pt-interp-gap.md`, retargeted).

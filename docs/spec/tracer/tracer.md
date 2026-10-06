@@ -39,7 +39,7 @@ A Debian program in the prefix normally never meets the tracer:
 | **makes its own syscalls** (inline `svc`, `syscall()`) | the shim cannot see them (`scan-direct-syscalls.py`) | **yes** |
 | **glibc NSS lookups** (`getpwnam`, `getaddrinfo`, ...) | libc-internal, not interposable | **yes** |
 
-`core/native/dn-run.c` routes the last three to `usr/lib/deb-native/dn-trace`
+`src/dn-run.c` routes the last three to `usr/lib/deb-native/dn-trace`
 (no fallback to Termux's `proot` since 0.2.3). A static binary also *needs* the
 tracer to survive: Android's app seccomp filter kills calls such as
 `set_robust_list` with SIGSYS (untraced, Debian's static `busybox find` dies),
@@ -49,7 +49,7 @@ and the tracer's SIGSYS emulation (`core/tracer/tracee/seccomp.c`) answers them.
 
 ### 1. Built at setup
 
-`core/install/setup-runtime.sh` builds `core/tracer/` (`make CC=clang`, from clean) when
+`scripts/prefix/setup-runtime.sh` builds `core/tracer/` (`make CC=clang`, from clean) when
 `make` and `libtalloc` are installed and copies `core/tracer/dn-trace` into the
 prefix. Without them it prints
 

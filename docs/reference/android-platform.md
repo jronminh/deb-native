@@ -30,7 +30,7 @@ of how it was found.
   `docs/log/findings/`.
 - [`design.md`](../spec/design.md) — "Fake root", whose `set-fakesyscalls-parked.patch`
   decision depends on this doc's per-file fork verdict.
-- `../../third_party/glibc-android-patches/README.md` —
+- `../../patches/README.md` —
   the actual patch this doc's catalog describes.
 
 ## The three enforcement gates
@@ -187,7 +187,7 @@ not a general fix for "things Android breaks."
 0.5.0's "own glibc" milestone forks
 [`termux-pacman/glibc-packages`](https://github.com/termux-pacman/glibc-packages)
 (`gpkg/glibc/`) onto Debian's real glibc source
-(`third_party/glibc-android-patches/`
+(`patches/`
 has the combined patch, how to apply/regenerate it, and the build recipe).
 This section is the catalog of what that upstream patch set contains and
 which pieces this project's fork carries — current status, not a log of
@@ -276,7 +276,7 @@ adopting it reinforces this project's single view or punctures it.
    with no way to tell "harmless no-op" from "a real privilege change was
    wanted." This duplicates, at the glibc layer, what this project's own
    fake-root shim does at a different layer
-   (`core/native/dn-shim.c`'s `chown`/`set*id`/`setgroups`/`initgroups`
+   (`src/dn-shim.c`'s `chown`/`set*id`/`setgroups`/`initgroups`
    refused-for-lack-of-rights -> succeed). **Parked, not forked**, pending
    fake-root's own direction — forking this bucket as-is would reinstate
    that behavior unconditionally at the glibc layer independent of

@@ -2,7 +2,7 @@
 
 <!-- template: templates/docs.template.md -->
 
-Which libc entry points `core/native/dn-shim.c` has to cover for the packages
+Which libc entry points `src/dn-shim.c` has to cover for the packages
 we support, and the ones it does not. The scope is [`standard.md`](../../reference/standard.md);
 the design is [`path-shim.md`](path-shim.md).
 
@@ -130,7 +130,7 @@ intercepted. The counts are `app / base` imports across the corpus:
 
 ### Gaps found — and closed
 
-Nine genuine gaps were all closed in `core/native/dn-shim.c`:
+Nine genuine gaps were all closed in `src/dn-shim.c`:
 `__xstat`/`__lxstat` (legacy pre-2.33 stat entry points; `__fxstat` is
 fd-based and needs no redirect), `__fxstatat64` (the 64-bit `fstatat`, which
 Bun/Node call directly -- without it the real owner leaked past fake-root and
@@ -180,7 +180,7 @@ the cleaner general fix. In practice most lookups just resolve the current
 uid/gid or hostnames, where the real `/etc` (and Android's DNS) is often
 what you want anyway.
 
-**Resolved 2026-09-26:** the tracer route is wired in `core/native/dn-run.c` and
+**Resolved 2026-09-26:** the tracer route is wired in `src/dn-run.c` and
 the actual fix is a bind of the prefix's `/etc` over Termux glibc's
 **sysconfdir** `$PREFIX/glibc/etc` (where NSS reads, not the guest `/etc`).
 See `syscall-boundary.md`, "Solved: NSS", and `tests/tracer-nss/run.sh`.

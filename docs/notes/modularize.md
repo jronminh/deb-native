@@ -143,7 +143,7 @@ In order, and each owned by one place:
    run `.dn/relocate.sh` when the prefix landed elsewhere than its build path.
    Owner: the target's host shell (`/system/bin/sh`+toybox, or the Termux
    shell); the steps are identical.
-2. **Finish (build side)** — `core/runtime/dn-finish.sh`'s steps (patched
+2. **Finish (build side)** — `scripts/host/dn-finish.sh`'s steps (patched
    glibc, symlinks, alternatives, launchers) run at build time, before
    packaging; none is needed at install (`docs/spec/prefix-contract.md`,
    "Build invariants").
@@ -167,7 +167,7 @@ In order, and each owned by one place:
 - [ ] Land the check: wire it into `.github/workflows/checks.yml` (P4).
 
 ### P1 — Move-only restructure (done)
-- [x] Move `core/native/`, `core/tracer/`, `core/custom/` -> `core/` (compat symlinks left at
+- [x] Move `src/`, `core/tracer/`, `scripts/prefix/custom/` -> `core/` (compat symlinks left at
       the old names).
 - [x] Move `scripts/**` -> `core/install`, `core/runtime`, `core/bench`,
       `build/`, `bootstrap/`, `tools/`; `install.sh` stays at the repo root
@@ -182,7 +182,7 @@ In order, and each owned by one place:
       adapter; `module-edges.allow` is empty. (All three retired since: the
       overlay is glibc-only and prebuilt (`build/build-overlay-glibc.sh`), the
       prefix ships as a `.dn/` artifact, and the target's install is
-      `core/runtime/ship-prefix.sh` + the artifact's own `.dn/install.sh`.)
+      `scripts/host/ship-prefix.sh` + the artifact's own `.dn/install.sh`.)
 - [x] Move the adapter leaf scripts to `adapters/deb-native/`
       (`make-shell-interface.sh`, `make-shell-interface.sh`).
 - [x] Parameterize the `dpkg-query` leak (prefer the prefix's own; borrow the
@@ -262,14 +262,14 @@ The bootstrap's output — the one boundary a target consumes:
 
 | File | Mixes | Verdict |
 |---|---|---|
-| `core/install/setup-runtime.sh` | build core artifacts; install into prefix + generate `priv/`; vendor host libs + rpath | **split** into build / install / vendor |
-| `core/runtime/make-shell-interface.sh` | pure adapter (login, userland switch, motd, `pkg` guard, prefix registry) | **move** to adapter |
-| `core/install/dn-hook-pre.sh` | core hook; collision check calls the host `dpkg-query` | **parameterize** |
-| `core/install/dn-hook-post.sh` | core hook; host paths | **parameterize** |
-| `core/runtime/make-launchers.sh` | core logic; host `dpkg-query` + `BASE_FILES` | **parameterize** |
-| `core/runtime/make-apt-wrappers.sh` | host package-manager wrappers | **move/parameterize** |
-| `core/runtime/install-hooks.sh` | core staging; copies bootstrap scripts too | **core manifest** |
-| `core/install/dn-translate-deb.sh` | core; relative `$HERE/../../custom` layout assumption | **parameterize** |
+| `scripts/prefix/setup-runtime.sh` | build core artifacts; install into prefix + generate `priv/`; vendor host libs + rpath | **split** into build / install / vendor |
+| `scripts/host/make-shell-interface.sh` | pure adapter (login, userland switch, motd, `pkg` guard, prefix registry) | **move** to adapter |
+| `scripts/prefix/dn-hook-pre.sh` | core hook; collision check calls the host `dpkg-query` | **parameterize** |
+| `scripts/prefix/dn-hook-post.sh` | core hook; host paths | **parameterize** |
+| `scripts/host/make-launchers.sh` | core logic; host `dpkg-query` + `BASE_FILES` | **parameterize** |
+| `scripts/host/make-apt-wrappers.sh` | host package-manager wrappers | **move/parameterize** |
+| `scripts/host/install-hooks.sh` | core staging; copies bootstrap scripts too | **core manifest** |
+| `scripts/prefix/dn-translate-deb.sh` | core; relative `$HERE/../../custom` layout assumption | **parameterize** |
 | `bootstrap/build-dn-shim.sh` | build recipe for a core source, using the bootstrap toolchain | **keep** (bootstrap builds a core source) |
 | `install.sh` | bootstrap/product entry point that calls core | **keep** (product) |
-| `core/native/dn-launch.c` vs fork `dn-shell.c`/`dn-perl.c` | same invariant, different interpreter choice | **adapter parameter**, not a split |
+| `src/dn-launch.c` vs fork `dn-shell.c`/`dn-perl.c` | same invariant, different interpreter choice | **adapter parameter**, not a split |
