@@ -28,9 +28,21 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/syscall.h>
 #include <errno.h>
 
 static char instdir[4096];
+
+/* Does PATH exist as an executable on the device itself? dn-run is a glibc
+ * program, so the prefix's shim is loaded into it (ld.so.preload) and
+ * interposes access()/faccessat(): a guest-shaped path such as
+ * /lib/ld-linux-aarch64.so.1 would be rewritten into the prefix, where the
+ * loader does exist, and a missing interpreter would look present. The raw
+ * syscall is not interposed, so it answers for the real path (the same trap
+ * the shim avoids with real_access_ok()). */
+static int real_access_x(const char *path) {
+  return syscall(SYS_faccessat, AT_FDCWD, path, X_OK, 0) == 0;
+}
 static int g_glibc;   /* the target is a glibc ELF (classify) */
 
 #ifndef DN_APK
@@ -345,7 +357,7 @@ int main(int argc, char **argv) {
    * translated. Rewrite it once to the prefix's fused loader and run it
    * natively; if that is impossible (no patchelf, read-only), fall through
    * to the tracer route. Foreign binaries become case N of the same door. */
-  if (cls == C_GLIBC && in[0] && access(in, X_OK) != 0) {
+  if (cls == C_GLIBC && in[0] && !real_access_x(in)) {
     if (try_adopt(args[0]) == 0) {
       fprintf(stderr,
               "dn-run: adopted %s (interpreter %s -> prefix loader)\n",
