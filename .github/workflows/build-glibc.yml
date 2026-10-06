@@ -14,7 +14,12 @@ on:
 env:
   GLIBC_VERSION: "2.41"
   GLIBC_DEB_VERSION: "2.41-12+deb13u4"
-  DN_PREFIX: "/data/local/deb-native"
+  # The prefix glibc is BUILT for. It is baked as the fallback the runtime
+  # rewrites (docs/spec/dn-glibc-prefix.md, "Runtime prefix self-derivation"),
+  # so it must differ from the artifact's PREFIX_ROOT: if the two were equal,
+  # every patched glibc file would name the artifact root and pack-prefix
+  # would refuse it (build invariant 6). Keep it a placeholder, not a target.
+  DN_PREFIX: "/data/local/dn-build"
 
 jobs:
   build:

@@ -23,7 +23,9 @@ on:
     types: [completed]
 
 env:
-  DN_PREFIX: "/data/local/deb-native"
+  # The artifact root baked into the tarballs (PT_INTERP). It must differ from
+  # the glibc build's DN_PREFIX placeholder (see build-glibc.yml).
+  PREFIX_ROOT: "/data/local/deb-native"
   GLIBC_WORKFLOW: "build-glibc.yml"
 
 jobs:
@@ -66,7 +68,7 @@ jobs:
         env:
           DN_GLIBC_PREFIX: ${{ github.workspace }}/bundle/files
           DN_OVERLAY: ${{ github.workspace }}/src/.build-glibc
-          PREFIX_ROOT: ${{ env.DN_PREFIX }}
+          PREFIX_ROOT: ${{ env.PREFIX_ROOT }}
           DEB_LIST: ${{ github.workspace }}/scripts/build/packages.tsv
           DN_PROFILE: ${{ github.workspace }}/scripts/build/profile.txt
           DEB_CACHE: ${{ github.workspace }}/deb-cache
@@ -79,7 +81,7 @@ jobs:
         run: |
           python3 scripts/build/cut-core-ultra.py cdb-tree core-ultra-tree
           scripts/build/package-prefix.sh core-ultra-tree \
-            --root "$DN_PREFIX" --name core-ultra \
+            --root "$PREFIX_ROOT" --name core-ultra \
             --desc "core-ultra: the minimal prefix -- patched glibc, shell, basic tools" \
             --out core-ultra.tar.gz
 
