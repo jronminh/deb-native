@@ -15,6 +15,7 @@ run-time prefix self-derivation below are what shipped.
 - [What the prefix supplies](#what-the-prefix-supplies)
 - [One small loader patch](#one-small-loader-patch)
 - [Fixed paths](#fixed-paths)
+- [The 10-file swap](#the-10-file-swap)
 - [Runtime prefix self-derivation](#runtime-prefix-self-derivation)
 - [The package set](#the-package-set)
 - [Install order](#install-order)
@@ -96,6 +97,22 @@ while `set-dirs.patch` retargets the guest `/etc` for `ld.so.preload`. Debian's
 own `libc-bin` installs `ld.so.conf` to the guest `etc`, so the conf must be
 placed at `<prefix>/usr/etc/` for our `ldconfig` to read it.
 
+## The 10-file swap
+
+Rather than ship a full rebuilt glibc, the build reuses Debian's own packages
+for everything the Android patch does not touch: take Debian `libc6` and
+`libc-bin`, overwrite the 10 files the patch affects with this project's
+builds, and leave the rest Debian's. A Debian point release therefore needs
+only a re-check of the 10 files, not a full glibc rebuild.
+
+- `libc6` (7): `libc.so.6`, `ld-linux-aarch64.so.1`, `libresolv.so.2`,
+  `libnsl.so.1`, `libnss_compat.so.2`, `libnss_hesiod.so.2`, `librt.so.1`.
+- `libc-bin` (3): `ldconfig`, `localedef`, `iconv`.
+
+Only `libc.so.6` and the loader carry run-time prefix derivation; the other
+eight are swapped for their other patch effects, and their file access is
+covered by libc's redirected opens.
+
 ## Runtime prefix self-derivation
 
 Everything above assumes a **fixed** prefix: glibc is configured
@@ -109,8 +126,8 @@ any prefix, and a Debian base update never forces a glibc rebuild.
 Status: shipped (0.6.0+s.1). Implemented as **one global live prefix** in
 `sysdeps/generic/dn-prefix.h` + `elf/rtld.c` + `elf/dl-cache.c` +
 `elf/ldconfig.c` -- not per-file `dladdr` as first sketched below. The
-static `ldconfig` is the one exception (see [`deploy.md`](deploy.md),
-Open items).
+static `ldconfig` is the one exception (it is static, so it cannot derive the
+prefix; nothing in the current flow needs it — no `ld.so.cache` ships).
 
 ### How the live prefix is cut
 

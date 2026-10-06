@@ -130,7 +130,7 @@ The host workarounds are installed for you in
   `passwd`/`group`/`shadow`/`gshadow` from the prefix's own files.
 - **`ldconfig` is a no-op** in the priv layer: `libc-bin`'s postinst calls
   `ldconfig -r "$DPKG_ROOT/"`, which cannot work unprivileged. No `ld.so.cache`
-  ships ([`../spec/deploy.md`](../spec/deploy.md)); the loader derives its
+  ships ([`../spec/dn-glibc-prefix.md`](../spec/dn-glibc-prefix.md)); the loader derives its
   dirs from the live prefix, so a missing cache is non-fatal.
 
 ## Design limitations

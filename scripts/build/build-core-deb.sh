@@ -98,7 +98,7 @@ while read -r name ver _arch; do
 done < "$DEB_LIST" > "$W/debs.list"
 echo "build-core-deb: $(wc -l < "$W/debs.list") packages verified"
 
-# 2. Glibc, the way the bootstrap always did it (docs/spec/deploy.md): Debian's
+# 2. Glibc, the way the build always did it (docs/spec/dn-glibc-prefix.md): Debian's
 #    own libc6 and libc-bin, extracted like every package in step 3, then the
 #    10 files the Android patch changes overwritten with the patched build from
 #    a deb-native prefix (DN_GLIBC_PREFIX). The patched files are the only glibc

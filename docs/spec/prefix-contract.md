@@ -271,7 +271,7 @@ The build guarantees these, so relocation stays the steps above:
 3. **No `ld.so.cache`** in the artifact. The loader derives its library
    directories from its own path; a cache holds absolute paths in a binary
    format no text rewrite fixes, and the static `ldconfig` cannot derive the
-   prefix (`deploy.md`, Open items).
+   prefix ([`dn-glibc-prefix.md`](dn-glibc-prefix.md)).
 4. **Every symlink inside the prefix is relative.** A relative link never
    needs relocating. Today the apt post-hook runs `normalize-symlinks.sh`
    before `make-launchers.sh`, which leaves 44 absolute links in
