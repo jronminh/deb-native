@@ -3,15 +3,16 @@
 <!-- template: templates/docs.template.md -->
 
 Every prefix artifact carries a `.dn/` directory at its root: a **contract**
-file the host reads without running any code, a map of every byte range that
-names the build path, and an optional **relocation script** the host runs
-with its own shell. Installing a prefix needs nothing but a POSIX shell and
-`tar`, `dd`, `sed` (a POSIX shell + toybox is enough): read the contract,
-extract, and -- only when the prefix landed somewhere other than where it was
-built -- run the relocation script, which **patches the binaries' bytes
-directly** at offsets the build recorded. No ELF tool and no program of the
-prefix runs during an install. Status: design, verified by an experiment on
-core-deb and core-ultra (`prefix-layers.md`); the build does not emit `.dn/` yet and no host reads it.
+file the host reads without running any code, a list of every file that names
+the build path, and an **activation script** the host runs with its own shell.
+Installing a prefix needs nothing but a POSIX shell and toybox: read the
+contract, extract, run `.dn/install.sh`. It makes the prefix runnable where it
+landed by running the artifact's own loader -- the dynamic linker is the one
+ELF with no `PT_INTERP`, so the host shell can exec it -- on the artifact's
+own `dn-elf`, which repoints every glibc ELF's `PT_INTERP` at the new path and
+rewrites the text files with `sed`. The artifact carries the tool that
+relocates it; the host supplies no ELF tool of its own. Status: current; the
+build writes `.dn/` and `ship-prefix.sh` runs `install.sh`.
 
 ## Contents
 
@@ -19,8 +20,8 @@ core-deb and core-ultra (`prefix-layers.md`); the build does not emit `.dn/` yet
 - [Layout](#layout)
 - [The contract file](#the-contract-file)
 - [What the host does](#what-the-host-does)
-- [The relocation script](#the-relocation-script)
-- [Why patching bytes is safe here](#why-patching-bytes-is-safe-here)
+- [The activation script](#the-activation-script)
+- [Why rewriting the interpreter is safe here](#why-rewriting-the-interpreter-is-safe-here)
 - [Build invariants](#build-invariants)
 - [Verified](#verified)
 - [One ship path](#one-ship-path)
@@ -30,7 +31,7 @@ core-deb and core-ultra (`prefix-layers.md`); the build does not emit `.dn/` yet
 
 - [`../reference/elf-interp-patch.md`](../reference/elf-interp-patch.md) --
   how the kernel reads `PT_INTERP` (from the file, never mapped), which is
-  what makes an in-place byte patch valid.
+  what makes an in-place rewrite valid.
 - [`dn-glibc-prefix.md`](dn-glibc-prefix.md) -- the prefix's own loader, which
   derives the live prefix from its own path.
 - [`prefix-layers.md`](prefix-layers.md) -- core-ultra and core-deb, the
@@ -49,23 +50,25 @@ absolute path (shebangs, wrappers, `etc/ld.so.preload`). The kernel requires
 both to be absolute. Moving a prefix therefore means rewriting those paths --
 **relocation**, the one and only reason an install ever runs code.
 
-Relocation is split so that the hard part happens where tools are:
+Relocation is split so that each side does what it can:
 
 - **at build time**, with a toolchain and `dn-elf`, every glibc ELF's
-  `PT_INTERP` is given a fixed **capacity** (256 bytes), and the build records
-  each one's **file offset**;
-- **at install time**, the host's shell overwrites those bytes with `dd` and
-  rewrites the text files with `sed`. Nothing reads or parses an ELF.
+  `PT_INTERP` is given a fixed **capacity** (256 bytes) and the build records
+  every file that names the build path in `.dn/baked-paths`;
+- **at install time**, the artifact's own loader runs the artifact's own
+  `dn-elf` on those files. The loader is the one ELF the host shell can exec
+  without help (no `PT_INTERP`); `dn-elf` rewrites each interpreter to the new
+  path and `sed` rewrites the text files.
 
 So the host:
 
 1. reads the contract (data, no code);
 2. extracts the artifact;
-3. runs the prefix's relocation script with its own shell, when the contract
-   names one;
-4. runs the artifact's `install` script (host-side activation) and its
-   `bootstrap` script through the prefix's own shell (completion), when the
-   contract names them. What install and bootstrap do is below.
+3. runs the artifact's `install` script with its own shell: it relocates the
+   prefix to where it landed and activates it;
+4. checks that the prefix's shell runs, and runs the `bootstrap` script
+   through the prefix's own shell (completion), when the contract names one.
+   What install and bootstrap do is below.
 
 What a prefix needs beyond being in place is not part of installing it.
 Data that belongs to the host -- the phone's storage, the device's DNS -- is
@@ -84,8 +87,7 @@ own `boot.d` / `login.d` hooks.
 │   ├── baked-paths     every place the build path is written (by the build)
 │   ├── packages        the Debian packages the prefix contains (prefix-layers.md)
 │   ├── profile         the packages a bootstrap restores from the mirror
-│   ├── relocate.sh     optional: POSIX sh, run by the host's shell
-│   ├── install.sh      optional: /system/bin/sh, run by the host's shell, activates the prefix
+│   ├── install.sh      /system/bin/sh, run by the host's shell: relocate + activate
 │   └── bootstrap.sh    optional: run by the prefix's own shell, completes it
 ├── home/               empty
 ├── root -> home
@@ -114,8 +116,9 @@ text	usr/bin/zcat
 - `text FILE` -- a file whose content names the build path (shebangs,
   wrappers, config).
 
-The build writes it, so an install never scans the tree (the 0.7.1-dev core
-prefix: 181 `elf`, 139 `text`, about 5000 files in all).
+The build writes it, so `install.sh` rewrites exactly those files and never
+scans the tree (the 0.7.1-dev core prefix: 181 `elf`, 139 `text`, about 5000
+files in all).
 
 ## The contract file
 
@@ -135,9 +138,8 @@ prefix: 181 `elf`, 139 `text`, about 5000 files in all).
 | `version` | no | the prefix's own version (e.g. `core/VERSION` for core-ultra and core-deb). |
 | `arch` | yes | the CPU architecture (`uname -m`, e.g. `aarch64`). |
 | `root` | yes | the absolute directory the prefix's files currently name: the build path in an artifact, the install path once relocated. |
-| `loader` | with `relocate` | the prefix's loader, relative to the root; `root/loader` is the string every `elf` entry holds. |
-| `relocate` | no | the relocation script, relative to the root. Absent: the prefix installs only at `root`. |
-| `install` | no | the activation script, relative to the root; run by the host's `/system/bin/sh` after relocation. Absent: nothing to activate. |
+| `loader` | yes | the prefix's loader, relative to the root; `root/loader` is the string every `elf` entry holds, and the one ELF the host shell can exec. |
+| `install` | yes | the activation script, relative to the root; run by the host's `/system/bin/sh`. |
 | `bootstrap` | no | the completion script, relative to the root; run by the prefix's own shell after `install`. Absent: the prefix is complete as shipped. |
 | `entry` | yes | the command, relative to the root, that opens an interactive session. |
 | `size` | no | the extracted size in MiB, for a free-space check. |
@@ -153,7 +155,6 @@ version=0.7.1-dev
 arch=aarch64
 root=/data/local/deb-native
 loader=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
-relocate=.dn/relocate.sh
 install=.dn/install.sh
 bootstrap=.dn/bootstrap.sh
 entry=usr/bin/bash -i
@@ -162,126 +163,114 @@ size=200
 
 ## What the host does
 
-`install NAME ARTIFACT`, on any host, with a POSIX shell, `tar`, `dd` and
-`sed`:
+`install NAME ARTIFACT`, on any host, with a POSIX shell and toybox:
 
 1. **Read the contract without extracting**:
    `tar -xzOf ARTIFACT ./.dn/contract` (toybox `tar` supports `-z` and `-O`).
    **Check**, and refuse before writing anything: `contract` is a version it
-   knows, `arch` equals `uname -m`, the name is valid, the target directory
-   `D` does not exist, `size` fits the free space, and -- when the contract
-   has no `relocate` -- `D` is `root` (compared after resolving symlinks:
-   `/data/user/0/...` and `/data/data/...` are the same directory).
+   knows, `arch` equals `uname -m`, the name is valid, and the target
+   directory `D` does not exist; `size`, when given, fits the free space.
 2. **Extract**: `mkdir D && tar -xzf ARTIFACT -C D`.
-3. **Relocate**, when the contract names a script: `sh D/<relocate>` with
-   `DN_INSTDIR=D`, run by the host's own shell. The script returns at once
-   when `root` already is `D`.
+3. **Activate**, when the contract names an `install` script:
+   `DN_INSTDIR=D sh D/<install>`, run by the host's own shell. It relocates
+   the prefix to `D` (below) and wires the host's session entry. The artifact
+   carries the logic, so the host needs no per-target code of its own.
 4. **Check that the prefix's shell runs**: `D/<entry> -c 'exit 0'` (the
    entry is a shell). It is the acceptance test of every prefix: installed
-   means the shell works.
-5. **Activate**, when the contract names an `install` script: `sh D/<install>`
-   with `DN_INSTDIR=D`, run by the host's own POSIX shell. This is the host-side integration that makes the prefix
-   enterable (a session entry, a launcher); the artifact carries it, so the
-   host needs no per-target logic of its own.
-6. **Complete**, when the contract names a `bootstrap` script: run it with the
+   means the shell works. It can only pass after step 3 relocated the ELFs.
+5. **Complete**, when the contract names a `bootstrap` script: run it with the
    prefix's own shell, `DN_INSTDIR=D "$D/usr/bin/bash" "$D/<bootstrap>"`. The
    prefix installs what `.dn/profile` lists from the mirror and writes
    `.dn/bootstrapped`; a second run is a no-op. This is the prefix's own
    logic, not the host's, and the one step that needs the network.
-7. **On any failure** in 2-6, remove `D` and report it with the step's output.
+6. **On any failure** in 2-5, remove `D` and report it with the step's output.
    On success the prefix is ready to use; the host may integrate it on its own
    side (a prefix list, a login entry) without writing into it.
 
 The host reads `name`, `desc` and `entry` again whenever it lists or enters
 a prefix; it never needs the prefix to run for that.
 
-## The relocation script
+## The activation script
 
-`.dn/relocate.sh` is the prefix's own logic, run by the host's shell before
-any program of the prefix can start. It is written to the smallest common
-environment: **POSIX `sh`** (no bash or mksh extensions) and **only `printf`,
-`dd`, `sed`, `wc`**, which toybox and coreutils both have. Input:
-`DN_INSTDIR` (`D`), `.dn/contract`, `.dn/baked-paths`. Exit status is the
+`.dn/install.sh` is the artifact's own logic, run by the host's shell
+(`/system/bin/sh`, i.e. mksh + toybox on Android). It uses only the shell,
+toybox (`sed`, `mkdir`, …) and -- the point -- the **artifact's own loader and
+`dn-elf`**. Input: `DN_INSTDIR` (`D`) and `.dn/contract`. Exit status is the
 result; it is idempotent.
 
-When `root` (`R`) in the contract differs from `D`, with `OLD = R/<loader>`
-and `NEW = D/<loader>`:
+When `root` (`R`) in the contract differs from `D`, with `LD = D/<loader>`:
 
-1. **ELF interpreters, by byte patch.** For each `elf FILE OFFSET CAPACITY`:
-   - refuse if `NEW` plus its NUL does not fit `CAPACITY`;
-   - **read the bytes at `OFFSET` and refuse unless they are `OLD`** -- a
-     mismatch means the file changed since the build, and writing would
-     corrupt it;
-   - write `NEW` and a NUL over them:
-
-     ```
-     cur=$(dd if=FILE bs=1 skip=OFFSET count=${#OLD} 2>/dev/null)
-     [ "$cur" = "$OLD" ] || exit 1
-     printf '%s\000' "$NEW" | dd of=FILE bs=1 seek=OFFSET conv=notrunc 2>/dev/null
-     ```
-2. **Text files.** For each `text FILE`, `sed -i` replacing `R` with `D`. `D`
-   may contain `R` (`R` = `.../files`, `D` = `.../files/core`), so
-   occurrences of `D` are protected first and a rerun never produces
-   `.../core/core`:
+1. **Run the loader on the artifact's `dn-elf`.** The loader is the dynamic
+   linker; it has no `PT_INTERP`, so a plain `execve` of it works even though
+   everything else in the artifact still names `R`:
 
    ```
-   sed -i "s|$D|@@DN@@|g; s|$R|$D|g; s|@@DN@@|$D|g" FILE
+   "$LD" --library-path "$D/usr/lib/aarch64-linux-gnu" \
+         "$D/usr/lib/deb-native/dn-elf" set-interp FILE "$D/<loader>" 256
    ```
-3. **Record it**: set `root=D` in `.dn/contract`.
 
-A refusal leaves the files patched so far as they are; at install time the
+2. **ELF interpreters.** For each `elf FILE OFFSET CAPACITY` in
+   `.dn/baked-paths`, run the line above on `D/FILE`. `dn-elf` overwrites the
+   old interpreter within the reserved `CAPACITY`, so no byte of the file
+   moves and the kernel, at the next `execve`, reads the new path.
+3. **Text files.** For each `text FILE`, `sed -i` replacing `R` with `D`.
+4. **Record it**: set `root=D` in `.dn/contract`.
+
+Then it runs the prefix's own `login.d` hooks through `D/usr/bin/bash` -- the
+shell now runs, because every ELF was repointed -- and writes the host's
+session entry when `DN_SESSION_SHELL` is set.
+
+A failure leaves the files rewritten so far as they are; at install time the
 host removes `D` on any failure, so nothing half-relocated survives.
 
 From then on the prefix runs normally: the kernel reads each new
 `PT_INTERP`, the loader reads the new `etc/ld.so.preload`, and the shim and
 glibc self-derive the prefix at run time.
 
-## Why patching bytes is safe here
+## Why rewriting the interpreter is safe here
 
 - **The kernel reads `PT_INTERP` from the file**, through
   `p_offset`/`p_filesz`, at `execve()`, and never maps it
-  (`elf-interp-patch.md`). Changing those bytes changes nothing else in the
+  (`elf-interp-patch.md`). Overwriting those bytes changes nothing else in the
   ELF: no header, no segment, no layout.
 - **It needs only a terminated string.** The kernel requires the last byte of
   the `p_filesz` range to be NUL (the capacity's last byte stays NUL) and
   opens the path up to the first NUL; anything after it is ignored.
-- **No other binary byte names the prefix.** Measured on core-deb: no
-  ELF carries the build path anywhere but in `PT_INTERP` (the glibc and the
-  shim derive the prefix at run time), so the offsets are the whole job.
-- **Every write is checked first.** The offset is trusted only while the
-  bytes there are still the old loader path.
-
-The cost is the capacity: the path to the loader at the install site must be
-shorter than 256 bytes (core-deb in the app, at
-`/data/data/org.dn.shell/files/core-deb/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`,
-is 86).
+- **The build reserved the room.** Every interpreter is written once, with a
+  256-byte capacity, so `dn-elf` overwrites in place and the new path may grow
+  up to 255 bytes.
+- **No other binary byte names the prefix.** Measured on core-deb: no ELF
+  carries the build path anywhere but in `PT_INTERP` (glibc and the shim
+  derive the prefix at run time); the offsets in `.dn/baked-paths` are the
+  whole job, and the build refuses an artifact where that is not true.
 
 ## Build invariants
 
-The build guarantees these, so relocation stays the steps above:
+The build guarantees these, so activation stays the steps above:
 
 1. **Every glibc ELF's `PT_INTERP` has the full capacity** (256 bytes): the
-   build sets a 255-character placeholder with `dn-elf` (the only point
-   where its layout rewrite runs, and where the result can be checked), then
-   writes the real loader path and a NUL at its start, and records the
-   offset.
-2. **Only ELFs that use the prefix's glibc loader are touched.** `dn-run` and
-   `dn-trace` are Bionic (`/system/bin/linker64`) and must keep that
-   interpreter; repointing them breaks every launcher.
-3. **No `ld.so.cache`** in the artifact. The loader derives its library
+   build reserves it with `dn-elf` (a placeholder write, the one point where
+   its layout rewrite runs and the result can be checked), then writes the
+   real loader path and a NUL at its start, and records the offset.
+2. **Only ELFs that use the prefix's loader are rewritten.** An ELF with
+   another interpreter (the system's own linker) keeps it.
+3. **The artifact carries the loader and `dn-elf`** under `usr/lib/`: the
+   loader because it is what the host shell runs, `dn-elf` because it is what
+   rewrites the rest. The loader must have no `PT_INTERP`.
+4. **No `ld.so.cache`** in the artifact. The loader derives its library
    directories from its own path; a cache holds absolute paths in a binary
    format no text rewrite fixes, and the static `ldconfig` cannot derive the
    prefix ([`dn-glibc-prefix.md`](dn-glibc-prefix.md)).
-4. **Every symlink inside the prefix is relative.** A relative link never
+5. **Every symlink inside the prefix is relative.** A relative link never
    needs relocating. Today the apt post-hook runs `normalize-symlinks.sh`
    before `make-launchers.sh`, which leaves 44 absolute links in
    `usr/lib/deb-native/bin/`; the build normalizes after the last step that
    makes links.
-5. **`.dn/baked-paths` is complete**, and **no binary carries the build path
+6. **`.dn/baked-paths` is complete**, and **no binary carries the build path
    outside `PT_INTERP`**; the build checks both and fails otherwise.
-6. **`home/`, `root -> home` and `mnt -> ../mnt` are in the artifact**, all
+7. **`home/`, `root -> home` and `mnt -> ../mnt` are in the artifact**, all
    relative.
-7. **`etc/resolv.conf` is the relative link `../../app/etc/resolv.conf`**,
+8. **`etc/resolv.conf` is the relative link `../../app/etc/resolv.conf`**,
    not a file: the host keeps its DNS servers in `app/etc/resolv.conf` beside
    its prefixes, updated however that host does. glibc rereads the file when
    it changes, so a new network reaches the prefix with nothing run inside it.
@@ -298,18 +287,18 @@ time.
 
 ## Verified
 
-On core-deb, installed with a POSIX shell + toybox only into a different
-directory whose loader path is 190 bytes:
+On core-ultra, installed with only `/system/bin/sh` + toybox into a different
+directory (`env -i PATH=/system/bin DN_INSTDIR=D /system/bin/sh D/.dn/install.sh`):
 
-- the contract read with `tar -xzOf`, the tree extracted, `relocate.sh` run:
-  181 ELFs and 139 text files in 2-4 s; a rerun changes nothing;
-- run straight from the host shell, no loader invoked by hand: `bash`,
-  `dpkg`, `apt`; in a prefix session: `dpkg -l`, `perl` through its launcher
-  and `dn-run`, the fake-root identity, a shebang script (`zcat`), `/mnt`
-  through `mnt -> ../mnt`;
-- no file left naming the build path;
-- a file changed after the build (bytes at its `PT_INTERP` offset
-  overwritten) is refused, not patched.
+- the loader ran `dn-elf` on the 124 `elf` entries and the activation
+  rewrote `124 elf + 28 text` in under a second; the prefix's `bash` then ran
+  and named the new loader;
+- end to end, `package-prefix.sh` -> `ship-prefix.sh`: extract, activate,
+  check the shell, done -- the prefix's `bash` runs at `D`.
+
+Earlier, on the byte-patch (`dd`) relocation this design replaced: core-deb,
+181 ELFs and 139 text files in 2-4 s, no file left naming the build path, and
+a file changed after the build refused rather than corrupted.
 
 Not exercised: `apt install` over the network, `dn-trace`.
 
@@ -324,5 +313,5 @@ builds, and with no artifact it stops and says so.
 
 - **Artifact distribution**: the build emits the tarball; publishing it, and a
   default source a host can fetch from, is still open.
-- **Relocation capacity**: the loader path at the install site must be shorter
+- **Activation capacity**: the loader path at the install site must be shorter
   than the reserved `PT_INTERP` capacity (256 bytes).

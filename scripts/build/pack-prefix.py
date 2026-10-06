@@ -14,11 +14,10 @@ prefix (package-prefix.sh stages one); the tree is changed in place:
   - absolute symlinks into ROOT become relative; ld.so.cache is removed;
   - home/, root -> home, mnt -> ../mnt and
     etc/resolv.conf -> ../../app/etc/resolv.conf are made;
-  - .dn/contract, .dn/baked-paths, .dn/packages and .dn/relocate.sh are
-    written.
+  - .dn/contract, .dn/baked-paths and .dn/packages are written.
 
 Usage: pack-prefix.py TREE --root ROOT --name NAME [--desc TEXT]
-                      [--version V] [--relocate SCRIPT] [--dn-elf PATH]
+                      [--version V] [--dn-elf PATH]
 """
 import argparse
 import os
@@ -70,7 +69,6 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--desc", default="")
     ap.add_argument("--version", default="")
-    ap.add_argument("--relocate", help="relocate.sh to copy in (default: scripts/host/relocate.sh)")
     ap.add_argument("--dn-elf", default=os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "..", "src/.build-glibc/dn-elf"),
         help="dn-elf binary that reserves the PT_INTERP capacity")
@@ -162,6 +160,11 @@ def main():
 
     dn = os.path.join(T, ".dn")
     os.makedirs(dn, exist_ok=True)
+    # The relocation script was retired: install.sh relocates with the loader +
+    # dn-elf. Drop one an older artifact left in the tree.
+    stale = os.path.join(dn, "relocate.sh")
+    if os.path.exists(stale):
+        os.remove(stale)
     with open(os.path.join(dn, "baked-paths"), "w") as f:
         for rel, off, cap in sorted(elf):
             f.write(f"elf\t{rel}\t{off}\t{cap}\n")
@@ -176,10 +179,6 @@ def main():
                 kv = dict(l.split(": ", 1) for l in blk.splitlines() if ": " in l and not l.startswith(" "))
                 if kv.get("Status", "").endswith(" installed") and "Package" in kv:
                     o.write(f"{kv['Package']}\t{kv.get('Version', '')}\t{kv.get('Architecture', '')}\n")
-
-    reloc = a.relocate or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts", "host", "relocate.sh")
-    shutil.copyfile(reloc, os.path.join(dn, "relocate.sh"))
-    os.chmod(os.path.join(dn, "relocate.sh"), 0o755)
 
     # The activation scripts the contract names. install is always carried;
     # bootstrap only when the artifact is incomplete, i.e. ships a .dn/profile
@@ -205,7 +204,7 @@ def main():
     if a.version:
         lines.append(f"version={a.version}")
     lines += ["arch=aarch64", f"root={ROOT}", f"loader={LOADER}",
-              "relocate=.dn/relocate.sh", "install=.dn/install.sh"]
+              "install=.dn/install.sh"]
     if has_profile:
         lines.append("bootstrap=.dn/bootstrap.sh")
     lines += ["entry=usr/bin/bash -i", f"size={size_mib}"]

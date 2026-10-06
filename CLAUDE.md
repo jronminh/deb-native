@@ -23,11 +23,13 @@ There is **no build on the host**.
   (`build-core-deb.sh` + `package-prefix.sh`, which writes `.dn/` —
   `docs/spec/prefix-contract.md`).
 - **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
-  `.dn/contract` without extracting, check it, extract, relocate. One install
-  path, on a **poor host** (POSIX sh + toybox only).
-- **Activate / complete**: the artifact's own `.dn/install.sh` (host shell),
-  then `.dn/bootstrap.sh` (the prefix's own shell, installing `.dn/profile`).
-  When bootstrap succeeds the prefix is ready.
+  `.dn/contract` without extracting, check it, extract, run `.dn/install.sh`.
+  One install path, on a **poor host** (POSIX sh + toybox only).
+- **Activate / complete**: the artifact's own `.dn/install.sh` (host shell)
+  relocates the prefix -- the loader runs the artifact's `dn-elf`, which
+  repoints every ELF -- and wires the session entry; then `.dn/bootstrap.sh`
+  (the prefix's own shell) installs `.dn/profile`. When bootstrap succeeds the
+  prefix is ready.
 
 Run time has three path mechanisms: maintainer-script rewrites
 (`scripts/prefix/dn-translate-deb.sh`, via `dn-elf`), the shim

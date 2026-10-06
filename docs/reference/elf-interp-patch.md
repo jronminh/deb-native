@@ -93,7 +93,8 @@ it.
   carries the build path anywhere but in `PT_INTERP` (the glibc and the shim
   derive the prefix at run time), so the recorded offsets are the whole job;
   the build fails if a binary names it elsewhere.
-- **Every relocation write is checked first.** `.dn/baked-paths` records each
-  `PT_INTERP` offset and capacity; the relocation script refuses if the bytes
-  there are not the old loader path.
+- **The write stays in the reserved room.** `.dn/baked-paths` records each
+  `PT_INTERP` offset and capacity; `dn-elf` overwrites the string within that
+  capacity, so relocation is a byte write at a recorded offset and nothing else
+  moves.
 - **Idempotency.** `dn-elf` treats an already-correct interpreter as done.

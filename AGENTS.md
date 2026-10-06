@@ -20,11 +20,13 @@ There is **no build on the host**.
   (`build-core-deb.sh` + `package-prefix.sh`, which writes `.dn/` —
   `docs/spec/prefix-contract.md`).
 - **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
-  `.dn/contract` without extracting, extract, relocate. This is the one install
-  path, on a **poor host** (POSIX sh + toybox only).
-- **Activate / complete**: the artifact's own `.dn/install.sh` (host shell),
-  then `.dn/bootstrap.sh` (the prefix's own shell, installing `.dn/profile`).
-  When bootstrap succeeds the prefix is ready.
+  `.dn/contract` without extracting, extract, run `.dn/install.sh`. This is the
+  one install path, on a **poor host** (POSIX sh + toybox only).
+- **Activate / complete**: the artifact's own `.dn/install.sh` (host shell)
+  relocates the prefix -- the loader runs the artifact's `dn-elf`, which
+  repoints every ELF -- and wires the session entry; then `.dn/bootstrap.sh`
+  (the prefix's own shell) installs `.dn/profile`. When bootstrap succeeds the
+  prefix is ready.
 
 Run time has three path mechanisms: maintainer-script rewrites
 (`scripts/prefix/dn-translate-deb.sh`, via `dn-elf`), the shim
@@ -38,7 +40,8 @@ Run time has three path mechanisms: maintainer-script rewrites
 - `scripts/glibc/` — build host: apply the glibc patch, package `libc6` /
   `libc-bin`.
 - `scripts/host/` — the host's own shell (poor host): ship, bootstrap,
-  install (activation), relocate, hooks, adopt, update.
+  install (activation + relocation via the artifact's loader/dn-elf), hooks,
+  adopt, update.
 - `scripts/prefix/` — run by the prefix (its own glibc): apt hooks, package
   translation, per-package fixes; `interface.tsv` is the module surface.
 - `patches/` — the glibc Android patch.

@@ -6,14 +6,13 @@
 #
 #   1. read .dn/contract from the tarball without extracting it, and check it;
 #   2. extract into DEST;
-#   3. run the prefix's own relocation script (contract relocate=), if any;
+#   3. run the artifact's activation script (contract install=) with the host's
+#      own shell: it relocates the artifact to DEST and wires the session entry;
 #   4. check that the prefix's shell runs (contract entry=, with -c 'exit 0');
-#   5. run the artifact's activation script (contract install=), host shell;
-#   6. run the artifact's completion script (contract bootstrap=) through the
+#   5. run the artifact's completion script (contract bootstrap=) through the
 #      prefix's own shell -- the prefix installs .dn/profile from the mirror.
-# Any failure after DEST is created removes DEST. The host never edits a
-# file inside the prefix; everything prefix-specific is the prefix's own
-# relocation script.
+# Any failure after DEST is created removes DEST. The host never edits a file
+# inside the prefix; everything prefix-specific is the prefix's own scripts.
 #
 # Usage: ship-prefix.sh ARTIFACT.tar.gz DEST
 set -eu
@@ -33,7 +32,7 @@ parent=${D%/*}
 
 # 1. The contract, read without extracting.
 C=$(tar -xzOf "$A" ./.dn/contract 2>/dev/null) || die "$A carries no .dn/contract"
-contract= name= arch= root= loader= relocate= install= bootstrap= entry= size=
+contract= name= arch= root= loader= install= bootstrap= entry= size=
 # Line by line without a here-document: mksh writes those to a temporary
 # file, and an app may have no writable TMPDIR.
 oldifs=$IFS
@@ -48,7 +47,6 @@ for l in $C; do
     arch=*) arch=${l#*=} ;;
     root=*) root=${l#*=} ;;
     loader=*) loader=${l#*=} ;;
-    relocate=*) relocate=${l#*=} ;;
     install=*) install=${l#*=} ;;
     bootstrap=*) bootstrap=${l#*=} ;;
     entry=*) entry=${l#*=} ;;
@@ -60,17 +58,8 @@ done
 IFS=$oldifs
 set +f
 [ "$contract" = "$CONTRACT_VERSION" ] || die "contract version '${contract:-?}' not supported (this host knows $CONTRACT_VERSION)"
-[ -n "$name" ] && [ -n "$arch" ] && [ -n "$root" ] && [ -n "$entry" ] || die "contract lacks name/arch/root/entry"
+[ -n "$name" ] && [ -n "$arch" ] && [ -n "$root" ] && [ -n "$loader" ] && [ -n "$entry" ] || die "contract lacks name/arch/root/loader/entry"
 [ "$arch" = "$(uname -m)" ] || die "artifact is for $arch, this device is $(uname -m)"
-if [ -n "$relocate" ]; then
-  [ -n "$loader" ] || die "contract has relocate= but no loader="
-else
-  # Not relocatable: it runs only at root. Compare with symlinks resolved
-  # on the parent (/data/user/0/... and /data/data/... are one directory).
-  rparent=$(cd -P -- "$parent" && pwd)
-  bparent=$(cd -P -- "${root%/*}" 2>/dev/null && pwd) || bparent=${root%/*}
-  [ "$rparent/${D##*/}" = "$bparent/${root##*/}" ] || die "not relocatable: installs only at $root"
-fi
 if [ -n "$size" ]; then
   # POSIX format (-P): one line per filesystem, available KiB in field 4.
   # Compare in MiB: Android's mksh does 32-bit arithmetic, so size * 1024
@@ -79,18 +68,17 @@ if [ -n "$size" ]; then
   [ $((avail / 1024)) -ge "$size" ] || die "needs ${size} MiB in $parent, $((avail / 1024)) MiB free"
 fi
 
-# 2-6. Extract, relocate, check, activate, complete; undo on failure.
+# 2-5. Extract, activate, check, complete; undo on failure.
 mkdir "$D"
 trap 'rm -rf "$D"' EXIT
 tar -xzf "$A" -C "$D" || die "extract failed"
-if [ -n "$relocate" ]; then
-  DN_INSTDIR=$D sh "$D/$relocate" || die "relocation failed"
-fi
-"$D/${entry%% *}" -c 'exit 0' || die "the prefix's shell ($D/${entry%% *}) does not run"
 if [ -n "$install" ]; then
-  # Host-side activation, the host's own shell (mksh + toybox on Android).
+  # Activation, the host's own shell (mksh + toybox on Android): it relocates
+  # the artifact to D and wires the session entry, using the artifact's own
+  # loader + dn-elf.
   DN_INSTDIR=$D sh "$D/$install" "$D" || die "activation failed"
 fi
+"$D/${entry%% *}" -c 'exit 0' || die "the prefix's shell ($D/${entry%% *}) does not run"
 if [ -n "$bootstrap" ]; then
   # Completion, the prefix's own shell: it has apt and coreutils, the host
   # does not need them.
