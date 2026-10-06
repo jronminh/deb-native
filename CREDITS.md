@@ -15,7 +15,7 @@ builds on, and the license each part is under.
   syscall-interception core — the hard part — is theirs.
 - Why a fork and not a fresh tracer: rewriting a syscall's path arguments
   requires `ptrace` (seccomp user-notification can inspect and inject but not
-  modify arguments). See [`docs/spec/tracer/direct-usage.md`](docs/spec/tracer/direct-usage.md).
+  modify arguments).
 
 ## Termux
 

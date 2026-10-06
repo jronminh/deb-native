@@ -5,9 +5,8 @@
 The lifecycle of a **single package** in a prefix: `apt update` through to the
 program running by name. It maps each stage to the dpkg/apt hook that fires,
 the script that does the work, and the layer that makes it stick -- so a review
-can pick one stage and read only what belongs to it. `install-flow.md` covers
-the one-time prefix **bootstrap** instead, and `design.md`'s "Install pipeline"
-is the design record behind the two translation hooks.
+can pick one stage and read only what belongs to it. `design.md`'s "Install
+pipeline" is the design record behind the two translation hooks.
 
 Living doc: it tracks the shipped pipeline, not a proposal.
 
@@ -20,14 +19,12 @@ Living doc: it tracks the shipped pipeline, not a proposal.
 
 ## Related docs
 
-- [`install-flow.md`](install-flow.md) — the one-time bootstrap, end to end.
 - [`design.md`](design.md) — the live design; "Install pipeline" is this
   doc's two hook rows in context.
 - [`path-shim.md`](shim/path-shim.md) — the shim and maintainer-script layers.
 - [`tracer.md`](tracer/tracer.md) — `dn-trace`, the syscall layer at run time.
 - [`syscall-boundary.md`](../reference/syscall-boundary.md) — what the shim cannot see.
-- `core/install/README.md`, `core/runtime/README.md`,
-  `bootstrap/README.md` — the scripts per lifecycle category.
+- `scripts/prefix/` — the scripts per lifecycle category.
 
 ## Stage map
 
@@ -106,17 +103,15 @@ as built.
 
 ## Timing traps
 
-- **`preinst` precedes `postinst` by design.** In the bootstrap's batched base
-  install every file is already on disk before any `postinst` runs, because
-  Debian never declares its own Essential tools as dependencies
-  (`install-flow.md`). A later single `apt install` follows dpkg's normal
-  Pre-Depends order instead.
+- **`preinst` precedes `postinst` by design.** In the base set assembled at
+  build time every file is already on disk before any `postinst` runs, because
+  Debian never declares its own Essential tools as dependencies. A later
+  single `apt install` follows dpkg's normal Pre-Depends order instead.
 - **Pre-hook failure is transactional, post-hook failure is not.** Stage 2
   exiting non-zero stops apt before it unpacks anything; stage 5 is
   best-effort by contract.
-- **The post-hook runs after every install this way**, not only during
-  bootstrap -- `normalize-symlinks.sh` in particular must, or an absolute
-  symlink from a package installed outside `install.sh` resolves against the
-  real host root (`install-flow.md`).
+- **The post-hook runs after every install this way.** `normalize-symlinks.sh`
+  in particular must, or an absolute symlink from a package resolves against
+  the real host root.
 - **Maintainer scripts run under the prefix's own shell**, never Termux's --
   a shebang that survives translation points at `dn-shell`.

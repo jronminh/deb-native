@@ -168,12 +168,11 @@ only as a fallback for packages not in the repo.
 - The runtime layer: shim, `dn-shell`/`dn-perl`, `dn-run`, launchers,
   `termux-dn-doctor`.
 - Routing ("Termux wins") -- superseded: the Debian userland is the default
-  session, so `apt`/`dpkg` are the prefix's by PATH; Termux's are `pkg`
-  in a Termux shell (`termux-shell`). See `docs/spec/userlands.md`.
+  session, so `apt`/`dpkg` are the prefix's by PATH.
 
 ### Day-to-day commands
 
-The Debian userland is the default session (`docs/spec/userlands.md`):
+The Debian userland is the default session:
 opening Termux lands in Debian, not in Termux's own shell.
 
 - `apt`, `apt-get`, `apt-cache`, `apt-mark`, `dpkg`, `dpkg-query` are

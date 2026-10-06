@@ -6,6 +6,7 @@
 
 meta	^\.github/
 meta	^\.gitignore$
+meta	^templates/
 meta	^(AGENTS|CLAUDE|CONTRIBUTING|CREDITS|README|SECURITY|TODO)\.md$
 meta	^LICENSE$
 meta	^VERSION$

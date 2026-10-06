@@ -6,8 +6,8 @@ What the syscall tracer is for now that the fused loader exists, how it was meas
 and what is still open. Living doc, not per-release — last major update
 2026-09-27 on `dev-0.2.0`, tested on `fe2`. Code: `../../tracer/` (its
 `README.md` keeps the per-file prune list);
-earlier background: [`direct-usage.md`](direct-usage.md),
-[`bind-only.md`](bind-only.md), [`syscall-boundary.md`](../../reference/syscall-boundary.md).
+earlier background: `direct-usage.md`,
+`bind-only.md`, [`syscall-boundary.md`](../../reference/syscall-boundary.md).
 
 ## Contents
 
@@ -19,7 +19,7 @@ earlier background: [`direct-usage.md`](direct-usage.md),
 
 ## Related docs
 
-- [`direct-usage.md`](direct-usage.md), [`bind-only.md`](bind-only.md),
+- `direct-usage.md`, `bind-only.md`,
   [`syscall-boundary.md`](../../reference/syscall-boundary.md) — the earlier background
   (investigation, bind-only audit, the boundary map).
 - [`android-platform.md`](../../reference/android-platform.md) — the Android enforcement

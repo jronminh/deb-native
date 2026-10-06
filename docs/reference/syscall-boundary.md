@@ -25,7 +25,7 @@ existing answer (`proot`) already applies.
 
 - [`shim-coverage.md`](../spec/shim/shim-coverage.md) — the shim this doc's boundary
   sits beyond.
-- [`direct-usage.md`](../spec/tracer/direct-usage.md) — the living investigation into
+- `direct-usage.md` — the living investigation into
   what actually crosses this boundary.
 - [`tracer.md`](../spec/tracer/tracer.md) — the mechanism that reaches past it.
 - [`android-platform.md`](android-platform.md) — the Android-specific
@@ -160,7 +160,7 @@ python3 core/bench/scan-direct-syscalls.py DIR --verify --list
 ## Open questions
 
 These are tracked, with an experiment log and the mechanism decision, in
-[`direct-usage.md`](../spec/tracer/direct-usage.md).
+`direct-usage.md`.
 
 - The corpus is dominated by **libraries** (415 of 668). What matters is the
   in-scope **programs** on `PATH`; that breakdown is not yet done.

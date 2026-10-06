@@ -28,15 +28,13 @@ experiments cut from one full prefix (sizes below).
   layer's artifact carries, and how a host installs one.
 - [`../notes/modularize.md`](../notes/modularize.md) -- Build vs Ship; the build
   stage that produces these artifacts.
-- [`install-flow.md`](install-flow.md) -- today's bootstrap, which builds the
-  full prefix in one pass.
 
 ## The layers
 
 | artifact | built from | done when |
 | --- | --- | --- |
-| **core-ultra** | the patched glibc (the loader and the libraries the rest needs), the shim, `dn-run`, `dn-shell`, `bash`/`dash`, basic tools, `patchelf`, CA certificates, `.dn/` | the prefix's shell runs |
-| **core-deb** | the core-ultra recipe + the Debian layer: `dpkg`, `apt` and their libraries; the translation hooks (`dn-hook-pre`/`-post`, `dn-translate-deb`, `patch-scripts-tree`, `normalize-symlinks`, `dn-fix-alternatives`, `dn-fix-glibc`); `priv/`; `make-launchers`; the maintainer-script interpreters; `debconf`, the archive keyring, the apt configuration | `apt install` works |
+| **core-ultra** | the patched glibc (the loader and the libraries the rest needs), the shim, `dn-run`, `bash`/`dash`, basic tools, CA certificates, `.dn/` | the prefix's shell runs |
+| **core-deb** | the core-ultra recipe + the Debian layer: `dpkg`, `apt` and their libraries; the translation hooks (`dn-hook-pre`/`-post`, `dn-translate-deb`, `normalize-symlinks`, `dn-fix-glibc`, `dn-fix-alternatives`); `priv/`; the apt configuration | `apt install` works |
 | **specialized** | the core-ultra recipe + a payload (e.g. the Claude binary) | its payload runs |
 
 Each row is one artifact, installed once and complete. There is no module
