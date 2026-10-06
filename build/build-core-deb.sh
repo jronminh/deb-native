@@ -138,7 +138,7 @@ done
 find "$STAGE" -type f | while IFS= read -r f; do
   i=$("$ELF" get-interp "$f" 2>/dev/null) || continue
   case $i in
-    */ld-linux-aarch64.so.1) "$ELF" set-interp "$f" "$PREFIX_ROOT/$LOADER" ;;
+    */ld-linux-aarch64.so.1) "$ELF" set-interp "$f" "$PREFIX_ROOT/$LOADER" 256 ;;
   esac
 done
 
@@ -195,7 +195,7 @@ done
 # The overlay is built against the build host's loader, and it is copied after the
 # translation step: point its interpreter at this prefix's loader here.
 for f in usr/lib/deb-native/dn-run usr/lib/deb-native/dn-trace usr/lib/deb-native/dn-elf; do
-  "$ELF" set-interp "$STAGE/$f" "$PREFIX_ROOT/$LOADER"
+  "$ELF" set-interp "$STAGE/$f" "$PREFIX_ROOT/$LOADER" 256
 done
 
 

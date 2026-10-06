@@ -1,7 +1,7 @@
 /* dn-elf -- read or rewrite the ELF interpreter (PT_INTERP) of a program.
  *
  *   dn-elf get-interp FILE
- *   dn-elf set-interp FILE NEWPATH
+ *   dn-elf set-interp FILE NEWPATH [CAPACITY]
  *
  * The kernel reads PT_INTERP from the file (p_offset, p_filesz) at execve(),
  * but glibc's own loader names itself from the memory PT_INTERP maps to:
@@ -114,10 +114,16 @@ static int cmd_get(const char *file) {
   return 0;
 }
 
-static int cmd_set(const char *file, const char *newpath) {
+static int cmd_set(const char *file, const char *newpath, long capacity) {
   size_t len = strlen(newpath);
   if (len == 0 || newpath[0] != '/') return die("the new interpreter must be an absolute path", file);
   if (len + 1 > 4096) return die("the new interpreter is too long", file);
+  /* WANT is the size PT_INTERP ends up with. CAPACITY reserves room for a
+     later, longer path (the build's 256-byte invariant) in the same write --
+     a separate reserve would grow twice and leave two copies of the build
+     path in the file. */
+  size_t want = len + 1;
+  if (capacity > 0 && (size_t)capacity > want) want = (size_t)capacity;
 
   FILE *f = fopen(file, "r+b");
   if (!f) return die(strerror(errno), file);
@@ -132,9 +138,11 @@ static int cmd_set(const char *file, const char *newpath) {
   Elf64_Off mapped;
   int consistent = (vaddr_to_offset(f, &e, ph.p_vaddr, &mapped, file) == 0 &&
                     mapped == ph.p_offset);
-  if (consistent && strcmp(cur, newpath) == 0) { fclose(f); return 0; }  /* already done */
+  if (consistent && strcmp(cur, newpath) == 0 && ph.p_filesz >= want) {
+    fclose(f); return 0;   /* already done */
+  }
 
-  if (consistent && len + 1 <= ph.p_filesz) {
+  if (consistent && want <= ph.p_filesz) {
     /* Fits: overwrite in place, NUL-padded to the old size. */
     char *pad = calloc(1, ph.p_filesz);
     if (!pad) { fclose(f); return die("out of memory", file); }
@@ -143,21 +151,26 @@ static int cmd_set(const char *file, const char *newpath) {
           fwrite(pad, ph.p_filesz, 1, f) != 1) ? die("cannot write PT_INTERP", file) : 0;
     free(pad);
   } else {
-    /* Longer than the space PT_INTERP already owns: make room, the way
-       patchelf's rewriteSectionsLibrary does for .interp. Append the string at
-       the end of the file, grow the highest PT_LOAD so those bytes are mapped,
-       and point PT_INTERP's p_vaddr at where the string landed -- the loader
-       reads it there (elf/rtld.c), so moving p_offset alone is never enough. */
+    /* Make room, the way patchelf's rewriteSectionsLibrary does for .interp.
+       Append WANT bytes (the string, NUL-padded), grow the highest PT_LOAD so
+       they are mapped, and point PT_INTERP's p_vaddr at where they landed --
+       the loader reads it there (elf/rtld.c), so moving p_offset alone is
+       never enough. */
     Elf64_Phdr load;
     long load_idx;
+    char *buf;
     if (find_best_load(f, &e, &load, &load_idx, file)) { fclose(f); return 1; }
     if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return die("cannot seek to the end", file); }
     long end = ftell(f);
     if (end < 0) { fclose(f); return die("cannot size the file", file); }
-    if (fwrite(newpath, len + 1, 1, f) != 1) { fclose(f); return die("cannot append", file); }
+    buf = calloc(1, want);
+    if (!buf) { fclose(f); return die("out of memory", file); }
+    memcpy(buf, newpath, len + 1);
+    if (fwrite(buf, want, 1, f) != 1) { free(buf); fclose(f); return die("cannot append", file); }
+    free(buf);
 
     /* Grow the load: map every file byte up to the new string's end. */
-    Elf64_Off new_end = (Elf64_Off)end + len + 1;
+    Elf64_Off new_end = (Elf64_Off)end + want;
     load.p_filesz = new_end - load.p_offset;
     if (load.p_memsz < load.p_filesz) load.p_memsz = load.p_filesz;
     if (fseek(f, (long)(e.e_phoff + load_idx * sizeof load), SEEK_SET) != 0 ||
@@ -167,7 +180,7 @@ static int cmd_set(const char *file, const char *newpath) {
     /* Point PT_INTERP at the appended string, at its mapped address. */
     ph.p_offset = (Elf64_Off)end;
     ph.p_vaddr = ph.p_paddr = load.p_vaddr + ((Elf64_Off)end - load.p_offset);
-    ph.p_filesz = ph.p_memsz = len + 1;
+    ph.p_filesz = ph.p_memsz = want;
     rc = (fseek(f, (long)(e.e_phoff + idx * sizeof ph), SEEK_SET) != 0 ||
           fwrite(&ph, sizeof ph, 1, f) != 1) ? die("cannot update the PT_INTERP header", file) : 0;
   }
@@ -177,8 +190,9 @@ static int cmd_set(const char *file, const char *newpath) {
 
 int main(int argc, char **argv) {
   if (argc == 3 && strcmp(argv[1], "get-interp") == 0) return cmd_get(argv[2]);
-  if (argc == 4 && strcmp(argv[1], "set-interp") == 0) return cmd_set(argv[2], argv[3]);
+  if ((argc == 4 || argc == 5) && strcmp(argv[1], "set-interp") == 0)
+    return cmd_set(argv[2], argv[3], argc == 5 ? atol(argv[4]) : 0);
   fprintf(stderr, "usage: dn-elf get-interp FILE\n"
-                  "       dn-elf set-interp FILE NEWPATH\n");
+                  "       dn-elf set-interp FILE NEWPATH [CAPACITY]\n");
   return 1;
 }
