@@ -26,10 +26,6 @@ glibc 2.41 as fetched for the amd64 development tree.
 
 ## Related docs
 
-- `ld-dn-runtime.md` -- the interpreter trampoline that
-  `dn-glibc` would replace.
-- `ld-dn-config.md` -- the policy vocabulary the fused
-  loader inherits (as `dn-glibc.conf`).
 - [`elf-interp-patch.md`](elf-interp-patch.md) -- the static `PT_INTERP`
   patch that makes the kernel pick the loader at all.
 - [`android-platform.md`](android-platform.md) -- Android's enforcement
@@ -155,8 +151,8 @@ Running as `PT_INTERP`, only three kinds of surface are usable:
 
 The **file** surfaces are the interesting ones, because they are
 environment-free and, being read only by glibc's loader, are **glibc-only by
-construction** (Bionic/Termux programs never see them) -- the same
-selectivity the project now gets from `ld.so.preload` / `ld.so.cache`.
+construction** (non-glibc programs never see them) -- the same
+selectivity the project gets from `ld.so.preload`.
 
 ## How this slims the loader patch
 
@@ -165,7 +161,7 @@ Because glibc already implements search-dir and preload handling as
 loader does not need to re-implement any of it. The patch reduces to:
 
 1. **Derive the prefix** from the program's `PT_INTERP` (the irreducible
-   core -- see `docs/log/ld-dn-runtime.md`, step C2).
+   core -- the loader cuts it from its own path, [`../spec/dn-glibc-prefix.md`](../spec/dn-glibc-prefix.md)).
 2. **Point the standard surfaces at the prefix**: resolve
    `<prefix>/etc/ld.so.preload` and the prefix's `ld.so.cache` instead of
    the hardcoded host paths. Then the shim is just one line in the prefix's
