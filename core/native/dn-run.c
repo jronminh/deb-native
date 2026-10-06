@@ -1,6 +1,6 @@
 /* dn-run -- runtime launch dispatcher for a deb-native prefix program.
  *
- * The per-program wrapper (scripts/make-launchers.sh) calls:
+ * The per-program wrapper (the post hook (core/install/dn-hook-post.sh)) calls:
  *   dn-run REAL [args...]
  * and this decides, at launch, which mechanism REAL needs:
  *

@@ -11,8 +11,6 @@ Front end used after a prefix already exists. See
 - `dn-update.sh` — installs one prebuilt deb-native overlay component
   (runtime, loader, shims, hooks, launchers) over its fixed location, within
   an allowlist; the updater for the parts `apt` cannot touch.
-- `make-launchers.sh` — exposes a prefix's installed programs by name:
-  one launcher entry per program, first on `PATH`.
 - `ship-prefix.sh` — the one install path every host uses for a prefix
   artifact: read `.dn/contract` without extracting, check it, extract, run
   the prefix's relocation script, check its shell runs

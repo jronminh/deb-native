@@ -2,10 +2,11 @@
 # Phase: apt's DPkg::Post-Invoke hook (MODULARIZE.md, "Post-build pipelines").
 # Runs once after each transaction, with the prefix's own files installed, in
 # this order:
-#   1. glibc: restore the patched glibc files (dn-fix-glibc),
-#   2. symlinks: absolute links into the prefix made relative (normalize),
-#   3. launchers for the prefix's programs (make-launchers.sh),
-#   4. gcc specs: gcc's default loader points at this prefix (gcc-specs).
+#   1. glibc: restore the patched glibc files,
+#   2. symlinks: absolute links into the prefix made relative,
+#   3. launchers: a static program (no interpreter, so no loader to set up)
+#      runs under the tracer, dn-run --trace; every other program needs none,
+#   4. gcc specs: gcc's default loader points at this prefix.
 # Never fails the transaction: every step logs, the hook exits 0.
 #
 # Usage: dn-hook-post.sh [PREFIX]   (apt passes none; the prefix is found from
@@ -115,12 +116,56 @@ fix_gcc_specs() {
   return 0
 }
 
+# 3. Launchers. Only static programs get one: they have no PT_INTERP, so the
+#    kernel loads them with nothing to set up, and the shim cannot see their
+#    syscalls. Dynamic programs run directly through the prefix's loader and
+#    need no entry. Regenerated from scratch on every run; termux-*, dn-shell
+#    and dn-adopt are left alone.
+make_launchers() {
+  LIBDIR="$DN/usr/lib/deb-native"
+  LAUNCHDIR="$LIBDIR/bin"
+  ELF="$LIBDIR/dn-elf"
+  [ -x "$LIBDIR/dn-run" ] && [ -x "$ELF" ] || { echo "dn-launchers: no dn-run or dn-elf"; return 0; }
+  mkdir -p "$LAUNCHDIR"
+  tmp="$LAUNCHDIR/.tmp.$$"
+
+  for e in "$LAUNCHDIR"/*; do
+    [ -e "$e" ] || [ -L "$e" ] || continue
+    case "${e##*/}" in termux-*|dn-shell|dn-adopt) continue ;; esac
+    rm -f "$e"
+  done
+
+  # Files that belong to the base system (libc6, libc-bin, dpkg, apt) keep their
+  # own names: ldconfig, for one, is run by dpkg through its absolute path.
+  BASE="$tmp.base"
+  { for p in libc6 libc-bin dpkg apt; do
+      "$DN/usr/bin/dpkg-query" --admindir="$DN/var/lib/dpkg" -L "$p:arm64" 2>/dev/null
+    done; } | sed "s|^/bin/|/usr/bin/|; s|^/sbin/|/usr/sbin/|; s|^|$DN|" > "$BASE" || true
+
+  for d in "$DN/usr/bin" "$DN/usr/sbin" "$DN/usr/games"; do
+    [ -d "$d" ] || continue
+    for f in "$d"/*; do
+      [ -f "$f" ] && [ -x "$f" ] || continue
+      name=${f##*/}
+      case "$name" in dn-shell|dn-perl|dn-adopt|termux-*|apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split) continue ;; esac
+      grep -qxF "$f" "$BASE" && continue
+      [ "$(head -c4 "$f" | od -An -tx1 | tr -d ' \n')" = 7f454c46 ] || continue
+      [ -z "$("$ELF" get-interp "$f" 2>/dev/null)" ] || continue
+      printf '#!/system/bin/sh\nexec "%s" --trace "%s" "$@"\n' "$LIBDIR/dn-run" "$f" > "$tmp"
+      chmod 755 "$tmp" && mv -f "$tmp" "$LAUNCHDIR/$name"
+    done
+  done
+  rm -f "$tmp" "$BASE"
+  echo "Updated launchers in $LAUNCHDIR ($(ls -1 "$LAUNCHDIR" | wc -l) entries)."
+  return 0
+}
+
 AWK="$DN/usr/bin/mawk"
 echo "== $(date '+%F %T') post" >> "$LOG"
 {
   fix_glibc
   normalize_symlinks
-  "$HERE/../runtime/make-launchers.sh" "$DN"
+  make_launchers
   fix_gcc_specs
 } 2>&1 | tee -a "$LOG"
 exit 0

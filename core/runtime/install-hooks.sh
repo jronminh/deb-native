@@ -7,8 +7,7 @@
 #
 # The copied tree keeps the runtime layout under $DN/usr/lib/deb-native/ so the
 # hooks' relative paths still resolve:
-#   dn-hook-post.sh      -> $HOOKS/../runtime/make-launchers.sh
-#   make-launchers.sh    -> $HOOKS/../bench/scan-direct-syscalls.py
+#   dn-hook-post.sh      (launchers are made inside it)
 #   dn-translate-deb.sh  -> $HOOKS/../../core/custom/<pkg>.sh
 # Idempotent: re-run to refresh after an update (install.sh does).
 #
@@ -30,8 +29,6 @@ for s in dn-hook-pre.sh dn-hook-post.sh dn-translate-deb.sh; do
 done
 chmod 755 "$HOOKS/"*.sh
 
-cp -f "$HERE/core/runtime/make-launchers.sh" "$DEST/scripts/runtime/"
-chmod 755 "$DEST/scripts/runtime/make-launchers.sh"
 
 # dn-update: the constrained overlay updater, run from the launcher dir.
 cp -f "$HERE/core/runtime/dn-update.sh" "$DEST/scripts/runtime/"

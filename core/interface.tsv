@@ -17,7 +17,6 @@ entry	core/install/dn-hook-pre.sh
 entry	core/install/dn-hook-post.sh
 entry	core/install/apt-install.sh
 entry	core/runtime/install-hooks.sh
-entry	core/runtime/make-launchers.sh
 entry	core/runtime/dn-adopt.sh
 entry	core/runtime/dn-update.sh
 entry	core/runtime/bootstrap-prefix.sh

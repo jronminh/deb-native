@@ -28,7 +28,7 @@
 # run: none (no program in a bin dir), ok, partial, fail, untested (every
 #   program needs a display or a terminal, or hangs); "-" if not installed
 # programs: NAME:HOW:RESULT,... HOW is how the user's shell reaches it
-#   (usr/lib/deb-native/bin, make-launchers.sh): native (a symlink: the prefix loader or
+#   (usr/lib/deb-native/bin, made by dn-hook-post.sh): native (a symlink: the prefix loader or
 #   a translated "#!"), trace (a dn-run --trace wrapper), dn-run, script
 #   (dn-shell/dn-perl wrapper), hidden (no entry; run by full path).
 #   RESULT is ok, fail, miss (failed, but works under the tracer: the
