@@ -25,8 +25,6 @@ for the current one.
   fixes from `core/custom/`.
 - `dn-debian-index.sh` — rewrites `Architecture: all` -> `arm64` in a
   downloaded Debian package index.
-- `normalize-symlinks.sh` — rewrites absolute symlinks inside the prefix
-  so the kernel resolves them within it (needed for bind-only tracing).
 - `dn-fix-alternatives.sh` — makes every `update-alternatives` link in
   the prefix relative instead of absolute.
 - `setup-runtime.sh` — builds and installs the maintainer-script runtime

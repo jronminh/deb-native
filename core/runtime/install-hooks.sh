@@ -26,8 +26,8 @@ mkdir -p "$HOOKS" "$DEST/scripts/runtime" "$DEST/scripts/bench" "$DEST/core/cust
 # (setup-runtime.sh, make-priv.sh) and the bootstrap/survey helpers are
 # deliberately not baked.
 for s in dn-hook-pre.sh dn-hook-post.sh dn-translate-deb.sh \
-         dn-fix-alternatives.sh dn-fix-gcc-specs.sh \
-         normalize-symlinks.sh dn-debian-index.sh dn-fix-glibc.sh; do
+         dn-fix-alternatives.sh \
+         dn-debian-index.sh; do
   cp -f "$HERE/core/install/$s" "$HOOKS/"
 done
 chmod 755 "$HOOKS/"*.sh
@@ -43,10 +43,6 @@ chmod 755 "$DEST/scripts/runtime/dn-update.sh"
 # wrapper calls it).
 cp -f "$HERE/core/runtime/dn-adopt.sh" "$DEST/scripts/runtime/"
 chmod 755 "$DEST/scripts/runtime/dn-adopt.sh"
-
-# dn-finish: the one-shot prefix-native finish (Phase B of ship).
-cp -f "$HERE/core/runtime/dn-finish.sh" "$DEST/scripts/runtime/"
-chmod 755 "$DEST/scripts/runtime/dn-finish.sh"
 
 cp -f "$HERE/core/bench/scan-direct-syscalls.py" "$DEST/scripts/bench/"
 chmod 755 "$DEST/scripts/bench/scan-direct-syscalls.py"

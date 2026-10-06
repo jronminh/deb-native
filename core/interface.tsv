@@ -13,19 +13,15 @@
 # --- entry points: callable by bootstrap / build / adapter / product -------
 entry	core/install/install-runtime.sh
 entry	core/install/dn-translate-deb.sh
-entry	core/install/normalize-symlinks.sh
 entry	core/install/dn-fix-alternatives.sh
-entry	core/install/dn-fix-gcc-specs.sh
 entry	core/install/dn-hook-pre.sh
 entry	core/install/dn-hook-post.sh
 entry	core/install/dn-debian-index.sh
 entry	core/install/apt-install.sh
-entry	core/install/dn-fix-glibc.sh
 entry	core/runtime/install-hooks.sh
 entry	core/runtime/make-launchers.sh
 entry	core/runtime/dn-adopt.sh
 entry	core/runtime/dn-update.sh
-entry	core/runtime/dn-finish.sh
 entry	core/runtime/bootstrap-prefix.sh
 entry	core/runtime/ship-prefix.sh
 entry	core/runtime/relocate.sh
@@ -46,3 +42,4 @@ artifact	dn-trace	core/native/.build/dn-trace	usr/lib/deb-native/dn-trace
 artifact	dn-sh	core/native/.build/dn-sh	usr/bin/dn-sh
 artifact	dn-perl	core/native/.build/dn-perl	usr/bin/dn-perl
 artifact	adbwire	core/native/.build/adbwire	usr/lib/deb-native/adbwire
+source	core/native/dn-elf.c

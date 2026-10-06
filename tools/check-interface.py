@@ -95,7 +95,7 @@ def main():
             for base in sorted(core_basenames):
                 if base in allowed:
                     continue
-                if base in text:
+                if re.search(r'(?<![\w-])' + re.escape(base) + r'(?![\w.-])', text):
                     refs.append((path, base))
                     problems.append(f"{path}: references core '{base}' (not an entry)")
 

@@ -35,7 +35,7 @@ cannot: see [`../../docs/spec/tracer/bind-only.md`](../../docs/spec/tracer/bind-
 
 Safe mechanics for the three traps:
 
-- **absolute symlinks** — `core/install/normalize-symlinks.sh` rewrites absolute
+- **absolute symlinks** — `the post hook (core/install/dn-hook-post.sh)` rewrites absolute
   targets under bound dirs to relative; run by `install.sh` after install.
 - **`..` across a bind** — detected in `normalize_guest_path()`, falls back to
   `canonicalize()`.

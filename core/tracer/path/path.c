@@ -374,7 +374,7 @@ static int normalize_guest_path(char path[PATH_MAX])
  * Whether the bind-only fast path is active.  PRoot's per-component
  * canonicalization is skipped so the kernel resolves the path; this is
  * safe only because the guest tree is symlink-normalized
- * (scripts/normalize-symlinks.sh) and ".." still falls back.  Set
+ * (the post hook, dn-hook-post.sh) and ".." still falls back.  Set
  * PROOT_NO_BIND_ONLY=1 to disable and force canonicalize().
  */
 static bool bind_only_enabled(void)
