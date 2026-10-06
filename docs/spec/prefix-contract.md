@@ -6,7 +6,7 @@ Every prefix artifact carries a `.dn/` directory at its root: a **contract**
 file the host reads without running any code, a map of every byte range that
 names the build path, and an optional **relocation script** the host runs
 with its own shell. Installing a prefix needs nothing but a POSIX shell and
-`tar`, `dd`, `sed` (Android's `mksh` + toybox is enough): read the contract,
+`tar`, `dd`, `sed` (a POSIX shell + toybox is enough): read the contract,
 extract, and -- only when the prefix landed somewhere other than where it was
 built -- run the relocation script, which **patches the binaries' bytes
 directly** at offsets the build recorded. No ELF tool and no program of the
@@ -144,7 +144,7 @@ prefix: 181 `elf`, 139 `text`, about 5000 files in all).
 | `entry` | yes | the command, relative to the root, that opens an interactive session. |
 | `size` | no | the extracted size in MiB, for a free-space check. |
 
-Example (core-deb, built in Termux):
+Example (core-deb):
 
 ```
 # dn prefix contract
@@ -153,7 +153,7 @@ name=core-deb
 desc=core-deb: core-ultra plus apt, dpkg and the package translation hooks
 version=0.7.1-dev
 arch=aarch64
-root=/data/data/com.termux/files/deb-native
+root=/data/local/deb-native
 loader=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 relocate=.dn/relocate.sh
 install=.dn/install.sh
@@ -182,8 +182,7 @@ size=200
    entry is a shell). It is the acceptance test of every prefix: installed
    means the shell works.
 5. **Activate**, when the contract names an `install` script: `sh D/<install>`
-   with `DN_INSTDIR=D`, run by the host's own shell (on Android,
-   `/system/bin/sh`). This is the host-side integration that makes the prefix
+   with `DN_INSTDIR=D`, run by the host's own POSIX shell. This is the host-side integration that makes the prefix
    enterable (a session entry, a launcher); the artifact carries it, so the
    host needs no per-target logic of its own.
 6. **Complete**, when the contract names a `bootstrap` script: run it with the
@@ -285,10 +284,9 @@ The build guarantees these, so relocation stays the steps above:
 6. **`home/`, `root -> home` and `mnt -> ../mnt` are in the artifact**, all
    relative.
 7. **`etc/resolv.conf` is the relative link `../../app/etc/resolv.conf`**,
-   not a file: every host keeps its DNS servers in `app/etc/resolv.conf` beside
-   its prefixes (the dn-shell app from the device's active network; a Termux
-   host from Termux's own `resolv.conf`). glibc rereads the file when it
-   changes, so a new network reaches every prefix with nothing run inside it.
+   not a file: the host keeps its DNS servers in `app/etc/resolv.conf` beside
+   its prefixes, updated however that host does. glibc rereads the file when
+   it changes, so a new network reaches the prefix with nothing run inside it.
    With no such file the link dangles and names do not resolve; nothing hangs.
    Verified: a host writing `nameserver 8.8.8.8` there let `getent ahosts`
    resolve in core-deb, and changing the file changed the next lookup with no
@@ -302,41 +300,32 @@ time.
 
 ## Verified
 
-On core-deb (0.7.1-dev, built for `/data/data/org.dn.shell/files/core`),
-installed with `env -i PATH=/system/bin /system/bin/sh` (Android `mksh` +
-toybox only) into a different directory whose loader path is 190 bytes:
+On core-deb, installed with a POSIX shell + toybox only into a different
+directory whose loader path is 190 bytes:
 
 - the contract read with `tar -xzOf`, the tree extracted, `relocate.sh` run:
   181 ELFs and 139 text files in 2-4 s; a rerun changes nothing;
-- run straight from `mksh`, no loader invoked by hand: `bash`, `dpkg`,
-  `apt`; in a `dn-shell` session: `dpkg -l` (61 packages), `perl` through
-  its launcher and `dn-run`, the fake-root identity, a `#!.../dn-shell`
-  script (`zcat`), `/mnt` through `mnt -> ../mnt`;
+- run straight from the host shell, no loader invoked by hand: `bash`,
+  `dpkg`, `apt`; in a prefix session: `dpkg -l`, `perl` through its launcher
+  and `dn-run`, the fake-root identity, a shebang script (`zcat`), `/mnt`
+  through `mnt -> ../mnt`;
 - no file left naming the build path;
 - a file changed after the build (bytes at its `PT_INTERP` offset
   overwritten) is refused, not patched.
 
-Not exercised: `apt install` over the network, `dn-trace`, the dn-shell app
-itself.
+Not exercised: `apt install` over the network, `dn-trace`.
 
 ## One ship path
 
-Build and ship are separate (`MODULARIZE.md`, "Build vs Ship"), so there is
-exactly **one way to ship a prefix**, the host steps above, on every
-target:
-
-- the dn-shell app runs them on its bundled asset (`dn-prefix install`);
-- Termux's `install.sh` runs them on a downloaded artifact. It never builds;
-  with no artifact it stops and says so.
+Build and ship are separate
+([`../notes/modularize.md`](../notes/modularize.md), "Build vs Ship"), so there
+is exactly **one way to ship a prefix**: the host steps above, on every host.
+A host runs `scripts/host/ship-prefix.sh` on an artifact it obtained; it never
+builds, and with no artifact it stops and says so.
 
 ## Open items
 
-- **The build does not emit `.dn/` yet**: `package-prefix.sh` needs the
-  invariants above, the `baked-paths` scan with offsets, the contract and
-  `relocate.sh` (from `core/`).
-- **Termux still has two install paths**: `install.sh`'s default mode
-  bootstraps in place (a build that is also the install), and its
-  `DN_PREFIX_IMAGE` mode extracts and runs `dn-finish.sh` with the host's
-  shell and skips the login wiring. Both become the one ship path; the
-  in-place bootstrap moves to the build stage. `dn-finish.sh`'s steps are
-  build or apt-hook steps, none of them needed at install.
+- **Artifact distribution**: the build emits the tarball; publishing it, and a
+  default source a host can fetch from, is still open.
+- **Relocation capacity**: the loader path at the install site must be shorter
+  than the reserved `PT_INTERP` capacity (256 bytes).
