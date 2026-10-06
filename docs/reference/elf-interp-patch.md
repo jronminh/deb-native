@@ -6,15 +6,15 @@ deb-native's static "binary surgery" on a `.deb`'s ELF files is exactly
 one field: the `PT_INTERP` program header's pathname, rewritten from
 `/lib/ld-linux-aarch64.so.1` to the prefix's own fused glibc loader
 `$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`
-(`core/install/dn-translate-deb.sh`, via `patchelf`). (Before
-0.6.0+s.1 the target was the `ld-dn` trampoline, since retired — this doc
-kept the old target in places below.) This doc
-documents precisely which bytes that touches, why the kernel only ever
-reads that pathname through `p_offset`/`p_filesz` (never `p_vaddr`),
-why the rewrite usually has to relocate the string rather than overwrite
-it in place, and the invariants that keep the patch safe. It also
-sketches a self-brewed replacement for `patchelf` now that this is the
-tool's only remaining use.
+(`core/install/dn-translate-deb.sh`, via `dn-elf`). This doc
+documents precisely which bytes that touches, why the kernel reads that
+pathname through `p_offset`/`p_filesz` while glibc's own loader names
+itself from the address `p_vaddr` maps to (so the string must land
+there too), why the rewrite usually has to relocate the string rather
+than overwrite it in place, and the invariants that keep the patch
+safe. `dn-elf` does the edit; it grows one `PT_LOAD` the way
+`patchelf`'s `rewriteSectionsLibrary` does for `.interp`, and nothing
+more.
 
 ## Contents
 
@@ -50,20 +50,19 @@ unpatched binary). For every regular file whose first 4 bytes are the
 ELF magic (`7f 45 4c 46`):
 
 ```sh
-interp=$(patchelf --print-interpreter "$f" 2>&1) || interp=""
+interp=$("$ELF" get-interp "$f" 2>/dev/null) || interp=""
 case "$interp" in
-  */ld-linux-aarch64.so.1|*/ld-dn) [ "$interp" = "$LD" ] || patchelf --set-interpreter "$LD" "$f" ;;
+  */ld-linux-aarch64.so.1) [ "$interp" = "$LD" ] || "$ELF" set-interp "$f" "$LD" ;;
 esac
 ```
 
-(`core/install/dn-translate-deb.sh`, ~lines 73-81). `$LD` is
-`$DN/usr/lib/deb-native/ld-dn` — the absolute, prefix-rooted path to
-`core/native/ld-dn.c`'s built binary. `patchelf --print-interpreter` fails
-(captured, not treated as an error) for static binaries and libraries,
-which have no `PT_INTERP` segment at all; those are left untouched. A
-file whose interpreter is already `$LD` (re-running the translator, or
-a package translated twice) is also left untouched — the step is
-idempotent.
+(`core/install/dn-translate-deb.sh`). `$LD` is
+`$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1` — the absolute,
+prefix-rooted path to the loader. `dn-elf get-interp` fails (captured,
+not treated as an error) for static binaries and libraries, which have
+no `PT_INTERP` segment at all; those are left untouched. A file whose
+interpreter is already `$LD` (re-running the translator, or a package
+translated twice) is also left untouched — the step is idempotent.
 
 Nothing else in the pipeline (`patch-scripts-tree.sh`, the `#!`
 line rewrite loop) touches ELF files; both of those operate on
@@ -223,9 +222,9 @@ binary that crashed at loader startup with no syscall in flight.
 investigation and came out clean (13 program headers, sane `MemSiz`);
 the bug was specific to inserting a *new* `DT_RPATH`/`DT_RUNPATH`
 dynamic-section entry on a binary with none. That finding is *why*
-deb-native's pipeline today calls `patchelf` for `--set-interpreter`
-only — the `RUNPATH` rewrite was dropped entirely in favor of `ld-dn`
-setting `LD_LIBRARY_PATH` once per launch (same doc). `PT_INTERP`'s
+deb-native patches `PT_INTERP` only — the `RUNPATH` rewrite was dropped
+entirely, the run-time search paths being the loader's own job.
+`PT_INTERP`'s
 payload is a single flat byte string with a well-defined grow path
 (relocate one segment's offset/size, same as described above); it does
 not carry the same structural risk that inserting a new dynamic-section
@@ -308,41 +307,42 @@ per process launch.
 ## A self-brewed replacement: dn-elf
 
 `TODO.md`'s "Runtime overhaul" section records the decision to replace
-`patchelf` in this pipeline: its only remaining use, after the
-`RUNPATH` rewrite was dropped, is `--print-interpreter` /
-`--set-interpreter` — reading and rewriting exactly the one program
-header field documented above. That is small enough to not need a
-general-purpose ELF editor (with the generality, and the bug class,
-that comes with one — see "What patchelf does").
-
-A sketch, matching what the pipeline actually needs and nothing more:
+`patchelf` in this pipeline with `dn-elf`. The kernel reads `PT_INTERP`
+from the file (`p_offset`), but glibc's loader names itself from the
+address `p_vaddr` maps to (`_dl_rtld_libname.name = l_addr + p_vaddr`,
+`elf/rtld.c`), and the run-time prefix is cut from that name
+(`__dn_prefix_init`). The new string must land where `p_vaddr` points,
+not merely at a new `p_offset`.
 
 - `dn-elf get-interp FILE` — parse `Ehdr` (`e_phoff`/`e_phentsize`/
   `e_phnum`), scan program headers for `PT_INTERP`, print the string
-  read from `p_offset`/`p_filesz`. Exit non-zero (silently, like
-  today's captured-but-ignored `patchelf` failure) if there is no
-  `PT_INTERP` entry.
+  read from `p_offset`/`p_filesz`. Exit non-zero if there is no
+  `PT_INTERP` entry (static binary or library).
 - `dn-elf set-interp FILE NEWPATH` —
   1. Locate the existing `PT_INTERP` entry (fail if none: this tool is
      for rewriting an existing interpreter, not for adding one to a
      static binary, which is out of scope — `dn-translate-deb.sh`
      already skips those).
-  2. If `NEWPATH` (plus NUL) fits within the old `p_filesz`: overwrite
-     the bytes at `p_offset` in place, update `p_filesz` down if
-     shorter (or leave the old size and pad with NUL — either is
-     correct per `elf(5)`'s "null-terminated" rule, as long as the
-     first NUL lands at the right spot); no relocation needed.
-  3. Otherwise: append the new NUL-terminated string to the end of the
-     file (a plain byte string needs no page alignment or mapping —
-     unlike `patchelf`'s general section-growth path, there is no
-     `PT_LOAD` to extend), then rewrite only the `PT_INTERP` entry's
-     `p_offset` (to the new tail position) and `p_filesz` (to the new
-     length). No other program header entry changes; no entry is
-     added or removed; `e_phnum` is unchanged.
-  4. Leave `p_vaddr`/`p_memsz`/`p_paddr`/`p_align` on the `PT_INTERP`
-     entry untouched — confirmed above that the kernel never reads
-     them for this segment type, so there is nothing to keep
-     consistent there.
+  2. If `NEWPATH` (plus NUL) fits within the old `p_filesz` **and** the
+     entry is consistent — `p_offset` is the file offset `p_vaddr` maps
+     to, via the `PT_LOAD` holding it — overwrite in place, padded with
+     NUL to the old `p_filesz`. When the string already matches but
+     `p_offset` does not map to `p_vaddr` (a file written by the older,
+     buggy append), this is not treated as "done": it falls to step 3
+     and is repaired.
+  3. Otherwise: append the new NUL-terminated string at the end of the
+     file, grow the `PT_LOAD` with the highest virtual end
+     (`p_vaddr + p_memsz`) so those bytes are mapped, and set the
+     `PT_INTERP` entry's `p_offset`, `p_vaddr` and `p_paddr` to where
+     the string landed. This is the one job `patchelf`'s
+     `rewriteSectionsLibrary` does for `.interp`, kept minimal: no new
+     program header, no `e_phnum` change, no section added — only the
+     highest existing `PT_LOAD`'s `p_filesz`/`p_memsz` grow, so nothing
+     is overlapped (`p_memsz` is raised to `p_filesz` if the grow passes
+     it).
+  4. The `PT_LOAD`'s `p_align` still holds: it keeps `p_vaddr -
+     p_offset` unchanged, so the appended offset maps to the address
+     `p_vaddr` was set to.
 - Scope: `ET_EXEC`/`ET_DYN`, `ELFCLASS64`, `ELFDATA2LSB`,
   `EM_AARCH64` only, matching every other assumption in this project's
   own native code (see "Invariants and safety" above) — reject
@@ -352,9 +352,8 @@ A sketch, matching what the pipeline actually needs and nothing more:
   (see above) and a Debian/glibc binary hitting it would be
   unprecedented in this project's experience so far.
 
-This removes the one remaining third-party dependency in the translate
-step and its general-purpose failure mode (the `ET_EXEC`/`RUNPATH`
-corruption found in `patchelf-et-exec-runpath.md`, even though that bug
-was in a code path `dn-elf` would never implement) in favor of a tool
-that can only do the one well-understood edit this project actually
-needs.
+This removes the third-party dependency from the translate step: `dn-elf`
+does the one edit this project needs — rewrite `PT_INTERP`, growing one
+`PT_LOAD` when the path is longer — instead of `patchelf`'s
+general-purpose section machinery (and its `ET_EXEC`/`RUNPATH` failure
+mode, `patchelf-et-exec-runpath.md`).

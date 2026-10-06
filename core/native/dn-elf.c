@@ -4,13 +4,16 @@
  *   dn-elf set-interp FILE NEWPATH
  *
  * The kernel reads PT_INTERP from the file (p_offset, p_filesz) at execve(),
- * and never maps it. So changing the string changes no other byte of the ELF:
- * a path that fits the old string is written in place (padded with NULs to the
- * old p_filesz); a longer one is appended at the end of the file, and only the
- * PT_INTERP program header entry is pointed at it (p_offset, p_filesz, p_memsz).
- * No segment, no section and no other header changes -- which is why this is
- * not a general ELF editor and never grows a PT_LOAD. See
- * docs/reference/elf-interp-patch.md.
+ * but glibc's own loader names itself from the memory PT_INTERP maps to:
+ * _dl_rtld_libname.name = main_map->l_addr + ph->p_vaddr (elf/rtld.c), and the
+ * run-time prefix is cut from that name (__dn_prefix_init). So a new string is
+ * written either in place, NUL-padded within the old p_filesz, or -- when it is
+ * longer -- into room made for it: the string is appended and the PT_LOAD with
+ * the highest virtual end is grown to map it, PT_INTERP's p_vaddr set to where
+ * it landed. This is the same job patchelf's rewriteSectionsLibrary does for
+ * .interp (see docs/reference/elf-interp-patch.md); an append that moves only
+ * p_offset, leaving p_vaddr at the stale bytes, is never done -- the loader
+ * would read those and lose the prefix.
  *
  * Scope: ELF64, little-endian, EM_AARCH64, ET_EXEC or ET_DYN; anything else is
  * refused. Exit 0 on success (set-interp is idempotent), 1 on any error.
@@ -53,6 +56,40 @@ static int find_interp(FILE *f, const Elf64_Ehdr *e, Elf64_Phdr *ph, long *idx, 
   return die("no PT_INTERP (static or not a program)", file);
 }
 
+/* Find the PT_LOAD with the highest virtual end (p_vaddr + p_memsz): growing
+   it maps appended bytes above every other segment, so nothing is overlapped. */
+static int find_best_load(FILE *f, const Elf64_Ehdr *e, Elf64_Phdr *out, long *idx, const char *file) {
+  Elf64_Phdr ph;
+  int found = 0;
+  Elf64_Addr best = 0;
+  for (long i = 0; i < e->e_phnum; i++) {
+    if (fseek(f, (long)(e->e_phoff + i * sizeof ph), SEEK_SET) != 0 ||
+        fread(&ph, sizeof ph, 1, f) != 1)
+      return die("cannot read program headers", file);
+    if (ph.p_type != PT_LOAD) continue;
+    Elf64_Addr end = ph.p_vaddr + ph.p_memsz;
+    if (!found || end > best) { found = 1; best = end; *out = ph; *idx = i; }
+  }
+  return found ? 0 : die("no PT_LOAD to grow", file);
+}
+
+/* File offset the given virtual address maps to, from the PT_LOAD holding it.
+   PT_INTERP's string is read by the loader at p_vaddr, so "in place" is only
+   safe when p_offset is that address's file offset. */
+static int vaddr_to_offset(FILE *f, const Elf64_Ehdr *e, Elf64_Addr vaddr, Elf64_Off *off, const char *file) {
+  Elf64_Phdr ph;
+  for (long i = 0; i < e->e_phnum; i++) {
+    if (fseek(f, (long)(e->e_phoff + i * sizeof ph), SEEK_SET) != 0 ||
+        fread(&ph, sizeof ph, 1, f) != 1)
+      return die("cannot read program headers", file);
+    if (ph.p_type == PT_LOAD && vaddr >= ph.p_vaddr && vaddr < ph.p_vaddr + ph.p_memsz) {
+      *off = ph.p_offset + (vaddr - ph.p_vaddr);
+      return 0;
+    }
+  }
+  return -1;
+}
+
 /* Read the current interpreter string into buf (NUL-terminated). */
 static int read_string(FILE *f, const Elf64_Phdr *ph, char *buf, size_t bufsz, const char *file) {
   if (ph->p_filesz == 0 || ph->p_filesz > bufsz) return die("PT_INTERP has an unusable size", file);
@@ -91,10 +128,13 @@ static int cmd_set(const char *file, const char *newpath) {
   int rc = read_ehdr(f, &e, file) || find_interp(f, &e, &ph, &idx, file) ||
            read_string(f, &ph, cur, sizeof cur, file);
   if (rc) { fclose(f); return rc; }
-  if (strcmp(cur, newpath) == 0) { fclose(f); return 0; }   /* already done */
 
-  Elf64_Off ph_at = e.e_phoff + (Elf64_Off)idx * sizeof ph;
-  if (len + 1 <= ph.p_filesz) {
+  Elf64_Off mapped;
+  int consistent = (vaddr_to_offset(f, &e, ph.p_vaddr, &mapped, file) == 0 &&
+                    mapped == ph.p_offset);
+  if (consistent && strcmp(cur, newpath) == 0) { fclose(f); return 0; }  /* already done */
+
+  if (consistent && len + 1 <= ph.p_filesz) {
     /* Fits: overwrite in place, NUL-padded to the old size. */
     char *pad = calloc(1, ph.p_filesz);
     if (!pad) { fclose(f); return die("out of memory", file); }
@@ -103,15 +143,32 @@ static int cmd_set(const char *file, const char *newpath) {
           fwrite(pad, ph.p_filesz, 1, f) != 1) ? die("cannot write PT_INTERP", file) : 0;
     free(pad);
   } else {
-    /* Longer: append the string at the end and point PT_INTERP at it. */
+    /* Longer than the space PT_INTERP already owns: make room, the way
+       patchelf's rewriteSectionsLibrary does for .interp. Append the string at
+       the end of the file, grow the highest PT_LOAD so those bytes are mapped,
+       and point PT_INTERP's p_vaddr at where the string landed -- the loader
+       reads it there (elf/rtld.c), so moving p_offset alone is never enough. */
+    Elf64_Phdr load;
+    long load_idx;
+    if (find_best_load(f, &e, &load, &load_idx, file)) { fclose(f); return 1; }
     if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return die("cannot seek to the end", file); }
     long end = ftell(f);
     if (end < 0) { fclose(f); return die("cannot size the file", file); }
     if (fwrite(newpath, len + 1, 1, f) != 1) { fclose(f); return die("cannot append", file); }
+
+    /* Grow the load: map every file byte up to the new string's end. */
+    Elf64_Off new_end = (Elf64_Off)end + len + 1;
+    load.p_filesz = new_end - load.p_offset;
+    if (load.p_memsz < load.p_filesz) load.p_memsz = load.p_filesz;
+    if (fseek(f, (long)(e.e_phoff + load_idx * sizeof load), SEEK_SET) != 0 ||
+        fwrite(&load, sizeof load, 1, f) != 1)
+      { fclose(f); return die("cannot grow the PT_LOAD", file); }
+
+    /* Point PT_INTERP at the appended string, at its mapped address. */
     ph.p_offset = (Elf64_Off)end;
-    ph.p_filesz = len + 1;
-    ph.p_memsz = len + 1;
-    rc = (fseek(f, (long)ph_at, SEEK_SET) != 0 ||
+    ph.p_vaddr = ph.p_paddr = load.p_vaddr + ((Elf64_Off)end - load.p_offset);
+    ph.p_filesz = ph.p_memsz = len + 1;
+    rc = (fseek(f, (long)(e.e_phoff + idx * sizeof ph), SEEK_SET) != 0 ||
           fwrite(&ph, sizeof ph, 1, f) != 1) ? die("cannot update the PT_INTERP header", file) : 0;
   }
   if (fclose(f) != 0 && rc == 0) rc = die("cannot close the file", file);

@@ -28,9 +28,9 @@ case "$DN" in /*) ;; *) DN="$PWD/$DN" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LD="$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 
-# The prefix's own ELF editor (overlay: dn-elf). It is the only tool a
-# translation needs; it never grows a segment, and it refuses what it does not
-# understand.
+# The prefix's own ELF editor (overlay: dn-elf). It writes PT_INTERP in place
+# when the path fits, and otherwise grows the highest PT_LOAD to map a longer
+# one -- so a translation needs no patchelf.
 ELF="$DN/usr/lib/deb-native/dn-elf"
 [ -x "$ELF" ] || { echo "E: no $ELF -- cannot translate $DEB" >&2; exit 1; }
 

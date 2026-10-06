@@ -39,11 +39,11 @@ TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 
 [ -x "$LD" ] || { echo "E: no fused glibc loader in $DN (install the prefix first)" >&2; exit 1; }
 
-# patchelf only matters for adoption, so it is not in the minimal bootstrap
-# seed; get it from the prefix's own apt when first needed. Without this, a
-# missing patchelf silently reads as "static or a library; left alone".
-command -v patchelf >/dev/null 2>&1 || {
-  echo "E: patchelf not found -- adopting a glibc binary needs it: run 'apt install patchelf'" >&2
+# dn-elf is the overlay's editor; it writes the interpreter in place or grows
+# one PT_LOAD to map a longer path, so adoption needs no patchelf.
+ELF="$DN/usr/lib/deb-native/dn-elf"
+[ -x "$ELF" ] || {
+  echo "E: no $ELF -- adopting a glibc binary needs it (install the runtime overlay)" >&2
   exit 1
 }
 
@@ -55,7 +55,7 @@ adopt_one() {
   if [ "$(head -c4 "$f" | od -An -tx1 | tr -d ' \n')" != 7f454c46 ]; then
     echo "$f: not an ELF program; left alone."; return 0
   fi
-  interp=$(patchelf --print-interpreter "$f" 2>&1) || interp=""
+  interp=$("$ELF" get-interp "$f" 2>/dev/null) || interp=""
   # NB: do NOT test the interpreter with [ -e ]. This runs inside the prefix,
   # where the shim rewrites /lib -> $DN/lib, so a missing /lib loader would
   # look present and never get adopted. A Termux glibc program is identified
@@ -72,7 +72,7 @@ adopt_one() {
     echo "E: $f: not writable" >&2; return 1
   fi
 
-  patchelf --set-interpreter "$LD" "$f"
+  "$ELF" set-interp "$f" "$LD"
   echo "$f: adopted."
   return 0
 }

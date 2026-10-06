@@ -145,10 +145,11 @@ static void die(const char *what) {
  * this device (/lib/ld-linux-aarch64.so.1): rewrite the interpreter once to
  * the prefix's fused loader, so the kernel can start it and /proc/self/exe
  * stays the program (Bun/Node SEA safe). The prefix's own dn-elf does the
- * rewrite, in place or appended (the same editor the translator uses), so no
- * patchelf is needed inside the prefix. Returns 0 on success, -1 if dn-elf is
- * missing or the rewrite failed (read-only file, a layout dn-elf refuses) --
- * the caller then falls back to the tracer. */
+ * rewrite, in place or by growing a PT_LOAD to map a longer path (the same
+ * editor the translator uses), so no patchelf is needed inside the prefix.
+ * Returns 0 on success, -1 if dn-elf is missing or the rewrite failed
+ * (read-only file, a layout dn-elf refuses) -- the caller then falls back to
+ * the tracer. */
 static int try_adopt(const char *path) {
   char elf[4096], ld[4096];
   snprintf(elf, sizeof elf, "%s/usr/lib/deb-native/dn-elf", instdir);
