@@ -19,7 +19,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)   # repo root
 DEST="$INSTDIR/usr/lib/deb-native"
 HOOKS="$DEST/scripts/install"
 
-mkdir -p "$HOOKS" "$DEST/scripts/runtime" "$DEST/scripts/bench" "$DEST/core/custom"
+mkdir -p "$HOOKS" "$DEST/core/custom"
 
 # The runtime hook set: the scripts apt actually calls. Build-only scripts
 # (setup-runtime.sh, make-priv.sh) and the bootstrap/survey helpers are
@@ -30,18 +30,8 @@ done
 chmod 755 "$HOOKS/"*.sh
 
 
-# dn-update: the constrained overlay updater, run from the launcher dir.
-cp -f "$HERE/core/runtime/dn-update.sh" "$DEST/scripts/runtime/"
-chmod 755 "$DEST/scripts/runtime/dn-update.sh"
-
-# dn-adopt: adopt a glibc program obtained outside apt (the bin/dn-adopt
-# wrapper calls it).
-cp -f "$HERE/core/runtime/dn-adopt.sh" "$DEST/scripts/runtime/"
-chmod 755 "$DEST/scripts/runtime/dn-adopt.sh"
-
-cp -f "$HERE/core/bench/scan-direct-syscalls.py" "$DEST/scripts/bench/"
-chmod 755 "$DEST/scripts/bench/scan-direct-syscalls.py"
-
+# dn-update and dn-adopt are optional (not in the core overlay): run from the
+# checkout, not staged here.
 # custom/<pkg>.sh — per-package fixes; the directory is usually empty.
 for f in "$HERE/core/custom/"*.sh; do
   [ -e "$f" ] || continue
