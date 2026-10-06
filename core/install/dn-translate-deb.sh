@@ -50,12 +50,10 @@ while IFS="$(printf '\t')" read -r link target; do
 done < "$WORK/hardlinks"
 
 PKG=$(sed -n 's/^Package: //p' "$WORK/pkg/DEBIAN/control")
-echo "Translating $PKG:arm64 ($(sed -n 's/^Version: //p' "$WORK/pkg/DEBIAN/control")) ..."
 sed -i 's/^Architecture: all$/Architecture: arm64/' "$WORK/pkg/DEBIAN/control"
 
 if [ -x "$HERE/../../core/custom/$PKG.sh" ]; then
-  "$HERE/../../core/custom/$PKG.sh" "$WORK/pkg" "$DN"
-  echo "Applied custom/$PKG.sh to $PKG."
+  "$HERE/../../core/custom/$PKG.sh" "$WORK/pkg" "$DN" >/dev/null
 fi
 
 # rewrite_shebang FILE MODE. MODE "maint" rewrites maintainer scripts (only the
@@ -114,5 +112,11 @@ for d in usr/bin usr/sbin usr/games usr/libexec bin sbin; do
   while IFS= read -r f; do rewrite_shebang "$f" program; done < "$WORK/progs"
 done
 
-dpkg-deb -Znone -b "$WORK/pkg" "$WORK/out.deb"
+# Silent on success: the packaging message and any noise go to a file, shown only
+# when the repack fails.
+dpkg-deb -Znone -b "$WORK/pkg" "$WORK/out.deb" >"$WORK/pack.log" 2>&1 || {
+  cat "$WORK/pack.log" >&2
+  echo "E: repacking $PKG failed" >&2
+  exit 1
+}
 mv -f "$WORK/out.deb" "$DEB"
