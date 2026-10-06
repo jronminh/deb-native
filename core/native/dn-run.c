@@ -144,14 +144,15 @@ static void die(const char *what) {
 /* Lazy adopt for a glibc binary whose PT_INTERP is a loader that is not on
  * this device (/lib/ld-linux-aarch64.so.1): rewrite the interpreter once to
  * the prefix's fused loader, so the kernel can start it and /proc/self/exe
- * stays the program (Bun/Node SEA safe). Runs the prefix's own patchelf.
- * Returns 0 on success, -1 if patchelf is unavailable or the rewrite failed
- * (read-only file, patchelf refusing the layout) -- the caller then falls
- * back to the tracer. */
+ * stays the program (Bun/Node SEA safe). The prefix's own dn-elf does the
+ * rewrite, in place or appended (the same editor the translator uses), so no
+ * patchelf is needed inside the prefix. Returns 0 on success, -1 if dn-elf is
+ * missing or the rewrite failed (read-only file, a layout dn-elf refuses) --
+ * the caller then falls back to the tracer. */
 static int try_adopt(const char *path) {
-  char pc[4096], ld[4096];
-  snprintf(pc, sizeof pc, "%s/usr/bin/patchelf", instdir);
-  if (access(pc, X_OK) != 0) return -1;
+  char elf[4096], ld[4096];
+  snprintf(elf, sizeof elf, "%s/usr/lib/deb-native/dn-elf", instdir);
+  if (access(elf, X_OK) != 0) return -1;
   snprintf(ld, sizeof ld,
            "%s/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1", instdir);
   set_path();
@@ -159,7 +160,7 @@ static int try_adopt(const char *path) {
   pid_t pid = fork();
   if (pid < 0) return -1;
   if (pid == 0) {
-    execl(pc, pc, "--set-interpreter", ld, path, (char *)NULL);
+    execl(elf, elf, "set-interp", path, ld, (char *)NULL);
     _exit(127);
   }
   int st = 0;
@@ -292,7 +293,7 @@ int main(int argc, char **argv) {
   /* Lazy adopt: a glibc binary whose interpreter is not on this device was
    * installed outside apt (a vendor installer, a tarball, ...) and never
    * translated. Rewrite it once to the prefix's fused loader and run it
-   * natively; if that is impossible (no patchelf, read-only), fall through
+   * natively; if that is impossible (no dn-elf, read-only), fall through
    * to the tracer route. Foreign binaries become case N of the same door. */
   if (cls == C_GLIBC && in[0] && !real_access_x(in)) {
     if (try_adopt(args[0]) == 0) {
