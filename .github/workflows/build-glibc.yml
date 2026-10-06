@@ -9,6 +9,7 @@ name: Build the glibc runtime
 
 on:
   workflow_dispatch: {}
+  workflow_call: {}
 
 env:
   GLIBC_VERSION: "2.41"
@@ -151,6 +152,14 @@ jobs:
               --title "dn-glibc install bundle (rolling)" \
               --notes "Rolling bundle: the 10 patched glibc files, Debian's libc6/libc-bin, and the shim. Built by .github/workflows/build-glibc.yml."
           gh release upload glibc-bundle dn-glibc-bundle.tar.gz --clobber
+
+      # Hand the just-built bundle to a caller (build-prefix.yml), so the
+      # prefix tarballs are built from this glibc, not a stale release asset.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dn-glibc-bundle
+          path: dn-glibc-bundle.tar.gz
+          retention-days: 14
 
       - name: Build the runtime overlay
         run: scripts/build/build-overlay-glibc.sh

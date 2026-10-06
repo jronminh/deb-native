@@ -3,14 +3,18 @@ name: Build the prefix tarballs
 # Builds core-deb and core-ultra on an arm64 runner, from source, and attaches
 # both tarballs to the rolling `prefix` release (no version in the name).
 #
-# Inputs, all from source or upstream -- nothing from a developer machine:
+# This workflow does NOT build glibc: the patched glibc (the 10 files that are
+# swapped over Debian's libc6/libc-bin -- the two packages themselves are
+# UNPATCHED and unusable on Android) is produced by build-glibc.yml, from
+# Debian's own glibc source. Here we consume the freshest `dn-glibc-bundle`
+# artifact that workflow left, so nothing comes from a stale release or a
+# developer machine:
 #   - the runtime overlay: scripts/build/build-overlay-glibc.sh (plain gcc);
-#   - the patched glibc: the rolling `glibc-bundle` release, built from Debian's
-#     glibc source by build-glibc.yml (its `files/` is the DN_GLIBC_PREFIX);
+#   - the patched glibc: build-glibc.yml's newest dn-glibc-bundle artifact;
 #   - the package set: scripts/build/packages.tsv (pinned) + profile.txt,
 #     fetched from the Debian mirror.
-# core-deb is built on an EMPTY base: build-core-deb.sh now writes the loader
-# configuration itself. core-ultra is then cut from the core-deb tree.
+# core-deb is built on an EMPTY base (build-core-deb.sh writes the loader
+# configuration itself); core-ultra is cut from the core-deb tree.
 
 on:
   workflow_dispatch: {}
@@ -20,15 +24,17 @@ on:
 
 env:
   DN_PREFIX: "/data/local/deb-native"
+  GLIBC_WORKFLOW: "build-glibc.yml"
 
 jobs:
-  build:
+  prefix:
     runs-on: ubuntu-24.04-arm
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
 
@@ -38,11 +44,17 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential libtalloc-dev python3 wget xz-utils dpkg
 
-      - name: Fetch the patched glibc (the rolling glibc-bundle)
+      - name: Take the patched glibc (freshest build-glibc bundle)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download glibc-bundle -p dn-glibc-bundle.tar.gz --clobber
+          run="${{ github.event.workflow_run.id }}"
+          if [ -z "$run" ]; then
+            run=$(gh run list --workflow "$GLIBC_WORKFLOW" --status success -L1 \
+                    --json databaseId --jq '.[0].databaseId')
+          fi
+          echo "glibc bundle from build-glibc run $run"
+          gh run download "$run" -n dn-glibc-bundle -D .
           mkdir -p bundle
           tar -xzf dn-glibc-bundle.tar.gz -C bundle
           test -x bundle/files/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
