@@ -45,20 +45,18 @@ else is dpkg's own order, left intact on purpose (`design.md`).
 
 **0. Index.** `dn-debian-index.sh` makes the Debian index look native, so dpkg
 accepts packages without `--force-architecture`; `arm64` stays a foreign
-architecture rather than being relabelled `aarch64` (`design.md`). Bootstrap
-runs this before the base batch; a later `apt update` by the user goes through
-the same script.
+architecture. It runs on each `apt update`.
 
-**1. Resolve and download.** The prefix uses Termux's real `apt`/`dpkg` through
-launchers that pass the prefix explicitly (`APT_CONFIG`, `--admindir`,
-`--instdir`) -- no rebuilt package manager, so Termux's updates carry through.
+**1. Resolve and download.** The prefix's own `apt`/`dpkg` (Debian's packages,
+installed in the prefix) resolve and download the `.deb`.
 
 **2. Translate before dpkg sees it (`DPkg::Pre-Install-Pkgs`).**
 `dn-hook-pre.sh` reads apt's hook-protocol plan (version 3) on stdin, or `.deb`
 arguments for a direct `dpkg -i`, and for every `.deb` about to be unpacked:
-`dn-translate-deb.sh` relabels the control file, repoints ELFs at the `libc6`
-stand-in, rewrites maintainer-script shebangs to the prefix's shell
-(`patch-scripts-tree.sh`) and applies `core/custom/<package>.sh` fixes -- in one
+`dn-translate-deb.sh` relabels the control file, repoints each ELF's
+interpreter at the prefix's own loader (`dn-elf`), rewrites maintainer-script
+shebangs to the prefix's shell, and applies `scripts/prefix/custom/<package>.sh`
+fixes -- in one
 unpack/repack, several packages in parallel (`DN_JOBS`). A collision check then
 refuses a `.deb` that would overwrite a file no package owns (deb-native's own
 runtime/launchers). **A failure here fails the hook, so apt runs nothing.**
@@ -68,7 +66,7 @@ Because translation happens here, `apt-install.sh` itself is a plain
 **3. Unpack, `preinst`.** dpkg unpacks the translated files into the prefix;
 `preinst` runs as a maintainer script inside dpkg's `--unpack`, i.e. before
 `--configure`, and outside the process deb-native controls -- the reason the
-maintainer-script exec path exists (`core/native/dn-launch.c`).
+maintainer-script exec path exists.
 
 **4. Configure, `postinst`.** dpkg runs `postinst`/`configure` and triggers.
 dpkg's helpers are wrapped so they compute prefix paths themselves
@@ -113,5 +111,5 @@ as built.
 - **The post-hook runs after every install this way.** `normalize-symlinks.sh`
   in particular must, or an absolute symlink from a package resolves against
   the real host root.
-- **Maintainer scripts run under the prefix's own shell**, never Termux's --
-  a shebang that survives translation points at `dn-shell`.
+- **Maintainer scripts run under the prefix's own shell** -- a shebang that
+  survives translation points at the prefix's `dash`/`bash`.

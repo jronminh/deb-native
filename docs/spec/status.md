@@ -46,5 +46,5 @@ Debian section ([`../reference/standard.md`](../reference/standard.md)). 99 of
 
 ## Health
 
-`termux-dn-doctor` checks the common breakages. Confirmed issues:
+`tools/dn-doctor.sh` checks the common breakages. Confirmed issues:
 [`../reference/known-issues.md`](../reference/known-issues.md).
