@@ -16,6 +16,7 @@ entry	core/install/dn-translate-deb.sh
 entry	core/install/dn-hook-pre.sh
 entry	core/install/dn-hook-post.sh
 entry	core/install/apt-install.sh
+entry	core/runtime/install-prefix.sh
 entry	core/runtime/install-hooks.sh
 entry	core/runtime/bootstrap-prefix.sh
 entry	core/runtime/ship-prefix.sh

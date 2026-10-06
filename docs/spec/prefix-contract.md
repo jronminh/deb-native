@@ -64,7 +64,10 @@ So the host:
 1. reads the contract (data, no code);
 2. extracts the artifact;
 3. runs the prefix's relocation script with its own shell, when the contract
-   names one.
+   names one;
+4. runs the artifact's `install` script (host-side activation) and its
+   `bootstrap` script through the prefix's own shell (completion), when the
+   contract names them. What install and bootstrap do is below.
 
 What a prefix needs beyond being in place is not part of installing it.
 Data that belongs to the host -- the phone's storage, the device's DNS -- is
@@ -82,7 +85,10 @@ own `boot.d` / `login.d` hooks.
 │   ├── contract        data: key=value, read by the host without running code
 │   ├── baked-paths     every place the build path is written (by the build)
 │   ├── packages        the Debian packages the prefix contains (prefix-layers.md)
-│   └── relocate.sh     optional: POSIX sh, run by the host's shell
+│   ├── profile         the packages a bootstrap restores from the mirror
+│   ├── relocate.sh     optional: POSIX sh, run by the host's shell
+│   ├── install.sh      optional: /system/bin/sh, run by the host's shell, activates the prefix
+│   └── bootstrap.sh    optional: run by the prefix's own shell, completes it
 ├── home/               empty
 ├── root -> home
 ├── mnt -> ../mnt       the host's storage when it has a sibling mnt/; dangling otherwise
@@ -133,6 +139,8 @@ prefix: 181 `elf`, 139 `text`, about 5000 files in all).
 | `root` | yes | the absolute directory the prefix's files currently name: the build path in an artifact, the install path once relocated. |
 | `loader` | with `relocate` | the prefix's loader, relative to the root; `root/loader` is the string every `elf` entry holds. |
 | `relocate` | no | the relocation script, relative to the root. Absent: the prefix installs only at `root`. |
+| `install` | no | the activation script, relative to the root; run by the host's `/system/bin/sh` after relocation. Absent: nothing to activate. |
+| `bootstrap` | no | the completion script, relative to the root; run by the prefix's own shell after `install`. Absent: the prefix is complete as shipped. |
 | `entry` | yes | the command, relative to the root, that opens an interactive session. |
 | `size` | no | the extracted size in MiB, for a free-space check. |
 
@@ -148,6 +156,8 @@ arch=aarch64
 root=/data/data/com.termux/files/deb-native
 loader=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 relocate=.dn/relocate.sh
+install=.dn/install.sh
+bootstrap=.dn/bootstrap.sh
 entry=usr/bin/dn-shell -i
 size=200
 ```
@@ -169,12 +179,21 @@ size=200
    `DN_INSTDIR=D`, run by the host's own shell. The script returns at once
    when `root` already is `D`.
 4. **Check that the prefix's shell runs**: `D/<entry> -c 'exit 0'` (the
-   entry is a shell). It is the one prefix program the host runs during an
-   install, and the acceptance test of every prefix: installed means the
-   shell works.
-5. **On any failure**, remove `D` and report it with the script's output. On
-   success the host may integrate the prefix on its own side (a prefix
-   list, a login entry) without writing into it.
+   entry is a shell). It is the acceptance test of every prefix: installed
+   means the shell works.
+5. **Activate**, when the contract names an `install` script: `sh D/<install>`
+   with `DN_INSTDIR=D`, run by the host's own shell (on Android,
+   `/system/bin/sh`). This is the host-side integration that makes the prefix
+   enterable (a session entry, a launcher); the artifact carries it, so the
+   host needs no per-target logic of its own.
+6. **Complete**, when the contract names a `bootstrap` script: run it with the
+   prefix's own shell, `DN_INSTDIR=D "$D/usr/bin/bash" "$D/<bootstrap>"`. The
+   prefix installs what `.dn/profile` lists from the mirror and writes
+   `.dn/bootstrapped`; a second run is a no-op. This is the prefix's own
+   logic, not the host's, and the one step that needs the network.
+7. **On any failure** in 2-6, remove `D` and report it with the step's output.
+   On success the prefix is ready to use; the host may integrate it on its own
+   side (a prefix list, a login entry) without writing into it.
 
 The host reads `name`, `desc` and `entry` again whenever it lists or enters
 a prefix; it never needs the prefix to run for that.

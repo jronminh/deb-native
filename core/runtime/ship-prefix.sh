@@ -7,7 +7,10 @@
 #   1. read .dn/contract from the tarball without extracting it, and check it;
 #   2. extract into DEST;
 #   3. run the prefix's own relocation script (contract relocate=), if any;
-#   4. check that the prefix's shell runs (contract entry=, with -c 'exit 0').
+#   4. check that the prefix's shell runs (contract entry=, with -c 'exit 0');
+#   5. run the artifact's activation script (contract install=), host shell;
+#   6. run the artifact's completion script (contract bootstrap=) through the
+#      prefix's own shell -- the prefix installs .dn/profile from the mirror.
 # Any failure after DEST is created removes DEST. The host never edits a
 # file inside the prefix; everything prefix-specific is the prefix's own
 # relocation script.
@@ -46,6 +49,8 @@ for l in $C; do
     root=*) root=${l#*=} ;;
     loader=*) loader=${l#*=} ;;
     relocate=*) relocate=${l#*=} ;;
+    install=*) install=${l#*=} ;;
+    bootstrap=*) bootstrap=${l#*=} ;;
     entry=*) entry=${l#*=} ;;
     size=*) size=${l#*=} ;;
     desc=*|version=*) ;;
@@ -74,7 +79,7 @@ if [ -n "$size" ]; then
   [ $((avail / 1024)) -ge "$size" ] || die "needs ${size} MiB in $parent, $((avail / 1024)) MiB free"
 fi
 
-# 2-4. Extract, relocate, check; undo on failure.
+# 2-6. Extract, relocate, check, activate, complete; undo on failure.
 mkdir "$D"
 trap 'rm -rf "$D"' EXIT
 tar -xzf "$A" -C "$D" || die "extract failed"
@@ -82,5 +87,14 @@ if [ -n "$relocate" ]; then
   DN_INSTDIR=$D sh "$D/$relocate" || die "relocation failed"
 fi
 "$D/${entry%% *}" -c 'exit 0' || die "the prefix's shell ($D/${entry%% *}) does not run"
+if [ -n "$install" ]; then
+  # Host-side activation, the host's own shell (mksh + toybox on Android).
+  DN_INSTDIR=$D sh "$D/$install" "$D" || die "activation failed"
+fi
+if [ -n "$bootstrap" ]; then
+  # Completion, the prefix's own shell: it has apt and coreutils, the host
+  # does not need them.
+  DN_INSTDIR=$D "$D/usr/bin/bash" "$D/$bootstrap" || die "completion failed"
+fi
 trap - EXIT
 echo "ship-prefix: $name installed in $D"

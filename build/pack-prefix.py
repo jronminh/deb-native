@@ -74,6 +74,12 @@ def main():
     ap.add_argument("--dn-elf", default=os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "core/native/.build-glibc/dn-elf"),
         help="dn-elf binary that reserves the PT_INTERP capacity")
+    ap.add_argument("--install", default=os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "core/runtime/install-prefix.sh"),
+        help="host-side activation script, copied to .dn/install.sh")
+    ap.add_argument("--bootstrap", default=os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "core/runtime/bootstrap-prefix.sh"),
+        help="prefix-side completion script, copied to .dn/bootstrap.sh")
     a = ap.parse_args()
 
     T = os.path.abspath(a.tree)
@@ -175,6 +181,12 @@ def main():
     shutil.copyfile(reloc, os.path.join(dn, "relocate.sh"))
     os.chmod(os.path.join(dn, "relocate.sh"), 0o755)
 
+    # The two activation scripts the contract names: install (host side) and
+    # bootstrap (prefix side). Copied in, so the host needs no per-target code.
+    for src, dst in ((a.install, "install.sh"), (a.bootstrap, "bootstrap.sh")):
+        shutil.copyfile(src, os.path.join(dn, dst))
+        os.chmod(os.path.join(dn, dst), 0o755)
+
     size_mib = 0
     for dp, dns, fns in os.walk(T):
         for n in fns:
@@ -189,7 +201,9 @@ def main():
     if a.version:
         lines.append(f"version={a.version}")
     lines += ["arch=aarch64", f"root={ROOT}", f"loader={LOADER}",
-              "relocate=.dn/relocate.sh", "entry=usr/bin/dn-shell -i", f"size={size_mib}"]
+              "relocate=.dn/relocate.sh", "install=.dn/install.sh",
+              "bootstrap=.dn/bootstrap.sh",
+              "entry=usr/bin/dn-shell -i", f"size={size_mib}"]
     with open(os.path.join(dn, "contract"), "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"pack-prefix: {a.name}: {len(elf)} elf, {len(text)} text, "
