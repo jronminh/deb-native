@@ -20,8 +20,6 @@ coverage is measured in [`shim-coverage.md`](../spec/shim/shim-coverage.md). The
   this standard.
 - [`shim-coverage.md`](../spec/shim/shim-coverage.md) — the function-level coverage
   this standard's claims are measured against.
-- [`vs-sudo-less.md`](../notes/vs-sudo-less.md) — sudo-less's own
-  `docs/standard.md`, the model this one is adapted from.
 
 ## Triage, not universal support
 

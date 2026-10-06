@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the runtime overlay with a plain glibc toolchain (docs/notes/modularize.md, B2):
+# Build the runtime overlay with a plain glibc toolchain (the repo layout, B2):
 # dn-shim.so, dn-run and dn-trace, all glibc programs linked against the
 # glibc they will run on. Needs gcc, make and libtalloc's headers
 # (libtalloc-dev) -- an arm64 Debian userland: a deb-native prefix with the

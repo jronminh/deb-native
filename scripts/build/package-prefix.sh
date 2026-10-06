@@ -1,5 +1,5 @@
 #!/bin/sh
-# Package a built prefix into the shipped artifact (docs/notes/modularize.md "Build vs
+# Package a built prefix into the shipped artifact (the repo layout "Build vs
 # Ship", docs/spec/prefix-contract.md). Build-stage only: it reads a prefix
 # built elsewhere and writes a tarball; it never touches a target.
 #

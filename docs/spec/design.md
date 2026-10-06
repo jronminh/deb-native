@@ -25,8 +25,6 @@ their own docs (listed below).
   run-time prefix derivation.
 - [`tracer.md`](tracer/tracer.md) — the syscall tracer for what the shim
   cannot see.
-- [`classic-design.md`](../notes/classic-design.md), [`prior-art.md`](../notes/prior-art.md)
-  — the pre-artifact approach and the projects this borrows from.
 - [`android-platform.md`](../reference/android-platform.md) — the platform's
   enforcement gates, which bound what the runtime can do.
 

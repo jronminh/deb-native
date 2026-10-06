@@ -28,8 +28,6 @@ core-deb and core-ultra (`prefix-layers.md`); the build does not emit `.dn/` yet
 
 ## Related docs
 
-- [`../notes/modularize.md`](../notes/modularize.md) -- Build vs Ship and the
-  prefix artifact this contract is part of.
 - [`../reference/elf-interp-patch.md`](../reference/elf-interp-patch.md) --
   how the kernel reads `PT_INTERP` (from the file, never mapped), which is
   what makes an in-place byte patch valid.
@@ -317,8 +315,7 @@ Not exercised: `apt install` over the network, `dn-trace`.
 
 ## One ship path
 
-Build and ship are separate
-([`../notes/modularize.md`](../notes/modularize.md), "Build vs Ship"), so there
+Build and ship are separate, so there
 is exactly **one way to ship a prefix**: the host steps above, on every host.
 A host runs `scripts/host/ship-prefix.sh` on an artifact it obtained; it never
 builds, and with no artifact it stops and says so.

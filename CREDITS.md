@@ -66,8 +66,7 @@ builds on, and the license each part is under.
 - <https://github.com/jronminh/sudo-less>
 - Used for: the prefix-install approach and its documentation are the starting
   point, and the `apt`/`dpkg` lifecycle-hook idea (`DPkg::Pre-Install-Pkgs` /
-  `DPkg::Post-Invoke`) follows it. See
-  [`docs/notes/vs-sudo-less.md`](docs/notes/vs-sudo-less.md). `sudo-less` solves the same
+  `DPkg::Post-Invoke`) follows it. `sudo-less` solves the same
   problem on a real Debian host with a kernel mount-namespace "view"; this
   project is that idea on Android, where the view is unavailable.
 

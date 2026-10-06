@@ -19,9 +19,7 @@ actually *for*.
 
 ## Related docs
 
-- [`classic-design.md`](../notes/classic-design.md) — the separate-prefix design
-  that uses `--force-architecture`, one of the mechanisms this doc
-  clarifies.
+- [`elf-interp-patch.md`](elf-interp-patch.md) — the `PT_INTERP` edit this doc's mechanisms treat as a byte range.
 - [`design.md`](../spec/design.md) — the 0.2.0 pivot's own architecture handling.
 
 ## The `Multi-Arch` control field
