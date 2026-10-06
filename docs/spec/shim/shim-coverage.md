@@ -159,7 +159,7 @@ the interposable `fopen` anyway. The test says **no**: with a fake
 `passwd`, `group`, `hosts` or `resolv.conf` — every one of those opens is
 internal.
 
-Why — and why it is not a Termux packaging bug: `libc.so.6` itself defines
+Why — and why it is not a packaging bug: `libc.so.6` itself defines
 `_nss_files_*` and `_nss_dns_*`, and the bundled `libnss_files.so.2` /
 `libnss_dns.so.2` are empty ABI stubs (zero `_nss_*` symbols, zero imports),
 so glibc never `dlopen`s them. Stock Debian glibc is the same — its
@@ -180,10 +180,10 @@ the cleaner general fix. In practice most lookups just resolve the current
 uid/gid or hostnames, where the real `/etc` (and Android's DNS) is often
 what you want anyway.
 
-**Resolved 2026-09-26:** the tracer route is wired in `src/dn-run.c` and
-the actual fix is a bind of the prefix's `/etc` over Termux glibc's
-**sysconfdir** `$PREFIX/glibc/etc` (where NSS reads, not the guest `/etc`).
-See `syscall-boundary.md`, "Solved: NSS", and `tests/tracer-nss/run.sh`.
+**Resolved:** the tracer route is wired in `src/dn-run.c`; the prefix's own
+glibc self-derives NSS against the prefix's `/etc` (the NSS modules and config
+live in the prefix). See `syscall-boundary.md`, "Solved: NSS", and
+`tests/tracer-nss/run.sh`.
 
 **Out of scope, deliberately:** `mount` (0/1), `umount2` (0/1), `chroot`
 (1/1) are admin operations; redirecting them is neither possible nor wanted.

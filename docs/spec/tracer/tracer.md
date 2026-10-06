@@ -40,7 +40,7 @@ A Debian program in the prefix normally never meets the tracer:
 | **glibc NSS lookups** (`getpwnam`, `getaddrinfo`, ...) | libc-internal, not interposable | **yes** |
 
 `src/dn-run.c` routes the last three to `usr/lib/deb-native/dn-trace`
-(no fallback to Termux's `proot` since 0.2.3). A static binary also *needs* the
+(no fallback to `proot`). A static binary also *needs* the
 tracer to survive: Android's app seccomp filter kills calls such as
 `set_robust_list` with SIGSYS (untraced, Debian's static `busybox find` dies),
 and the tracer's SIGSYS emulation (`core/tracer/tracee/seccomp.c`) answers them.
@@ -76,7 +76,7 @@ PRoot execs its own loader in place of every program and has it map the
 program and its ELF interpreter, so that a `PT_INTERP` naming a guest path
 (`/lib/ld-linux-aarch64.so.1` inside a rootfs) can be found. In a deb-native
 prefix every interpreter already names a host path — the prefix's own
-glibc loader, Termux's glibc loader, Bionic's `linker64` — and static
+glibc loader, a host glibc loader, a Bionic `linker64` — and static
 programs have none. So `execve`
 now translates only the program path (and a script's `#!` interpreter,
 `execve/shebang.c`) and lets the kernel load it. `/proc/self/exe` is still
@@ -105,14 +105,12 @@ Paths under `/proc` now go through `canonicalize()`, which emulates those
 links. (With the loader gone the kernel's answer would now be the host path
 of the program; the emulation keeps it the guest path.)
 
-### 5. No termux-exec inside the tracer
+### 5. No host preload inside the tracer
 
-`dn-run` used to keep `LD_PRELOAD` (Termux's `libtermux-exec`) on the static
-and `--trace` routes. A Bionic program under the tracer then had its
-`execve("/usr/...")` rewritten to `$PREFIX/...` *before* the tracer saw it
-(found while testing: the first exec failed until `LD_PRELOAD` was unset).
-Every tracer route now unsets `LD_PRELOAD` and `DN_BIONIC_PRELOAD`; tested
-through `dn-run` with a Bionic `sh` child exec'ing `/usr/bin/busybox`.
+Every tracer route unsets `LD_PRELOAD`, so a non-glibc tracee does not inherit
+the prefix's shim as a preload (found while testing: the first exec failed
+until `LD_PRELOAD` was unset). Tested through `dn-run` with a non-glibc `sh`
+child exec'ing `/usr/bin/busybox`.
 
 ### 6. Seccomp acceleration: kept on (a retracted change)
 
@@ -134,12 +132,11 @@ script `s.sh` with `#!/usr/bin/busybox sh`:
 
 All pass: bound `/etc` read, `..` across a bind, a missing bind skipped, a
 bind onto `/usr` (absent on Android), applet re-exec,
-`/proc/self/exe` = `/usr/bin/busybox`, a guest-only `#!`, a Termux Bionic
-and a Termux glibc child, exit code 5 passed through; a missing program
+`/proc/self/exe` = `/usr/bin/busybox`, a guest-only `#!`, a Bionic child
+and a host-glibc child, exit code 5 passed through; a missing program
 gives one error and exit 1.
 
-Not yet run: the whole route `dn-run` → `dn-trace` from an installed prefix
-(`fe2` had no `~/.dn` at the time).
+Not yet run: the whole route `dn-run` → `dn-trace` from an installed prefix.
 
 ## Measurements
 

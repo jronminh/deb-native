@@ -56,8 +56,8 @@ libc interposer (`src/dn-shim.c`), **tracer** = fork-lite
 ## B. Dynamic loading
 
 - **Absolute `DT_NEEDED`/`RUNPATH`** (`/usr/lib/…`) — the loader opens
-  internally, not through the PLT. Mitigated by `grun --configure` and Termux
-  glibc's own search path, not universally. *partial*
+  internally, not through the PLT. Mitigated by the loader's own search path
+  and `LD_LIBRARY_PATH`, not universally. *partial*
 - **`/etc/ld.so.cache`, `/etc/ld.so.preload`** — read from the real root.
 - **NSS / `gconv` / locale modules** — loader-internal absolute paths; a
   missing `gconv-modules` can abort `iconv` (and thus many programs).
@@ -115,7 +115,7 @@ libc interposer (`src/dn-shim.c`), **tracer** = fork-lite
 - **PATH ordering** — redirection only applies when launched through our
   launchers.
 - **Two package managers sharing `$HOME`** — `~/.config`, `~/.cache`,
-  `~/.local` collide; `update-alternatives` writes into Termux's own prefix
+  `~/.local` collide; `update-alternatives` writes into the host's own prefix
   (known nit).
 
 ## H. Tracer-specific (once fork-lite is in)

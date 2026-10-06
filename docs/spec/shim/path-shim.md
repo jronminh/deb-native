@@ -70,9 +70,9 @@ device's kernel, confirmed by direct syscall trace, not a general Android
 fact. But for this project's actual target environment, it's a hard wall,
 not a "probably."
 
-### What the overlay was for, mapped against what Termux already has
+### What the overlay was for, mapped against what the platform already has
 
-| sudo-less's view target | why a package needs it | Termux's actual path | overlay-based fix | feasible here? |
+| sudo-less's view target | why a package needs it | the platform's path | overlay-based fix | feasible here? |
 |---|---|---|---|---|
 | `/usr`, `/etc`, `/opt` made to show the prefix's files | absolute paths compiled into the binary | no real `/usr`/`/etc` tree exists to overlay onto at all on stock Android (not just "root-owned," likely *absent* or unwritable regardless) | mount-namespace overlay | **no** — confirmed above |
 | dynamic linker / library search path | binary's `DT_NEEDED` libraries | `$PREFIX/glibc/lib`, already the glibc `ld.so`'s own default search path | none needed | **already solved**, no overlay ever required |
@@ -129,7 +129,7 @@ With the shim:
 ```
 $ DN_REDIRECT_FROM=/usr/share/figlet DN_REDIRECT_TO=<font root> \
   LD_PRELOAD=src/dn-shim.so \
-  ld-linux-aarch64.so.1 figlet-figlet "termux deb bridge"
+  ld-linux-aarch64.so.1 figlet-figlet "deb bridge"
  _                                       _      _
 | |_ ___ _ __ _ __ ___  _   ___  __   __| | ___| |__
 ...
@@ -138,19 +138,19 @@ $ DN_REDIRECT_FROM=/usr/share/figlet DN_REDIRECT_TO=<font root> \
 Full ASCII-banner output, correct. `DN_REDIRECT_DEBUG=1` prints each
 rewrite for verification (`/usr/share/figlet/standard.flf -> .../standard.flf`).
 
-### Toolchain gotchas hit building this (recorded so they aren't re-discovered)
+### Toolchain notes
 
-Termux ships `*-glibc` packages' **runtime** libraries
-(`termux-pacman/glibc-packages`) but not a full glibc **cross-toolchain**
-for building new ones on-device. Compiling `src/dn-shim.c`
-against Termux's own glibc, using Termux's own Bionic-hosted `clang`,
-needed:
+The shim is an ordinary glibc shared library:
+`scripts/build/build-overlay-glibc.sh` builds it with a plain gcc against the
+prefix's glibc, on a build host. The on-device smoke test (`tests/shim-libc`)
+builds its own copy with a glibc-cross clang where that is what the device
+has; that path needs:
 
 - `--target=aarch64-linux-gnu` (glibc target, not `aarch64-*-android`).
-- **Not** `--sysroot=$GLIBC`: Termux's `$GLIBC/lib/libc.so` is a linker
-  script (`GROUP ( /data/data/.../glibc/lib/libc.so.6 ... )`) with
-  already-fully-resolved absolute paths baked in (Termux packages are
-  built for one fixed install location, never relocated). Passing a real
+- **Not** `--sysroot=$GLIBC`: the glibc side-install's `$GLIBC/lib/libc.so` is
+  a linker script (`GROUP ( /data/data/.../glibc/lib/libc.so.6 ... )`) with
+  already-fully-resolved absolute paths baked in (those packages are built for
+  one fixed install location, never relocated). Passing a real
   `--sysroot` makes `lld` re-root every absolute path in that script
   *again*, doubling it into a path that doesn't exist
   (`.../glibc` + `/data/data/.../glibc/lib/libc.so.6`) — confirmed via the
@@ -198,8 +198,8 @@ maintainer scripts.
   the *kernel*, against the real filesystem root — which on Android is
   `/system/bin/sh` (a root-owned Android **toybox** binary), confirmed
   directly (`readlink -f /proc/$$/exe` from inside a running maintainer
-  script printed `/system/bin/sh`), **not** Termux's own `/bin/sh`
-  (`dash`) as first assumed. Termux's `dash` was tested too and also
+  script printed `/system/bin/sh`), **not** the host's own `/bin/sh`
+  (`dash`) as first assumed. The host's `dash` was tested too and also
   resisted interception (linked `BIND_NOW`/`FLAGS_1 NOW` — Bionic's linker
   doesn't honor `LD_PRELOAD`'s override on `BIND_NOW` binaries the way
   glibc does), but it turned out to be the wrong binary to even chase:
@@ -284,8 +284,8 @@ baked-in they are:
 
 1. **Environment preload** — `LD_PRELOAD=$SHIM`, what the launchers set today.
 2. **Explicit loader call** — `$GLIBC/lib/ld-linux-aarch64.so.1 --preload $SHIM /prog`.
-   The same effect with nothing in the environment to scrub; Termux already
-   launches glibc programs through an explicit interpreter.
+   The same effect with nothing in the environment to scrub; a host may launch
+   glibc programs through an explicit interpreter.
 3. **Baked into the ELF** at install time — e.g.
    `patchelf --add-rpath $SHIMDIR --add-needed libdn-shim.so /prog`,
    so the loader loads the shim on every run regardless of the environment.
