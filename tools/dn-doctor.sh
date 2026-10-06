@@ -3,10 +3,9 @@
 # seams that go wrong in practice:
 #
 #   - a leaked `export APT_CONFIG=...` in the shell rc, which points
-#     Termux's own apt (pkg, termux-apt) at the prefix;
+#     Termux's own apt (pkg) at the prefix;
 #   - a Termux `sources.list` clobbered by installing into $PREFIX;
-#   - missing termux-apt/termux-dpkg, 0.1.x routing wrappers left on PATH,
-#     or a missing shell interface (~/.termux/shell).
+#   - a missing shell interface (~/.termux/shell).
 #
 # Usage: dn-doctor.sh [PREFIX] [--fix]
 #   PREFIX defaults to the deb-native launcher dir found on PATH, else the
@@ -89,22 +88,6 @@ fi
 [ -f "$TP/etc/apt/sources.list.d/glibc.list" ] \
   && ok "glibc.list present" \
   || warn "glibc.list missing (glibc side-install repo)"
-
-# 4. termux-apt/termux-dpkg exist, and no 0.1.x routing wrapper is left on
-#    PATH (it would shadow Termux's apt for pkg).
-stale=""
-for n in apt apt-get apt-cache dpkg; do
-  [ -f "$LAUNCHDIR/$n" ] && grep -q "deb-native arch-aware" "$LAUNCHDIR/$n" && stale="$stale $n"
-done
-if [ -x "$LAUNCHDIR/termux-apt" ] && [ -x "$LAUNCHDIR/termux-dpkg" ] && [ -z "$stale" ]; then
-  ok "termux-apt/termux-dpkg present, no old routing wrappers"
-else
-  [ -n "$stale" ] && warn "0.1.x routing wrappers still on PATH:$stale"
-  [ -x "$LAUNCHDIR/termux-apt" ] || warn "no termux-apt/termux-dpkg (run make-apt-wrappers.sh)"
-  if [ "$FIX" = 1 ] && [ -d "$ROOT" ]; then
-    sh "$REPO/adapters/deb-native/make-apt-wrappers.sh" "$ROOT" && ok "regenerated wrappers"
-  fi
-fi
 
 # 5. Prefix state.
 if [ -s "$DN_PREFIX/var/lib/dpkg/status" ]; then
