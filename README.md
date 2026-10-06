@@ -1,28 +1,60 @@
 # deb-native
 
-A **self-contained Debian userland in a tarball** — real `arm64` `.deb`
-packages, their own glibc, apt and files inside one prefix. A **poor host**
-installs it with nothing but a POSIX shell and `tar`/`dd`/`sed` (toybox is
-enough): no root, no `chroot`, no namespaces, and the host's own tree left
-untouched.
+A self-contained Debian `arm64` userland in a tarball — its own glibc, `apt`
+and files.
 
-> Pre-alpha, AI-assisted, not independently audited. Use a throwaway host.
+## Build
 
-## How it ships
+Build host: an `arm64` Debian userland (or CI) with `gcc`, `make`,
+`libtalloc-dev`, `dpkg-deb`, `wget`, `xz` and `python3`.
 
-The prefix is built elsewhere and shipped as a tarball carrying a `.dn/`
-contract. There is **no build on the host**.
+### 1. glibc bundle
 
-- **Build** (a build host, `scripts/build/` + `scripts/glibc/`): the runtime
-  overlay (`dn-shim.so`, `dn-run`, `dn-trace`, `dn-elf`), the glibc bundle,
-  and the prefix artifact with its `.dn/` contract.
-- **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
-  `.dn/contract`, extract, relocate.
-- **Activate / complete**: the artifact's `.dn/install.sh` (host shell), then
-  `.dn/bootstrap.sh` (the prefix's own shell, installing `.dn/profile`). When
-  bootstrap succeeds the prefix is ready.
+Apply the Android patch ([`patches/dn-glibc-android.patch`](patches/dn-glibc-android.patch))
+to a Debian glibc source tree and package this project's build of `libc6` and
+`libc-bin`:
 
-The contract is described in [`docs/spec/prefix-contract.md`](docs/spec/prefix-contract.md).
+```sh
+scripts/glibc/dn-apply-glibc-patch.sh SRC_TREE PREFIX
+scripts/glibc/dn-package-glibc.sh    REAL_LIBC6_DEB DESTDIR libc6.deb
+scripts/glibc/dn-package-libc-bin.sh REAL_LIBC_BIN_DEB DESTDIR libc-bin.deb
+```
+
+(CI: [`.github/workflows/build-glibc.yml`](.github/workflows/build-glibc.yml).)
+
+### 2. runtime overlay
+
+`dn-shim.so`, `dn-run`, `dn-trace`, `dn-elf` — plain-gcc glibc programs:
+
+```sh
+scripts/build/build-overlay-glibc.sh            # → src/.build-glibc/
+```
+
+### 3. prefix artifact
+
+Assemble a prefix from a core-ultra tree and package it with its `.dn/`
+contract. Inputs: a patched-glibc prefix whose loader is the patched build, the
+overlay dir, the artifact's build path, and the pinned package list.
+
+```sh
+DN_GLIBC_PREFIX=BUILT_PREFIX \
+DN_OVERLAY=src/.build-glibc \
+PREFIX_ROOT=/where/the/prefix/will/live \
+DEB_LIST=packages.tsv \
+  scripts/build/build-core-deb.sh BASE core-deb.tar.gz
+
+scripts/build/package-prefix.sh core-deb \
+  --root /where/the/prefix/will/live --name core-deb
+```
+
+`BASE` is a core-ultra tree ([`docs/spec/prefix-layers.md`](docs/spec/prefix-layers.md));
+cut one from an unpacked prefix with `scripts/build/cut-core-ultra.py SRC DST`.
+
+### Install (on the host)
+
+```sh
+scripts/host/ship-prefix.sh core-deb.tar.gz DEST
+```
 
 ## License
 
