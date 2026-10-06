@@ -74,8 +74,15 @@ rewrite_shebang() {
     /bin/sh|/usr/bin/sh|/bin/dash|/usr/bin/dash) new="$DN/usr/bin/dash" ;;
     /bin/bash|/usr/bin/bash) new="$DN/usr/bin/bash" ;;
     /usr/bin/perl|/bin/perl)
-      [ "$mode" = program ] || return 0
-      new="$DN/usr/bin/dn-perl" ;;
+      # perl is the prefix's own. Its @INC names /usr paths that do not exist on
+      # the device, so the prefix's module dirs are put first by a BEGIN line
+      # after the shebang (a shebang cannot carry this: it is cut at ~256 bytes).
+      new="$DN/usr/bin/perl"
+      { printf '#!%s%s\n' "$new" "$rest"
+        printf 'BEGIN { unshift @INC, "%s/usr/share/perl5", "%s/usr/lib/aarch64-linux-gnu/perl-base", "%s/usr/lib/aarch64-linux-gnu/perl/5.40", "%s/usr/lib/aarch64-linux-gnu/perl5/5.40" }\n' "$DN" "$DN" "$DN" "$DN"
+        tail -n +2 "$f"; } > "$WORK/shebang.new"
+      cat "$WORK/shebang.new" > "$f"
+      return 0 ;;
     /usr/*|/bin/*|/sbin/*)
       [ "$mode" = program ] || return 0
       new="$DN$interp" ;;
