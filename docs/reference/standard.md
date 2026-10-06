@@ -62,7 +62,8 @@ Whatever its section, a package is the **admin's** if it:
 
 - depends on `adduser` or creates a system user;
 - ships a system service (depends on `init-system-helpers`, installs units or
-  init scripts) — Termux has no systemd, and the runit translation is unbuilt;
+  init scripts) — the platform has no systemd, and the runit translation is
+  unbuilt;
 - needs a setuid/setgid file or a file capability to work (Android will not
   honour them, and they are unsafe).
 
@@ -75,8 +76,8 @@ scope as an exception.
   from the platform's `aarch64`; the current `--force-architecture` workaround
   is flagged unsafe (`docs/log/findings/first-working-prototype.md`) and
   still open.
-- **`gui` is an attribute, not a refusal.** On Termux the display is
-  Termux:X11/VNC; a package can be `user` and still need a display to do
+- **`gui` is an attribute, not a refusal.** The display is an external
+  X/VNC server; a package can be `user` and still need a display to do
   anything.
 - **glibc-dynamic is an assumption, not a promise.** A program that is
   statically linked, or that reaches the filesystem with a raw `syscall()`,

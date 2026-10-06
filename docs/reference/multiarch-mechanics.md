@@ -87,7 +87,7 @@ Confirmed by grep across the classic branch's own scripts
 (`setup-apt-prefix.sh`, `bootstrap-base.sh`): it uses **only**
 `--force-architecture`, never `--add-architecture`, and its own
 `native-seed.sh` stub packages are written as `Architecture: arm64` (not
-Termux's own native label) — i.e. the classic design's fresh, isolated
+the host's own native label) — i.e. the classic design's fresh, isolated
 sandbox database is made to *pretend its native architecture is arm64
 throughout*, real packages and local stubs alike, and `--force-
 architecture` exists purely to get a dpkg binary whose own compiled-in
@@ -96,13 +96,13 @@ starts completely empty and is *only ever* going to hold arm64 content —
 there's nothing else in it whose real identity would be lost by the
 pretense.
 
-A design that instead reused Termux's own real, pre-populated dpkg
+A design that instead reused the host's own real, pre-populated dpkg
 database **must** use the proper mechanism: that database already has
 thousands of packages under its own native identity, worth confirming
 precisely rather than assumed:
 
 ```
-dpkg --print-architecture            # aarch64 -- Termux's own historical label
+dpkg --print-architecture            # aarch64 -- the host's own historical label
 dpkg --print-foreign-architectures   # arm64   -- what this branch added
 ```
 
@@ -121,7 +121,7 @@ database.
 | | Multi-Arch field | update-alternatives | `--force-architecture` | `--add-architecture` |
 |---|---|---|---|---|
 | Separate prefix | used for stub `Provides` (`native-seed.sh`) | used normally, no cross-namespace issue possible | used, sufficient (fresh, single-arch db) | not needed |
-| A shared Termux database | used identically | used, **plus** needs bridging Termux's own non-dpkg providers into it | used too (still needed for the same dpkg-vs-package arch checks) | **needed** — shares Termux's real, pre-populated, `aarch64`-native database |
+| A shared host database | used identically | used, **plus** needs bridging the host's own non-dpkg providers into it | used too (still needed for the same dpkg-vs-package arch checks) | **needed** — shares the host's real, pre-populated, `aarch64`-native database |
 
 Neither `Multi-Arch` nor `update-alternatives` differs between the two
 strategies — they're dpkg's own layer, unmodified either way. What differs
