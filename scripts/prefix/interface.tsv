@@ -39,7 +39,7 @@ source	src/dn-child.h
 source	src/tracer
 
 # --- artifacts build produces, and where install places them ---------------
-artifact	dn-shim.so	src/.build/dn-shim.so	usr/lib/deb-native/dn-shim.so
-artifact	dn-run	src/.build/dn-run	usr/lib/deb-native/dn-run
-artifact	dn-trace	src/.build/dn-trace	usr/lib/deb-native/dn-trace
+artifact	dn-shim.so	src/.build-glibc/dn-shim.so	usr/lib/deb-native/dn-shim.so
+artifact	dn-run	src/.build-glibc/dn-run	usr/lib/deb-native/dn-run
+artifact	dn-trace	src/.build-glibc/dn-trace	usr/lib/deb-native/dn-trace
 artifact	dn-elf	src/.build-glibc/dn-elf	usr/lib/deb-native/dn-elf

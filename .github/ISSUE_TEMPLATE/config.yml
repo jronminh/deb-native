@@ -7,5 +7,5 @@ contact_links:
     url: https://github.com/jronminh/deb-native/discussions
     about: Setup questions, ideas and general talk — not for bug reports.
   - name: Documentation
-    url: https://github.com/jronminh/deb-native/blob/main/docs/README.md
-    about: The documentation map (status, design, references, guides).
+    url: https://github.com/jronminh/deb-native/blob/main/docs/spec/status.md
+    about: Project status, design and reference docs.

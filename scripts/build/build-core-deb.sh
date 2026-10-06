@@ -25,9 +25,8 @@
 #                 only checked against its sha256, never downloaded again
 #   PREFIX_ROOT   the absolute path the artifact's files will name (the
 #                 loader path), e.g. /data/data/org.dn.shell/files/core-deb
-#   DEB_LIST      the package list with pinned versions (a .dn/packages file)
-#                 of the core-deb being replaced; default: the list of BASE's
-#                 own .dn/packages plus the Debian layer from DEB_LIST_EXTRA.
+#   DEB_LIST      the pinned package list to install on top of BASE, one
+#                 `name ver arch` per line (a .dn/packages file). Required.
 #   DN_PROFILE    optional: a file of package names written as .dn/profile
 #                 (the packages the prefix restores from the mirror)
 #   OUT           output tarball

@@ -54,10 +54,8 @@ reserved by `dn-elf`; artifacts ship and bootstrap end to end
 - `core-ultra` size: most `gconv` modules (~20 of 92 MB); terminfo missing.
 - Launcher symlinks: make them relative after `normalize_symlinks` runs (the
   post hook's order leaves them absolute).
-- **CI**: `.github/workflows/build-glibc.yml` still names the old layout
-  (`native/`, `bootstrap/`); fix its paths and add a workflow that builds the
-  prefix artifact (`build-overlay-glibc` → `build-core-deb` →
-  `package-prefix`).
+- **CI**: add a workflow that builds the prefix artifact
+  (`build-overlay-glibc` → `build-core-deb` → `package-prefix`).
 - **One build entry**: wrap the build steps in a single command (a `Makefile`
   or `scripts/build.sh`), so the README's build section is one line.
 

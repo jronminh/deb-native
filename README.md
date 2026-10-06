@@ -16,7 +16,7 @@ A host with `dpkg-deb`, `wget`, `xz`.
 
 ```sh
 DN_GLIBC_PREFIX=... DN_OVERLAY=src/.build-glibc \
-PREFIX_ROOT=... DEB_LIST=packages.tsv \
+PREFIX_ROOT=... DEB_LIST=... \
   scripts/build/build-core-deb.sh BASE core-deb.tar.gz
 scripts/build/package-prefix.sh core-deb --root ... --name core-deb
 ```
