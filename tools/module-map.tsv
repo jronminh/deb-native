@@ -5,26 +5,19 @@
 # rules non-overlapping.
 
 meta	^\.github/
-meta	^templates/
 meta	^\.gitignore$
 meta	^(AGENTS|CLAUDE|CONTRIBUTING|CREDITS|MODULARIZE|README|SECURITY|TODO)\.md$
 meta	^LICENSE$
-meta	^(native|tracer|custom)$
+meta	^VERSION$
 
 docs	^docs/
-
-third_party	^third_party/
 
 tests	^tests/
 
 tools	^tools/
 
-product	^install\.sh$
+src	^src/
 
-adapter	^adapters/
+scripts	^scripts/
 
-build	^build/
-
-bootstrap	^bootstrap/
-
-core	^core/
+patches	^patches/

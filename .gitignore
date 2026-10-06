@@ -1,21 +1,22 @@
-# Build artifacts of the core runtime (see core/interface.tsv).
-core/native/*.so
-core/native/.build/
-core/tracer/**/*.o
-core/tracer/**/*.d
-core/tracer/dn-trace
-core/tracer/build.h
-core/tracer/licenses
-core/tracer/loader/loader
-core/tracer/loader/loader-m32
-core/tracer/loader/loader-info.c
-core/tracer/.check_*
-!core/tracer/.check_*.c
+# Build artifacts of the runtime (see scripts/prefix/interface.tsv).
+src/*.so
+src/.build/
+src/.build-glibc/
+src/tracer/**/*.o
+src/tracer/**/*.d
+src/tracer/dn-trace
+src/tracer/build.h
+src/tracer/licenses
+src/tracer/loader/loader
+src/tracer/loader/loader-m32
+src/tracer/loader/loader-info.c
+src/tracer/.check_*
+!src/tracer/.check_*.c
 # Test build outputs.
 tests/shim-libc/test
+tests/shim-libc/dn-shim.so
 tests/tracer-nss/nss-probe
-# Core dumps (kept distinct from the core/ module directory).
-core.[0-9]*
+# Core dumps (kept distinct from the src/ module directory).
+src.[0-9]*
 *.core
-core/native/.build-glibc/
 __pycache__/

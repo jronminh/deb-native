@@ -29,16 +29,13 @@ builds on, and the license each part is under.
   0.5.0, and still the fallback until 0.5.0's own glibc is wired into
   `install.sh`.
 - Used for: 0.5.0's own-glibc patch,
-  [`third_party/glibc-android-patches/dn-glibc-android.patch`](third_party/glibc-android-patches/dn-glibc-android.patch),
+  [`build/glibc-android-patches/dn-glibc-android.patch`](build/glibc-android-patches/dn-glibc-android.patch),
   is a **direct fork of this repo's own Android compatibility patch series
   for glibc** (`gpkg/glibc/`, GPL-2.0-or-later, same license as glibc
-  itself) — not written from scratch. Per-file fork verdict for all 54
-  loose files there is in
-  [`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md), "Full
-  per-file fork verdict"; the patch carries every file marked "fork"
-  there, retargeted from Termux's dual-prefix layout to this project's
-  single fixed prefix. See
-  [`third_party/glibc-android-patches/README.md`](third_party/glibc-android-patches/README.md)
+  itself) — not written from scratch. The patch carries every file the
+  fork needed, retargeted from Termux's dual-prefix layout to this
+  project's single fixed prefix. See
+  [`build/glibc-android-patches/README.md`](build/glibc-android-patches/README.md)
   for the exact provenance and what was changed vs. kept as-is.
 - Without Termux there is no project: the approach is "reuse Termux, fake only
   the Debian layout".

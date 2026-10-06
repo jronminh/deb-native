@@ -22,7 +22,7 @@ set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/../.." && pwd)
 REL_INTERP=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
-TERMUX_PREFIX=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
+TERMUX_PREFIX=${DN_HOST_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 
 fail() { printf 'FAIL: glibc-swap: %s\n' "$1" >&2; exit 1; }
 info() { printf '  %s\n' "$1"; }

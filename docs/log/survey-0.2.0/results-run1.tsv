@@ -1,11 +1,0 @@
-section	package	install	detail	run	programs	seconds
-comm	81voltd	ok		fail	81voltd:native:fail	48
-comm	ipp-usb	script	Please correct this problem and reconfigure with dpkg --configure passwd''.  Note that both user and group IDs in the range 0-99 are globally allocated by the Debian project and must be the same on every Debian system. installed passwd:arm64 package post-installation script subprocess returned 	-		121
-debug	ceph-immutable-object-cache-dbg	script	Please correct this problem and reconfigure with dpkg --configure passwd''.  Note that both user and group IDs in the range 0-99 are globally allocated by the Debian project and must be the same on every Debian system. installed passwd:arm64 package post-installation script subprocess returned 	-		346
-debug	dibbler-client-dbg	other	E: translating perl-base failed	-		19
-devel	gcc-13-plugin-dev-x86-64-linux-gnux32	ok		none		201
-devel	poxml	ok		partial	po2xml:native:ok,split2po:native:ok,swappo:native:fail,xml2pot:native:ok	96
-doc	gsasl-doc	ok		none		29
-doc	libghc-asn1-parse-doc	skew	ghc:arm64 : Depends: libc6-dev:arm64 but it is not installable	-		3
-editors	apel	ok		none		18
-editors	vala-mode-el	ok		none		35

@@ -14,7 +14,7 @@ set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/.." && pwd)
-TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
+TP=${DN_HOST_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 
 FIX=0
 DN_PREFIX=""
@@ -68,7 +68,7 @@ done
 if [ -L "$HOME/.termux/shell" ] && [ -x "$ROOT/usr/bin/bash" ]; then
   ok "shell interface installed (userland is the default session)"
 else
-  warn "$HOME/.termux/shell missing (run make-shell-interface.sh)"
+  warn "$HOME/.termux/shell missing (the prefix's .dn/install.sh wires it)"
 fi
 
 # 3. Termux's own apt must still point at the Termux repo.
@@ -97,8 +97,8 @@ else
   warn "no dpkg db at $DN_PREFIX (not bootstrapped yet?)"
 fi
 
-if [ "$FIX" = 1 ] && [ -d "$LAUNCHDIR" ]; then
-  sh "$REPO/adapters/deb-native/make-shell-interface.sh" "$ROOT" && ok "reinstalled the shell interface (start a new session)"
+if [ "$FIX" = 1 ] && [ -d "$LAUNCHDIR" ] && [ -x "$ROOT/.dn/install.sh" ]; then
+  DN_SESSION_SHELL="$HOME/.termux/shell" sh "$ROOT/.dn/install.sh" && ok "reinstalled the shell interface (start a new session)"
 fi
 
 [ "$fail" = 0 ] && echo "==> ok" || echo "==> problems found (re-run with --fix to repair)"

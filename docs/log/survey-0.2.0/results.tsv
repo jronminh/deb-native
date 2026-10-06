@@ -1,101 +1,0 @@
-section	package	install	detail	run	programs	seconds
-comm	efax	ok		ok	efax:native:ok,efix:native:ok,fax:native:ok	39
-comm	gnokii-common	ok		none		30
-comm	sredird	ok		ok	sredird:native:ok	16
-debug	libao-dbg	ok		none		11
-debug	libdkim1d-dbg	ok		none		14
-devel	android-sdk-platform-tools-common	ok		none		10
-devel	check	ok		ok	checkmk:native:ok	11
-doc	libnetfilter-cttimeout-doc	ok		none		12
-doc	python-odoorpc-doc	ok		none		14
-editors	elpa-rust-mode	ok		none		12
-editors	elpa-vertico	ok		none		25
-education	fisicalab.app-common	ok		none		56
-education	kanadic	ok		none		29
-electronics	camv-rnd-core	ok		fail	camv-rnd:native:fail	35
-electronics	sch-rnd-doc	ok		none		32
-embedded	libts-bin	ok		partial	ts_calibrate:native:ok,ts_conf:native:ok,ts_finddev:native:fail,ts_harvest:native:ok,ts_print:native:ok,ts_print_mt:native:ok	37
-embedded	urjtag-common	ok		none		44
-fonts	fonts-povray	ok		none		15
-fonts	fonts-taml-tscu	ok		none		10
-games	bastet	ok		untested	bastet:native:tty	15
-games	nethack-common	script	(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database 	-		11
-games	slimevolley-data	ok		none		31
-gnome	gnome-bluetooth-3-common	ok		none		31
-gnome	gnome-icon-theme-suede	ok		none		30
-gnome	gnome-software-common	ok		none		31
-golang	golang-github-corpix-uarand-dev	ok		none		36
-golang	golang-github-mitchellh-prefixedio-dev	ok		none		29
-golang	gorst	ok		ok	gorst:dn-run:ok	30
-graphics	tesseract-ocr-hye	ok		none		30
-graphics	tesseract-ocr-script-grek	ok		none		29
-hamradio	soapysdr-module-hackrf	ok		none		39
-hamradio	soapysdr0.8-module-bladerf	ok		none		31
-hamradio	soapysdr0.8-module-rfspace	ok		none		15
-haskell	happy	ok		ok	happy:native:ok	18
-haskell	ppsh	ok		ok	ppsh:native:ok	33
-haskell	unlambda	ok		fail	unlambda:native:fail	34
-interpreters	lua-dbi-common	ok		none		29
-interpreters	slang-sqlite	ok		none		31
-interpreters	slang-wildcard	ok		none		19
-introspection	gir1.2-babl-0.1	ok		none		13
-introspection	gir1.2-gm-0	ok		none		11
-introspection	gir1.2-gpaste-2	ok		none		11
-java	libcommons-cli-java	ok		none		9
-java	libsbt-template-resolver-java	ok		none		11
-javascript	libjs-three	ok		none		50
-javascript	node-everything.js	ok		none		29
-kde	akonadi-contacts-data	ok		none		33
-kde	libkf5codecs-data	ok		none		31
-libdevel	libfarmhash-dev	ok		none		30
-libdevel	libfsplib-dev	ok		none		29
-libs	libkf6su-data	ok		none		29
-libs	libsolsys-calceph1	ok		none		32
-libs	libzstd1	ok		none		5
-lisp	cl-anaphora	ok		none		27
-lisp	elpa-minimap	ok		none		36
-localization	kdevelop-l10n	ok		none		103
-localization	libkf6userfeedback-data	ok		none		33
-localization	libqscintilla2-qt6-l10n	ok		none		29
-math	hol88-library-source	ok		none		36
-math	libexprtk-dev	ok		none		28
-math	scilab-include	ok		none		38
-ocaml	libextunix-ocaml	ok		none		36
-ocaml	libuutf-ocaml	ok		none		36
-perl	libtask-kensho-dates-perl	ok		none		28
-perl	perl-openssl-defaults	ok		untested	dh_perl_openssl:native:tty	28
-php	php-composer-spdx-licenses	ok		none		34
-php	phpunit-diff	ok		none		41
-python	python-oslosphinx-common	ok		none		29
-python	python3-setuptools-whl	ok		none		33
-ruby	ruby-aggregate	ok		none		28
-ruby	ruby-scarf	ok		none		30
-rust	librust-idna-mapping-dev	ok		none		31
-rust	librust-pin-project-dev	ok		none		48
-rust	librust-talktosc-dev	ok		none		74
-science	phipack	ok		partial	phipack-phi:native:ok,phipack-ppma_2_bmp:native:fail,phipack-profile:native:ok	35
-science	poa	ok		fail	poa:native:fail	28
-science	spaced	ok		ok	spaced:native:ok	34
-shells	ksh	ok		none		36
-shells	ksh93u+m	ok		ok	ksh93:native:ok,shcomp93:native:ok,rksh93:native:ok	36
-sound	amb-plugins	ok		none		33
-sound	speex	ok		ok	speexdec:native:ok,speexenc:native:ok	31
-tex	bibcursed	ok		ok	bibcursed:native:ok	30
-tex	dvi2dvi	ok		ok	dvi2dvi:native:ok	31
-text	tcs	ok		ok	tcs:native:ok	29
-text	yodl	ok		partial	yodl:native:ok,yodl2whatever:native:ok,yodlpost:native:ok,yodlstriproff:native:ok,yodlverbinsert:native:fail,yodl2html:native:ok	37
-utils	golang-codesearch-dev	ok		none		28
-utils	wpd2epub	ok		ok	wpd2epub:native:ok	39
-vcs	elpa-magit-section	ok		none		37
-vcs	patch	ok		ok	patch:native:ok	28
-vcs	rcs	ok		ok	ci:native:ok,co:native:ok,ident:native:ok,merge:native:ok,rcs:native:ok,rcsclean:native:ok	32
-video	hasciicam	ok		ok	hasciicam:native:ok	47
-video	xawtv-plugins	ok		none		45
-web	eiskaltdcpp-web	ok		ok	eiskaltdcpp-web:native:ok	62
-web	webext-bulk-media-downloader	ok		none		43
-web	wwwconfig-common	ok		none		39
-x11	ltpanel	ok		ok	ltpanel:native:ok	55
-x11	mate-media-common	ok		none		44
-xfce	libxfce4ui-common	ok		none		37
-xfce	libxfce4util-common	ok		none		31
-xfce	orage-data	ok		none		32

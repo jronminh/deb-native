@@ -71,7 +71,7 @@ target.
   (`deb-native-prefix-<version>-<arch>.tar.gz` + manifest) and splits by weight:
   - **B1 — glibc** (heavy): build the project's own glibc into `libc6.deb` +
     `libc-bin.deb` and the patched glibc files (the "10-file swap", from
-    `third_party/glibc-android-patches`). That bundle **is** `DN_GLIBC_DEBS`.
+    `build/glibc-android-patches`). That bundle **is** `DN_GLIBC_DEBS`.
   - **B2 — overlay** (light, plain gcc): build the runtime overlay —
     `dn-shim.so`, `dn-run`, `dn-trace`, `dn-elf`, and the
     hook/launcher scripts. Pure gcc against the prefix's glibc; no glibc source,

@@ -1,12 +1,12 @@
 #!/bin/sh
-# Installs a random sample of real Debian .deb packages through real
-# apt (setup-apt-prefix.sh + apt-install.sh) instead of bare dpkg on a
-# single .deb — the before/after comparison for
-# docs/log/findings/first-random-sample-survey.md's #1 finding (no
-# dependency installer was the dominant failure cause, not native-seed
-# coverage).
+# Installs a random sample of real Debian .deb packages through real apt
+# into a shipped prefix (ship-prefix.sh + apt-install.sh) instead of bare
+# dpkg on a single .deb — the before/after comparison for the first
+# random-sample survey finding (no dependency installer was the dominant
+# failure cause, not native-seed coverage).
 #
-# Usage: OUT=~/survey-apt tools/survey/survey-apt.sh LIST.tsv
+# Usage: OUT=~/survey-apt DN_SURVEY_IMAGE=core-deb.tar.gz \
+#          tools/survey/survey-apt.sh LIST.tsv
 # LIST.tsv: "section<TAB>package<TAB>anything" (third column unused —
 # apt resolves the .deb itself; kept so the same sample file from
 # sample-packages.py works for both survey scripts).
@@ -41,8 +41,9 @@ survey_one() {
   local section=$1 pkg=$2 log=$OUT/logs/$pkg.log pfx=$OUT/work/$pkg
   rm -rf "$pfx"
   : > "$log"
-  "$HERE/../../bootstrap/setup-apt-prefix.sh" "$pfx" >>"$log" 2>&1
-  "$HERE/../../core/install/apt-install.sh" "$pfx" "$pkg" >>"$log" 2>&1
+  : "${DN_SURVEY_IMAGE:?set DN_SURVEY_IMAGE to a prefix artifact (tarball)}"
+  "$HERE/../../scripts/host/ship-prefix.sh" "$DN_SURVEY_IMAGE" "$pfx" >>"$log" 2>&1
+  "$HERE/../../scripts/prefix/apt-install.sh" "$pfx" "$pkg" >>"$log" 2>&1
   local inst=ok detail=""
   if ! dpkg-query --admindir="$pfx/var/lib/dpkg" -W -f '${db:Status-Abbrev}' "$pkg" | grep -q '^ii'; then
     detail=$(install_failure "$log")

@@ -1,0 +1,45 @@
+# scripts/prefix/interface.tsv — the prefix-side surface (MODULARIZE.md P3).
+#
+# One record per line, TAB-separated:
+#   entry     <path>                      a script other parts may call
+#   source    <path|dir>                  a tree the build compiles
+#   artifact  <name> <cache-path> <installed-path>
+#                                         a build output and where install puts
+#                                         it (installed-path is prefix-relative)
+#
+# check-interface.py verifies every entry/source path exists, and that no
+# other module calls a declared script that is not listed as an `entry`.
+
+# --- entry points: callable by the build / host / prefix -------------------
+entry	scripts/prefix/dn-translate-deb.sh
+entry	scripts/prefix/dn-hook-pre.sh
+entry	scripts/prefix/dn-hook-post.sh
+entry	scripts/prefix/apt-install.sh
+entry	scripts/host/install-prefix.sh
+entry	scripts/host/install-hooks.sh
+entry	scripts/host/bootstrap-prefix.sh
+entry	scripts/host/ship-prefix.sh
+entry	scripts/host/relocate.sh
+
+# --- build / glibc leaves a build host or tool may call --------------------
+entry	scripts/build/build-overlay-glibc.sh
+entry	scripts/build/build-core-deb.sh
+entry	scripts/build/package-prefix.sh
+entry	scripts/build/cut-core-ultra.py
+entry	scripts/build/pack-prefix.py
+entry	scripts/glibc/dn-apply-glibc-patch.sh
+entry	scripts/glibc/dn-package-glibc.sh
+entry	scripts/glibc/dn-package-libc-bin.sh
+
+# --- sources the build compiles --------------------------------------------
+source	src/dn-shim.c
+source	src/dn-run.c
+source	src/dn-elf.c
+source	src/dn-child.h
+source	src/tracer
+
+# --- artifacts build produces, and where install places them ---------------
+artifact	dn-shim.so	src/.build/dn-shim.so	usr/lib/deb-native/dn-shim.so
+artifact	dn-run	src/.build/dn-run	usr/lib/deb-native/dn-run
+artifact	dn-trace	src/.build/dn-trace	usr/lib/deb-native/dn-trace
+artifact	dn-elf	src/.build-glibc/dn-elf	usr/lib/deb-native/dn-elf

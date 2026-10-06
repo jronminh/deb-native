@@ -1,9 +1,9 @@
 #!/bin/sh
-# On-device smoke test for native/dn-shim.c (the glibc libc-level
-# path shim). Run this in Termux, where clang can target the glibc
-# side-install. It builds the shim + a glibc test binary, sets up a fake
-# $DN_INSTDIR root, runs every libc entry point the shim intercepts against
-# a path under /etc or /usr, and asserts each one was rewritten to the root.
+# On-device smoke test for src/dn-shim.c (the glibc libc-level path shim).
+# Run this in Termux, where clang can target the glibc side-install. It builds
+# the shim + a glibc test binary, sets up a fake $DN_INSTDIR root, runs every
+# libc entry point the shim intercepts against a path under /etc or /usr, and
+# asserts each one was rewritten to the root.
 #
 # No root, no namespace: this only exercises libc interposition, the same
 # way a maintainer script's forked glibc command reaches it.
@@ -13,11 +13,21 @@ G=${DN_GLIBC_ROOT:-/data/data/com.termux/files/usr/glibc}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/../.." && pwd)
 ROOT=${DN_INSTDIR:-$HOME/.cache/deb-native-shimtest/root}
-SHIM=$REPO/core/native/dn-shim.so
+SHIM=$HERE/dn-shim.so
 TEST=$HERE/test
 
 [ -x "$G/bin/true" ] || { echo "no glibc side-install at $G (set DN_GLIBC_ROOT)"; exit 2; }
-[ -f "$SHIM" ] || sh "$REPO/bootstrap/build-dn-shim.sh"
+
+# The shim, built here against Termux's glibc side-install: this test is the
+# only builder that needs it on-device (the shipped shim comes from
+# scripts/build/build-overlay-glibc.sh on a build host).
+if [ ! -f "$SHIM" ] || [ "$REPO/src/dn-shim.c" -nt "$SHIM" ]; then
+  clang --target=aarch64-linux-gnu --sysroot=/ -O2 -fPIC -shared \
+    -nostartfiles -nodefaultlibs \
+    -I"$G/include" -L"$G/lib" \
+    -Wl,-dynamic-linker,"$G/lib/ld-linux-aarch64.so.1" \
+    -o "$SHIM" "$REPO/src/dn-shim.c" -lc -ldl
+fi
 
 rm -rf "$ROOT"
 mkdir -p "$ROOT/etc" "$ROOT/usr/bin" "$ROOT/var" "$ROOT/opt"

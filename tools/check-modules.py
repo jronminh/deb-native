@@ -26,15 +26,11 @@ ROOT = os.path.dirname(HERE)
 MAP = os.path.join(HERE, "module-map.tsv")
 ALLOW = os.path.join(HERE, "module-edges.allow")
 
-# Regexes that identify a reference to a non-core module, per target module.
+# Regexes that identify a reference to a non-runtime module, per target module.
 # Word/boundary care matters: "install.sh" must not match "apt-install.sh".
 EDGE_PATTERNS = {
-    "build":     [r"build-dn-shim", r"build-core"],
-    "bootstrap": [r"bootstrap/", r"setup-apt-prefix", r"dn-install-glibc",
-                  r"dn-apply-glibc-patch", r"dn-package-glibc",
-                  r"dn-package-libc-bin", r"dn-standins"],
-    "adapter":   [r"make-shell-interface", r"adapters/"],
-    "product":   [r"(?<![\w-])install\.sh"],
+    "tests": [r"tests/"],
+    "tools": [r"tools/"],
 }
 COMMENT_PREFIXES = ("#", "//", "*", "/*", "<!--", ";")
 
@@ -125,9 +121,9 @@ def main():
         return 0
 
     violations = []
-    for path in by_module.get("core", []):
+    for path in by_module.get("src", []) + by_module.get("scripts", []):
         if path.endswith(".md"):
-            continue          # directory READMEs are prose, not dependencies
+            continue          # prose, not dependencies
         for target, pat in scan_edges(path):
             if (path, target) not in allowed:
                 violations.append((path, target, pat))

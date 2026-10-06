@@ -131,7 +131,7 @@ def check_reachability(root: str) -> list[str]:
     # The repo's entry scripts: a host runs the ship/bootstrap, a build host
     # runs the build and adapter leaves. Reachability is traced from these.
     entries = {
-        "ship-prefix.sh", "bootstrap-prefix.sh", "make-shell-interface.sh",
+        "ship-prefix.sh", "bootstrap-prefix.sh", "install-prefix.sh",
         "package-prefix.sh", "build-core-deb.sh", "build-overlay-glibc.sh",
         "cut-core-ultra.py", "dn-package-glibc.sh", "dn-package-libc-bin.sh",
         "dn-apply-glibc-patch.sh", "dn-doctor.sh",

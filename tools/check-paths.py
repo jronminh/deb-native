@@ -8,8 +8,7 @@ or an ancestor when the definition walks up with `..`), then verifies every
 literal `$HERE/…` reference resolves on disk.
 
 Scope and limits:
-  - `.sh` files only, outside `third_party/` (vendored, own `$ROOT`) and
-    `tests/` (each defines its own fake root).
+  - `.sh` files only, outside `tests/` (each defines its own fake root).
   - only literal suffixes; a reference with another shell variable or a glob is
     skipped (a glob's parent directory is checked).
   - `$ROOT`/`$REPO` are not checked: several scripts redefine them to a target
@@ -39,8 +38,7 @@ def tracked_shells():
             dirs[:] = [d for d in dirs if d != ".git"]
             for n in names:
                 files.append(os.path.relpath(os.path.join(base, n), ROOT))
-    return [p for p in files
-            if p.endswith(".sh") and not p.startswith(("third_party/", "tests/"))]
+    return [p for p in files if p.endswith(".sh") and not p.startswith("tests/")]
 
 
 def here_base(path, lines):

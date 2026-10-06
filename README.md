@@ -1,51 +1,27 @@
 # deb-native
 
-![status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)
+Real Debian arm64 `.deb` packages inside Termux — no root, no `chroot`, no
+namespaces. A small Debian tree beside Termux's own, Termux left untouched.
 
-**Real Debian `arm64` `.deb` packages inside Termux: no root, no `chroot`,
-no namespaces.** `apt install PKG` works and the program runs by name; a
-small Debian tree beside Termux's own `usr/` and `home/`, Termux left
-untouched.
+> Pre-alpha, AI-assisted, not independently audited. Use a throwaway Termux
+> install or device.
 
-> [!WARNING]
-> **Pre-alpha, AI-assisted, not independently audited.** Read `install.sh`
-> and `scripts/` before running them. The on-disk layout can change between
-> releases, heavy packages (toolchains) aren't fully supported, and this has
-> had no security review. Use a throwaway Termux install or device.
+## How it ships
 
-## Requirements
+The prefix is built on a build host and shipped as a tarball. There is no
+build on the target.
 
-Termux with `git`, `clang`, `patchelf` and the glibc side-install
-(`glibc-runner`, `coreutils-glibc`, `bash-glibc`, `perl`, the loader and
-libraries). Optional: `make` + `libtalloc` (`pkg install make libtalloc`) for
-the tracer — without them, static and raw-syscall programs run untranslated.
+- **Build** (`build/`): the glibc bundle, the runtime overlay
+  (`dn-shim.so`, `dn-run`, `dn-trace`, `dn-elf`), and the prefix artifact
+  (`build-core-deb.sh` + `package-prefix.sh`).
+- **Ship** (`core/runtime/ship-prefix.sh`): read `.dn/contract` without
+  extracting, check it, extract, relocate.
+- **Activate / complete**: the artifact's own `.dn/install.sh` (host shell)
+  then `.dn/bootstrap.sh` (the prefix's own shell, installing `.dn/profile`
+  from the mirror). When bootstrap succeeds the prefix is ready.
 
-## Install
+The contract is described in `docs/spec/prefix-contract.md`.
 
-```sh
-# pinned pre-alpha release:
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/v0.7.1-prealpha/install.sh | DEB_NATIVE_REF=v0.7.1-prealpha sh
+## License
 
-# then restart Termux — the new session is the Debian userland
-apt install figlet
-figlet hi
-```
-
-Rolling edge: replace both `v0.7.1-prealpha` with `main`. Idempotent from
-a checkout: `sh install.sh [PREFIX] [pkg ...]`; log in `var/log/` under the
-prefix.
-
-![deb-native demo: installing Debian's lua5.4 inside Termux and running it](docs/demo.gif)
-
-## Documentation
-
-[`docs/README.md`](docs/README.md) maps everything: start with
-[`docs/spec/status.md`](docs/spec/status.md) (where it is today) and
-[`docs/spec/design.md`](docs/spec/design.md) (how it works). Roadmap in
-[`TODO.md`](TODO.md); conventions in [`AGENTS.md`](AGENTS.md); releases in
-[`Releases`](https://github.com/jronminh/deb-native/releases).
-
-## Credit & license
-
-Built on other people's work — see [`CREDITS.md`](CREDITS.md).
-GPL-3.0-or-later — [`LICENSE`](LICENSE).
+GPL-3.0-or-later — see `LICENSE` and `CREDITS.md`.

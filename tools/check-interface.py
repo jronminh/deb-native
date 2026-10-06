@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """check-interface.py — enforce the core's public surface (MODULARIZE.md P3).
 
-Reads `core/interface.tsv` and checks:
+Reads `scripts/prefix/interface.tsv` and checks:
   1. every declared `entry` and `source` path exists;
   2. no non-core module (`bootstrap`/`build`/`adapter`/`product`/`tools`/`tests`)
      references a core script that is not declared as an `entry` (sources and
@@ -19,8 +19,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 MAP = os.path.join(HERE, "module-map.tsv")
-IFACE = os.path.join(ROOT, "core", "interface.tsv")
-NONCORE = {"bootstrap", "build", "adapter", "product", "tools", "tests"}
+IFACE = os.path.join(ROOT, "scripts", "prefix", "interface.tsv")
+NONCORE = {"tools", "tests", "patches"}
 
 
 def tracked_files():
@@ -75,7 +75,7 @@ def main():
     allowed |= {os.path.basename(p) for p in sources}
     allowed |= {name for name, _, _ in artifacts}
     code_ext = (".sh", ".py", ".c", ".h", ".so")
-    core_basenames = {os.path.basename(p) for p in by.get("core", [])
+    core_basenames = {os.path.basename(p) for p in by.get("src", []) + by.get("scripts", [])
                       if p.endswith(code_ext)}
 
     problems = []
