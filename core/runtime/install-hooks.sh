@@ -26,7 +26,7 @@ mkdir -p "$HOOKS" "$DEST/scripts/runtime" "$DEST/scripts/bench" "$DEST/core/cust
 # (setup-runtime.sh, make-priv.sh) and the bootstrap/survey helpers are
 # deliberately not baked.
 for s in dn-hook-pre.sh dn-hook-post.sh dn-translate-deb.sh \
-         dn-fix-alternatives.sh \
+         \
          dn-debian-index.sh; do
   cp -f "$HERE/core/install/$s" "$HOOKS/"
 done

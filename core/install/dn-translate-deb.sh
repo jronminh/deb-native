@@ -102,8 +102,55 @@ while IFS= read -r f; do
   esac
 done < "$WORK/files"
 
+# update-alternatives, inside each maintainer script that calls it: a shell
+# function of the same name runs the prefix's own binary and then makes the
+# links it just wrote relative (a relative link never needs the prefix to be
+# the real root). The script itself is not otherwise changed; links sit two
+# levels below the prefix root in every alternatives group (usr/bin, usr/sbin,
+# etc/alternatives), so "../../" is always the right relative path.
+ALT_BLOCK='# deb-native: alternatives links stay relative inside the prefix.
+_dn_ua() {
+  _dn_rc=0
+  __DN__/usr/bin/update-alternatives --altdir /etc/alternatives \
+    --admindir /var/lib/dpkg/alternatives --log /var/log/alternatives.log "$@" || _dn_rc=$?
+  _dn_relink
+  return $_dn_rc
+}
+_dn_relink() {
+  for _dn_a in "__DN__"/var/lib/dpkg/alternatives/*; do
+    [ -f "$_dn_a" ] || continue
+    _dn_n=0
+    while IFS= read -r _dn_line; do
+      _dn_n=$((_dn_n + 1))
+      [ "$_dn_n" -eq 1 ] && continue
+      [ -z "$_dn_line" ] && break
+      if [ "$_dn_n" -eq 2 ] || [ $((_dn_n % 2)) -eq 0 ]; then _dn_fix "$_dn_line"
+      else _dn_fix "/etc/alternatives/$_dn_line"; fi
+    done < "$_dn_a"
+    _dn_fix "/etc/alternatives/${_dn_a##*/}"
+  done
+}
+_dn_fix() {
+  _dn_l="__DN__$1"
+  [ -L "$_dn_l" ] || return 0
+  _dn_t=$(readlink "$_dn_l")
+  case $_dn_t in /usr/*|/etc/*|/var/*|/opt/*|/bin/*|/sbin/*|/lib/*) ;; *) return 0 ;; esac
+  ln -sfn "../../${_dn_t#/}" "$_dn_l"
+}
+'
+ALT_BLOCK=$(printf '%s' "$ALT_BLOCK" | sed "s|__DN__|$DN|g")
+
 for s in preinst postinst prerm postrm; do
-  [ -f "$WORK/pkg/DEBIAN/$s" ] && rewrite_shebang "$WORK/pkg/DEBIAN/$s" maint
+  f="$WORK/pkg/DEBIAN/$s"
+  [ -f "$f" ] || continue
+  rewrite_shebang "$f" maint
+  if grep -q 'update-alternatives' "$f"; then
+    # Calls become _dn_ua (a valid shell name: dash refuses a function named
+    # update-alternatives), then the function is placed after the shebang.
+    sed -E 's/(^|[^A-Za-z0-9_-])update-alternatives([^A-Za-z0-9_-]|$)/\1_dn_ua\2/g' "$f" > "$WORK/alt.body"
+    { head -n1 "$WORK/alt.body"; printf '%s\n' "$ALT_BLOCK"; tail -n +2 "$WORK/alt.body"; } > "$WORK/alt.new"
+    cat "$WORK/alt.new" > "$f"
+  fi
 done
 
 for d in usr/bin usr/sbin usr/games usr/libexec bin sbin; do

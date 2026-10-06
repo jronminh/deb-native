@@ -3,10 +3,9 @@
 # Runs once after each transaction, with the prefix's own files installed, in
 # this order:
 #   1. glibc: restore the patched glibc files (dn-fix-glibc),
-#   2. alternatives: relative update-alternatives links (dn-fix-alternatives.sh),
-#   3. symlinks: absolute links into the prefix made relative (normalize),
-#   4. launchers for the prefix's programs (make-launchers.sh),
-#   5. gcc specs: gcc's default loader points at this prefix (gcc-specs).
+#   2. symlinks: absolute links into the prefix made relative (normalize),
+#   3. launchers for the prefix's programs (make-launchers.sh),
+#   4. gcc specs: gcc's default loader points at this prefix (gcc-specs).
 # Never fails the transaction: every step logs, the hook exits 0.
 #
 # Usage: dn-hook-post.sh [PREFIX]   (apt passes none; the prefix is found from
@@ -120,7 +119,6 @@ AWK="$DN/usr/bin/mawk"
 echo "== $(date '+%F %T') post" >> "$LOG"
 {
   fix_glibc
-  "$HERE/dn-fix-alternatives.sh" "$DN"
   normalize_symlinks
   "$HERE/../runtime/make-launchers.sh" "$DN"
   fix_gcc_specs

@@ -102,7 +102,6 @@ ua="$INSTDIR/usr/bin/update-alternatives"
 [ -x "\$ua" ] || ua="$PREFIX_DIR/bin/update-alternatives"
 DPKG_ROOT="$INSTDIR" "\$ua" --altdir "$INSTDIR/etc/alternatives" --admindir "$INSTDIR/var/lib/dpkg/alternatives" --log /var/log/alternatives.log "\$@"
 rc=\$?
-"$HERE/dn-fix-alternatives.sh" "$INSTDIR"
 exit \$rc
 EOF
 chmod 755 "$PRIV/update-alternatives"
