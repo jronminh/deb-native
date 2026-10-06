@@ -173,4 +173,5 @@ jobs:
         with:
           name: dn-overlay
           path: src/.build-glibc/
+          include-hidden-files: true
           retention-days: 14
