@@ -179,11 +179,12 @@ In order, and each owned by one place:
 - [x] Split `setup-runtime.sh` into `build-core` (build), `install-runtime`
       (core: install + `priv/`), and `vendor-host-libs` (adapter). The
       orchestrator stays bootstrap-level, so `core` no longer reaches build or
-      adapter; `module-edges.allow` is empty. (Since retired:
-      `vendor-host-libs` went with the Bionic runtime and adbwire, so
-      `install-runtime` is the whole adapter-side install.)
+      adapter; `module-edges.allow` is empty. (All three retired since: the
+      overlay is glibc-only and prebuilt (`build/build-overlay-glibc.sh`), the
+      prefix ships as a `.dn/` artifact, and the target's install is
+      `core/runtime/ship-prefix.sh` + the artifact's own `.dn/install.sh`.)
 - [x] Move the adapter leaf scripts to `adapters/deb-native/`
-      (`make-shell-interface.sh`, `make-apt-wrappers.sh`).
+      (`make-shell-interface.sh`, `make-shell-interface.sh`).
 - [x] Parameterize the `dpkg-query` leak (prefer the prefix's own; borrow the
       host's only during bootstrap) in `dn-hook-pre.sh` and `make-launchers.sh`.
 - [x] `install-hooks.sh` copies an explicit core manifest, not `*.sh`.

@@ -7,12 +7,11 @@
 # toolchain, no Termux.
 #
 # This is the overlay the shipped artifacts carry (docs/spec/prefix-layers.md).
-# build-core.sh still builds the Bionic dn-run/dn-trace the in-place Termux
-# bootstrap needs before the prefix's glibc exists; the two caches are kept
-# apart.
+# It is the only overlay builder: the in-place Bionic runtime that used to sit
+# beside it (build-core.sh) is retired with the in-place bootstrap.
 #
 # dn-trace is built in a scratch copy of core/tracer, so its objects never
-# mix with build-core.sh's in-tree Bionic build.
+# mix with the in-tree build.
 #
 # Usage: build-overlay-glibc.sh [OUTDIR]   (default: core/native/.build-glibc)
 set -eu

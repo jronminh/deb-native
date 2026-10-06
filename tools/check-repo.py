@@ -18,9 +18,10 @@ What it checks:
      the same way GitHub does it. A doc that follows
      templates/docs.template.md has one of these sections; this catches
      a heading renamed without its Contents entry following along.
-  3. Script reachability -- every scripts/**/*.sh and *.py, traced from
-     install.sh's own calls, transitively, through $HERE/-style
-     invocations. Reports what's NOT reachable this way, for a human to
+  3. Script reachability -- every scripts/**/*.sh and *.py, traced from the
+     repo's entry scripts (the ship/bootstrap, build and adapter leaves),
+     transitively, through $HERE/-style invocations. Reports what's NOT
+     reachable this way, for a human to
      judge: some of that is legitimate (bench/, survey/, a packaging
      step meant to be run by hand), and some of it is exactly the "only
      a README mentions it" dead code this project has found and removed
@@ -127,13 +128,15 @@ def check_reachability(root: str) -> list[str]:
             ):
                 calls[path].add(target)
 
-    install_sh = os.path.join(root, "install.sh")
-    entrypoints = set()
-    if os.path.exists(install_sh):
-        install_text = open(install_sh, encoding="utf-8", errors="ignore").read()
-        for base, target in basenames.items():
-            if re.search(r"/" + re.escape(base) + r'["\s]', install_text):
-                entrypoints.add(target)
+    # The repo's entry scripts: a host runs the ship/bootstrap, a build host
+    # runs the build and adapter leaves. Reachability is traced from these.
+    entries = {
+        "ship-prefix.sh", "bootstrap-prefix.sh", "make-shell-interface.sh",
+        "package-prefix.sh", "build-core-deb.sh", "build-overlay-glibc.sh",
+        "cut-core-ultra.py", "dn-package-glibc.sh", "dn-package-libc-bin.sh",
+        "dn-apply-glibc-patch.sh", "dn-doctor.sh",
+    }
+    entrypoints = {path for base, path in basenames.items() if base in entries}
 
     reachable = set(entrypoints)
     frontier = list(entrypoints)
@@ -167,7 +170,7 @@ def main() -> int:
         print("  clean")
 
     print()
-    print("== Script reachability from install.sh (informational) ==")
+    print("== Script reachability from the entry scripts (informational) ==")
     print("  Not reachable doesn't mean dead -- bench/, survey/ and similar")
     print("  are meant to be run by hand. 'NOBODY calls this' and not an")
     print("  intentional standalone tool is the thing worth checking by hand.")
