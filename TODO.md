@@ -58,6 +58,8 @@ reserved by `dn-elf`; artifacts ship and bootstrap end to end
   (`native/`, `bootstrap/`); fix its paths and add a workflow that builds the
   prefix artifact (`build-overlay-glibc` → `build-core-deb` →
   `package-prefix`).
+- **One build entry**: wrap the build steps in a single command (a `Makefile`
+  or `scripts/build.sh`), so the README's build section is one line.
 
 ## Per-userland home (planned)
 
