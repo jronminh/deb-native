@@ -15,7 +15,6 @@ entry	core/install/install-runtime.sh
 entry	core/install/dn-translate-deb.sh
 entry	core/install/dn-hook-pre.sh
 entry	core/install/dn-hook-post.sh
-entry	core/install/dn-debian-index.sh
 entry	core/install/apt-install.sh
 entry	core/runtime/install-hooks.sh
 entry	core/runtime/make-launchers.sh

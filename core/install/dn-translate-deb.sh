@@ -1,8 +1,8 @@
 #!/bin/sh
 # Translate one Debian .deb for the prefix, in place, before dpkg sees it.
 #
-#   - Architecture "all" -> "arm64" (the same rule dn-debian-index.sh applies
-#     to the index, so apt and dpkg agree);
+#   - Architecture "all" -> "arm64" (the same rule the index is
+#     read with, so apt and dpkg agree);
 #   - hard links become copies: Android refuses link(2) in app data, and
 #     perl-base ships one (perl5.40.1 -> perl);
 #   - custom/<package>.sh, if present, applies per-package fixes;

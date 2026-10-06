@@ -23,7 +23,5 @@ for the current one.
 - `dn-translate-deb.sh` — translates one `.deb` in place: ELF interpreter,
   library path, `#!` lines, maintainer scripts, hard links, per-package
   fixes from `core/custom/`.
-- `dn-debian-index.sh` — rewrites `Architecture: all` -> `arm64` in a
-  downloaded Debian package index.
 - `setup-runtime.sh` — builds and installs the maintainer-script runtime
   (`dn-run`, the shim, the tracer) inside a prefix.

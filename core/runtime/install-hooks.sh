@@ -25,9 +25,7 @@ mkdir -p "$HOOKS" "$DEST/scripts/runtime" "$DEST/scripts/bench" "$DEST/core/cust
 # The runtime hook set: the scripts apt actually calls. Build-only scripts
 # (setup-runtime.sh, make-priv.sh) and the bootstrap/survey helpers are
 # deliberately not baked.
-for s in dn-hook-pre.sh dn-hook-post.sh dn-translate-deb.sh \
-         \
-         dn-debian-index.sh; do
+for s in dn-hook-pre.sh dn-hook-post.sh dn-translate-deb.sh; do
   cp -f "$HERE/core/install/$s" "$HOOKS/"
 done
 chmod 755 "$HOOKS/"*.sh
