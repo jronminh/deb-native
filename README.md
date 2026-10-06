@@ -10,9 +10,6 @@ An `arm64` Linux host with `gcc`, `make`, `libtalloc-dev`, `python3`.
 scripts/build/build-overlay-glibc.sh    # → src/.build-glibc/
 ```
 
-The glibc bundle (`scripts/glibc/`) is built in CI
-([`.github/workflows/build-glibc.yml`](.github/workflows/build-glibc.yml)).
-
 ## Package
 
 A host with `dpkg-deb`, `wget`, `xz`.
@@ -23,8 +20,6 @@ PREFIX_ROOT=... DEB_LIST=packages.tsv \
   scripts/build/build-core-deb.sh BASE core-deb.tar.gz
 scripts/build/package-prefix.sh core-deb --root ... --name core-deb
 ```
-
-`BASE` is a core-ultra tree (`scripts/build/cut-core-ultra.py`).
 
 ## Install
 
