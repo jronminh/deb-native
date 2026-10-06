@@ -77,10 +77,16 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-cache.c work/elf/
  #include <dl-procinfo.h>
  #include <stdint.h>
  #include <_itoa.h>
-@@ -385,14 +386,17 @@
+@@ -385,14 +386,23 @@
  char *
  _dl_load_cache_lookup (const char *name)
  {
++  /* deb-native: the artifact has no ld.so.cache (prefix-contract.md,
++     build invariant 3). Without a cache the search falls through to the
++     system directories, which __dn_redirect already maps onto the live
++     prefix (dl-load.c). */
++  return NULL;
++
 +  char dn_cache[512];
 +  __dn_build (dn_cache, sizeof dn_cache, "/usr/etc/ld.so.cache");
 +
@@ -2289,7 +2295,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dl-cache
 diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- pristine/p/sysdeps/generic/dn-prefix.h	1970-01-01 08:00:00.000000000 +0800
 +++ work/sysdeps/generic/dn-prefix.h	2026-10-03 22:41:34.145471442 +0700
-@@ -0,0 +1,152 @@
+@@ -0,0 +1,156 @@
 +/* deb-native: run-time prefix derivation
 +   (docs/spec/dn-glibc-prefix.md, "Runtime prefix self-derivation").
 +
@@ -2413,6 +2419,13 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefi
 +  if (pfx == NULL || pl == 0 || path == NULL || path[0] != '/')
 +    return path;
 +
++  /* Already under the live prefix: leave it alone.  This must come before the
++     build-prefix test, because the live prefix can sit under the build
++     prefix (a test prefix in .../files/usr/tmp).  */
++  if (__dn_starts_n (path, pfx, pl)
++      && (path[pl] == '\0' || path[pl] == '/'))
++    return path;
++
 +  if (bl > 0 && __dn_starts (path, built)
 +      && (path[bl] == '\0' || path[bl] == '/'))
 +    {
@@ -2424,9 +2437,6 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/sysdeps/generic/dn-prefi
 +      return buf;
 +    }
 +
-+  if (__dn_starts_n (path, pfx, pl)
-+      && (path[pl] == '\0' || path[pl] == '/'))
-+    return path;
 +
 +  for (i = 0; roots[i] != NULL; ++i)
 +    if (__dn_starts (path, roots[i]))
