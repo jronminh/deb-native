@@ -23,8 +23,8 @@ and confirmed breakages are [`../reference/known-issues.md`](../reference/known-
 
 - A Debian package installs to dpkg status `ii` and its program runs by name.
 - `apt`/`dpkg` are the prefix's, and the default session is the Debian
-  userland. `termux-shell` opens a clean Termux shell (for `pkg`,
-  `termux-apt`); a `pkg` guard refuses inside the userland.
+  userland: the artifact's install step points the host's session entry at
+  the prefix's shell.
 - Toolchains: `apt install gcc`, a full compile (`libc6-dev`), and running the
   result.
 
