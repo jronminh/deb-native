@@ -32,9 +32,9 @@ more.
 
 - [`package-lifecycle.md`](../spec/package-lifecycle.md) — where the translate
   step (which does this patch) sits in a package's overall lifecycle.
-- [`ld-dn-config.md`](../log/ld-dn-config.md) — `ld-dn`'s policy and config
+- `ld-dn-config.md` — `ld-dn`'s policy and config
   file; the runtime side this patch hands off to.
-- [`../log/findings/patchelf-et-exec-runpath.md`](../log/findings/patchelf-et-exec-runpath.md)
+- `../log/findings/patchelf-et-exec-runpath.md`
   — the related `patchelf` bug (`--set-rpath` on `ET_EXEC`, not
   `--set-interpreter`) that led to dropping per-file `RUNPATH` rewrites
   entirely; background for "why not patch more than PT_INTERP" below.

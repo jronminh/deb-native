@@ -28,7 +28,7 @@ core-deb and core-ultra (`prefix-layers.md`); the build does not emit `.dn/` yet
 
 ## Related docs
 
-- [`../../MODULARIZE.md`](../../MODULARIZE.md) -- Build vs Ship and the
+- [`../notes/modularize.md`](../notes/modularize.md) -- Build vs Ship and the
   prefix artifact this contract is part of.
 - [`../reference/elf-interp-patch.md`](../reference/elf-interp-patch.md) --
   how the kernel reads `PT_INTERP` (from the file, never mapped), which is

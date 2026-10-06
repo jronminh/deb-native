@@ -212,7 +212,7 @@ cache file (`libc.so.6`, `gconv-modules.cache`) has that path baked in as
 a literal string (checked with `strings`), and the prefix's `ld.so.cache`
 covers both locations regardless.
 
-**Packaging as `libc6`**: [`bootstrap/dn-package-glibc.sh`](../../bootstrap/dn-package-glibc.sh)
+**Packaging as `libc6`**: `bootstrap/dn-package-glibc.sh`
 takes a real Debian `libc6_<ver>_arm64.deb` (`apt-get download
 libc6=<ver>`, matching version) as a template -- reusing Debian's own
 maintainer scripts/triggers/symbols/doc rather than reinventing them --
@@ -244,7 +244,7 @@ real NSS identities, previously-installed packages (`tree`, `figlet`,
 ...) keep running, and the full regression battery from the runtime
 component audit (`find -exec test`, a fresh `apt-get install`) stays
 clean. **`libc-bin` packaged 2026-10-03**:
-[`bootstrap/dn-package-libc-bin.sh`](../../bootstrap/dn-package-libc-bin.sh)
+`bootstrap/dn-package-libc-bin.sh`
 is the companion to `dn-package-glibc.sh` (below) -- it takes a real Debian
 `libc-bin_<ver>_arm64.deb` as a template and swaps in this build's own
 `usr/bin`/`usr/sbin` programs (`ldconfig`, `ldd`, `getconf`, `locale`, ...).

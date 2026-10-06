@@ -26,7 +26,7 @@ Read [`AGENTS.md`](AGENTS.md) first; it is the conventions doc. The essentials:
   there — `tests/` each have their own `run.sh` — before you commit.
 - **Run one command at a time** — no chaining, no parallel jobs.
 - **Docs state only the current state**; history lives in `docs/log/`. New docs
-  and directory READMEs follow [`templates/`](templates/README.md).
+  and directory READMEs follow `templates/`.
 - After moving or renaming a doc or script, run
   `tools/check-repo.py`.
 

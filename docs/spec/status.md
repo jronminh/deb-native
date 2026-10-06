@@ -33,7 +33,7 @@ and confirmed breakages are [`../reference/known-issues.md`](../reference/known-
 The same packages as [`sudo-less`](https://github.com/jronminh/sudo-less), by
 Debian section ([`../reference/standard.md`](../reference/standard.md)). 99 of
 100 random Debian 13 packages installed and ran, with no tracer needed
-([`../log/survey-0.2.0.md`](../log/survey-0.2.0.md)).
+(`../log/survey-0.2.0.md`).
 
 ## Not yet
 

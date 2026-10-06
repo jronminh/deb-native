@@ -111,7 +111,7 @@ shim/launcher resolution handles a script invoked by its own long translated
 path rather than via `python3 -m`.
 
 **Workaround.** Always `python3 -m pip`, never `pip`/`pip3` directly. Full
-detail: [`../guides/python-venv.md`](../guides/python-venv.md).
+detail: `../guides/python-venv.md`.
 
 ### `pytest` dies with `Bad system call`
 
@@ -125,7 +125,7 @@ root-caused (same class as the `ldconfig -r` SIGSYS).
 
 **Workaround.** Run under the tracer:
 `~/deb-native/tracer/dn-trace -- .venv-dn/bin/python3 -m pytest tests/`.
-Full detail: [`../guides/python-venv.md`](../guides/python-venv.md).
+Full detail: `../guides/python-venv.md`.
 
 ### `ctypes`/`cffi` `dlopen` by bare name fails
 
@@ -137,7 +137,7 @@ self-built library outside those is not found. Wheels with bundled
 `-rpath $ORIGIN` deps are unaffected.
 
 **Workaround.** Set `LD_LIBRARY_PATH` (or use an absolute path) before
-launching. Full detail: [`../guides/python-venv.md`](../guides/python-venv.md).
+launching. Full detail: `../guides/python-venv.md`.
 
 ### gcc-linked binary with a literal `/lib/ld-linux-aarch64.so.1`
 
@@ -147,7 +147,7 @@ literal `/lib/ld-linux-aarch64.so.1` instead of the prefix's fused loader.
 
 **Root cause.** The gcc `specs` file is missing or stale. Fix: rerun
 `dn-fix-gcc-specs.sh`. Full detail:
-[`../guides/gcc-glibc-dev.md`](../guides/gcc-glibc-dev.md).
+`../guides/gcc-glibc-dev.md`.
 
 ### Stale apt hook paths after the checkout moves
 
@@ -217,6 +217,6 @@ regressions.
 - **Tailscale native is not started:** static Go binaries cannot be
   shim-redirected, `/dev/net/tun` is root-only, and there is no systemd;
   run it via the tracer or with explicit `--state`/`--socket`
-  ([`../guides/tailscale.md`](../guides/tailscale.md)).
+  (`../guides/tailscale.md`).
 - **Per-project builds are partly unverified:** `g++`/C++ is untested and
-  `rustc`/`ghc` are unresearched ([`../guides/gcc-glibc-dev.md`](../guides/gcc-glibc-dev.md)).
+  `rustc`/`ghc` are unresearched (`../guides/gcc-glibc-dev.md`).

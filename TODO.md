@@ -9,7 +9,7 @@ for the side-by-side diff.
 **Status** paragraph (the current, stable truth — when an Open item is
 finished, its outcome is folded in here and the item is deleted, not kept
 as a checked-off line), and an **Open** list (short, no narrative — the
-"why"/investigation history lives in [`docs/log/findings/`](docs/log/findings/README.md)
+"why"/investigation history lives in `docs/log/findings/`
 (chronological engineering log) and the other `docs/*.md` files each
 section links to).
 
@@ -54,7 +54,7 @@ untested; `ghc`/`rustc` as a bonus, unresearched.
   uses Termux's 5.42; trixie's `perl` builds modules for 5.40, no fix yet).
 - **Unfiltered survey**: the seeded 100 across all 43 sections without the
   size filter — a number for heavy packages, no asterisk
-  ([`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md) is lightweight only).
+  (`docs/log/survey-0.2.0.md` is lightweight only).
 - **More than one device**: a second phone / Android version, and the
   Google Play build of Termux.
 - **Upgrade and remove**: `apt upgrade` across a Debian point release;
@@ -145,7 +145,7 @@ never touched.
 
 **Status**: released and verified on a vanilla Termux — fresh install,
 the 100-package survey (99 install / 98 run,
-[`docs/log/survey-0.2.0.md`](docs/log/survey-0.2.0.md)), a full prefix delete
+`docs/log/survey-0.2.0.md`), a full prefix delete
 leaving Termux untouched. Design decisions (real nested Debian root, no
 `usr ->.` flattening, Termux's own apt/dpkg through launchers,
 `$DN/root` -> Termux home) are recorded in
@@ -348,11 +348,11 @@ round-trip) works correctly with no port needed
 exist anywhere in glibc 2.41's source). Patch catalog and per-file verdict:
 [`docs/reference/android-platform.md`](docs/reference/android-platform.md). Full
 investigation history:
-[`docs/log/android-seccomp-audit.md`](docs/log/android-seccomp-audit.md),
-[`docs/log/findings/`](docs/log/findings/README.md). One parked decision: the
+`docs/log/android-seccomp-audit.md`,
+`docs/log/findings/`. One parked decision: the
 fake-root-entangled `"0"`-bucket of `fakesyscall.json`
 (`setuid`/`setgid`/...) is split out as
-[`set-fakesyscalls-parked.patch`](third_party/glibc-android-patches/set-fakesyscalls-parked.patch),
+`set-fakesyscalls-parked.patch`,
 unapplied — stays that way: fake-root's future is decided (0.3.0,
 reconsidered 2026-10-01: no further investment, superseded eventually by
 the real identity layer), and the decision is *not* to extend fake-root,
@@ -364,7 +364,7 @@ loader to work, not investigated further).
 **`libc6` packaged and installed, 2026-10-01**: the validated patch is
 now the prefix's actual, running `libc6` — `dpkg -l libc6` shows `ii
 2.41-12+deb13u4`, replacing `dn-standins.sh`'s Termux-glibc stand-in.
-[`bootstrap/dn-package-glibc.sh`](bootstrap/dn-package-glibc.sh) builds it:
+`bootstrap/dn-package-glibc.sh` builds it:
 real Debian `libc6.deb` as a template (its maintainer
 scripts/triggers/symbols/doc are still accurate, reused as-is), payload
 replaced with this project's own build, relocated from the build's flat
@@ -372,7 +372,7 @@ replaced with this project's own build, relocated from the build's flat
 (confirmed safe -- no binary has that path baked in as a literal
 string). Recipe, including the one file `make install` doesn't produce
 (`gconv-modules.cache`, generated via the build's own `iconvconfig`), is
-in [`third_party/glibc-android-patches/README.md`](third_party/glibc-android-patches/README.md).
+in `third_party/glibc-android-patches/README.md`.
 Verified: NSS resolves real identities (`ls -l`), previously-installed
 packages keep running, the runtime-component-audit's regression battery
 (`find -exec test`, a fresh `apt-get install`) stays clean installing
@@ -461,7 +461,7 @@ binaries atomically. `core/native/dn-shim.c` consumes
 redirect roots with no rebuild. `tests/ld-dn-config/run.sh` covers
 defaults, the default file, overrides, per-program blocks and fail-open.
 Design and as-built detail:
-[`docs/log/ld-dn-config.md`](docs/log/ld-dn-config.md).
+`docs/log/ld-dn-config.md`.
 
 **Open**:
 - Benchmark the always-probe `openat` per exec on a spawn-heavy workload;
@@ -480,12 +480,12 @@ exactly one documented way to do it.
 `LD_LIBRARY_PATH` after the two fixed prefix dirs, deduplicated, instead
 of discarding it; `DN_EXTRA_LIB_PATH` is removed. Both `docs/guides/`
 guides now document only `LD_LIBRARY_PATH`
-([`docs/guides/gcc-glibc-dev.md`](docs/guides/gcc-glibc-dev.md),
-[`docs/guides/python-venv.md`](docs/guides/python-venv.md)).
+(`docs/guides/gcc-glibc-dev.md`,
+`docs/guides/python-venv.md`).
 `tests/ld-dn-config/run.sh` covers the merge and deduplication, and an
 on-prefix `gcc` shared-library build runs with `LD_LIBRARY_PATH=.` and
 fails without it. Design:
-[`docs/log/ld-dn-config.md`](docs/log/ld-dn-config.md).
+`docs/log/ld-dn-config.md`.
 
 **Open**: none.
 
@@ -505,7 +505,7 @@ from the config rather than the shim's compiled switch, and it documents
 that global directives must precede the first `[program]` block.
 `tests/ld-dn-config/run.sh` covers oversized values, an oversized file
 and aggregate overflow. Design:
-[`docs/log/ld-dn-config.md`](docs/log/ld-dn-config.md).
+`docs/log/ld-dn-config.md`.
 
 **Open**:
 - Gate/benchmark the always-probe `openat` (see 0.5.2 Open).
@@ -743,7 +743,7 @@ for program state -- config/cache/dotfiles -- while `/home` stays the user's
 data home, joined by **leaf** symlinks. Ends the two worlds' dotfile/config
 collisions without recursion (prefer `.dn` outside `$HOME`). `dn-shell` sets
 `HOME`. Design sketch:
-[`docs/log/findings/per-userland-home.md`](docs/log/findings/per-userland-home.md).
+`docs/log/findings/per-userland-home.md`.
 
 ## Services, then sudo (after alpha)
 
@@ -1041,7 +1041,7 @@ Alpha goal and the sections above. Detail in the linked docs, not here.
   lines; or the "refresh" path rewrites just those lines of an existing
   `apt.conf` instead of leaving it untouched.
 - **Run Tailscale natively** — the target case for the tracer (a static
-  Go daemon the shim cannot see). [`docs/guides/tailscale.md`](docs/guides/tailscale.md).
+  Go daemon the shim cannot see). `docs/guides/tailscale.md`.
 - **Run wrappers** (`prefix-wrap` equivalent, `docs/notes/classic-design.md`) — the
   biggest unbuilt piece: for each binary a package puts on `PATH`, detect
   whether it needs path help and generate a wrapper, triggered via apt's

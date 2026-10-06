@@ -26,7 +26,7 @@ experiments cut from one full prefix (sizes below).
 
 - [`prefix-contract.md`](prefix-contract.md) -- the `.dn/` interface every
   layer's artifact carries, and how a host installs one.
-- [`../../MODULARIZE.md`](../../MODULARIZE.md) -- Build vs Ship; the build
+- [`../notes/modularize.md`](../notes/modularize.md) -- Build vs Ship; the build
   stage that produces these artifacts.
 - [`install-flow.md`](install-flow.md) -- today's bootstrap, which builds the
   full prefix in one pass.

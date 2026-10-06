@@ -1,5 +1,5 @@
 #!/bin/sh
-# Phase: apt's DPkg::Post-Invoke hook (MODULARIZE.md, "Post-build pipelines").
+# Phase: apt's DPkg::Post-Invoke hook (docs/notes/modularize.md, "Post-build pipelines").
 # Runs once after each transaction, with the prefix's own files installed, in
 # this order:
 #   1. glibc: restore the patched glibc files,

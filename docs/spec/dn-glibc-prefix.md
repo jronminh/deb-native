@@ -6,7 +6,7 @@ The next-generation prefix: the runtime's loader is glibc's own, built for the
 prefix, and `core/native/ld-dn.c` is retired. This doc covers how a package gets in
 (**packaging**) and how the compiler toolchain fits (**the GCC lifecycle**),
 for the prefix this branch is preparing to make installable. The proxy
-runtime it replaces: [`ld-dn-runtime.md`](../log/ld-dn-runtime.md) and its
+runtime it replaces: `ld-dn-runtime.md` and its
 "Alternative: fuse into the loader" section.
 
 Status: shipped (0.6.0+s.1). The mechanism is proven on the phone
@@ -27,7 +27,7 @@ run-time prefix self-derivation below are what shipped.
 
 ## Related docs
 
-- [`ld-dn-runtime.md`](../log/ld-dn-runtime.md) -- the trampoline being retired; its
+- `ld-dn-runtime.md` -- the trampoline being retired; its
   fuse section is this doc's origin.
 - [`dl-mechanics.md`](../reference/dl-mechanics.md) -- the glibc mechanisms this leans on
   (`ld.so.preload`, `ld.so.cache`), and why they keep the patch small.
@@ -35,11 +35,11 @@ run-time prefix self-derivation below are what shipped.
   stages; this doc is the runtime/packaging overlay for the next-gen prefix.
 - [`elf-interp-patch.md`](../reference/elf-interp-patch.md) -- the `PT_INTERP` edit the
   translate hook makes; only the target string changes here.
-- [`../../docs/log/findings/fused-shim-self-derives-prefix.md`](../log/findings/fused-shim-self-derives-prefix.md)
+- `../../docs/log/findings/fused-shim-self-derives-prefix.md`
   -- the proof this builds on.
-- [`../../docs/log/findings/own-glibc-missing-libc-bin.md`](../log/findings/own-glibc-missing-libc-bin.md)
+- `../../docs/log/findings/own-glibc-missing-libc-bin.md`
   -- why `libc-bin` is a custom package here, and the fixed paths below.
-- [`../../docs/log/findings/glibc-patch-swap-set.md`](../log/findings/glibc-patch-swap-set.md)
+- `../../docs/log/findings/glibc-patch-swap-set.md`
   -- the exact 10 files the patch affects; the set [Runtime prefix
   self-derivation](#runtime-prefix-self-derivation) makes prefix-agnostic.
 

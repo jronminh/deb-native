@@ -4,8 +4,8 @@
 
 What the syscall tracer is for now that the fused loader exists, how it was measured,
 and what is still open. Living doc, not per-release — last major update
-2026-09-27 on `dev-0.2.0`, tested on `fe2`. Code: [`../../tracer/`](../../../tracer) (its
-[`README.md`](../../../tracer/README.md) keeps the per-file prune list);
+2026-09-27 on `dev-0.2.0`, tested on `fe2`. Code: `../../tracer/` (its
+`README.md` keeps the per-file prune list);
 earlier background: [`direct-usage.md`](direct-usage.md),
 [`bind-only.md`](bind-only.md), [`syscall-boundary.md`](../../reference/syscall-boundary.md).
 
@@ -171,4 +171,4 @@ binaries in the same loop.
   loader syscalls. `path/glue.c` (PRoot's placeholder dirs for bind targets
   that do not exist on the host, such as `/usr`) likely stays; check before
   removing it.
-- **Real workloads:** a static Go daemon (Tailscale, [`tailscale.md`](../../guides/tailscale.md)).
+- **Real workloads:** a static Go daemon (Tailscale, `tailscale.md`).

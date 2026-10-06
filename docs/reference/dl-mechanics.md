@@ -26,9 +26,9 @@ glibc 2.41 as fetched for the amd64 development tree.
 
 ## Related docs
 
-- [`ld-dn-runtime.md`](../log/ld-dn-runtime.md) -- the interpreter trampoline that
+- `ld-dn-runtime.md` -- the interpreter trampoline that
   `dn-glibc` would replace.
-- [`ld-dn-config.md`](../log/ld-dn-config.md) -- the policy vocabulary the fused
+- `ld-dn-config.md` -- the policy vocabulary the fused
   loader inherits (as `dn-glibc.conf`).
 - [`elf-interp-patch.md`](elf-interp-patch.md) -- the static `PT_INTERP`
   patch that makes the kernel pick the loader at all.

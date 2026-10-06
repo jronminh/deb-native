@@ -1,4 +1,4 @@
-# scripts/prefix/interface.tsv — the prefix-side surface (MODULARIZE.md P3).
+# scripts/prefix/interface.tsv — the prefix-side surface (docs/notes/modularize.md P3).
 #
 # One record per line, TAB-separated:
 #   entry     <path>                      a script other parts may call

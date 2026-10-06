@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check-interface.py — enforce the core's public surface (MODULARIZE.md P3).
+"""check-interface.py — enforce the core's public surface (docs/notes/modularize.md P3).
 
 Reads `scripts/prefix/interface.tsv` and checks:
   1. every declared `entry` and `source` path exists;

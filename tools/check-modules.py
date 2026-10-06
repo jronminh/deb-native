@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """check-modules.py — enforce the deb-native module boundaries (P0).
 
-Two rules, from MODULARIZE.md:
+Two rules, from docs/notes/modularize.md:
   1. one home per file: every tracked path matches exactly one module in
      tools/module-map.tsv;
   2. dependency direction: a `core` file must not reference a

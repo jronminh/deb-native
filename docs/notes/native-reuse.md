@@ -30,9 +30,9 @@ improvement, not a revival of this file.
 - [`design.md`](../spec/design.md) — the doc this was split out of.
 - [`classic-design.md`](classic-design.md) — the two-layer-database idea
   this doc builds on and corrects.
-- [`../log/findings/hard-package-ruby-adsf.md`](../log/findings/hard-package-ruby-adsf.md)
+- `../log/findings/hard-package-ruby-adsf.md`
   — where the epoch-comparison bug was found.
-- [`../log/findings/first-working-prototype.md`](../log/findings/first-working-prototype.md)
+- `../log/findings/first-working-prototype.md`
   — where the native-mapping gap was originally found.
 
 ## The idea, restated for this project

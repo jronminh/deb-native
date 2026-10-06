@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """check-paths.py — catch broken `$HERE/…` references in shell scripts.
 
-Scripts find each other through `$HERE/..`, and moving a file (MODULARIZE.md
+Scripts find each other through `$HERE/..`, and moving a file (docs/notes/modularize.md
 P1) can silently break those; nothing else checks them. This reads each file's
 own `HERE=` definition to learn what `$HERE` points at (the script's directory,
 or an ancestor when the definition walks up with `..`), then verifies every

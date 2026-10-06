@@ -5,7 +5,7 @@
 What stops a syscall on this device, independent of which library issued
 it, and the current fork verdict for Termux's Android glibc patch series
 against that taxonomy. Extracted from
-[`../log/android-seccomp-audit.md`](../log/android-seccomp-audit.md) (the
+`../log/android-seccomp-audit.md` (the
 investigation that found this) to keep as a standing reference instead of
 buried in that log — update this doc, not the log, when the taxonomy or
 the patch's own fork status changes; the log stays the historical record
@@ -20,7 +20,7 @@ of how it was found.
 
 ## Related docs
 
-- [`../log/android-seccomp-audit.md`](../log/android-seccomp-audit.md) —
+- `../log/android-seccomp-audit.md` —
   the investigation that produced this doc, plus the on-device glibc
   build attempt log.
 - This doc's own "Device probe: sandbox limits confirmed directly"
@@ -30,7 +30,7 @@ of how it was found.
   `docs/log/findings/`.
 - [`design.md`](../spec/design.md) — "Fake root", whose `set-fakesyscalls-parked.patch`
   decision depends on this doc's per-file fork verdict.
-- [`../../third_party/glibc-android-patches/README.md`](../../third_party/glibc-android-patches/README.md) —
+- `../../third_party/glibc-android-patches/README.md` —
   the actual patch this doc's catalog describes.
 
 ## The three enforcement gates
@@ -187,12 +187,12 @@ not a general fix for "things Android breaks."
 0.5.0's "own glibc" milestone forks
 [`termux-pacman/glibc-packages`](https://github.com/termux-pacman/glibc-packages)
 (`gpkg/glibc/`) onto Debian's real glibc source
-([`third_party/glibc-android-patches/`](../../third_party/glibc-android-patches/)
+(`third_party/glibc-android-patches/`
 has the combined patch, how to apply/regenerate it, and the build recipe).
 This section is the catalog of what that upstream patch set contains and
 which pieces this project's fork carries — current status, not a log of
 how each verdict was reached (that's
-[`../log/android-seccomp-audit.md`](../log/android-seccomp-audit.md)).
+`../log/android-seccomp-audit.md`).
 
 Layout: `build.sh` (glibc 2.44, configure flags, install steps) plus ~50
 loose files — some are unified `.patch` files against upstream glibc
