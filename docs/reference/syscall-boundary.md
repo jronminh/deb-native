@@ -5,7 +5,7 @@
 The shim ([`shim-coverage.md`](../spec/shim/shim-coverage.md)) rewrites paths at the
 **preemptible dynamic symbol** layer. Everything that reaches the filesystem
 without crossing such a symbol is out of its reach. This doc maps that wider
-boundary, measures it against the in-scope corpus, and records where Termux's
+boundary, measures it against the in-scope corpus, and records where the
 existing answer (`proot`) already applies.
 
 ## Contents
@@ -13,8 +13,8 @@ existing answer (`proot`) already applies.
 - [The cases, not just "static vs dynamic"](#the-cases-not-just-static-vs-dynamic)
 - [Measured against the corpus](#measured-against-the-corpus)
 - [The gap is routing, not the count](#the-gap-is-routing-not-the-count)
-- [Termux's existing answer](#termuxs-existing-answer)
-- [Solved (2026-09-26): NSS, case 2](#solved-2026-09-26-nss-case-2)
+- [The existing answer](#the-existing-answer)
+- [Solved: NSS, case 2](#solved-nss-case-2)
 - [Status by case (2026-09-26)](#status-by-case-2026-09-26)
 - [Solved (2026-09-26): the direct-syscall attribute (cases 3/4)](#solved-2026-09-26-the-direct-syscall-attribute-cases-34)
 - [Options, cheapest first](#options-cheapest-first)
@@ -70,31 +70,23 @@ syscalls. "Has a dynamic interpreter" is not the same as "all its filesystem
 access goes through libc". A `PT_INTERP` check is necessary but not sufficient;
 a binary needs a **direct-syscall attribute** of its own.
 
-## Termux's existing answer
+## The existing answer
 
-`proot` — a `ptrace` syscall interceptor, already shipped and already wired as
-`dn-run`'s static route (`proot -b host:guest …`). It works at the syscall
-layer, so it covers cases 2–5 uniformly, which is why the project reaches for
-it instead of building a tracer first. Two caveats, both already visible:
-`ptrace` overhead on every syscall, and `proot`'s bind model errors on a
-missing host path (`dn-run.c`'s comment).
+`proot` — a `ptrace` syscall interceptor — is the prior art here. It works at
+the syscall layer, so it covers cases 2–5 uniformly. The project builds its own
+reduced tracer (`dn-trace`, [`../spec/tracer/tracer.md`](../spec/tracer/tracer.md))
+instead, because `ptrace` overhead on every syscall is the cost to contain, and
+`proot`'s bind model errors on a missing host path.
 
-## Solved (2026-09-26): NSS, case 2
+## Solved: NSS, case 2
 
-Measured on `fe2`: the missing piece was not the syscall layer but the *path*.
-`PROOT_VERBOSE=2` shows Termux's glibc reads its **sysconfdir**
-`$PREFIX/glibc/etc/passwd` — a host path outside the prefix — not the guest
-`/etc/passwd`. So neither the LD_PRELOAD shim nor a plain `/etc` bind reaches
-it, which is why `getpwnam` returned `NOTFOUND` even under `proot`.
-
-Fix: on the NSS route, bind the prefix's `/etc` over Termux glibc's sysconfdir
-(`-b $INSTDIR/etc:$PREFIX/glibc/etc`). Then `getpwnam("dnshim")` resolves in
-the prefix. `src/dn-run.c` now gives a glibc ELF an **NSS-import attribute**
-(scan for `getpwnam`/`getpwuid`/`getaddrinfo`/… in the binary) and routes it
-through the tracer (`dn-trace`, else Termux `proot`) with that bind; static
-binaries take the tracer route too. Verified by `tests/tracer-nss/run.sh`
-(PASS). glibc still synthesizes `root`/`nobody`/Android uids; the bind only
-makes the prefix's `passwd`, `group`, `hosts`, `resolv.conf` authoritative.
+NSS reads are libc-internal, so neither the shim nor a plain path map reaches
+them. The prefix's own glibc derives its sysconfdir from the live prefix, so
+`getpwnam`/`getgrgid`/… resolve against the prefix's `/etc` (its `passwd`,
+`group`, `hosts`, `resolv.conf`). `src/dn-run.c` gives a glibc ELF an
+**NSS-import attribute** (scan for `getpwnam`/`getpwuid`/`getaddrinfo`/… in the
+binary) and routes it through the tracer; static binaries take the tracer route
+too. Verified by `tests/tracer-nss/run.sh`.
 
 ## Status by case (2026-09-26)
 
