@@ -315,16 +315,9 @@ target:
 - **The build does not emit `.dn/` yet**: `package-prefix.sh` needs the
   invariants above, the `baked-paths` scan with offsets, the contract and
   `relocate.sh` (from `core/`).
-- **`build/relocate-prefix.sh` and `adapters/termux/deploy.sh` repoint every
-  ELF that has an interpreter**, the Bionic `dn-run`/`dn-trace` included, and
-  rewrite only five text files; a prefix relocated with them loses its
-  launchers. Both are superseded by `relocate.sh`.
-- **`patchelf` is still used at build time** (invariant 1); `dn-elf`
-  (`elf-interp-patch.md`, `TODO.md`) would replace it there.
-- **Termux still has three install paths**: `install.sh`'s default mode
-  bootstraps in place (a build that is also the install), its
+- **Termux still has two install paths**: `install.sh`'s default mode
+  bootstraps in place (a build that is also the install), and its
   `DN_PREFIX_IMAGE` mode extracts and runs `dn-finish.sh` with the host's
-  shell and skips the login wiring, and `adapters/termux/deploy.sh` (above).
-  All three become the one ship path; the in-place bootstrap moves to the
-  build stage. `dn-finish.sh`'s steps are build or apt-hook steps, none of
-  them needed at install.
+  shell and skips the login wiring. Both become the one ship path; the
+  in-place bootstrap moves to the build stage. `dn-finish.sh`'s steps are
+  build or apt-hook steps, none of them needed at install.

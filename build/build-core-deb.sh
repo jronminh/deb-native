@@ -7,7 +7,8 @@
 # The .debs are fetched here, and only their translated result goes into the
 # tarball. Installing core-deb needs no network; a later `apt update` does.
 #
-# Build host tools: dpkg-deb, patchelf, wget, xz, sha256sum, awk, sh.
+# Build host tools: dpkg-deb, wget, xz, sha256sum, awk, sh, and the overlay's
+# own dn-elf (from DN_OVERLAY) to translate interpreters.
 #
 # Inputs:
 #   BASE          a core-ultra tree in build form (cut-core-ultra.py output,
@@ -16,7 +17,7 @@
 #                 build (its loader reports "GNU libc"). Its 10 patched files
 #                 replace the ones in Debian's libc6/libc-bin (step 2).
 #   DN_OVERLAY    the glibc overlay (build-overlay-glibc.sh output): dn-shim.so,
-#                 dn-run, dn-trace.
+#                 dn-run, dn-trace, dn-elf.
 #   DEB_MIRROR    Debian mirror, default http://deb.debian.org/debian
 #   DEB_SUITE     default trixie
 #   DEB_CACHE     downloaded .debs, kept across builds
@@ -48,7 +49,9 @@ ROOT=$(CDPATH= cd -- "$HERE/.." && pwd)
 LOADER=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 
 die() { echo "build-core-deb: $*" >&2; exit 1; }
-for t in dpkg-deb patchelf wget xz; do command -v "$t" >/dev/null 2>&1 || die "$t not found"; done
+for t in dpkg-deb wget xz; do command -v "$t" >/dev/null 2>&1 || die "$t not found"; done
+ELF=$DN_OVERLAY/dn-elf
+[ -x "$ELF" ] || die "no dn-elf in DN_OVERLAY ($ELF)"
 [ -d "$BASE" ] || die "BASE is not a directory: $BASE"
 
 W=$(mktemp -d)
@@ -129,12 +132,13 @@ echo "$PATCHED" | while IFS= read -r rel; do
 done
 
 # 4. Translate: every glibc ELF whose interpreter is a Debian loader gets the
-#    prefix's own loader; pack-prefix.py then gives it the 256-byte capacity.
+#    prefix's own loader (dn-elf grows the PT_LOAD if the path is longer);
+#    pack-prefix.py then gives it the 256-byte capacity.
 #    Bionic binaries keep their /system/bin/linker64.
 find "$STAGE" -type f | while IFS= read -r f; do
-  i=$(patchelf --print-interpreter "$f" 2>/dev/null) || continue
+  i=$("$ELF" get-interp "$f" 2>/dev/null) || continue
   case $i in
-    */ld-linux-aarch64.so.1) patchelf --set-interpreter "$PREFIX_ROOT/$LOADER" "$f" ;;
+    */ld-linux-aarch64.so.1) "$ELF" set-interp "$f" "$PREFIX_ROOT/$LOADER" ;;
   esac
 done
 
@@ -191,7 +195,7 @@ done
 # The overlay is built against the build host's loader, and it is copied after the
 # translation step: point its interpreter at this prefix's loader here.
 for f in usr/lib/deb-native/dn-run usr/lib/deb-native/dn-trace usr/lib/deb-native/dn-elf; do
-  patchelf --set-interpreter "$PREFIX_ROOT/$LOADER" "$STAGE/$f"
+  "$ELF" set-interp "$STAGE/$f" "$PREFIX_ROOT/$LOADER"
 done
 
 

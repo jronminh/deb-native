@@ -5,7 +5,7 @@ docs/spec/prefix-contract.md, "Build invariants". Run on a copy of a built
 prefix (package-prefix.sh stages one); the tree is changed in place:
 
   - every glibc ELF whose PT_INTERP is ROOT/<loader> gets a CAPACITY-byte
-    interpreter (a placeholder set with patchelf, then the real path and a
+    interpreter (a placeholder reserved with dn-elf, then the real path and a
     NUL written at its start), and its offset is recorded;
   - ELFs with any other interpreter (the system's Bionic linker) are left
     alone;
@@ -18,7 +18,7 @@ prefix (package-prefix.sh stages one); the tree is changed in place:
     written.
 
 Usage: pack-prefix.py TREE --root ROOT --name NAME [--desc TEXT]
-                      [--version V] [--relocate SCRIPT]
+                      [--version V] [--relocate SCRIPT] [--dn-elf PATH]
 """
 import argparse
 import os
@@ -71,7 +71,9 @@ def main():
     ap.add_argument("--desc", default="")
     ap.add_argument("--version", default="")
     ap.add_argument("--relocate", help="relocate.sh to copy in (default: core/runtime/relocate.sh)")
-    ap.add_argument("--patchelf", default=shutil.which("patchelf") or "patchelf")
+    ap.add_argument("--dn-elf", default=os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "core/native/.build-glibc/dn-elf"),
+        help="dn-elf binary that reserves the PT_INTERP capacity")
     a = ap.parse_args()
 
     T = os.path.abspath(a.tree)
@@ -126,10 +128,11 @@ def main():
                         bad.append((rel, f"interpreter {cur}, and names the build path"))
                     continue            # Bionic or another loader: not ours
                 if size != CAPACITY:
-                    subprocess.run([a.patchelf, "--set-interpreter", "/" + "x" * (CAPACITY - 2), p], check=True)
+                    placeholder = "/" + "x" * (CAPACITY - 2)   # CAPACITY-1 chars + NUL
+                    subprocess.run([a.dn_elf, "set-interp", p, placeholder], check=True)
                     off, size, _ = elf_interp(p)
                     if size != CAPACITY:
-                        sys.exit(f"pack-prefix: {rel}: PT_INTERP is {size} bytes after patchelf, wanted {CAPACITY}")
+                        sys.exit(f"pack-prefix: {rel}: PT_INTERP is {size} bytes after dn-elf, wanted {CAPACITY}")
                 with open(p, "r+b") as f:
                     f.seek(off)
                     f.write(build_ld.encode() + b"\0" * (CAPACITY - len(build_ld)))

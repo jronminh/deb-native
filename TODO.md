@@ -103,11 +103,6 @@ with Android `mksh` + toybox only); nothing below is built into the repo yet.
 
 **Bugs found on the way:**
 
-- [ ] `build/relocate-prefix.sh` and `adapters/termux/deploy.sh` repoint every
-      ELF that has an interpreter, the Bionic `dn-run`/`dn-trace`
-      (`/system/bin/linker64`) included, which breaks every launcher; and
-      rewrite only five text files (139 carry the path in the core prefix).
-      Superseded by `relocate.sh`; until then, skip non-glibc interpreters.
 - [ ] `make-launchers.sh` runs after `normalize-symlinks.sh` in the post-hook,
       so launcher symlinks stay absolute.
 - [ ] The `/data/data/com.termux/files/deb-native` prefix's
@@ -128,8 +123,8 @@ with Android `mksh` + toybox only); nothing below is built into the repo yet.
       through the tracer during the glibc swap -- goes with "no
       `ld.so.cache`". Open: the shim preloaded into them (`access()` rewrite
       trap, the tracer's own paths). core-ultra has no `dn-trace` today.
-- [ ] Termux: the three install paths (default in-place bootstrap,
-      `DN_PREFIX_IMAGE`, `adapters/termux/deploy.sh`) become the one ship
+- [ ] Termux: the two install paths (default in-place bootstrap,
+      `DN_PREFIX_IMAGE`) become the one ship
       path; the in-place bootstrap moves to the build stage; the Termux host
       keeps its DNS in `app/etc/resolv.conf` beside the prefixes.
 - [ ] Bootstrap on a poor host: where the first artifact comes from, and

@@ -18,3 +18,4 @@ tests/tracer-nss/nss-probe
 core.[0-9]*
 *.core
 core/native/.build-glibc/
+__pycache__/
