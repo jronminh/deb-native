@@ -54,6 +54,10 @@ reserved by `dn-elf`; artifacts ship and bootstrap end to end
 - `core-ultra` size: most `gconv` modules (~20 of 92 MB); terminfo missing.
 - Launcher symlinks: make them relative after `normalize_symlinks` runs (the
   post hook's order leaves them absolute).
+- **CI**: `.github/workflows/build-glibc.yml` still names the old layout
+  (`native/`, `bootstrap/`); fix its paths and add a workflow that builds the
+  prefix artifact (`build-overlay-glibc` → `build-core-deb` →
+  `package-prefix`).
 
 ## Per-userland home (planned)
 
@@ -88,7 +92,7 @@ is a vendored, pruned SINS. Test ladder: `cron` -> `redis` -> `dbus`.
 
 **Status**: the libc-interposition layer is complete for its scope
 ([`docs/spec/shim/shim-coverage.md`](docs/spec/shim/shim-coverage.md)); NSS
-and raw-syscall/static binaries route to `dn-trace`. Termux's `proot` is gone.
+and raw-syscall/static binaries route to `dn-trace`. `proot` is gone.
 
 **Open**:
 
@@ -102,6 +106,9 @@ and raw-syscall/static binaries route to `dn-trace`. Termux's `proot` is gone.
   `ENOSYS` — fatal under Android's seccomp (`SIGSYS`). A per-launch check is
   rejected; the shape is a build/install-time analysis pass extending
   `scan-direct-syscalls.py`, then route only those binaries to the tracer.
+- **Post-hook non-fatal faults**: a full bootstrap printed a few
+  `Segmentation fault` lines from the post hook (it did not reproduce on a
+  later run). Investigate.
 
 ## Runtime overhaul
 
@@ -120,9 +127,11 @@ mechanism (`dn-run`'s "launch classifier", ...).
   and mechanism, refuse a "never" package before it wedges the prefix.
 - **Soname-based dependency matching**: match a `.deb`'s `Depends:` against
   installed packages' SONAMEs directly.
-- **Launcher/icon/desktop-DB integration**: only what Termux needs.
+- **Launcher/icon/desktop-DB integration**: only what the host needs.
 - **State + `explain` + `doctor`**: record per package its scope, mechanism
   and wrappers, so decisions are explainable/removable.
+- **Docs overlap**: `dn-glibc-prefix.md` and `dl-mechanics.md` both cover
+  run-time prefix self-derivation; consider folding into one.
 
 ## Known unsafe, not yet fixed
 
