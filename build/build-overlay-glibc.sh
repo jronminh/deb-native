@@ -50,5 +50,8 @@ find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-trace \) -type f -exec rm -f
 make -s -C "$T" CC="$CC"
 cp -f "$T/dn-trace" "$OUT/dn-trace"
 
+echo "Building dn-elf ..."
+"$CC" -O2 -Wall -Wextra -o "$OUT/dn-elf" "$SRC/dn-elf.c"
+
 echo "overlay (glibc) in $OUT:"
 ls -l "$OUT"

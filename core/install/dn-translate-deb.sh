@@ -28,10 +28,11 @@ case "$DN" in /*) ;; *) DN="$PWD/$DN" ;; esac
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LD="$DN/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 
-command -v patchelf >/dev/null 2>&1 || {
-  echo "E: patchelf not found -- cannot translate $DEB (apt install patchelf)" >&2
-  exit 1
-}
+# The prefix's own ELF editor (overlay: dn-elf). It is the only tool a
+# translation needs; it never grows a segment, and it refuses what it does not
+# understand.
+ELF="$DN/usr/lib/deb-native/dn-elf"
+[ -x "$ELF" ] || { echo "E: no $ELF -- cannot translate $DEB" >&2; exit 1; }
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -91,13 +92,13 @@ rewrite_shebang() {
 find "$WORK/pkg" -path "$WORK/pkg/DEBIAN" -prune -o -type f -print > "$WORK/files"
 while IFS= read -r f; do
   [ "$(head -c4 "$f" | od -An -tx1 | tr -d ' \n')" = 7f454c46 ] || continue
-  # Static binaries and libraries without PT_INTERP: patchelf fails, which is
+  # Static binaries and libraries without PT_INTERP: get-interp fails, which is
   # the expected answer, not an error.
-  interp=$(patchelf --print-interpreter "$f" 2>/dev/null) || interp=""
+  interp=$("$ELF" get-interp "$f" 2>/dev/null) || interp=""
   case $interp in
     */ld-linux-aarch64.so.1)
       if [ "$interp" != "$LD" ]; then
-        patchelf --set-interpreter "$LD" "$f" || {
+        "$ELF" set-interp "$f" "$LD" || {
           echo "E: cannot set the interpreter of ${f#"$WORK/pkg"}" >&2; exit 1; }
       fi ;;
   esac
