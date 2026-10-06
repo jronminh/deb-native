@@ -33,7 +33,7 @@ parent=${D%/*}
 
 # 1. The contract, read without extracting.
 C=$(tar -xzOf "$A" ./.dn/contract 2>/dev/null) || die "$A carries no .dn/contract"
-contract= name= arch= root= loader= relocate= entry= size=
+contract= name= arch= root= loader= relocate= install= bootstrap= entry= size=
 # Line by line without a here-document: mksh writes those to a temporary
 # file, and an app may have no writable TMPDIR.
 oldifs=$IFS
