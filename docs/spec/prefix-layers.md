@@ -122,44 +122,31 @@ post-invoke hook restores them if a package pulls them in.
 
 ## Naming
 
-`core-ultra` and `core-deb` name **prefix layers**. The repository's `core/`
-directory names a **code module** (translation logic, shim, tracer;
-`MODULARIZE.md`); the two are unrelated.
+`core-ultra` and `core-deb` name **prefix layers** (what an artifact
+contains), not repository directories.
 
 ## Verified
 
-Both artifacts were cut from one full 0.7.1-dev prefix built for
-`/data/data/org.dn.shell/files/core`, then installed with Android's `mksh` +
-toybox alone (`env -i PATH=/system/bin /system/bin/sh`) into another
-directory, following `prefix-contract.md`:
+Both artifacts were cut from one full prefix built for a fixed build path,
+then installed with a POSIX shell + toybox alone into another directory,
+following `prefix-contract.md`:
 
 | | core-ultra | core-deb |
 | --- | --- | --- |
 | tarball | 19 MB | 46 MB |
 | extracted | 92 MB, 667 files | ~200 MB, ~5000 files |
 | relocated | 124 ELF + 28 text | 181 ELF + 139 text |
-| checked | `dn-shell -c 'exit 0'`; bash, 140 commands, fake root, `/mnt`, `sed`, `gzip`; no `apt`/`dpkg` | `bash`, `dpkg`, `apt`, `perl`, `dpkg -l` (61 packages) |
+| checked | the prefix's shell runs; bash, basic commands, fake root, `/mnt`, `sed`, `gzip`; no `apt`/`dpkg` | `bash`, `dpkg`, `apt`, `perl`, `dpkg -l` |
 
-core-ultra as a blueprint: the official Claude Code binary with its
-interpreter set to `/lib/ld-linux-aarch64.so.1` (absent on Android), placed
-in the prefix and started through `dn-run`, was adopted
-(`dn-run: adopted ... -> prefix loader`) and printed its version.
+core-ultra as a blueprint: a foreign glibc binary, its interpreter set to a
+path absent on the host, placed in the prefix and started through `dn-run`,
+was adopted (`dn-run: adopted ... -> prefix loader`) and printed its version.
 
 ## Open items
 
 - **Build order**: core-ultra is cut *from* the full prefix today. The layered
   build is the reverse -- build the core-ultra recipe, then add the Debian
-  layer for core-deb -- and touches the bootstrap order in
-  `bootstrap/setup-apt-prefix.sh`.
-- **`dn-run` and `dn-trace` are Bionic**: built with Termux's clang because
-  the bootstrap runs `ldconfig` through the tracer while installing the glibc
-  swap. With no `ld.so.cache` in an artifact (`prefix-contract.md`, "Build
-  invariants") that dependency goes, so both can be built with the prefix's
-  own gcc against its glibc -- which a host without a Bionic toolchain needs
-  in order to rebuild them. Open: the shim is then preloaded into them too
-  (the `access()` rewrite trap of lazy adopt, and the tracer's own paths).
-  core-ultra carries `dn-run` but not `dn-trace` (its `libtalloc` is a
-  Bionic library from Termux today).
-- **Size**: glibc's `gconv` modules are 20 of core-ultra's 92 MB; most can
-  go when no charset conversion is needed. Terminfo (`ncurses-base`) is
-  missing from today's trimmed prefix.
+  layer for core-deb.
+- **Size**: glibc's `gconv` modules are 20 of core-ultra's 92 MB; most can go
+  when no charset conversion is needed. Terminfo (`ncurses-base`) is missing
+  from today's trimmed prefix.

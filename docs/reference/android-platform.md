@@ -230,11 +230,11 @@ patch.** A standard unified diff touching ~30 files (`resolv/resolv.h`,
 `nss/nss_files/files-XXX.c`, `nss/nss_compat/compat-{pwd,grp,spwd}.c`,
 `nscd/nscd.h`, `misc/fstab.h`, `misc/ttyent.h`, `libio/stdio.h`, and more)
 — every hardcoded `"/etc/..."`, `"/tmp/..."`, `"/var/..."` string replaced
-with a `@TERMUX_PREFIX@` or `@TERMUX_PREFIX_CLASSICAL@` placeholder,
+with a `@DN_PREFIX@` or `@TERMUX_PREFIX_CLASSICAL@` placeholder,
 substituted to Termux's real prefix path at build time. This is the
 "neither" row's fix: NSS opens use `__nss_files_fopen("/etc/passwd")`
 internally, unreachable by any external interposer — `nss/nss_files/
-files-init.c`'s `register_file(cb, pwddb, "@TERMUX_PREFIX@/etc/passwd",
+files-init.c`'s `register_file(cb, pwddb, "@DN_PREFIX@/etc/passwd",
 0)` is the literal line already solving it for Termux's own prefix.
 
 **Decision framework for forking a piece: "a package gets exactly one

@@ -76,19 +76,14 @@ derives the prefix itself (`dladdr`, `fused-shim-self-derives-prefix.md`).
 "Fusing" is therefore mostly *configuration* plus two standard files, not a
 fork of the loader's control flow.
 
-**The one exception (2026-10-03):** the loader must **ignore the inherited
-`LD_PRELOAD`**. `ld-dn` used to sanitize the environment for every binary --
-it replaced `LD_PRELOAD` with its own shim -- so a host `LD_PRELOAD`
-(Termux's `libtermux-exec-ld-preload.so`, set in every Termux shell) never
-reached a prefix program. The fused loader does not sanitize, and that host
-library is built for another glibc, so it aborts every prefix program at
-startup (found migrating `.dn`). The fix is a small `elf/rtld.c` hunk (part
-of `dn-glibc-android.patch`): skip the `state.preloadlist` (`LD_PRELOAD`)
-source in `dl_main`, keeping `--preload` and the `ld.so.preload` file. Why
-this is safe: the prefix's shim is delivered by `ld.so.preload`, not the env,
-so dropping `LD_PRELOAD` costs nothing and restores `ld-dn`'s sanitization.
-`core/native/dn-run.c` was updated to match: it no longer injects the shim via
-`LD_PRELOAD`, only drops the inherited host preload.
+**The one exception:** the loader must **ignore the inherited `LD_PRELOAD`**.
+The fused loader does not sanitize, and a host preload built for another glibc
+aborts every prefix program at startup. The fix is a small `elf/rtld.c` hunk
+(part of `dn-glibc-android.patch`): skip the `state.preloadlist` (`LD_PRELOAD`)
+source in `dl_main`, keeping `--preload` and the `ld.so.preload` file. The
+prefix's shim is delivered by `ld.so.preload`, not the env, so dropping
+`LD_PRELOAD` costs nothing. `src/dn-run.c` matches: it never injects the shim
+via `LD_PRELOAD`, only drops the inherited host preload.
 
 This fixed-prefix build needs no runtime derivation: every path is
 compile-time, and the shim arrives via `ld.so.preload`. The self-deriving
@@ -151,19 +146,19 @@ Shipped as **one global**, cut by the loader and shared:
   cache/conf/libdirs/aux paths from it.
 
 Match requires a path-component boundary, so `.dn` does not match `.dn12`.
-The compiled `@TERMUX_PREFIX@` stays the fallback when derivation yields
+The compiled `@DN_PREFIX@` stays the fallback when derivation yields
 nothing.
 
 ### Patch shape
 
 1. One global live prefix (`__dn_prefix_get`), cut once in `elf/rtld.c`
    and declared in `sysdeps/generic/dn-prefix.h`.
-2. Replace the baked `"@TERMUX_PREFIX@/..."` literals with strings built at
+2. Replace the baked `"@DN_PREFIX@/..."` literals with strings built at
    run time via `__dn_build(...)`.
 3. In the loader, `preload_file` and the cache path (`elf/dl-cache.c`)
    become run-time paths, computed after `_dl_rtld_map.l_name` is set and
    before first use.
-4. `@TERMUX_PREFIX@` stays as the build-time default/fallback; the live
+4. `@DN_PREFIX@` stays as the build-time default/fallback; the live
    prefix overrides it.
 
 ### Caveats
@@ -211,9 +206,8 @@ The order that makes the prefix self-consistent:
 **Bootstrap note.** A fresh prefix has no compiler, but our `libc6` must exist
 before any translated Debian binary can run -- so `libc6`/`libc-bin` are a
 *prebuilt artifact*, installed in step 2, not built in-prefix. The prebuilt
-glibc is itself compiled outside the fresh prefix (an existing prefix's `gcc`,
-`third_party/glibc-android-patches/README.md`, or Termux's clang for the very
-first build); the prefix never self-hosts glibc.
+glibc is itself compiled outside the fresh prefix (a build host's gcc; see
+`patches/README.md`); the prefix never self-hosts glibc.
 
 ## The two interpreter targets
 
