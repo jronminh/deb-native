@@ -13,7 +13,6 @@
 # --- entry points: callable by bootstrap / build / adapter / product -------
 entry	core/install/install-runtime.sh
 entry	core/install/dn-translate-deb.sh
-entry	core/install/patch-scripts-tree.sh
 entry	core/install/normalize-symlinks.sh
 entry	core/install/dn-fix-alternatives.sh
 entry	core/install/dn-fix-gcc-specs.sh
@@ -27,6 +26,7 @@ entry	core/runtime/make-launchers.sh
 entry	core/runtime/dn-adopt.sh
 entry	core/runtime/dn-update.sh
 entry	core/runtime/dn-finish.sh
+entry	core/runtime/bootstrap-prefix.sh
 entry	core/runtime/ship-prefix.sh
 entry	core/runtime/relocate.sh
 

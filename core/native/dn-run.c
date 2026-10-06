@@ -30,6 +30,7 @@
 #include <sys/wait.h>
 #include <sys/syscall.h>
 #include <errno.h>
+#include "dn-child.h"
 
 static char instdir[4096];
 
@@ -44,24 +45,6 @@ static int real_access_x(const char *path) {
   return syscall(SYS_faccessat, AT_FDCWD, path, X_OK, 0) == 0;
 }
 static int g_glibc;   /* the target is a glibc ELF (classify) */
-
-/* .../usr/lib/deb-native/dn-run -> ... (strip filename + 3 dirs) */
-static int derive_instdir(char *out, size_t sz) {
-  char self[4096];
-  ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
-  if (n <= 0) return -1;
-  self[n] = '\0';
-  char *s = strrchr(self, '/');
-  if (!s || s == self) return -1;
-  *s = '\0';
-  for (int i = 0; i < 3; i++) {
-    s = strrchr(self, '/');
-    if (!s || s == self) return -1;
-    *s = '\0';
-  }
-  snprintf(out, sz, "%s", self);
-  return 0;
-}
 
 enum { C_NOTELF, C_GLIBC, C_BIONIC, C_DYNOTHER, C_STATIC };
 
@@ -148,15 +131,8 @@ static int classify(const char *path, int *nss, char *interp, size_t isz) {
 }
 
 static void set_path(void) {
-  const char *home = getenv("HOME");
   char path[8192];
-  /* Prefix dirs first, plus $HOME/.local/bin (host-layer commands). The prefix
-   * has its own coreutils and shell; no host directory is ever on the PATH. */
-  snprintf(path, sizeof path,
-           "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/usr/games:"
-           "%s/usr/lib/deb-native/bin:%s/.local/bin",
-           instdir, instdir, instdir, instdir, instdir, instdir,
-           (home && *home) ? home : "/nonexistent");
+  dn_build_path(instdir, path, sizeof path);
   setenv("PATH", path, 1);
 }
 
@@ -286,7 +262,7 @@ int main(int argc, char **argv) {
   }
   const char *e = getenv("DN_INSTDIR");
   if (e && *e) snprintf(instdir, sizeof instdir, "%s", e);
-  else if (derive_instdir(instdir, sizeof instdir) != 0) {
+  else if (dn_derive_instdir(instdir, sizeof instdir) != 0) {
     fprintf(stderr, "dn-run: cannot derive INSTDIR (set DN_INSTDIR)\n");
     return 127;
   }

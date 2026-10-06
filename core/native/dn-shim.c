@@ -439,7 +439,7 @@ static const char *map_shebang_interp(const char *in, char *buf, size_t sz) {
   if (!g_init) dn_init();
   const char *root = g_root;
   if (root) {
-    /* Same preference as dn-translate-deb.sh/patch-scripts-tree.sh
+    /* Same preference as dn-translate-deb.sh
      * (translate: direct shebang, 2026-09-30): point at the prefix's own
      * dash/bash directly when installed -- real apt packages with the fused
      * loader as their own ELF interpreter, so the kernel following the rewritten

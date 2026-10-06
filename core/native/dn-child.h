@@ -23,36 +23,53 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
-static void dn_up_dirs(char *p, int n) {
-  while (n-- > 0) {
-    char *s = strrchr(p, '/');
-    if (!s || s == p) return;
-    *s = '\0';
-  }
-}
-
-/* Derive $INSTDIR from our own path and set the child environment. Returns 0
- * on success, -1 if /proc/self/exe could not be read. inst must be at least
- * 4096 bytes. */
-static int dn_prepare_child(char *inst, size_t sz) {
+/* The prefix root, from this program's own path: .../usr/<dir>/<prog> -> root.
+ * Shared by every overlay program (dn-run, dn-sh, dn-perl). Returns 0 on
+ * success, -1 if /proc/self/exe cannot be read. out must hold 4096 bytes. */
+static inline int dn_derive_instdir(char *out, size_t sz) {
   char self[4096];
   ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
   if (n <= 0) return -1;
   self[n] = '\0';
-  snprintf(inst, sz, "%s", self);
-  dn_up_dirs(inst, 3); /* .../usr/bin/dn-sh -> INSTDIR */
+  /* Strip components until the one named "usr" is reached; the root is what
+   * comes before it. Works for usr/bin/<prog> and usr/lib/deb-native/<prog>. */
+  for (;;) {
+    char *s = strrchr(self, '/');
+    if (!s || s == self) return -1;
+    *s = '\0';
+    size_t l = strlen(self);
+    if (l >= 4 && strcmp(self + l - 4, "/usr") == 0) {
+      self[l - 4] = '\0';
+      break;
+    }
+  }
+  if (!self[0]) return -1;
+  snprintf(out, sz, "%s", self);
+  return 0;
+}
 
-  char shim[4096];
-  snprintf(shim, sizeof shim, "%s/usr/lib/deb-native/dn-shim.so", inst);
-
-  char path[8192];
+/* The PATH every prefix program runs with: the privilege layer first, then the
+ * launchers, then the prefix's own bin dirs and the user's ~/.local/bin. No
+ * host directory is ever on it. */
+static inline void dn_build_path(const char *inst, char *path, size_t sz) {
   const char *home = getenv("HOME");
-  snprintf(path, sizeof path,
+  snprintf(path, sz,
            "%s/usr/lib/deb-native/priv:%s/usr/lib/deb-native/bin:"
            "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:"
            "%s/usr/games:%s/.local/bin",
            inst, inst, inst, inst, inst, inst, inst,
            (home && *home) ? home : "/nonexistent");
+}
+
+/* Derive $INSTDIR and set the environment of a dn-shell / dn-perl child.
+ * Returns 0 on success, -1 if /proc/self/exe could not be read. inst must be
+ * at least 4096 bytes. */
+static inline int dn_prepare_child(char *inst, size_t sz) {
+  if (dn_derive_instdir(inst, sz) != 0) return -1;
+
+  char shim[4096], path[8192];
+  snprintf(shim, sizeof shim, "%s/usr/lib/deb-native/dn-shim.so", inst);
+  dn_build_path(inst, path, sizeof path);
 
   setenv("LD_PRELOAD", shim, 1);
   setenv("DN_INSTDIR", inst, 1);

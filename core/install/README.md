@@ -25,8 +25,6 @@ for the current one.
   fixes from `core/custom/`.
 - `dn-debian-index.sh` — rewrites `Architecture: all` -> `arm64` in a
   downloaded Debian package index.
-- `patch-scripts-tree.sh` — rewrites an extracted package's maintainer
-  scripts' `#!` shebang to the prefix's own interpreter.
 - `normalize-symlinks.sh` — rewrites absolute symlinks inside the prefix
   so the kernel resolves them within it (needed for bind-only tracing).
 - `dn-fix-alternatives.sh` — makes every `update-alternatives` link in
