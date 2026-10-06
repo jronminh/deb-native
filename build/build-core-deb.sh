@@ -19,11 +19,16 @@
 #                 dn-run, dn-trace.
 #   DEB_MIRROR    Debian mirror, default http://deb.debian.org/debian
 #   DEB_SUITE     default trixie
+#   DEB_CACHE     downloaded .debs, kept across builds
+#                 (default ~/.cache/deb-native/debs); a cached file is
+#                 only checked against its sha256, never downloaded again
 #   PREFIX_ROOT   the absolute path the artifact's files will name (the
 #                 loader path), e.g. /data/data/org.dn.shell/files/core-deb
 #   DEB_LIST      the package list with pinned versions (a .dn/packages file)
 #                 of the core-deb being replaced; default: the list of BASE's
 #                 own .dn/packages plus the Debian layer from DEB_LIST_EXTRA.
+#   DN_PROFILE    optional: a file of package names written as .dn/profile
+#                 (the packages the prefix restores from the mirror)
 #   OUT           output tarball
 #
 # Usage: DN_GLIBC_PREFIX=... DN_OVERLAY=... PREFIX_ROOT=... DEB_LIST=... \
@@ -49,8 +54,8 @@ for t in dpkg-deb patchelf wget xz; do command -v "$t" >/dev/null 2>&1 || die "$
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 STAGE=$W/stage
-CACHE=${DEB_CACHE:-$W/debs}
-mkdir -p "$STAGE" "$CACHE"
+CACHE=${DEB_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/deb-native/debs}
+mkdir -p "$STAGE" "$CACHE"  # downloads persist across builds
 cp -a "$BASE/." "$STAGE/"
 
 # 1. Pinned package list -> download from the mirror, verify sha256.
@@ -158,16 +163,88 @@ for d in "$STAGE/usr/lib/aarch64-linux-gnu"/*.so*; do
   [ -e "$STAGE/usr/lib/$n" ] || [ -L "$STAGE/usr/lib/$n" ] || ln -s "aarch64-linux-gnu/$n" "$STAGE/usr/lib/$n"
 done
 
+# 5a. Files of Debian packages this artifact does not ship must not be on disk:
+#     the restore installs those packages, and dpkg refuses to overwrite a file
+#     that no package owns. Such files come from the base tree (library closure)
+#     or are left from a trimmed package. Remove them; directories stay.
+ship_files=$W/owned-ship.txt; all_files=$W/owned-all.txt; : > "$ship_files"; : > "$all_files"
+for d in "$CACHE"/*.deb; do
+  n=$(dpkg-deb -f "$d" Package)
+  dpkg-deb -c "$d" | awk '{ f = $6; sub(/^\.\//, "", f); if (f != "" && f !~ /\/$/) print f }' > "$W/f.txt"
+  cat "$W/f.txt" >> "$all_files"
+  if cut -d' ' -f3 "$W/debs.list" | grep -qx "$d"; then cat "$W/f.txt" >> "$ship_files"; fi
+done
+sort -u "$ship_files" > "$W/ship.sorted"; sort -u "$all_files" > "$W/all.sorted"
+comm -23 "$W/all.sorted" "$W/ship.sorted" > "$W/orphans.txt"
+pruned=0
+while IFS= read -r f; do
+  if [ -f "$STAGE/$f" ] || [ -L "$STAGE/$f" ]; then rm -f "$STAGE/$f"; pruned=$((pruned + 1)); fi
+done < "$W/orphans.txt"
+echo "build-core-deb: pruned $pruned files of packages not shipped"
+
 # 6. Overlay: the glibc-built runtime.
 mkdir -p "$STAGE/usr/lib/deb-native"
 for f in dn-shim.so dn-run dn-trace; do
   [ -f "$DN_OVERLAY/$f" ] || die "missing $DN_OVERLAY/$f"
   cp -f "$DN_OVERLAY/$f" "$STAGE/usr/lib/deb-native/$f"
 done
+# The maintainer-script interpreters (dn-sh runs the prefix's bash, dn-perl its perl)
+# live in usr/bin, like the packages' own programs.
+for f in dn-sh dn-perl; do
+  [ -f "$DN_OVERLAY/$f" ] || die "missing $DN_OVERLAY/$f"
+  cp -f "$DN_OVERLAY/$f" "$STAGE/usr/bin/$f"
+done
+# The overlay is built against the build host's loader, and it is copied after the
+# translation step: point its interpreter at this prefix's loader here.
+for f in usr/lib/deb-native/dn-run usr/lib/deb-native/dn-trace usr/bin/dn-sh usr/bin/dn-perl; do
+  patchelf --set-interpreter "$PREFIX_ROOT/$LOADER" "$STAGE/$f"
+done
 
-# 7. Launchers and symlinks (the post-install steps of dn-finish), then pack.
-#    TODO: run deb-native's make-launchers.sh and normalize-symlinks.sh on the
-#    stage here; they are not wired into this script yet.
+
+# 7. deb-native's own layer, which the prefix needs to translate what apt
+#    installs later: the apt hooks and their scripts, the launcher scripts,
+#    and the stash of the patched glibc files that dn-fix-glibc restores.
+#    The apt configuration names the hooks by their installed path.
+sh "$ROOT/core/runtime/install-hooks.sh" "$STAGE"
+cp -f "$ROOT/core/runtime/bootstrap-prefix.sh" "$STAGE/usr/lib/deb-native/scripts/runtime/"
+# The alternatives that mawk's configure step would make: the package manager's
+# and the hooks' awk is the link, not the file (a shipped tree is not configured).
+[ -e "$STAGE/usr/bin/awk" ] || [ -L "$STAGE/usr/bin/awk" ] || ln -s mawk "$STAGE/usr/bin/awk"
+GS="$STAGE/usr/lib/deb-native/glibc-swap"
+mkdir -p "$GS"
+echo "$PATCHED" | while IFS= read -r rel; do
+  mkdir -p "$GS/$(dirname "$rel")"
+  cp -f "$DN_GLIBC_PREFIX/$rel" "$GS/$rel"
+done
+HK=$PREFIX_ROOT/usr/lib/deb-native/scripts/install
+mkdir -p "$STAGE/etc/apt/apt.conf.d"
+cat > "$STAGE/etc/apt/apt.conf.d/50deb-native" <<CONF
+DPkg::Pre-Install-Pkgs { "$HK/dn-hook-pre.sh"; };
+DPkg::Tools::Options::$HK/dn-hook-pre.sh "";
+DPkg::Tools::Options::$HK/dn-hook-pre.sh::Version "3";
+DPkg::Post-Invoke { "$HK/dn-hook-post.sh"; };
+# apt drops to user _apt for its methods; the prefix is one user (fake root),
+# where that switch is refused. Run the methods as the current user.
+APT::Sandbox::User "root";
+CONF
+mkdir -p "$STAGE/etc/apt/sources.list.d"
+cat > "$STAGE/etc/apt/sources.list.d/debian.sources" <<SRC
+Types: deb
+URIs: $MIRROR
+Suites: $SUITE $SUITE-updates
+Components: main
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: deb
+URIs: $SECURITY
+Suites: $SUITE-security
+Components: main
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+SRC
+if [ -n "${DN_PROFILE:-}" ]; then
+  mkdir -p "$STAGE/.dn"
+  cp -f "$DN_PROFILE" "$STAGE/.dn/profile"
+fi
 
 sh "$ROOT/build/package-prefix.sh" "$STAGE" --root "$PREFIX_ROOT" --name core-deb \
   --desc "core-deb: core-ultra plus apt, dpkg and the translation hooks" --out "$OUT"

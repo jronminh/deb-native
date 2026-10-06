@@ -22,9 +22,10 @@
 # Usage: dn-hook-pre.sh PREFIX [DEB...]
 set -eu
 umask 022
-DN=${1:?usage: dn-hook-pre.sh PREFIX [DEB...]}
-shift
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# The prefix is where this hook lives: $PREFIX/usr/lib/deb-native/scripts/install.
+# An explicit PREFIX argument still wins (the in-place bootstrap passes one).
+if [ -n "${1:-}" ] && [ -d "$1/usr/lib/deb-native" ]; then DN=$1; shift; else DN=$(CDPATH= cd -- "$HERE/../../../../.." && pwd); fi
 TP=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 # Prefer the prefix's own dpkg-query once it exists (steady state); borrow
 # Termux's only during bootstrap, before the prefix has dpkg.

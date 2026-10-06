@@ -45,15 +45,6 @@ static int real_access_x(const char *path) {
 }
 static int g_glibc;   /* the target is a glibc ELF (classify) */
 
-#ifndef DN_APK
-static const char *termux_prefix(void) {
-  const char *p = getenv("DN_TERMUX_PREFIX");
-  if (!p || !*p) p = getenv("PREFIX");
-  if (!p || !*p) p = "/data/data/com.termux/files/usr";
-  return p;
-}
-#endif
-
 /* .../usr/lib/deb-native/dn-run -> ... (strip filename + 3 dirs) */
 static int derive_instdir(char *out, size_t sz) {
   char self[4096];
@@ -157,29 +148,15 @@ static int classify(const char *path, int *nss, char *interp, size_t isz) {
 }
 
 static void set_path(void) {
-#ifndef DN_APK
-  const char *p = termux_prefix();
-#endif
   const char *home = getenv("HOME");
   char path[8192];
-  /* Prefix dirs first, plus $HOME/.local/bin (host-layer commands:
-   * dn-list/dn-switch); Termux's dirs only while the prefix has no dpkg yet
-   * (bootstrap). The steady-state PATH has no Termux entry (0.7.0 R1). */
+  /* Prefix dirs first, plus $HOME/.local/bin (host-layer commands). The prefix
+   * has its own coreutils and shell; no host directory is ever on the PATH. */
   snprintf(path, sizeof path,
            "%s/usr/sbin:%s/usr/bin:%s/sbin:%s/bin:%s/usr/games:"
            "%s/usr/lib/deb-native/bin:%s/.local/bin",
            instdir, instdir, instdir, instdir, instdir, instdir,
            (home && *home) ? home : "/nonexistent");
-#ifndef DN_APK
-  {
-    char dpkg[4096];
-    snprintf(dpkg, sizeof dpkg, "%s/usr/bin/dpkg", instdir);
-    if (access(dpkg, X_OK) != 0) {
-      size_t l = strlen(path);
-      snprintf(path + l, sizeof path - l, ":%s/glibc/bin:%s/bin", p, p);
-    }
-  }
-#endif
   setenv("PATH", path, 1);
 }
 
@@ -217,24 +194,8 @@ static int try_adopt(const char *path) {
 static void launch_glibc(char **args) {
   /* Fused loader (dn-glibc): the dn-shim shim is delivered by
    * <prefix>/etc/ld.so.preload and the loader ignores LD_PRELOAD
-   * (docs/spec/dn-glibc-prefix.md), so do not inject it here -- just drop the
-   * inherited host preload (on Termux, termux-exec, built for another glibc).
-   * Preserve it for a Bionic child the shim may exec: capture before
-   * unsetting. */
-#ifndef DN_APK
-  const char *inh = getenv("LD_PRELOAD");
-  if (inh && *inh && !strstr(inh, "dn-shim.so")) {
-    /* Prefer the prefix's vendored copy (setup-runtime.sh) so a Bionic child
-     * the shim may exec needs nothing under Termux's tree at runtime. */
-    char hostpre[4096];
-    snprintf(hostpre, sizeof hostpre,
-             "%s/usr/lib/deb-native/host/libtermux-exec-ld-preload.so", instdir);
-    if (strstr(inh, "libtermux-exec") && access(hostpre, R_OK) == 0)
-      setenv("DN_BIONIC_PRELOAD", hostpre, 1);
-    else
-      setenv("DN_BIONIC_PRELOAD", inh, 1);
-  }
-#endif
+   * (docs/spec/dn-glibc-prefix.md), so do not inject it here -- just drop any
+   * inherited preload. */
   unsetenv("LD_PRELOAD");
   setenv("DN_INSTDIR", instdir, 1);
   set_path();

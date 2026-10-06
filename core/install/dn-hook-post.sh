@@ -15,8 +15,10 @@
 #
 # Usage: dn-hook-post.sh PREFIX
 set -u
-DN=${1:?usage: dn-hook-post.sh PREFIX}
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# The prefix is where this hook lives: $PREFIX/usr/lib/deb-native/scripts/install.
+# An explicit PREFIX argument still wins (the in-place bootstrap passes one).
+if [ -n "${1:-}" ] && [ -d "$1/usr/lib/deb-native" ]; then DN=$1; else DN=$(CDPATH= cd -- "$HERE/../../../../.." && pwd); fi
 LOG="$DN/var/log/deb-native-hook.log"
 mkdir -p "$DN/var/log"
 # Output goes to the terminal, amid apt's own lines, and to the log (the
