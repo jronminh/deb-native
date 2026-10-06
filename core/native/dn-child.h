@@ -1,7 +1,7 @@
 /* dn-child.h — shared setup for the maintainer-script interpreters.
  *
- * `dn-sh` and `dn-perl` are separate tiny ELF binaries the kernel runs
- * from a maintainer script's shebang (`#!$INSTDIR/usr/bin/dn-sh`). A
+ * `dn-run` (and dn-shell) need the same environment set up before they exec a
+ * program. A
  * shebang interpreter must be a real ELF: the kernel follows only one `#!`
  * level, so an interpreter that is itself a script leaves dpkg falling back
  * to Android's Bionic /bin/sh with no shim and no glibc PATH -- surfacing as
@@ -24,7 +24,7 @@
 #include <sys/stat.h>
 
 /* The prefix root, from this program's own path: .../usr/<dir>/<prog> -> root.
- * Shared by every overlay program (dn-run, dn-sh, dn-perl). Returns 0 on
+ * Shared by the overlay programs that exec the prefix's own programs (dn-run). Returns 0 on
  * success, -1 if /proc/self/exe cannot be read. out must hold 4096 bytes. */
 static inline int dn_derive_instdir(char *out, size_t sz) {
   char self[4096];
@@ -61,7 +61,7 @@ static inline void dn_build_path(const char *inst, char *path, size_t sz) {
            (home && *home) ? home : "/nonexistent");
 }
 
-/* Derive $INSTDIR and set the environment of a dn-shell / dn-perl child.
+/* Derive $INSTDIR and set the environment of a dn-shell child.
  * Returns 0 on success, -1 if /proc/self/exe could not be read. inst must be
  * at least 4096 bytes. */
 static inline int dn_prepare_child(char *inst, size_t sz) {

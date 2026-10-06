@@ -41,17 +41,6 @@ for a in dn-shim.so dn-run dn-trace; do
   [ -e "$CACHE/$a" ] || continue
   put "$CACHE/$a" "$LIBDIR/$a"
 done
-# The maintainer-script interpreters (dn-sh, dn-perl): real glibc ELFs built
-# with the prefix's own gcc, so NEEDED/PT_INTERP match the prefix's glibc and
-# loader exactly (fork model, Stage 1). Requires gcc in the prefix.
-CC="$INSTDIR/usr/bin/gcc"; [ -x "$CC" ] || CC=$(command -v gcc || true)
-if [ -n "$CC" ]; then
-  for n in dn-sh dn-perl; do
-    "$CC" -O2 -I"$SRC" -o "$BINDIR/$n" "$SRC/$n.c" || echo "W: could not build $n"
-  done
-else
-  echo "W: no gcc in the prefix; maintainer-script interpreters (dn-sh, dn-perl) not built"
-fi
 [ -e "$CACHE/adbwire" ] && put "$CACHE/adbwire" "$LIBDIR/adbwire"
 
 # No-op shims for root-only/unshipped commands a maintainer script may call
@@ -159,7 +148,7 @@ if [ "\$real" != "\$dn" ] && [ "\$real" != / ]; then
   exit 125
 fi
 cd "$INSTDIR" || exit 125
-[ \$# -gt 0 ] || exec "$INSTDIR/usr/bin/dn-sh" -i
+[ \$# -gt 0 ] || exec "$INSTDIR/usr/bin/bash" -i
 case "\$1" in
   /*) [ -e "$INSTDIR\$1" ] && { p="$INSTDIR\$1"; shift; set -- "\$p" "\$@"; } ;;
 esac

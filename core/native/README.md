@@ -14,10 +14,6 @@ and [`../../docs/spec/design.md`](../../docs/spec/design.md).
   abandoned — removed from the tree; see
   [`../../docs/spec/shim/path-shim.md`](../../docs/spec/shim/path-shim.md), "Dead end,
   fully explored" for the record.
-- `dn-sh.c` / `dn-perl.c` / `dn-child.h` — the maintainer-script
-  interpreters: two tiny glibc ELFs (shared setup in `dn-child.h`) the kernel
-  runs from a shebang (not a shell script — the kernel follows only one `#!`
-  level). Built by `install-runtime.sh` with the prefix's own gcc, repointed
-  at the fused loader.
+- `dn-child.h` — the shared child setup (`dn_prepare_child`, `dn_build_path`) used by dn-run.
 - `dn-run.c` — the runtime launch dispatcher: classifies a target's ELF
   at launch and picks the shim, plain exec, or the tracer.

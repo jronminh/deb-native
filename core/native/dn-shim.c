@@ -447,25 +447,14 @@ static const char *map_shebang_interp(const char *in, char *buf, size_t sz) {
      * indirection needed. dn-sh is only the bootstrap-time fallback,
      * kept here too for the same chicken-and-egg reason (a script the
      * shim encounters live, e.g. via system()/posix_spawn, before
-     * dash/bash are installed). Runtime component audit item 4,
-     * 2026-09-30 -- this was the one remaining place still hardcoded to
-     * dn-sh unconditionally after the translate-time scripts were
-     * fixed. */
+     * dash/bash are installed). */
     if (!strcmp(in, "/bin/sh") || !strcmp(in, "/bin/dash") ||
         !strcmp(in, "/usr/bin/sh") || !strcmp(in, "/usr/bin/dash")) {
       snprintf(buf, sz, "%s/usr/bin/dash", root);
-      if (access(buf, X_OK) == 0) return buf;
-      snprintf(buf, sz, "%s/usr/bin/dn-sh", root);
       return buf;
     }
     if (!strcmp(in, "/bin/bash") || !strcmp(in, "/usr/bin/bash")) {
       snprintf(buf, sz, "%s/usr/bin/bash", root);
-      if (access(buf, X_OK) == 0) return buf;
-      snprintf(buf, sz, "%s/usr/bin/dn-sh", root);
-      return buf;
-    }
-    if (!strncmp(in, "/usr/bin/perl", 13) || !strncmp(in, "/bin/perl", 9)) {
-      snprintf(buf, sz, "%s/usr/bin/dn-perl", root);
       return buf;
     }
   }

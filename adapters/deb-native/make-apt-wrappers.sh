@@ -56,7 +56,7 @@ chmod 755 "$LAUNCHDIR/termux-dn-doctor"
 # shell (dn-launch.c: Termux's glibc bash with the path shim, the prefix
 # first on PATH), so a script run from it sees Debian's /usr, /etc, /opt.
 # For trying direct installers (`curl ... | bash`); `exit` returns to Termux.
-ln -sfn "$INSTDIR/usr/bin/dn-sh" "$LAUNCHDIR/dn-sh"
+ln -sfn "$INSTDIR/usr/bin/bash" "$LAUNCHDIR/dn-sh"
 
 # dn-adopt: make a glibc program obtained outside apt run through the
 # prefix (dn-adopt.sh).

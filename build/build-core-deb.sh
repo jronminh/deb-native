@@ -188,15 +188,9 @@ for f in dn-shim.so dn-run dn-trace dn-elf; do
   [ -f "$DN_OVERLAY/$f" ] || die "missing $DN_OVERLAY/$f"
   cp -f "$DN_OVERLAY/$f" "$STAGE/usr/lib/deb-native/$f"
 done
-# The maintainer-script interpreters (dn-sh runs the prefix's bash, dn-perl its perl)
-# live in usr/bin, like the packages' own programs.
-for f in dn-sh dn-perl; do
-  [ -f "$DN_OVERLAY/$f" ] || die "missing $DN_OVERLAY/$f"
-  cp -f "$DN_OVERLAY/$f" "$STAGE/usr/bin/$f"
-done
 # The overlay is built against the build host's loader, and it is copied after the
 # translation step: point its interpreter at this prefix's loader here.
-for f in usr/lib/deb-native/dn-run usr/lib/deb-native/dn-trace usr/lib/deb-native/dn-elf usr/bin/dn-sh usr/bin/dn-perl; do
+for f in usr/lib/deb-native/dn-run usr/lib/deb-native/dn-trace usr/lib/deb-native/dn-elf; do
   patchelf --set-interpreter "$PREFIX_ROOT/$LOADER" "$STAGE/$f"
 done
 

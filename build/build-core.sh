@@ -35,7 +35,8 @@ if stale "$CACHE/dn-run" "$SRC/dn-run.c"; then
   clang -O2 -o "$CACHE/dn-run" "$SRC/dn-run.c"
 fi
 
-# The maintainer-script interpreters (dn-sh, dn-perl) are built by
+# (The maintainer-script interpreters no longer exist: scripts run the prefix's bash/dash/perl.)
+# Was: built by
 # install-runtime.sh with the prefix's own gcc, so their NEEDED/PT_INTERP match
 # the prefix's glibc and loader exactly (Stage 1, MODULARIZE.md "bootstrap
 # stages"). build-core cannot: it has no prefix/toolchain.
@@ -71,7 +72,8 @@ else
   echo "W: no dn-trace built; only the shim route is available."
 fi
 
-# The maintainer-script interpreters (dn-sh, dn-perl) are built by
+# (The maintainer-script interpreters no longer exist: scripts run the prefix's bash/dash/perl.)
+# Was: built by
 # install-runtime.sh, not here: they need the prefix's own gcc and loader.
 
 # adbwire (third_party/adbwire): termux-adb-bridge's daemonless

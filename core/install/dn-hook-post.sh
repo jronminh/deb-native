@@ -147,7 +147,7 @@ make_launchers() {
     for f in "$d"/*; do
       [ -f "$f" ] && [ -x "$f" ] || continue
       name=${f##*/}
-      case "$name" in dn-shell|dn-perl|dn-adopt|termux-*|apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split) continue ;; esac
+      case "$name" in dn-shell|dn-adopt|termux-*|apt|apt-get|apt-cache|apt-mark|apt-config|dpkg|dpkg-query|dpkg-deb|dpkg-split) continue ;; esac
       grep -qxF "$f" "$BASE" && continue
       [ "$(head -c4 "$f" | od -An -tx1 | tr -d ' \n')" = 7f454c46 ] || continue
       [ -z "$("$ELF" get-interp "$f" 2>/dev/null)" ] || continue

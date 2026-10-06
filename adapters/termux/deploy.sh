@@ -41,7 +41,7 @@ fi
 
 # Phase B -- finish inside the prefix, using its own shell.
 FIN=/usr/lib/deb-native/scripts/runtime/dn-finish.sh
-for sh in "$DN/usr/bin/dn-shell" "$DN/usr/bin/dn-sh" "$DN/usr/bin/bash"; do
+for sh in "$DN/usr/bin/bashell" "$DN/usr/bin/bash" "$DN/usr/bin/bash"; do
   [ -x "$sh" ] || continue
   "$sh" -c "sh $FIN $DN" && break || true
 done

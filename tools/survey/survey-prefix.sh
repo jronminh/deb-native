@@ -30,7 +30,7 @@
 # programs: NAME:HOW:RESULT,... HOW is how the user's shell reaches it
 #   (usr/lib/deb-native/bin, made by dn-hook-post.sh): native (a symlink: the prefix loader or
 #   a translated "#!"), trace (a dn-run --trace wrapper), dn-run, script
-#   (dn-shell/dn-perl wrapper), hidden (no entry; run by full path).
+#   (dn-shell wrapper), hidden (no entry; run by full path).
 #   RESULT is ok, fail, miss (failed, but works under the tracer: the
 #   launcher should have traced it), gui, tty or hang.
 # OUT/logs/PKG.log keeps the apt output and each program's output.

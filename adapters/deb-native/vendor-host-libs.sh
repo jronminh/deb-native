@@ -14,7 +14,7 @@ LIBDIR="$INSTDIR/usr/lib/deb-native"
 
 # Bundle the Bionic host-layer libraries into the prefix so the *runtime*
 # never opens anything under Termux's tree (0.7.0's independence goal, R7
-# follow-up). dn-run/dn-trace/dn-shell/dn-perl are Bionic ELFs built by
+# follow-up). dn-run/dn-trace/dn-shell are Bionic ELFs built by
 # Termux's clang, so their linker rpath points at $PREFIX_DIR/lib and
 # dn-trace NEEDs libtalloc.so.2 from there -- a hard-coded path no
 # DN_TERMUX_PREFIX override reaches. Copy those libs into the prefix and
@@ -53,7 +53,7 @@ if command -v patchelf >/dev/null 2>&1; then
         || echo "W: patchelf could not retarget $f; it keeps its Termux rpath"
     fi
   done
-  # The maintainer-script interpreters (dn-sh, dn-perl) are glibc ELFs now;
+  # The maintainer-script interpreters (bash) is the prefix's own now;
   # install-runtime.sh sets their interpreter and rpath, so leave them alone.
 else
   echo "W: patchelf not found; the Bionic host binaries keep their Termux rpath"

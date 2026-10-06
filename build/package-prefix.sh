@@ -43,8 +43,7 @@ for f in \
   usr/lib/deb-native/dn-shim.so \
   usr/lib/deb-native/dn-run \
   usr/lib/deb-native/dn-trace \
-  usr/bin/dn-sh \
-  usr/bin/dn-perl; do
+  ; do
   [ -e "$PREFIX/$f" ] || continue
   printf '%s\t%s\n' "$f" "$(sha256sum "$PREFIX/$f" | awk '{print $1}')" >> "$MAN"
 done
