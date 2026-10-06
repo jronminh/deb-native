@@ -2,10 +2,11 @@ name: Build the glibc runtime
 
 # Builds the glibc side of deb-native on an arm64 Linux runner:
 #   - the glibc bundle: Debian's real libc6/libc-bin, repackaged with this
-#     project's own Android-patched build (patches/dn-glibc-android.patch),
-#     published as the rolling `glibc-bundle` release;
+#     project's own Android-patched build (patches/dn-glibc-android.patch);
+#     it is an artifact for build-prefix.yml -- not a release of its own;
 #   - the runtime overlay (dn-shim.so, dn-run, dn-trace, dn-elf).
-# Packaging the prefix tarball is separate -- see docs/spec/prefix-layers.md.
+# The one published release is `prefix`, from build-prefix.yml
+# (docs/spec/prefix-layers.md).
 
 on:
   workflow_dispatch: {}
@@ -122,7 +123,7 @@ jobs:
 
       # The install bundle (DN_GLIBC_DEBS): the 10 patched files laid out
       # relative to a prefix, Debian's own libc6/libc-bin, and the shim built
-      # against this build's glibc. Published as the rolling `glibc-bundle`.
+      # against this build's glibc. Handed to build-prefix.yml as an artifact.
       - name: Assemble the install bundle
         run: |
           set -eu
@@ -147,16 +148,6 @@ jobs:
           gcc -O2 -fPIC -shared \
             -o dn-shim.so "$GITHUB_WORKSPACE/src/dn-shim.c" -ldl
           tar -C "$B" -czf "$GITHUB_WORKSPACE/dn-glibc-bundle.tar.gz" .
-
-      - name: Publish the bundle to the rolling release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view glibc-bundle >/dev/null 2>&1 || \
-            gh release create glibc-bundle --prerelease \
-              --title "dn-glibc install bundle (rolling)" \
-              --notes "Rolling bundle: the 10 patched glibc files, Debian's libc6/libc-bin, and the shim. Built by .github/workflows/build-glibc.yml."
-          gh release upload glibc-bundle dn-glibc-bundle.tar.gz --clobber
 
       # Hand the just-built bundle to a caller (build-prefix.yml), so the
       # prefix tarballs are built from this glibc, not a stale release asset.
