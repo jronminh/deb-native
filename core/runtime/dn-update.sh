@@ -40,8 +40,6 @@ target() {
     run)            echo "$INST/usr/lib/deb-native/dn-run" ;;
     trace)          echo "$INST/usr/lib/deb-native/dn-trace" ;;
     shell)          echo "$INST/usr/bin/bash" ;;
-    libtalloc)      echo "$INST/usr/lib/deb-native/host/libtalloc.so.2" ;;
-    libtermux-exec) echo "$INST/usr/lib/deb-native/host/libtermux-exec-ld-preload.so" ;;
     hooks)          echo "$INST/usr/lib/deb-native/scripts" ;;
     priv)           echo "$INST/usr/lib/deb-native/priv" ;;
     launchers)      echo "$INST/usr/lib/deb-native/bin" ;;
@@ -54,8 +52,7 @@ case "${1:-}" in
   ""|-h|--help) usage; exit 2 ;;
   list)
     echo "files: loader libc libresolv libnsl libnss-compat libnss-hesiod librt"
-    echo "       ldconfig localedef iconv shim run trace shell perl"
-    echo "       libtalloc libtermux-exec"
+    echo "       ldconfig localedef iconv shim run trace shell"
     echo "dirs:  hooks priv launchers custom"
     exit 0 ;;
 esac

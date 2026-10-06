@@ -3,10 +3,8 @@
 # installer. No prefix is touched (build stage; MODULARIZE.md P2).
 #
 # Artifacts: dn-shim.so (the shim), dn-run (launcher/classifier),
-# dn-trace (the syscall tracer, optional), adbwire (optional). Built once per
-# checkout into $SRC/.build; install-runtime.sh copies them into a prefix. The
-# maintainer-script interpreters (dn-sh, dn-perl) are built by install-runtime
-# instead, since they need the prefix's own gcc and loader (fork model).
+# dn-trace (the syscall tracer, optional). Built once per checkout into
+# $SRC/.build; install-runtime.sh copies them into a prefix.
 #
 # Usage: build-core.sh
 set -eu
@@ -14,7 +12,6 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/.." && pwd)
 SRC="$ROOT/core/native"
 TRACER="$ROOT/core/tracer"
-ADBWIRE_SRC="$ROOT/third_party/adbwire"
 PREFIX_DIR=${DN_TERMUX_PREFIX:-${PREFIX:-/data/data/com.termux/files/usr}}
 GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
 CACHE="$SRC/.build"
@@ -75,22 +72,3 @@ fi
 # (The maintainer-script interpreters no longer exist: scripts run the prefix's bash/dash/perl.)
 # Was: built by
 # install-runtime.sh, not here: they need the prefix's own gcc and loader.
-
-# adbwire (third_party/adbwire): termux-adb-bridge's daemonless
-# Wireless-Debugging ADB client, so `dn-adbwire` can run one command per
-# connection at Android's `shell` UID. Built here with Termux's clang +
-# OpenSSL. Optional: with no clang/OpenSSL it is simply absent.
-have_ssl=$(ls "$PREFIX_DIR"/lib/libssl.so* 2>/dev/null | head -n1 || true)
-if [ -e "$ADBWIRE_SRC/adbwire.c" ] && command -v clang >/dev/null 2>&1 && [ -n "$have_ssl" ]; then
-  if [ ! -x "$CACHE/adbwire" ] || [ -n "$(find "$ADBWIRE_SRC" -name '*.[ch]' -newer "$CACHE/adbwire" | head -n1)" ]; then
-    echo "Building adbwire ..."
-    clang -O2 -Wall -o "$CACHE/adbwire" \
-      "$ADBWIRE_SRC/adbwire.c" "$ADBWIRE_SRC/spake2.c" \
-      "$ADBWIRE_SRC/ed25519/fe.c" "$ADBWIRE_SRC/ed25519/ge.c" \
-      "$ADBWIRE_SRC/ed25519/sc.c" "$ADBWIRE_SRC/ed25519/sha512.c" \
-      "$ADBWIRE_SRC/ed25519/keypair.c" "$ADBWIRE_SRC/ed25519/sign.c" \
-      "$ADBWIRE_SRC/ed25519/verify.c" "$ADBWIRE_SRC/ed25519/key_exchange.c" \
-      -I"$ADBWIRE_SRC/ed25519" -lssl -lcrypto \
-      || { echo "W: adbwire build failed"; rm -f "$CACHE/adbwire"; }
-  fi
-fi

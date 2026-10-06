@@ -33,4 +33,3 @@ artifact	dn-shim.so	core/native/.build/dn-shim.so	usr/lib/deb-native/dn-shim.so
 artifact	dn-run	core/native/.build/dn-run	usr/lib/deb-native/dn-run
 artifact	dn-trace	core/native/.build/dn-trace	usr/lib/deb-native/dn-trace
 artifact	dn-elf	core/native/.build-glibc/dn-elf	usr/lib/deb-native/dn-elf
-artifact	adbwire	core/native/.build/adbwire	usr/lib/deb-native/adbwire

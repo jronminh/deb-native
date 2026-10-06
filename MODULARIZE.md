@@ -179,7 +179,9 @@ In order, and each owned by one place:
 - [x] Split `setup-runtime.sh` into `build-core` (build), `install-runtime`
       (core: install + `priv/`), and `vendor-host-libs` (adapter). The
       orchestrator stays bootstrap-level, so `core` no longer reaches build or
-      adapter; `module-edges.allow` is empty.
+      adapter; `module-edges.allow` is empty. (Since retired:
+      `vendor-host-libs` went with the Bionic runtime and adbwire, so
+      `install-runtime` is the whole adapter-side install.)
 - [x] Move the adapter leaf scripts to `adapters/deb-native/`
       (`make-shell-interface.sh`, `make-apt-wrappers.sh`).
 - [x] Parameterize the `dpkg-query` leak (prefer the prefix's own; borrow the

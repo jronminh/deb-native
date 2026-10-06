@@ -1,8 +1,7 @@
 #!/bin/sh
 # Orchestrate a prefix's runtime: build the artifacts (build stage), install
-# them and the privilege layer (core), vendor the host libraries (adapter).
-# This is the bootstrap-level glue, so `core` itself never reaches build or
-# adapter (MODULARIZE.md P2). Idempotent.
+# them and the privilege layer (core). This is the bootstrap-level glue, so
+# `core` itself never reaches build or adapter (MODULARIZE.md P2). Idempotent.
 #
 # The interpreter is a real ELF built from native/dn-launch.c; it needs a
 # glibc bash to exec. Reason for the real ELF (not a shell script):
@@ -22,4 +21,3 @@ GLIBC=${DN_GLIBC_ROOT:-$PREFIX_DIR/glibc}
 
 "$HERE/../build/build-core.sh"
 "$HERE/../core/install/install-runtime.sh" "$INSTDIR"
-"$HERE/../adapters/deb-native/vendor-host-libs.sh" "$INSTDIR"

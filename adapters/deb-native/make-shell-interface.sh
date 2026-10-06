@@ -236,60 +236,6 @@ printf '%s\n' "$p" > "$STATE/default"
 echo "default userland: $p"
 DEF
 
-# dn-adbwire: run a command at Android's `shell` UID through termux-adb-bridge's
-# adbwire (https://github.com/jronminh/termux-adb-bridge) -- daemonless, one
-# connection per command, nothing persistent. Shell UID is a near-root tier, so
-# this is opt-in: the command pairs nothing, runs nothing and prints nothing
-# until you invoke it, and a missing adbwire is silent at install. Build
-# adbwire once in Termux (git clone + build/build.sh); this only consumes it.
-gen "$HOME_DIR/.local/bin/dn-adbwire" <<'ADBWIRE'
-#!/system/bin/sh
-# deb-native dn-adbwire (generated; do not edit): shell-UID commands through
-# termux-adb-bridge's adbwire, one-shot. Nothing runs until invoked.
-HOME_DIR="${DN_HOME:-$HOME}"
-ADBWIRE=""
-for c in "__INSTDIR__/usr/lib/deb-native/adbwire" "__TP__/bin/adbwire" \
-         "$HOME_DIR/termux-adb-bridge/build/out/adbwire"; do
-  [ -x "$c" ] && { ADBWIRE=$c; break; }
-done
-if [ -z "${ADBWIRE:-}" ]; then
-  echo "dn-adbwire: adbwire not built -- in Termux, build it once:" >&2
-  echo "  git clone https://github.com/jronminh/termux-adb-bridge" >&2
-  echo "  cd termux-adb-bridge && build/build.sh" >&2
-  exit 127
-fi
-case "${1:-}" in
-  pair|--pair)
-    shift
-    [ -n "${1:-}" ] || { echo "usage: dn-adbwire pair <code>" >&2; exit 2; }
-    exec "$ADBWIRE" --pair "$@"
-    ;;
-  "")
-    # No argument: paired already -> report identity; otherwise start the
-    # one-time pairing now (needs the code from the device's dialog).
-    if [ -r "$HOME_DIR/.android/adbkey" ]; then exec "$ADBWIRE" id; fi
-    echo "On the device: Settings > Developer options > Wireless debugging" >&2
-    echo "> Pair device with pairing code." >&2
-    printf 'Enter the 6-digit code: ' >&2
-    read code || exit 0
-    [ -n "$code" ] || exit 0
-    exec "$ADBWIRE" --pair "$code"
-    ;;
-  *)
-    exec "$ADBWIRE" "$@"
-    ;;
-esac
-ADBWIRE
-
-# If adbwire is already built, keep a copy in the prefix so dn-adbwire is
-# self-contained. Silent when it is absent -- no install-time noise.
-for c in "$TP/bin/adbwire" "$HOME_DIR/termux-adb-bridge/build/out/adbwire"; do
-  if [ -x "$c" ]; then
-    cp -f "$c" "${PRIV%/*}/adbwire" 2>/dev/null && chmod 755 "${PRIV%/*}/adbwire" 2>/dev/null
-    break
-  fi
-done
-
 # The welcome. Termux's login runs ~/.termux/motd.sh in place of its own
 # static /etc/motd. Debian's own greeting (os-release name + base-files
 # /etc/motd), then where this userland runs. Each /etc/motd paragraph is

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install the pre-built runtime artifacts into a prefix, and create the
-# privilege layer (the `priv/` stand-ins). Core: no building (build-core.sh)
-# and no host-library vendoring (vendor-host-libs.sh). See MODULARIZE.md P2.
+# privilege layer (the `priv/` stand-ins). Core: no building (build-core.sh).
+# See MODULARIZE.md P2.
 #
 # Usage: install-runtime.sh INSTDIR
 set -eu
@@ -36,12 +36,11 @@ put() {                                            # FROM TO
 }
 
 # Copy the built artifacts; skip any that build-core.sh did not produce
-# (the tracer and adbwire are optional).
+# (the tracer is optional).
 for a in dn-shim.so dn-run dn-trace; do
   [ -e "$CACHE/$a" ] || continue
   put "$CACHE/$a" "$LIBDIR/$a"
 done
-[ -e "$CACHE/adbwire" ] && put "$CACHE/adbwire" "$LIBDIR/adbwire"
 
 # No-op shims for root-only/unshipped commands a maintainer script may call
 # by bare name: an unprivileged process cannot chown/chgrp no matter what

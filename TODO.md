@@ -665,11 +665,10 @@ Exempt: the app's own entry, `$PREFIX/bin/login`.
   one Debian; the prefix must be a copyable/portable artifact and the
   interface must let you pick/enter among them.
 
-**Bionic preload** (done): `termux-exec` is vendored into the prefix at
-bootstrap (`setup-runtime.sh` -> `$INSTDIR/usr/lib/deb-native/host/`) and
-`dn-launch.c`/`dn-run.c` remap `DN_BIONIC_PRELOAD` onto that copy, so a Bionic
-child needs nothing under `$TP` at runtime. It remains meaningful only for
-Bionic children.
+**Bionic preload** (retired): the overlay is glibc-only now, and the prefix
+does not run Termux programs, so `termux-exec` is neither vendored nor
+forwarded. `dn-run.c`/`dn-shim.c` still recognise a Bionic target and exec
+it untouched, but nothing hands it a preload.
 
 **Runtime-overlay plan (the Termux-independent half), R0-R7:**
 
