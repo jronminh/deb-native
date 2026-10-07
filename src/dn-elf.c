@@ -134,63 +134,82 @@ static int cmd_set(const char *file, const char *newpath, long capacity) {
           fwrite(pad, ph.p_filesz, 1, f) != 1) ? die("cannot write PT_INTERP", file) : 0;
     free(pad);
   } else {
-    /* Make room for a longer string. glibc's rtld reads its own name from the
-       memory PT_INTERP maps (the build-time prefix is cut from it), so the
-       string must be mapped -- but NOT by growing a segment that has a BSS
-       (p_memsz > p_filesz): that would turn the zero-fill region into file
-       bytes and corrupt the program (libc's globals, seen live). Instead,
-       place the string in a free file slot right after a loadable segment
-       with p_filesz == p_memsz, and extend only that segment; require the
-       slot's file range and the resulting vaddr range to be unowned by every
-       other segment. */
-    Elf64_Phdr phs[64];
+    /* Make room by adding a new PT_LOAD that carries the string (and a
+       relocated program-header table) above every existing segment. Growing
+       an existing segment is unsafe: a segment with a BSS (p_memsz >
+       p_filesz) would turn its zero-fill into file bytes, and the loader
+       reads its own name from the memory PT_INTERP maps (elf/rtld.c), so the
+       string must be mapped. */
     long n = e.e_phnum;
-    if (n > (long)(sizeof phs / sizeof phs[0]))
+    Elf64_Phdr phs[128];
+    if (n + 1 > (long)(sizeof phs / sizeof phs[0]))
       { fclose(f); return die("too many program headers", file); }
-    for (long i = 0; i < n; i++) {
+    for (long i = 0; i < n; i++)
       if (fseek(f, (long)(e.e_phoff + i * sizeof(Elf64_Phdr)), SEEK_SET) != 0 ||
           fread(&phs[i], sizeof(Elf64_Phdr), 1, f) != 1)
         { fclose(f); return die("cannot read program headers", file); }
-    }
     if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return die("cannot seek to the end", file); }
     long end = ftell(f);
     if (end < 0) { fclose(f); return die("cannot size the file", file); }
 
-    long best = -1;
-    Elf64_Off bestF = 0, bestV = 0;
-    for (long i = 0; i < n; i++) {
-      if (phs[i].p_type != PT_LOAD || phs[i].p_filesz != phs[i].p_memsz) continue;
-      Elf64_Off F = phs[i].p_offset + phs[i].p_filesz;   /* slot: right after it */
-      Elf64_Off V = phs[i].p_vaddr + phs[i].p_filesz;    /* where the string maps */
-      if (F + want > (Elf64_Off)end) continue;           /* reuse existing space only */
-      int clash = 0;
-      for (long j = 0; j < n && !clash; j++) {
-        if (F < phs[j].p_offset + phs[j].p_filesz && F + want > phs[j].p_offset) clash = 1;
-        if (V < phs[j].p_vaddr + phs[j].p_memsz && V + want > phs[j].p_vaddr) clash = 1;
+    /* A free vaddr for the new segment: page-aligned above every segment. */
+    Elf64_Addr newV = 0;
+    for (long i = 0; i < n; i++)
+      if (phs[i].p_type == PT_LOAD) {
+        Elf64_Addr segend = phs[i].p_vaddr + phs[i].p_memsz;
+        if (segend > newV) newV = segend;
       }
-      if (clash) continue;
-      if (best < 0 || F > bestF) { best = i; bestF = F; bestV = V; }
-    }
-    if (best < 0) { fclose(f); return die("no free slot to grow PT_INTERP", file); }
+    newV = (newV + 0xfff) & ~(Elf64_Addr)0xfff;
 
-    char *buf = calloc(1, want);
-    if (!buf) { fclose(f); return die("out of memory", file); }
-    memcpy(buf, newpath, len + 1);
-    if (fseek(f, (long)bestF, SEEK_SET) != 0 || fwrite(buf, want, 1, f) != 1)
-      { free(buf); fclose(f); return die("cannot write PT_INTERP", file); }
-    free(buf);
+    /* The new segment must be page-congruent: p_offset and p_vaddr share the
+       same page remainder (glibc: "address/offset not page-aligned"). */
+    Elf64_Off string_off = ((Elf64_Off)end + 0xfff) & ~(Elf64_Off)0xfff;
+    long new_n = n + 1;
+    size_t phsz = sizeof(Elf64_Phdr);
+    Elf64_Off phdr_off = string_off + (Elf64_Off)want;
+    Elf64_Off seg_sz = (Elf64_Off)want + (Elf64_Off)new_n * (Elf64_Off)phsz;
 
-    phs[best].p_filesz += want;
-    phs[best].p_memsz += want;
-    if (fseek(f, (long)(e.e_phoff + best * sizeof(Elf64_Phdr)), SEEK_SET) != 0 ||
-        fwrite(&phs[best], sizeof(Elf64_Phdr), 1, f) != 1)
-      { fclose(f); return die("cannot grow the PT_LOAD", file); }
+    /* The new read-only LOAD covers the string and the relocated table. */
+    Elf64_Phdr nl;
+    memset(&nl, 0, sizeof nl);
+    nl.p_type = PT_LOAD;
+    nl.p_flags = PF_R;
+    nl.p_offset = string_off;
+    nl.p_vaddr = nl.p_paddr = newV;
+    nl.p_filesz = nl.p_memsz = seg_sz;
+    nl.p_align = 0x1000;
 
-    ph.p_offset = bestF;
-    ph.p_vaddr = ph.p_paddr = bestV;
+    /* PT_PHDR must describe the relocated table (the kernel reads AT_PHDR
+       from it; without PT_PHDR the kernel finds it in the new LOAD). */
+    for (long i = 0; i < n; i++)
+      if (phs[i].p_type == PT_PHDR) {
+        phs[i].p_offset = phdr_off;
+        phs[i].p_vaddr = phs[i].p_paddr = newV + (Elf64_Addr)want;
+        phs[i].p_filesz = phs[i].p_memsz =
+          (Elf64_Xword)new_n * (Elf64_Xword)phsz;
+        phs[i].p_align = 0x1000;
+      }
+    ph.p_offset = string_off;
+    ph.p_vaddr = ph.p_paddr = newV;
     ph.p_filesz = ph.p_memsz = want;
-    rc = (fseek(f, (long)(e.e_phoff + idx * sizeof ph), SEEK_SET) != 0 ||
-          fwrite(&ph, sizeof ph, 1, f) != 1) ? die("cannot update the PT_INTERP header", file) : 0;
+    phs[idx] = ph;
+    phs[n] = nl;
+
+    size_t pad = (size_t)(string_off - (Elf64_Off)end);
+    char *buf = calloc(1, pad + (size_t)seg_sz);
+    if (!buf) { fclose(f); return die("out of memory", file); }
+    memcpy(buf + pad, newpath, len + 1);
+    memcpy(buf + pad + want, phs, (size_t)new_n * phsz);
+    rc = (fseek(f, (long)end, SEEK_SET) != 0 ||
+          fwrite(buf, pad + (size_t)seg_sz, 1, f) != 1)
+         ? die("cannot write the new segment", file) : 0;
+    free(buf);
+    if (rc == 0) {
+      e.e_phoff = phdr_off;
+      e.e_phnum = (Elf64_Half)new_n;
+      rc = (fseek(f, 0, SEEK_SET) != 0 || fwrite(&e, sizeof e, 1, f) != 1)
+           ? die("cannot update the ELF header", file) : 0;
+    }
   }
   if (fclose(f) != 0 && rc == 0) rc = die("cannot close the file", file);
   return rc;
