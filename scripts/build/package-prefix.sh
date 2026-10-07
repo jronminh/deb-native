@@ -56,5 +56,8 @@ set -- "$STAGE" --root "$ROOTP" --name "$NAME"
 [ -z "$DESC" ] || set -- "$@" --desc "$DESC"
 set -- "$@" --version "$VER"
 python3 "$ROOT/scripts/build/pack-prefix.py" "$@"
-tar -czf "$OUT" -C "$STAGE" .
+# Store hard-linked files as separate copies: a poor host's tar (toybox, and
+# GNU tar too on Android/f2fs) cannot recreate hard links -- perl's
+# usr/bin/perl5.40.1 -> usr/bin/perl made "extract failed" on device.
+tar --hard-dereference -czf "$OUT" -C "$STAGE" .
 echo "packaged: $OUT ($(du -h "$OUT" | cut -f1))"

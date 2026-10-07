@@ -22,6 +22,11 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 DN=${DN_INSTDIR:-$(CDPATH= cd -- "$HERE/../../../../.." && pwd)}
 PATH=$DN/usr/lib/deb-native/priv:$DN/usr/sbin:$DN/usr/bin:$DN/sbin:$DN/bin:$PATH
 export PATH
+# apt/dpkg put scratch files under $TMPDIR; the host's is outside the prefix
+# (and not redirected), so dpkg could not stat what apt wrote. Keep them inside.
+TMPDIR=$DN/tmp
+export TMPDIR
+mkdir -p "$TMPDIR"
 PROFILE=$DN/.dn/profile
 DONE=$DN/.dn/bootstrapped
 
