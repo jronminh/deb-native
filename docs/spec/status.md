@@ -38,7 +38,13 @@ Debian section ([`../reference/standard.md`](../reference/standard.md)). 99 of
 ## Not yet
 
 - **Services:** a package that ships a unit installs, but the service does not
-  run; `runit` is the plan.
+  run; `runit` is the plan. The `runit` programs themselves work: `runsvdir`,
+  `runsv`, `sv`, `chpst` and `svlogd`, unpacked from Debian's `runit` `.deb`,
+  are adopted on first run and supervise, restart and control a service. The
+  `runit` package is not installed: it depends on `runit-helper` and
+  `sysuser-helper`, which pull in `adduser`, `passwd` and PAM. For remote
+  access `dropbear` runs and logs in with a key; OpenSSH's `sshd` does not run
+  ([`known-issues.md`](../reference/known-issues.md)).
 - **Real root:** packages needing system users, `setuid`, TUN or kernel modules
   do not work; `sudo` modes are planned.
 - **Heavy toolchains** are not fully supported (some compile; `rustc`/`ghc` are

@@ -104,6 +104,20 @@ launching.
 **Root cause.** The gcc `specs` file is missing or stale. Fix: rerun
 `dn-fix-gcc-specs.sh` (wired into the post hook).
 
+### `dn-trace` fails: `libtalloc.so.2` not found
+
+**Symptom.** A program that `dn-run` routes to `dn-trace` (seen with
+`ssh-keygen`, `sshd` and `dropbear` adopted from a `.deb`) dies at once:
+
+```
+dn-trace: error while loading shared libraries: libtalloc.so.2: cannot open shared object file
+```
+
+**Root cause.** `dn-trace` links `libtalloc`, and `core-deb` does not install
+`libtalloc2`.
+
+**Workaround.** `apt install libtalloc2`; the same programs then run.
+
 ### Stale apt hook paths after a checkout moves
 
 **Symptom.** `apt`/`dpkg` break on an existing prefix after the checkout
@@ -147,6 +161,16 @@ By design, not bugs; see the linked specs.
 - **No init/service manager and no child reaper:** a package shipping a unit
   installs but the service does not run, and double-forked zombies accumulate
   (services are a roadmap item).
+- **OpenSSH `sshd` cannot run.** A connection reaches pre-auth and then fails
+  at the privilege-separation `chroot("/run/sshd")`: the syscall is blocked by
+  Android's seccomp (`dn-trace warning: blocked syscall chroot (#51) denied by
+  seccomp; returning ENOSYS`), and OpenSSH has no option to turn privilege
+  separation off. `dropbear` is the SSH server: with a key in
+  `~/.ssh/authorized_keys` it logs in to the prefix's own shell. It also needs
+  the login user to have a shell in `/etc/passwd` that is listed in
+  `/etc/shells`; `core-deb` ships neither file, the shim answers `getpwnam`
+  with a synthesized entry whose shell is Termux's `login`, and `dropbear`
+  rejects that as an invalid shell.
 - **`uname` reports the platform**, and `os-release`/`lsb_release`/`systemd`/
   `dbus` may be absent, so programs branching on them can misbehave
   (`shim/shim-coverage.md`).

@@ -61,9 +61,16 @@ runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
   adds 0 certificates and `/etc/ssl/certs/ca-certificates.crt` is never built;
   `git` over HTTPS fails with "Problem with the SSL CA cert". Workaround that
   worked: write the conf from `/usr/share/ca-certificates` (every `*.crt`,
-  relative path, one per line), then run `update-ca-certificates`. The
-  postinst step that should create it, or the build step that should ship it,
-  is not yet found.
+  relative path, one per line), then run `update-ca-certificates`. The error
+  `update-ca-certificates` prints (`sed: can't read /etc/ca-certificates.conf`)
+  is the one in [`known-issues.md`](docs/reference/known-issues.md) ("Maintainer
+  scripts with a raw interpreter shebang"); whether the bootstrap run of the
+  `ca-certificates` postinst hit that same cause is not confirmed.
+- **Account files**: `core-deb` has no `/etc/passwd`, `/etc/group` or
+  `/etc/shells` although `base-passwd` is `ii`; the shim answers `getpwnam`
+  with a synthesized entry whose shell is Termux's `login`. A login service
+  (`dropbear`) rejects that shell. `core-deb` also lacks `libtalloc2`, which
+  `dn-trace` needs.
 - **Package list refresh**: `scripts/build/packages.tsv` pins exact versions;
   a mirror point release makes them unreachable. A resolver, or a documented
   refresh step, is needed.
@@ -81,11 +88,14 @@ symlinks — ends the two worlds' dotfile/config collisions without recursion.
 **Goal**: same scope as `sudo-less` — a service needs something to run it and
 the rights it expects. In order: services, sudo modes, then both.
 
-**Status**: not started. `sudo`/`doas` are pinned out; the no-op privilege
-layer (`$DN/usr/lib/deb-native/priv/`) is a later real mode's replacement.
-Design: supervisor is **runit** installed at deploy (Debian's `runit` package,
-its `sysuser-helper` and init glue skipped, `runsvdir "$DN/etc/service"`
-started by us). Packages keep shipping systemd units; we translate the unit at
+**Status**: not wired into the prefix. `sudo`/`doas` are pinned out; the no-op
+privilege layer (`$DN/usr/lib/deb-native/priv/`) is a later real mode's
+replacement. Design: supervisor is **runit**, deployed as the programs
+unpacked from Debian's `runit` `.deb` (the package itself pulls `adduser`,
+`passwd` and PAM through `sysuser-helper`, and its init glue is skipped),
+`runsvdir "$DN/etc/service"` started by us. Checked on a device: `runsvdir`,
+`runsv`, `sv` and `chpst` run adopted, supervise a service, restart one that
+exits, and take `sv down`/`sv up`. Packages keep shipping systemd units; we translate the unit at
 install (foreground `ExecStart`, `Environment`, `WorkingDirectory`,
 `RuntimeDirectory`/`StateDirectory`; `User=` and sandbox options dropped; low
 ports/capabilities/devices refused with the reason) and the `systemctl` front
@@ -93,6 +103,15 @@ is a vendored, pruned SINS. Test ladder: `cron` -> `redis` -> `dbus`.
 
 **Open**:
 
+- **Deploy runit**: put the unpacked programs on the `PATH` of whatever starts
+  `runsvdir` (it starts `runsv` by name; off `PATH` it logs `unable to start
+  runsv`). Not yet checked: `svlogd` logging, `chpst -u`, `runit-init` and the
+  `/etc/runit/{1,2,3}` stages, `runsvdir` surviving the end of the session
+  that started it.
+- **SSH service**: `dropbear` under `runsvdir` (OpenSSH's `sshd` cannot run:
+  its privilege-separation `chroot` is blocked). `dropbear` logs in with a key
+  today when started by hand; it needs a valid login shell in `/etc/passwd`
+  and `/etc/shells` (see the account files item above), and `libtalloc2`.
 - `update-rc.d` / `invoke-rc.d` / `deb-systemd-helper` -> real runit
   translation (needs `/run` in the shim, system users in the prefix's db).
 - Keep `dn-run`'s preload handling general enough for a second `LD_PRELOAD`
