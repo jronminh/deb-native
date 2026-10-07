@@ -56,6 +56,14 @@ runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
 - `core-ultra` size: most `gconv` modules; terminfo missing.
 - Launcher symlinks: make them relative after `normalize_symlinks` runs (the
   post hook's order leaves them absolute).
+- **`/etc/ca-certificates.conf` missing in core-deb**: `ca-certificates` is
+  `ii` after bootstrap but the conf is absent, so `update-ca-certificates`
+  adds 0 certificates and `/etc/ssl/certs/ca-certificates.crt` is never built;
+  `git` over HTTPS fails with "Problem with the SSL CA cert". Workaround that
+  worked: write the conf from `/usr/share/ca-certificates` (every `*.crt`,
+  relative path, one per line), then run `update-ca-certificates`. The
+  postinst step that should create it, or the build step that should ship it,
+  is not yet found.
 - **Package list refresh**: `scripts/build/packages.tsv` pins exact versions;
   a mirror point release makes them unreachable. A resolver, or a documented
   refresh step, is needed.
