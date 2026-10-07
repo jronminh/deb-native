@@ -20,7 +20,7 @@ env:
   # so it must differ from the artifact's PREFIX_ROOT: if the two were equal,
   # every patched glibc file would name the artifact root and pack-prefix
   # would refuse it (build invariant 6). Keep it a placeholder, not a target.
-  DN_PREFIX: "/data/local/dn-build"
+  DN_PREFIX: "/data/data/com.termux/files/home/.dn"
 
 jobs:
   build:
