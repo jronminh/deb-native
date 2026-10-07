@@ -56,23 +56,6 @@ static int find_interp(FILE *f, const Elf64_Ehdr *e, Elf64_Phdr *ph, long *idx, 
   return die("no PT_INTERP (static or not a program)", file);
 }
 
-/* Find the PT_LOAD with the highest virtual end (p_vaddr + p_memsz): growing
-   it maps appended bytes above every other segment, so nothing is overlapped. */
-static int find_best_load(FILE *f, const Elf64_Ehdr *e, Elf64_Phdr *out, long *idx, const char *file) {
-  Elf64_Phdr ph;
-  int found = 0;
-  Elf64_Addr best = 0;
-  for (long i = 0; i < e->e_phnum; i++) {
-    if (fseek(f, (long)(e->e_phoff + i * sizeof ph), SEEK_SET) != 0 ||
-        fread(&ph, sizeof ph, 1, f) != 1)
-      return die("cannot read program headers", file);
-    if (ph.p_type != PT_LOAD) continue;
-    Elf64_Addr end = ph.p_vaddr + ph.p_memsz;
-    if (!found || end > best) { found = 1; best = end; *out = ph; *idx = i; }
-  }
-  return found ? 0 : die("no PT_LOAD to grow", file);
-}
-
 /* File offset the given virtual address maps to, from the PT_LOAD holding it.
    PT_INTERP's string is read by the loader at p_vaddr, so "in place" is only
    safe when p_offset is that address's file offset. */
@@ -151,35 +134,60 @@ static int cmd_set(const char *file, const char *newpath, long capacity) {
           fwrite(pad, ph.p_filesz, 1, f) != 1) ? die("cannot write PT_INTERP", file) : 0;
     free(pad);
   } else {
-    /* Make room, the way patchelf's rewriteSectionsLibrary does for .interp.
-       Append WANT bytes (the string, NUL-padded), grow the highest PT_LOAD so
-       they are mapped, and point PT_INTERP's p_vaddr at where they landed --
-       the loader reads it there (elf/rtld.c), so moving p_offset alone is
-       never enough. */
-    Elf64_Phdr load;
-    long load_idx;
-    char *buf;
-    if (find_best_load(f, &e, &load, &load_idx, file)) { fclose(f); return 1; }
+    /* Make room for a longer string. glibc's rtld reads its own name from the
+       memory PT_INTERP maps (the build-time prefix is cut from it), so the
+       string must be mapped -- but NOT by growing a segment that has a BSS
+       (p_memsz > p_filesz): that would turn the zero-fill region into file
+       bytes and corrupt the program (libc's globals, seen live). Instead,
+       place the string in a free file slot right after a loadable segment
+       with p_filesz == p_memsz, and extend only that segment; require the
+       slot's file range and the resulting vaddr range to be unowned by every
+       other segment. */
+    Elf64_Phdr phs[64];
+    long n = e.e_phnum;
+    if (n > (long)(sizeof phs / sizeof phs[0]))
+      { fclose(f); return die("too many program headers", file); }
+    for (long i = 0; i < n; i++) {
+      if (fseek(f, (long)(e.e_phoff + i * sizeof(Elf64_Phdr)), SEEK_SET) != 0 ||
+          fread(&phs[i], sizeof(Elf64_Phdr), 1, f) != 1)
+        { fclose(f); return die("cannot read program headers", file); }
+    }
     if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return die("cannot seek to the end", file); }
     long end = ftell(f);
     if (end < 0) { fclose(f); return die("cannot size the file", file); }
-    buf = calloc(1, want);
+
+    long best = -1;
+    Elf64_Off bestF = 0, bestV = 0;
+    for (long i = 0; i < n; i++) {
+      if (phs[i].p_type != PT_LOAD || phs[i].p_filesz != phs[i].p_memsz) continue;
+      Elf64_Off F = phs[i].p_offset + phs[i].p_filesz;   /* slot: right after it */
+      Elf64_Off V = phs[i].p_vaddr + phs[i].p_filesz;    /* where the string maps */
+      if (F + want > (Elf64_Off)end) continue;           /* reuse existing space only */
+      int clash = 0;
+      for (long j = 0; j < n && !clash; j++) {
+        if (F < phs[j].p_offset + phs[j].p_filesz && F + want > phs[j].p_offset) clash = 1;
+        if (V < phs[j].p_vaddr + phs[j].p_memsz && V + want > phs[j].p_vaddr) clash = 1;
+      }
+      if (clash) continue;
+      if (best < 0 || F > bestF) { best = i; bestF = F; bestV = V; }
+    }
+    if (best < 0) { fclose(f); return die("no free slot to grow PT_INTERP", file); }
+
+    char *buf = calloc(1, want);
     if (!buf) { fclose(f); return die("out of memory", file); }
     memcpy(buf, newpath, len + 1);
-    if (fwrite(buf, want, 1, f) != 1) { free(buf); fclose(f); return die("cannot append", file); }
+    if (fseek(f, (long)bestF, SEEK_SET) != 0 || fwrite(buf, want, 1, f) != 1)
+      { free(buf); fclose(f); return die("cannot write PT_INTERP", file); }
     free(buf);
 
-    /* Grow the load: map every file byte up to the new string's end. */
-    Elf64_Off new_end = (Elf64_Off)end + want;
-    load.p_filesz = new_end - load.p_offset;
-    if (load.p_memsz < load.p_filesz) load.p_memsz = load.p_filesz;
-    if (fseek(f, (long)(e.e_phoff + load_idx * sizeof load), SEEK_SET) != 0 ||
-        fwrite(&load, sizeof load, 1, f) != 1)
+    phs[best].p_filesz += want;
+    phs[best].p_memsz += want;
+    if (fseek(f, (long)(e.e_phoff + best * sizeof(Elf64_Phdr)), SEEK_SET) != 0 ||
+        fwrite(&phs[best], sizeof(Elf64_Phdr), 1, f) != 1)
       { fclose(f); return die("cannot grow the PT_LOAD", file); }
 
-    /* Point PT_INTERP at the appended string, at its mapped address. */
-    ph.p_offset = (Elf64_Off)end;
-    ph.p_vaddr = ph.p_paddr = load.p_vaddr + ((Elf64_Off)end - load.p_offset);
+    ph.p_offset = bestF;
+    ph.p_vaddr = ph.p_paddr = bestV;
     ph.p_filesz = ph.p_memsz = want;
     rc = (fseek(f, (long)(e.e_phoff + idx * sizeof ph), SEEK_SET) != 0 ||
           fwrite(&ph, sizeof ph, 1, f) != 1) ? die("cannot update the PT_INTERP header", file) : 0;
