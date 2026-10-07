@@ -77,16 +77,10 @@ diff -ruN '--exclude=.pc' '--exclude=debian' pristine/p/elf/dl-cache.c work/elf/
  #include <dl-procinfo.h>
  #include <stdint.h>
  #include <_itoa.h>
-@@ -385,14 +386,23 @@
+@@ -385,14 +386,17 @@
  char *
  _dl_load_cache_lookup (const char *name)
  {
-+  /* deb-native: the artifact has no ld.so.cache (prefix-contract.md,
-+     build invariant 3). Without a cache the search falls through to the
-+     system directories, which __dn_redirect already maps onto the live
-+     prefix (dl-load.c). */
-+  return NULL;
-+
 +  char dn_cache[512];
 +  __dn_build (dn_cache, sizeof dn_cache, "/usr/etc/ld.so.cache");
 +
