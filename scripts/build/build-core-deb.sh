@@ -238,6 +238,13 @@ DPkg::Post-Invoke { "$HK/dn-hook-post.sh"; };
 # apt drops to user _apt for its methods; the prefix is one user (fake root),
 # where that switch is refused. Run the methods as the current user.
 APT::Sandbox::User "root";
+# apt's own directories as absolute prefix paths. When apt hands dpkg the .debs
+# it links them and the kernel resolves the target's /var/, /etc/ literally --
+# the shim rewrites only the calls apt makes, not kernel path resolution -- so
+# a "/var/cache/apt/archives/..." target dangles and dpkg fails with "cannot
+# stat". Keep apt's cache under $PREFIX_ROOT so the targets are real.
+Dir::Cache::archives "$PREFIX_ROOT/var/cache/apt/archives";
+Dir::State::lists "$PREFIX_ROOT/var/lib/apt/lists";
 CONF
 mkdir -p "$STAGE/etc/apt/sources.list.d"
 cat > "$STAGE/etc/apt/sources.list.d/debian.sources" <<SRC
