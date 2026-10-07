@@ -37,25 +37,28 @@ unprivileged; `apt install gcc` compiles and runs end to end.
 Design: [`docs/spec/prefix-contract.md`](docs/spec/prefix-contract.md),
 [`docs/spec/prefix-layers.md`](docs/spec/prefix-layers.md).
 
-**Status**: the build applies the invariants and writes `.dn/`
-(`scripts/build/package-prefix.py`), with the 256-byte `PT_INTERP` capacity
-reserved by `dn-elf`; artifacts ship and bootstrap end to end
-(`scripts/host/ship-prefix.sh`, `bootstrap-prefix.sh`).
+**Status**: shipped. `build-glibc.yml` builds the patched glibc from Debian's
+own source; `build-prefix.yml` builds `core-ultra` and `core-deb` from it (an
+empty base + pinned `scripts/build/packages.tsv` + `profile.txt`) and publishes
+both to the single rolling `prefix` release. On device `ship-prefix.sh`
+extracts, `.dn/install.sh` relocates (the artifact's loader runs its `dn-elf`),
+and `.dn/bootstrap.sh` finishes core-deb (76 packages; `apt install figlet`
+runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
 
 **Open**:
 
-- Produce the real `core-ultra` and `core-deb` artifacts and publish them.
-- Build `core-ultra` from its own recipe instead of cutting it from a full
-  prefix; `core-deb` = that recipe + the Debian layer.
+- Build `core-ultra` from its own recipe instead of cutting it from the built
+  core-deb tree; `core-deb` = that recipe + the Debian layer.
 - **Bootstrap on a poor host**: where the first artifact comes from, and how
   one artifact yields the next (core-ultra, core-deb, specialized).
 - The `claude` specialized prefix: core-ultra recipe + the Claude binary as a
   glibc ELF at build time.
-- `core-ultra` size: most `gconv` modules (~20 of 92 MB); terminfo missing.
+- `core-ultra` size: most `gconv` modules; terminfo missing.
 - Launcher symlinks: make them relative after `normalize_symlinks` runs (the
   post hook's order leaves them absolute).
-- **CI**: add a workflow that builds the prefix artifact
-  (`build-overlay-glibc` → `build-core-deb` → `package-prefix`).
+- **Package list refresh**: `scripts/build/packages.tsv` pins exact versions;
+  a mirror point release makes them unreachable. A resolver, or a documented
+  refresh step, is needed.
 - **One build entry**: wrap the build steps in a single command (a `Makefile`
   or `scripts/build.sh`), so the README's build section is one line.
 
