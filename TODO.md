@@ -141,8 +141,13 @@ below.
   device where it doesn't), `security.*` xattr faking, the
   `DnIdentity`-keyed get/setuid. Verified by hand against both backends
   (`.check_fakeroot.c`), including a slot-reuse case for the DB backend.
-- [ ] Hardlinks (`link2symlink` — settle the PRoot-GPL licensing question
-  first, per `runtime.md`'s open items).
+- [x] Hardlinks: `src/dn-policy/dn-policy-hardlink.c` — link2symlink, a
+  refcount DB, and the stat/lstat fixup that makes a managed name report
+  as an ordinary multiply-linked regular file. GPL question resolved (not
+  actually a blocker, see `runtime.md`). Verified by hand
+  (`.check_hardlink.c`).
+- [ ] Absolute in-tree symlink resolution in `dn-policy.c`'s path
+  mapping (noted as not yet implemented when path mapping landed).
 - Patch glibc (full rebuild from Debian source, not the shipped 10-file
   swap — see `docs/spec/dn-glibc-prefix.md`'s status note): wire dn-policy
   into every path-taking function (public + internal + `syscall()`), route
