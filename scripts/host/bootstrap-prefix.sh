@@ -27,6 +27,12 @@ echo "bootstrap: installing $(grep -c . "$PROFILE") packages from the profile"
 # shellcheck disable=SC2046
 DEBIAN_FRONTEND=noninteractive apt-get install -y $(grep -v '^[[:space:]]*$' "$PROFILE" | grep -v '^#')
 
+# The CA bundle (/etc/ssl/certs/ca-certificates.crt) is generated, never
+# shipped: build it once, whether or not a trigger already did.
+if command -v update-ca-certificates >/dev/null 2>&1; then
+  update-ca-certificates
+fi
+
 for h in libc6 libc-bin; do
   st=$(dpkg-query -W -f='${db:Status-Abbrev}' "$h" 2>/dev/null || true)
   case $st in

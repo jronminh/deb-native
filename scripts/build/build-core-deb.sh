@@ -7,7 +7,7 @@
 # The .debs are fetched here, and only their translated result goes into the
 # tarball. Installing core-deb needs no network; a later `apt update` does.
 #
-# Build host tools: dpkg-deb, wget, xz, sha256sum, awk, sh.
+# Build host tools: dpkg-deb, wget or curl, xz, sha256sum, md5sum, awk, sh.
 #
 # Inputs:
 #   BASE          a core-ultra tree in build form (cut-core-ultra.py output,
@@ -53,7 +53,12 @@ ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd)
 LOADER=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 
 die() { echo "build-core-deb: $*" >&2; exit 1; }
-for t in dpkg-deb wget xz; do command -v "$t" >/dev/null 2>&1 || die "$t not found"; done
+for t in dpkg-deb xz md5sum; do command -v "$t" >/dev/null 2>&1 || die "$t not found"; done
+command -v wget >/dev/null 2>&1 || command -v curl >/dev/null 2>&1 || die "wget or curl not found"
+# fetch URL OUT: wget, or curl on a build host without wget.
+fetch() {
+  if command -v wget >/dev/null 2>&1; then wget -q -O "$2" "$1"; else curl -fsSL -o "$2" "$1"; fi
+}
 [ -d "$BASE" ] || die "BASE is not a directory: $BASE"
 
 W=$(mktemp -d)
@@ -71,7 +76,7 @@ cp -a "$BASE/." "$STAGE/"
 : > "$W/index.tsv"
 for base in "$MIRROR/dists/$SUITE/main" "$MIRROR/dists/$SUITE-updates/main" \
             "$SECURITY/dists/$SUITE-security/main"; do
-  if wget -q -O "$W/Packages.xz" "$base/binary-arm64/Packages.xz"; then
+  if fetch "$base/binary-arm64/Packages.xz" "$W/Packages.xz"; then
     xz -dc "$W/Packages.xz" | awk -v OFS='\t' '
       /^Package: / { p = substr($0, 10) }
       /^Version: / { v = substr($0, 10) }
@@ -92,7 +97,11 @@ while read -r name ver _arch; do
   s=$(printf '%s' "$line" | cut -f4)
   deb=$CACHE/$(basename "$f")
   if [ ! -f "$deb" ]; then
-    wget -q -O "$deb" "$MIRROR/$f" || wget -q -O "$deb" "$SECURITY/$f" || die "cannot fetch $name $ver"
+    # Fetched beside the cache entry and renamed, so a failed download never
+    # leaves a partial .deb that later builds would trust.
+    fetch "$MIRROR/$f" "$deb.part" || fetch "$SECURITY/$f" "$deb.part" \
+      || { rm -f "$deb.part"; die "cannot fetch $name $ver"; }
+    mv -f "$deb.part" "$deb"
   fi
   got=$(sha256sum "$deb" | cut -d' ' -f1)
   [ "$got" = "$s" ] || die "$name $ver: sha256 mismatch"
@@ -138,20 +147,44 @@ done < "$W/debs.list"
 #    (RT/ld.so) itself, so the kernel never has to resolve a guest PT_INTERP
 #    (docs/spec/overlay.md, "The exec gate").
 
-# 5. dpkg's database for every package in the artifact: status and file lists,
-#    from the packages' own control and contents, so apt sees them installed
-#    and never replaces the patched glibc.
+# 5. dpkg's database for every package in the artifact, as dpkg itself would
+#    leave it: status (with each package's Conffiles and their md5sums), file
+#    lists, and the control files (md5sums, conffiles, maintainer scripts,
+#    triggers, shlibs, ...) under info/, named <pkg>:<arch> for a
+#    Multi-Arch: same package.  So apt sees them installed and never replaces
+#    the patched glibc, dpkg --verify works, conffiles are kept on upgrade and
+#    removal runs the package's own scripts.
 mkdir -p "$STAGE/var/lib/dpkg/info" "$STAGE/var/lib/dpkg/updates"
 : > "$STAGE/var/lib/dpkg/status"
 while read -r name ver deb; do
-  dpkg-deb -f "$deb" >> "$STAGE/var/lib/dpkg/status"
-  case " libc6 libc-bin " in
-    *" $name "*) printf 'Status: hold ok installed\n\n' >> "$STAGE/var/lib/dpkg/status" ;;
-    *) printf 'Status: install ok installed\n\n' >> "$STAGE/var/lib/dpkg/status" ;;
-  esac
+  key=$name
+  [ "$(dpkg-deb -f "$deb" Multi-Arch)" = same ] && key="$name:$(dpkg-deb -f "$deb" Architecture)"
+  ctl=$W/ctl
+  rm -rf "$ctl"
+  dpkg-deb -e "$deb" "$ctl"
+  {
+    dpkg-deb -f "$deb"
+    case " libc6 libc-bin " in
+      *" $name "*) echo 'Status: hold ok installed' ;;
+      *) echo 'Status: install ok installed' ;;
+    esac
+    if [ -s "$ctl/conffiles" ]; then
+      echo 'Conffiles:'
+      while read -r cf; do
+        case "$cf" in /*) ;; *) continue ;; esac   # skip remove-on-upgrade etc.
+        [ -f "$STAGE$cf" ] || continue
+        printf ' %s %s\n' "$cf" "$(md5sum < "$STAGE$cf" | cut -d' ' -f1)"
+      done < "$ctl/conffiles"
+    fi
+    echo
+  } >> "$STAGE/var/lib/dpkg/status"
   dpkg-deb -c "$deb" | awk '{ p = $6; sub(/^\.\//, "", p); if (p != "" && p !~ /\/$/) print "/" p }' \
-    > "$STAGE/var/lib/dpkg/info/$name.list"
+    > "$STAGE/var/lib/dpkg/info/$key.list"
+  for f in "$ctl"/*; do
+    [ "${f##*/}" = control ] || cp -p "$f" "$STAGE/var/lib/dpkg/info/$key.${f##*/}"
+  done
 done < "$W/debs.list"
+rm -rf "$W/ctl"
 
 # 5b. Library search. The patched glibc is built for a flat libdir (usr/lib, as
 #     its path.prefix=/usr implies); the packages put libraries in the Debian
@@ -222,14 +255,23 @@ for d in libc6 libc-bin; do
   } >> "$REPO/Packages"
 done
 gzip -kf "$REPO/Packages"
-cat > "$REPO/Release" <<REL
+# Date and the index hashes: without them apt warns ("No Hash entry",
+# "Invalid 'Date' entry") and cannot check the indexes it reads.
+{
+  cat <<REL
 Origin: deb-native
 Label: deb-native
 Suite: stable
 Codename: dn
+Date: $(date -u -R ${SOURCE_DATE_EPOCH:+-d "@$SOURCE_DATE_EPOCH"})
 Architectures: arm64
 Description: deb-native local repo
+SHA256:
 REL
+  for i in Packages Packages.gz; do
+    printf ' %s %s %s\n' "$(sha256sum < "$REPO/$i" | cut -d' ' -f1)" "$(wc -c < "$REPO/$i" | tr -d ' ')" "$i"
+  done
+} > "$REPO/Release"
 
 
 # 7. deb-native's own layer: the bootstrap helper the prefix runs at login.
@@ -250,14 +292,15 @@ mkdir -p "$STAGE/etc" "$STAGE/usr/etc/ld.so.conf.d"
   printf '%s/usr/lib/aarch64-linux-gnu\n%s/usr/lib\n' "$PREFIX_ROOT" "$PREFIX_ROOT" > "$STAGE/usr/etc/ld.so.conf.d/dn.conf"
 mkdir -p "$STAGE/etc/apt/apt.conf.d"
 cat > "$STAGE/etc/apt/apt.conf.d/50deb-native" <<CONF
-# apt drops to user _apt for its methods; the prefix is one user (fake root),
-# where that switch is refused. Run the methods as the current user.
+# apt drops to user _apt for its methods and then checks the switch took.
+# Fake root reports uid 0 whatever set*id() asked for (nothing is recorded),
+# so that check fails: run the methods as root, the prefix's one user.
 APT::Sandbox::User "root";
-# apt's own directories as absolute prefix paths. When apt hands dpkg the .debs
-# it links them and the kernel resolves the target's /var/, /etc/ literally --
-# the shim rewrites only the calls apt makes, not kernel path resolution -- so
-# a "/var/cache/apt/archives/..." target dangles and dpkg fails with "cannot
-# stat". Keep apt's cache under $PREFIX_ROOT so the targets are real.
+# apt's own directories as absolute prefix paths. apt links fetched files into
+# its cache, and the kernel resolves a symlink's target literally, on the
+# host: a "/var/cache/apt/archives/..." target would name Android's /var.
+# Under $PREFIX_ROOT the targets are real (and still valid in the guest, where
+# dn-trace binds the tree to itself).
 Dir::Cache::archives "$PREFIX_ROOT/var/cache/apt/archives";
 Dir::State::lists "$PREFIX_ROOT/var/lib/apt/lists";
 CONF
@@ -287,6 +330,14 @@ Package: *
 Pin: release o=deb-native
 Pin-Priority: 1001
 CONF
+# ca-certificates' postinst writes /etc/ca-certificates.conf through debconf,
+# which the tree does not ship (and a shipped tree is not configured): write
+# its non-interactive default, every certificate enabled, so
+# update-ca-certificates can build the bundle HTTPS needs.
+if [ -d "$STAGE/usr/share/ca-certificates" ] && [ ! -e "$STAGE/etc/ca-certificates.conf" ]; then
+  ( cd "$STAGE/usr/share/ca-certificates" && find . -type f -name '*.crt' | sed 's|^\./||' | LC_ALL=C sort ) \
+    > "$STAGE/etc/ca-certificates.conf"
+fi
 if [ -n "${DN_PROFILE:-}" ]; then
   mkdir -p "$STAGE/.dn"
   cp -f "$DN_PROFILE" "$STAGE/.dn/profile"

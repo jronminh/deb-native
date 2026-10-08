@@ -145,8 +145,8 @@ size=200
 
 ## Build
 
-A build host: an `arm64` Linux machine with `gcc`, `make`, `libtalloc-dev`,
-`python3`, `dpkg-deb`, `wget`, `xz`. Nothing here runs inside a prefix or on
+A build host: an `arm64` Linux machine with `gcc`, `make`, `python3`,
+`dpkg-deb`, `wget` or `curl`, `xz`. Nothing here runs inside a prefix or on
 the target.
 
 1. **The overlay.** `scripts/build/build-overlay-glibc.sh` builds `dn-trace`
@@ -169,10 +169,15 @@ the target.
    one from an **empty base**: it indexes the mirror, downloads and
    sha256-verifies every package in the pinned list (using our `libc6`/
    `libc-bin` instead of the mirror's), extracts them, builds the `dpkg`
-   database, prunes files no shipped package owns, installs the overlay into
-   `RT`, builds the **local repo** (`RT/repo`) with the patched glibc
-   packages, ships the prefix's init and the loader, and writes the apt
-   configuration.
+   database as `dpkg` itself would leave it (status with each package's
+   `Conffiles`, file lists, and every control file: `md5sums`, `conffiles`,
+   maintainer scripts, triggers; `<pkg>:<arch>` for a `Multi-Arch: same`
+   package), prunes files no shipped package owns, installs the overlay into
+   `RT`, builds the **local repo** (`RT/repo`, its `Release` dated and
+   carrying the index hashes) with the patched glibc packages, ships the
+   prefix's init and the loader, and writes the apt configuration and
+   `etc/ca-certificates.conf` (every certificate enabled: the tree has no
+   debconf to ask). The bootstrap then builds the CA bundle.
 4. **The tarball.** `scripts/build/package-prefix.sh TREE --root PREFIX_ROOT
    --name NAME --out OUT.tar.gz` writes `.dn/` and tars the tree.
 5. **core-ultra**, optionally, from the core-deb tree

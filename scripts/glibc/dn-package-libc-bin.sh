@@ -84,5 +84,5 @@ echo "Regenerating DEBIAN/md5sums ..."
     > DEBIAN/md5sums )
 
 echo "Building $OUT ..."
-dpkg-deb -b "$WORK/pkg" "$OUT"
+dpkg-deb --root-owner-group -b "$WORK/pkg" "$OUT"
 echo "Done: $(dpkg-deb -f "$OUT" Package) $(dpkg-deb -f "$OUT" Version)"
