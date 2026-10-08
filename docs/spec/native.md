@@ -20,6 +20,7 @@ replacement for them. Status: the target, with what is built and what is open.
 - [The back-end: near-native by tier](#the-back-end-near-native-by-tier)
 - [Performance model and measurement](#performance-model-and-measurement)
 - [Hard limits and refusals](#hard-limits-and-refusals)
+- [Roadmap to the target](#roadmap-to-the-target)
 - [Status](#status)
 
 ## Related docs
@@ -159,14 +160,58 @@ file capabilities, TUN. Each is classified in
 (route to the older syscall). Security-relevant state is **refused, never
 faked**.
 
+## Roadmap to the target
+
+The work to reach the target, in the order that protects the goal. Measure
+before optimizing: the only evidence for "near-native" is a per-tier
+measurement.
+
+**0. Measure first** ([`../../TODO.md`](../../TODO.md) P4). Per-tier,
+per-syscall counters in `dn-trace`, plus microbenchmarks for the three regimes
+(CPU-bound, path/syscall-bound, I/O) against native on the same hardware.
+Output: a per-tier call-distribution table for install, compile and run.
+
+**1. Complete the fast path** ([`overlay.md`](overlay.md) P2) — the decisive
+step for near-native, because anything not on it falls to `ptrace`:
+
+- route every path/identity syscall through the gate page; flip the remaining
+  `src/syscalls.tsv` rows to `gate=yes` (including `bind` and the identity
+  group);
+- override the `syscalls.list`-generated wrappers (`mkdirat`/`unlinkat`/
+  `symlinkat`/`readlinkat`/`fchownat`/`chdir`/`chroot`/`*xattr`) so they take
+  the gate;
+- handle `syscall_cancel.S`'s cancellation markers;
+- **cache** path and symlink resolution (today every lookup hits the
+  filesystem directly);
+- narrow the seccomp filter to the syscalls that still need the tracer.
+
+Done when: a real workload never routes ordinary work to `ptrace`.
+
+**2. Make the front-end near-full.**
+
+- finish exec-gate rule 4 (a foreign loader);
+- **normalize** the restricted/divergent class in both tiers (`uname`, `/proc`
+  values, `rlimit`/cgroup, W^X `mprotect`) — the silent one
+  ([`emulation.md`](emulation.md), "Two kinds of hard limit");
+- settle the prefix-ABI contract (entry, env, the `dn-host` socket and its
+  version, lifecycle, hooks).
+
+**3. Emulate what the platform refuses** ([`emulation.md`](emulation.md)). A
+virtual mount table; `/proc/sys`, `/proc/net`, `/proc/self/*` synthesis;
+privileged-port translation; raw ICMP; capability synthesis; (stretch)
+userspace overlay copy-up with merged reads. Rule: every one of these stays
+**off the hot path**.
+
+**4. Clear the hot path** ([`overlay.md`](overlay.md) P3, plus hygiene).
+Static-link `libtalloc` into `dn-trace` so it has no runtime dependency; remove
+the old shim and the now-duplicated `dn_fake_root()` / `fakeroot_sysnums` once
+dn-policy carries them ("one policy, two enforcement points").
+
+**Order:** 0 → 1 → 2/3 (parallel) → 4. The invariant throughout: nothing may be
+added to the hot path.
+
 ## Status
 
 This doc is the target and its conditions, not a claim already met.
-[`overlay.md`](overlay.md) is the current runtime; the open work that most
-moves this model:
-
-- **path/symlink resolution cache** (today every lookup hits the filesystem);
-- **filter minimization** and flipping the remaining catalog rows to `gate=yes`;
-- **P4 measurement** (the per-tier table for install, compile, run);
-- the backend-emulation items of [`emulation.md`](emulation.md);
-- removing `libtalloc` from the overlay's own path.
+[`overlay.md`](overlay.md) is the current runtime; the phased work to close the
+gap is in [Roadmap to the target](#roadmap-to-the-target) above.
