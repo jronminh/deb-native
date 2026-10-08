@@ -152,7 +152,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.
    call_init_paths (&state);
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- work-after-official-patch/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:03.964680319 +0000
-+++ work/sysdeps/generic/dn-prefix.h	2026-10-08 12:26:51.127045342 +0000
++++ work/sysdeps/generic/dn-prefix.h	2026-10-08 13:02:20.127044530 +0000
 @@ -16,6 +16,7 @@
  #define _DN_PREFIX_H 1
  
@@ -191,7 +191,35 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/g
  #endif
  
  /* strstr-alike, rtld-safe.  */
-@@ -149,4 +163,59 @@
+@@ -86,20 +100,24 @@
+   return cached;
+ }
+ 
+-/* Build "<live prefix><suffix>" into dst.  */
++/* Build "<live prefix><suffix>" into dst.  With no live prefix (a static
++   program such as ldconfig: no loader to derive it from) the suffix alone,
++   a guest path: such a program runs under dn-trace, whose guest root is the
++   tree.  */
+ static char *
+ __dn_build (char *dst, size_t dstsz, const char *suffix)
+ {
+   const char *p = __dn_pfx ();
+   size_t pl = (p != NULL) ? strlen (p) : 0;
+   size_t sl = strlen (suffix);
+-  if (p == NULL || pl + sl + 1 > dstsz)
++  if (pl + sl + 1 > dstsz)
+     {
+       if (dstsz > 0)
+         dst[0] = '\0';
+       return dst;
+     }
+-  memcpy (dst, p, pl);
++  if (pl > 0)
++    memcpy (dst, p, pl);
+   memcpy (dst + pl, suffix, sl + 1);
+   return dst;
+ }
+@@ -149,4 +167,59 @@
    return path;
  }
  
@@ -1164,8 +1192,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +}
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c work/sysdeps/unix/sysv/linux/dn-policy-glue.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c	1970-01-01 00:00:00.000000000 +0000
-+++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 12:27:28.451045328 +0000
-@@ -0,0 +1,385 @@
++++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 13:14:31.839044251 +0000
+@@ -0,0 +1,390 @@
 +/* dn-policy glue for glibc itself: wires the already-shipped prefix
 +   self-derivation (__dn_prefix_get, elf/rtld.c) into dn_policy_init(),
 +   and gives open.c and the stat/faccessat family a drop-in replacement
@@ -1365,6 +1393,11 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +void
 +dn_policy_stat_post (const char *host_path, void *st)
 +{
++  /* Outside a prefix the stat is the kernel's: no owner rewrite, and no
++     hardlink fixup -- with no links_dir set up, that would take every
++     absolute symlink for a managed hardlink and report its target.  */
++  if (!dn_policy_active ())
++    return;
 +  dn_policy_fake_stat (host_path, (struct stat *) st);
 +}
 +
