@@ -146,8 +146,14 @@ below.
   as an ordinary multiply-linked regular file. GPL question resolved (not
   actually a blocker, see `runtime.md`). Verified by hand
   (`.check_hardlink.c`).
-- [ ] Absolute in-tree symlink resolution in `dn-policy.c`'s path
-  mapping (noted as not yet implemented when path mapping landed).
+- [x] Absolute in-tree symlink resolution: `map_and_resolve()`/
+  `resolve_symlink_chain()` in `dn-policy.c`, with a `normalize_into()`
+  cleanup pass for a relative symlink's `..`. Verified by hand
+  (`.check_symlink.c`): absolute/relative/chained symlinks, a component
+  appended past one, `_nofollow`, a not-yet-existing target, and
+  `-ELOOP` on a self-reference. **dn-policy is now feature-complete**
+  for everything `dn-policy.h` declares; not yet done: caching the
+  resolution (every lookup hits the real filesystem directly).
 - Patch glibc (full rebuild from Debian source, not the shipped 10-file
   swap — see `docs/spec/dn-glibc-prefix.md`'s status note): wire dn-policy
   into every path-taking function (public + internal + `syscall()`), route
