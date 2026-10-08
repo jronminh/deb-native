@@ -270,16 +270,19 @@ family now call into the real policy built and tested in `src/dn-policy/` --
 path translation through `dn_policy_redirect()` (and its `_nofollow` variant),
 plus `dn_policy_stat_post()` rewriting a stat result's owner fields from the
 owner store (fake root) -- instead of `__dn_redirect`'s inline root
-heuristic. The rest of the wiring (the chown, xattr, symlink and rename
-families, `syscall()` interposition, the gate page, the `RT/lib` search
-order) is still ahead; what is here is what made the first full glibc build
-with dn-policy inside it succeed, extended to the stat/access group.
+heuristic. It also carries the reverse translation (`getcwd()` and the
+`/proc/<self>` magic links -- `runtime.md`'s "Reverse translation"). The
+rest of the wiring (the chown, xattr, symlink and rename families,
+`syscall()` interposition, the gate page, the `RT/lib` search order) is
+still ahead; what is here is what made the first full glibc build with
+dn-policy inside it succeed, extended through the stat/access group and
+reverse translation.
 
 ## What it is
 
 `diff -ruN` between `work-after-official-patch/` (glibc source with
 `dn-glibc-android.patch` already applied once, per the section above) and
-`work/` (that plus the wiring). Nineteen files:
+`work/` (that plus the wiring). Twenty-two files:
 
 - New, byte-identical copies of `src/dn-policy/` under
   `sysdeps/unix/sysv/linux/`: `dn-policy.{h,c}`, `dn-policy-fakeroot.c`,
@@ -290,11 +293,12 @@ with dn-policy inside it succeed, extended to the stat/access group.
   `<TREE>/usr/lib/deb-native` (the directory the other non-dpkg runtime tools
   already use), calls `dn_policy_init()` lazily under `__libc_lock` (`open()`
   can be called from any thread immediately, unlike `__dn_prefix_init()`,
-  which runs in `dl_main`), and exposes three entry points: `dn_policy_redirect()`
-  (with `__dn_redirect`'s exact signature), `dn_policy_redirect_nofollow()`,
-  and `dn_policy_stat_post()`.
-- `sysdeps/generic/dn-prefix.h`: declares `dn_policy_redirect()` under
-  `#if !IS_IN (rtld)`.
+  which runs in `dl_main`), and exposes the entry points the wrappers
+  call: `dn_policy_redirect()` (with `__dn_redirect`'s exact signature),
+  `dn_policy_redirect_nofollow()`, `dn_policy_stat_post()`,
+  `dn_policy_getcwd_post()`, and `dn_policy_readlink_post()`.
+- `sysdeps/generic/dn-prefix.h`: declares every `dn_policy_*` entry point
+  above under `#if !IS_IN (rtld)`.
 - `sysdeps/unix/sysv/linux/Makefile`: adds the four `dn-policy*` objects to
   `sysdep_routines`.
 - The eight `open*.c` call sites (`open`, `open64`, `open{,64}_nocancel`,
@@ -310,6 +314,14 @@ with dn-policy inside it succeed, extended to the stat/access group.
   `dn_policy_stat_post()` so `st_uid`/`st_gid`/the setuid bits come from the
   owner store. This is glibc's side of `runtime.md`'s "path group" for
   stat/access.
+- Reverse translation: `readlink.c` translates the input path (nofollow)
+  and, only when that input is under `/proc/`, rewrites the returned target
+  into the guest path -- this is what makes `/proc/self/{cwd,fd/N,exe,root}`
+  read back as tree paths. A plain in-tree symlink's target is already a
+  guest path and is left alone; keeping the rewrite `/proc`-only also keeps
+  dn-policy's own `readlink()` calls (symlink resolution, hardlink
+  bookkeeping) seeing the raw host target. `getcwd.c` rewrites the path the
+  kernel returns, on both the syscall path and the generic fallback.
 - `elf/Makefile`: `dn_policy_fake_stat` joins `rtld-stubbed-symbols` -- see
   below.
 
@@ -387,9 +399,18 @@ translate into the tree; `lstat` honors `AT_SYMLINK_NOFOLLOW`; `stat` follows
 the symlink; a missing path still gives `ENOENT`; and the fake-root
 post-processing really runs (`dn-policy-fakeroot.o`/`-hardlink.o` are
 reached -- `RT/state/owners.db` and `state/links/` appear once a stat goes
-through). The same binary run directly under the host loader fails, so the
-translation is what made it work.
+through). The same binary run under the host loader fails, so the translation
+is what made it work.
+
+A second binary, exec'd with the prefix's own loader as its `PT_INTERP` (the
+real launch shape) and placed inside the tree, confirms the reverse
+translation: `getcwd()` inside the tree returns `/etc`; `readlink()` of
+`/proc/self/cwd`, `/proc/self/exe` and `/proc/self/fd/N` returns `/etc`,
+`/usr/bin/dn-rt-rev` and `/etc/dn-runtime-marker`; and an ordinary in-tree
+symlink's stored target comes back unchanged.
 
 Covers the public `open`/`openat` and `stat`/`fstatat`/`statx`/`faccessat`
-families; the chown, xattr, symlink and rename families, `syscall()`
-interposition, the gate page and the `RT/lib` search order are still open.
+families plus reverse translation (`getcwd`, the `/proc/self` magic links);
+the chown, xattr, symlink and rename families, `readlinkat()` (only
+`readlink()` is wired so far), `syscall()` interposition, the gate page and
+the `RT/lib` search order are still open.

@@ -24,8 +24,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/Makef
  ifeq ($(have-ssp),yes)
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- work-after-official-patch/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:03.964680319 +0000
-+++ work/sysdeps/generic/dn-prefix.h	2026-10-08 08:40:04.346284853 +0000
-@@ -149,4 +149,27 @@
++++ work/sysdeps/generic/dn-prefix.h	2026-10-08 08:49:59.098284627 +0000
+@@ -149,4 +149,34 @@
    return path;
  }
  
@@ -50,6 +50,13 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/g
 +   root").  @st is really a `struct stat`; spelled void* so this header
 +   need not pull <sys/stat.h> into every includer. */
 +extern void dn_policy_stat_post (const char *host_path, void *st);
++/* Reverse translation (runtime.md, "Reverse translation"): turn a real
++   host path the kernel returned into the guest path.  getcwd() rewrites
++   @buf (NUL-terminated, capacity @cap) in place; readlink()'s result is
++   @n bytes in @buf (capacity @len, NOT NUL-terminated) and is rewritten
++   only if it still fits.  Both leave a value outside TREE/RT alone. */
++extern void dn_policy_getcwd_post (char *buf, size_t cap);
++extern long dn_policy_readlink_post (char *buf, size_t len, long n);
 +#endif
 +
  #endif /* _DN_PREFIX_H */
@@ -750,8 +757,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +}
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c work/sysdeps/unix/sysv/linux/dn-policy-glue.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c	1970-01-01 00:00:00.000000000 +0000
-+++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 08:44:30.594284752 +0000
-@@ -0,0 +1,137 @@
++++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 08:50:03.558284625 +0000
+@@ -0,0 +1,181 @@
 +/* dn-policy glue for glibc itself: wires the already-shipped prefix
 +   self-derivation (__dn_prefix_get, elf/rtld.c) into dn_policy_init(),
 +   and gives open.c and the stat/faccessat family a drop-in replacement
@@ -887,6 +894,50 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +dn_policy_stat_post (const char *host_path, void *st)
 +{
 +  dn_policy_fake_stat (host_path, (struct stat *) st);
++}
++
++/* Reverse translation (docs/spec/runtime.md, "Reverse translation"):
++   turn a real host path the kernel just handed back into the guest path
++   a program in the tree should see.  Both are no-ops for a path outside
++   TREE/RT (dn_policy_detranslate_path() declines it), so a value that is
++   already a guest path is left as is.  */
++void
++dn_policy_getcwd_post (char *buf, size_t cap)
++{
++  char out[PATH_MAX];
++  size_t len;
++
++  if (!dn_policy_ready && !dn_policy_broken)
++    dn_policy_try_init ();
++  if (!dn_policy_ready || buf == NULL)
++    return;
++  if (dn_policy_detranslate_path (buf, out, sizeof out) < 0)
++    return;
++  len = strlen (out);
++  if (len < cap)
++    memcpy (buf, out, len + 1);
++}
++
++long
++dn_policy_readlink_post (char *buf, size_t len, long n)
++{
++  char in[PATH_MAX];
++  char out[PATH_MAX];
++  size_t olen;
++
++  if (!dn_policy_ready && !dn_policy_broken)
++    dn_policy_try_init ();
++  if (!dn_policy_ready || buf == NULL || n <= 0 || (size_t) n >= sizeof in)
++    return n;
++  memcpy (in, buf, (size_t) n);
++  in[n] = '\0';
++  if (dn_policy_detranslate_path (in, out, sizeof out) < 0)
++    return n;
++  olen = strlen (out);
++  if (olen > len)
++    return n;
++  memcpy (buf, out, olen);
++  return (long) olen;
 +}
 +#endif
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-hardlink.c work/sysdeps/unix/sysv/linux/dn-policy-hardlink.c
@@ -2193,6 +2244,41 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
    return INTERNAL_SYSCALL_ERROR_P (r)
  	 ? INLINE_SYSCALL_ERROR_RETURN_VALUE (-r)
  	 : 0;
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/getcwd.c work/sysdeps/unix/sysv/linux/getcwd.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/getcwd.c	2026-10-08 07:51:04.436680319 +0000
++++ work/sysdeps/unix/sysv/linux/getcwd.c	2026-10-08 08:50:23.106284617 +0000
+@@ -25,6 +25,7 @@
+ 
+ #include <sysdep.h>
+ #include <sys/syscall.h>
++#include <dn-prefix.h>
+ 
+ 
+ /* If we compile the file for use in ld.so we don't need the feature
+@@ -91,6 +92,12 @@
+ 	buf = path;
+ #endif
+ 
++#if !IS_IN (rtld)
++      /* Reverse translation (runtime.md): the guest sees the tree
++	 path, not the real one. */
++      dn_policy_getcwd_post (buf, alloc_size);
++#endif
++
+       return buf;
+     }
+ 
+@@ -114,6 +121,10 @@
+ 	free (path);
+ #endif
+ 
++#if !IS_IN (rtld)
++      dn_policy_getcwd_post (result, alloc_size);
++#endif
++
+       return result;
+     }
+ 
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/open.c work/sysdeps/unix/sysv/linux/open.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/open.c	2026-10-08 07:51:04.648680319 +0000
 +++ work/sysdeps/unix/sysv/linux/open.c	2026-10-08 07:52:23.760680289 +0000
@@ -2337,6 +2423,59 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
  
    return INLINE_SYSCALL_CALL (openat, fd, file, oflag, mode);
  }
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/readlink.c work/sysdeps/unix/sysv/linux/readlink.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/readlink.c	2026-10-08 07:51:04.592680319 +0000
++++ work/sysdeps/unix/sysv/linux/readlink.c	2026-10-08 08:50:11.178284622 +0000
+@@ -19,6 +19,7 @@
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ 
+ /* Read the contents of the symbolic link PATH into no more than
+    LEN bytes of BUF.  The contents are not null-terminated.
+@@ -26,10 +27,39 @@
+ ssize_t
+ __readlink (const char *path, char *buf, size_t len)
+ {
++  ssize_t n;
++  const char *rp = path;
++
++#if !IS_IN (rtld)
++  /* dn-policy: translate an absolute guest path before the syscall, and
++     reverse-translate the result for the /proc/<self> magic links (cwd,
++     fd/N, exe, root), whose target is a real host path (runtime.md,
++     "Reverse translation").  A regular in-tree symlink stores a guest
++     path already, so its target is left as is -- and, importantly,
++     dn-policy's own readlink() calls (symlink resolution, hardlink
++     bookkeeping) are on non-/proc host paths and must keep seeing the
++     raw target.  */
++  char dn_path[DN_PREFIX_MAX];
++  int dn_proc = 0;
++
++  if (path != NULL && path[0] == '/')
++    {
++      rp = dn_policy_redirect_nofollow (dn_path, sizeof dn_path, path);
++      if (__dn_starts (path, "/proc/"))
++	dn_proc = 1;
++    }
++#endif
++
+ #ifdef __NR_readlink
+-  return INLINE_SYSCALL_CALL (readlink, path, buf, len);
++  n = INLINE_SYSCALL_CALL (readlink, rp, buf, len);
+ #else
+-  return INLINE_SYSCALL_CALL (readlinkat, AT_FDCWD, path, buf, len);
++  n = INLINE_SYSCALL_CALL (readlinkat, AT_FDCWD, rp, buf, len);
++#endif
++
++#if !IS_IN (rtld)
++  if (n > 0 && dn_proc)
++    n = dn_policy_readlink_post (buf, len, n);
+ #endif
++  return n;
+ }
+ weak_alias (__readlink, readlink)
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/statx.c work/sysdeps/unix/sysv/linux/statx.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/statx.c	2026-10-08 07:51:04.648680319 +0000
 +++ work/sysdeps/unix/sysv/linux/statx.c	2026-10-08 08:40:25.782284845 +0000
