@@ -67,10 +67,16 @@ packages are optional requirements in the README.
 `cli/proot.c`: option tables, help, qemu, `-r`/`-w`/`-0`, the pruned
 extensions' options):
 
-    dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--] PROGRAM [ARG...]
+    dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--rt-loader PATH] [--] PROGRAM [ARG...]
 
 - guest root is always the host `/`, cwd is the current directory;
 - a `-b` whose host path does not exist is skipped (PRoot warned);
+- `--rt-loader PATH` names the runtime's loader (dn-glibc `ld.so`): the exec
+  gate then runs a rule-3 (glibc dynamic) program through it as
+  `loader --argv0 <orig argv0> <real path> <args>` (`docs/spec/runtime.md`,
+  "The exec gate") — the kernel cannot find a guest `PT_INTERP` itself, and
+  the tree's own loader has no dn-policy wiring.  Without the option the
+  behavior is unchanged;
 - the arguments are a subset of `proot`'s.
 
 ### 3. The kernel execs the program; PRoot's loader is gone
@@ -84,6 +90,10 @@ programs have none. So `execve`
 now translates only the program path (and a script's `#!` interpreter,
 `execve/shebang.c`) and lets the kernel load it. `/proc/self/exe` is still
 emulated from the guest path committed after a successful `execve`.
+
+With the exec gate (P2), one exception: given `--rt-loader`, a rule-3
+(glibc dynamic) program is instead exec'd through the runtime's loader, so
+it gets dn-policy in-process — see `docs/spec/runtime.md`, "The exec gate".
 
 Removed with the loader (−2,774 lines, binary 191 → 153 KB):
 

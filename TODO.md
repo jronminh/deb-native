@@ -194,6 +194,9 @@ below.
   (`INTERNAL_SYSCALL_RAW` + the cancellation asm) and add the gate-IP rule
   to the shared filter in `dn-trace`.
 - Turn on exec-gate rules 3/4 (rewrite to `RT/ld.so ...`). Drop the shim.
+  - Rule 3 done: `dn-trace --rt-loader PATH` rewrites a glibc-dynamic exec to
+    `loader --argv0 <orig argv0> <real path> <args>`. The runtime must pass
+    its own loader path. Rule 4 (a foreign loader) still to do.
   Switch glibc-family packages to version pinning (`/etc/apt/preferences.d/dn-glibc`,
   auto-generated from `Source: glibc`), drop the hand-written resolver.
 - Done when: packages in use, reinstalled from stock `.deb`s, run correctly;

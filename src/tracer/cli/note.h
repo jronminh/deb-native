@@ -51,4 +51,11 @@ extern void note(const Tracee *tracee, Severity severity, Origin origin, const c
 extern int global_verbose_level;
 extern const char *global_tool_name;
 
+/* deb-native: the runtime's loader (dn-glibc's ld.so), from --rt-loader.
+   When set, the exec gate runs a rule-3 (glibc dynamic) program through it
+   instead of exec'ing the program directly -- the tree's own loader has no
+   dn-policy wiring, this one does (docs/spec/runtime.md, "The exec gate").
+   NULL by default: behavior is unchanged. */
+extern const char *global_rt_loader;
+
 #endif /* NOTE_H */

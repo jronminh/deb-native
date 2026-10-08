@@ -4,7 +4,7 @@
  * PRoot's cli/cli.c + cli/proot.c (option tables, usage, extensions'
  * options, qemu, -r/-w/-0/...).  It keeps only what dn-run passes:
  *
- *   dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--] PROGRAM [ARG...]
+ *   dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--rt-loader PATH] [--] PROGRAM [ARG...]
  *
  * The guest root is always the host "/", the working directory is the
  * current one, and a -b whose host path does not exist is skipped
@@ -30,7 +30,11 @@
 #include "path/canon.h"
 #include "path/path.h"
 
-#define USAGE "usage: dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--] PROGRAM [ARG...]\n"
+#define USAGE "usage: dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--rt-loader PATH] [--] PROGRAM [ARG...]\n"
+
+/* deb-native, --rt-loader: the runtime loader the exec gate runs rule-3
+   programs through.  See cli/note.h. */
+const char *global_rt_loader = NULL;
 
 /* -b HOST[:GUEST]; GUEST defaults to HOST.  */
 static int add_binding(Tracee *tracee, const char *value)
@@ -138,6 +142,10 @@ int main(int argc, char *const argv[])
 			status = add_binding(tracee, argv[++i]);
 		else if (strcmp(argv[i], "-v") == 0 && i + 1 < argc) {
 			tracee->verbose = strtol(argv[++i], NULL, 10);
+			status = 0;
+		}
+		else if (strcmp(argv[i], "--rt-loader") == 0 && i + 1 < argc) {
+			global_rt_loader = argv[++i];
 			status = 0;
 		}
 		else {

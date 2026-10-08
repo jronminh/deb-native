@@ -30,6 +30,7 @@
 #include "execve/execve.h"
 #include "execve/shebang.h"
 #include "execve/elf.h"
+#include "execve/aoxp.h"
 #include "path/path.h"
 #include "tracee/tracee.h"
 #include "syscall/syscall.h"
@@ -67,13 +68,22 @@ int translate_and_check_exec(Tracee *tracee, char host_path[PATH_MAX], const cha
 	return 0;
 }
 
-/* deb-native, P1 (docs/spec/runtime.md, "The exec gate"): classify the
- * final @host_path by the 5 rules there, purely from its header -- no
- * trial run. Observe-only for now: the result is only logged, nothing
- * here changes what gets exec'd. P2 wires this into dn-policy and
- * rewrites the exec per rules 3/4.  */
+/* deb-native (docs/spec/runtime.md, "The exec gate"): classify the final
+ * @host_path by the 5 rules there, purely from its header -- no trial run.
+ * Rule 1 (the "#!" script case) is already unwrapped by expand_shebang(),
+ * so @host_path here is always the final ELF (or the final non-ELF, for
+ * rule 5).  Rule 3 is acted on (via --rt-loader); rules 2/4/5 are only
+ * classified for now.  */
 
 #define DN_GLIBC_LOADER_SUFFIX "/ld-linux-aarch64.so.1"
+
+enum {
+	DN_RULE_ERROR = 0,
+	DN_RULE_STATIC = 2,
+	DN_RULE_GLIBC = 3,
+	DN_RULE_FOREIGN = 4,
+	DN_RULE_NOT_RUNNABLE = 5,
+};
 
 typedef struct {
 	int fd;
@@ -107,10 +117,8 @@ static int find_interp(const ElfHeader *elf_header, const ProgramHeader *program
 	return 1;
 }
 
-/* Rules 2-5. Rule 1 (the "#!" script case) is already unwrapped by
- * expand_shebang() before this runs, so @host_path here is always the
- * final ELF (or the final non-ELF, for rule 5).  */
-static const char *classify_exec(const char *host_path)
+/* Rules 2-5, returning the rule number; @interp is filled for rules 3/4. */
+static int classify_exec(const char *host_path, char interp[PATH_MAX])
 {
 	ElfHeader elf_header;
 	FindInterp result = { .found = false };
@@ -118,25 +126,75 @@ static const char *classify_exec(const char *host_path)
 	size_t interp_len;
 	int status;
 
+	interp[0] = '\0';
+
 	result.fd = open_elf(host_path, &elf_header);
 	if (result.fd < 0)
-		return "rule5-not-runnable";
+		return DN_RULE_NOT_RUNNABLE;
 
 	status = iterate_program_headers(NULL, result.fd, &elf_header, find_interp, &result);
 	close(result.fd);
 
 	if (status < 0 && status != 1)
-		return "elf-read-error";
+		return DN_RULE_ERROR;
 
 	if (!result.found)
-		return "rule2-static";
+		return DN_RULE_STATIC;
 
 	interp_len = strlen(result.interp);
+	memcpy(interp, result.interp, interp_len + 1);
+
 	if (interp_len >= suffix_len
 	    && strcmp(result.interp + interp_len - suffix_len, DN_GLIBC_LOADER_SUFFIX) == 0)
-		return "rule3-glibc-dynamic";
+		return DN_RULE_GLIBC;
 
-	return "rule4-foreign";
+	return DN_RULE_FOREIGN;
+}
+
+/* deb-native, exec-gate rule 3: run @host_path through @loader (the
+ * runtime's dn-glibc ld.so) as
+ *
+ *     loader --argv0 <original argv0> <host_path> <args...>
+ *
+ * The kernel cannot find a guest PT_INTERP itself (it looks on Android's
+ * real filesystem, not in the tree), and the tree's own loader has no
+ * dn-policy wiring while this one does.  The new argv is built in the
+ * tracee's memory; argv[0] is preserved through ld.so's --argv0.  Returns
+ * -errno on failure.  */
+static int dn_exec_via_loader(Tracee *tracee, const char *loader, const char *host_path)
+{
+	ArrayOfXPointers *argv = NULL;
+	char *orig0 = NULL;
+	int status;
+
+	status = fetch_array_of_xpointers(tracee, &argv, SYSARG_2, 0);
+	if (status < 0)
+		return status;
+
+	status = read_xpointee_as_string(argv, 0, &orig0);
+	if (status < 0 || orig0 == NULL) {
+		orig0 = talloc_strdup(tracee->ctx, host_path);
+		if (orig0 == NULL)
+			return -ENOMEM;
+	}
+
+	/* New argv is [loader, "--argv0", orig0, host_path, orig1, ...]:
+	   insert four front entries, then drop the old argv[0] (which moved
+	   to index 4).  */
+	status = resize_array_of_xpointers(argv, 0, 4);
+	if (status < 0)
+		return status;
+	status = resize_array_of_xpointers(argv, 4, -1);
+	if (status < 0)
+		return status;
+	status = write_xpointees(argv, 0, 4, loader, "--argv0", orig0, host_path);
+	if (status < 0)
+		return status;
+	status = push_array_of_xpointers(argv, SYSARG_2);
+	if (status < 0)
+		return status;
+
+	return set_sysarg_path(tracee, loader, SYSARG_1);
 }
 
 /**
@@ -158,6 +216,8 @@ int translate_execve_enter(Tracee *tracee)
 	char user_path[PATH_MAX];
 	char host_path[PATH_MAX];
 	char new_exe[PATH_MAX];
+	char interp[PATH_MAX];
+	int rule;
 	int status;
 
 	status = get_sysarg_path(tracee, user_path, SYSARG_1);
@@ -170,12 +230,13 @@ int translate_execve_enter(Tracee *tracee)
 		 * trying to execute a directory.  */
 		return status == -EISDIR ? -EACCES : status;
 
-	/* P1 exec gate: classify and log only, see classify_exec() above.  */
-	VERBOSE(tracee, 1, "exec gate: %s -> %s", host_path, classify_exec(host_path));
+	rule = classify_exec(host_path, interp);
+	VERBOSE(tracee, 1, "exec gate: %s -> rule %d", host_path, rule);
 
 	/* Remember the new value for "/proc/self/exe", committed by
 	 * translate_execve_exit() once the execve succeeded.  It is
-	 * a guest path, hence detranslate_path().  */
+	 * a guest path, hence detranslate_path().  This stays the program
+	 * even under rule 3, where the loader is what actually runs.  */
 	talloc_unlink(tracee, tracee->host_exe);
 	tracee->host_exe = talloc_strdup(tracee, host_path);
 
@@ -185,6 +246,19 @@ int translate_execve_enter(Tracee *tracee)
 	status = detranslate_path(tracee, new_exe, NULL);
 	if (status >= 0)
 		tracee->new_exe = talloc_strdup(tracee, new_exe);
+
+	/* Rule 3: run it through the runtime's loader (dn-glibc), which
+	 * carries the dn-policy wiring; the tree's own loader does not.
+	 * Only when --rt-loader names an existing loader -- otherwise the
+	 * behavior is unchanged.  */
+	if (rule == DN_RULE_GLIBC
+	    && global_rt_loader != NULL
+	    && access(global_rt_loader, X_OK) == 0) {
+		status = dn_exec_via_loader(tracee, global_rt_loader, host_path);
+		if (status < 0)
+			return status;
+		return 0;
+	}
 
 	return set_sysarg_path(tracee, host_path, SYSARG_1);
 }
