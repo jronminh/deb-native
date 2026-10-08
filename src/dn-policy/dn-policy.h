@@ -76,6 +76,11 @@ extern "C" {
  * root"/"The owner store") and records the choice for the rest of the
  * process's lifetime. Returns 0, or a negative errno if @tree_root/
  * @rt_root are unusable (not absolute, too long, ...).
+ *
+ * DN_POLICY_OWNER_BACKEND=db|xattr in the environment skips the probe
+ * and forces that backend (diagnosis, and testing the DB backend's code
+ * path on a device where xattr happens to work everywhere TREE could
+ * live).
  */
 int dn_policy_init(const char *tree_root, const char *rt_root);
 
@@ -156,38 +161,54 @@ typedef struct {
 	dev_t  rdev;       /* for a faked device file (mknod) */
 } DnOwnerRecord;
 
-/* Look up the owner-store record for (@dev, @ino). Returns 0 with
- * *@out filled in, or -ENOENT if the file has no record (caller should
- * then report uid 0, gid 0 -- "an ordinary Debian install", per
- * runtime.md), or another negative errno on a real failure reading the
- * store. */
-int dn_policy_owner_get(dev_t dev, ino_t ino, DnOwnerRecord *out);
+/* Look up the owner-store record for @host_path (identified by
+ * (@dev, @ino) so a rename is still the same record under the DB
+ * backend; the xattr backend ignores dev/ino and reads @host_path's
+ * own xattr directly -- both are needed because the two backends key
+ * the record differently, not because the caller should pick one).
+ * Returns 0 with *@out filled in, or -ENOENT if the file has no record
+ * (caller should then report uid 0, gid 0 -- "an ordinary Debian
+ * install", per runtime.md), or another negative errno on a real
+ * failure reading the store. */
+int dn_policy_owner_get(const char *host_path, dev_t dev, ino_t ino, DnOwnerRecord *out);
 
-/* Record a new owner for (@dev, @ino), creating the entry if absent.
+/* Record a new owner for @host_path, creating the entry if absent.
  * Returns 0, or a negative errno (-EIO for the on-disk backend, -ENOSPC
  * if the xattr backend's value is rejected by the filesystem, ...). */
-int dn_policy_owner_set(dev_t dev, ino_t ino, const DnOwnerRecord *record);
+int dn_policy_owner_set(const char *host_path, dev_t dev, ino_t ino, const DnOwnerRecord *record);
 
 /* Called when a file's last link is removed (runtime.md: "mục bị xóa khi
- * file bị xóa link cuối cùng"). Not an error if there was no record. */
-int dn_policy_owner_forget(dev_t dev, ino_t ino);
+ * file bị xóa link cuối cùng"). Not an error if there was no record.
+ * @host_path may already be gone (the unlink that triggered this call
+ * already happened) -- only the DB backend needs it to still exist;
+ * the xattr backend's record disappears with the file on its own, so
+ * this is a no-op there. */
+int dn_policy_owner_forget(const char *host_path, dev_t dev, ino_t ino);
 
 /* Rewrite @st's st_uid/st_gid/permission bits from the owner store
- * before a stat-family result is returned to the guest program. A file
- * absent from the store is left reporting uid 0, gid 0. Returns 0 always
- * (a store-read failure here degrades to "no record", not an error --
+ * before a stat-family result is returned to the guest program.
+ * @host_path is the path the real stat/fstatat/statx call just used --
+ * needed here for the same reason dn_policy_owner_get() needs it (the
+ * xattr backend has no other way to find the record); @st already
+ * carries (st_dev, st_ino) for the DB backend's key. A file absent from
+ * the store is left reporting uid 0, gid 0. Returns 0 always (a
+ * store-read failure here degrades to "no record", not an error --
  * breaking every stat() call over a store hiccup is worse than
  * occasionally under-reporting an owner). */
-void dn_policy_fake_stat(struct stat *st);
+void dn_policy_fake_stat(const char *host_path, struct stat *st);
 
 /* security.* xattrs (setcap and friends): always faked, always
- * succeeds. @name is the full xattr name (e.g. "security.capability");
+ * succeeds -- a *real* write of one of these is what's failing in the
+ * first place (Android denies it), so this never attempts the real
+ * xattr regardless of which owner-store backend is active; it always
+ * goes in the internal store, keyed the same way as the owner record
+ * above. @name is the full xattr name (e.g. "security.capability");
  * callers should route here only when dn_policy_is_fake_xattr(name) is
  * true. */
 int dn_policy_is_fake_xattr(const char *name);
-int dn_policy_fake_setxattr(dev_t dev, ino_t ino, const char *name, const void *value, size_t size);
-int dn_policy_fake_getxattr(dev_t dev, ino_t ino, const char *name, void *value_out, size_t cap);
-int dn_policy_fake_removexattr(dev_t dev, ino_t ino, const char *name);
+int dn_policy_fake_setxattr(const char *host_path, dev_t dev, ino_t ino, const char *name, const void *value, size_t size);
+int dn_policy_fake_getxattr(const char *host_path, dev_t dev, ino_t ino, const char *name, void *value_out, size_t cap);
+int dn_policy_fake_removexattr(const char *host_path, dev_t dev, ino_t ino, const char *name);
 
 /* ---- Hardlinks ------------------------------------------------------ */
 

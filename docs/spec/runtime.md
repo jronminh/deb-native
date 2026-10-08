@@ -544,8 +544,13 @@ that replaces them.
       the owner store is kept.
 - [ ] Choosing `P_GATE`: needs a real memory map of a few on-device
       processes to find free 39-bit space.
-- [ ] Borrowing code from PRoot (symlink resolution, `link2symlink`) is
-      GPL. Settle the repo's license before copying.
+- [x] Borrowing the idea from PRoot's `link2symlink` is not a licensing
+      problem (resolved): this repo is GPL-3.0-or-later (`LICENSE`), and
+      PRoot's own code (already vendored in `src/tracer/`) is
+      GPL-2.0-or-later -- compatible. dn-policy's hardlink implementation
+      is a clean-room reimplementation of the same idea, not a literal
+      copy of PRoot's extension source (which isn't in this repo's pruned
+      fork to begin with).
 - [ ] dn-policy's calling convention isn't defined yet: function
       signatures, error/return conventions, thread safety, and — since
       dn-glibc calls it in-process while `dn-trace` must read/write a

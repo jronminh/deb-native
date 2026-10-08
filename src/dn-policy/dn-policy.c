@@ -15,6 +15,7 @@
  */
 
 #include "dn-policy.h"
+#include "dn-policy-internal.h"
 
 #include <string.h>
 #include <errno.h>
@@ -62,6 +63,7 @@ static int copy_out(const char *src, char *out, size_t cap)
 int dn_policy_init(const char *tree_root_in, const char *rt_root_in)
 {
 	size_t len;
+	int status;
 
 	if (tree_root_in == NULL || tree_root_in[0] != '/')
 		return -EINVAL;
@@ -91,8 +93,9 @@ int dn_policy_init(const char *tree_root_in, const char *rt_root_in)
 	memcpy(rt_root, rt_root_in, len + 1);
 	rt_root_len = len;
 
-	/* TODO(fake-root increment): probe user.dn.* xattr support here
-	 * and record the owner-store backend choice. */
+	status = dn_policy_fakeroot_init(rt_root);
+	if (status != 0)
+		return status;
 
 	initialized = 1;
 	return 0;
