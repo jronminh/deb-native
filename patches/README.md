@@ -271,20 +271,21 @@ path translation through `dn_policy_redirect()` (and its `_nofollow` variant),
 plus `dn_policy_stat_post()` rewriting a stat result's owner fields from the
 owner store (fake root) -- instead of `__dn_redirect`'s inline root
 heuristic. It also carries the reverse translation (`getcwd()` and the
-`/proc/<self>` magic links) and path translation for the simple manipulation
+`/proc/<self>` magic links), path translation for the simple manipulation
 wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
-`truncate`, `utimensat`/`utimes`/`utime`, `statfs`). The rest of the wiring
-(the chown/chmod/xattr families, `link`/`unlink`'s hardlink bookkeeping,
-`chdir`, the `syscall()` interposition, the gate page, the `RT/lib` search
-order) is still ahead; what is here is what made the first full glibc build
-with dn-policy inside it succeed, extended through the stat/access group,
-reverse translation and the manipulation wrappers.
+`truncate`, `utimensat`/`utimes`/`utime`, `statfs`), and the `syscall(2)`
+interposition for the path group. The rest of the wiring (the chown/chmod/
+xattr families, `link`/`unlink`'s hardlink bookkeeping, `chdir`/`chroot`,
+the gate page, the `RT/lib` search order) is still ahead; what is here is
+what made the first full glibc build with dn-policy inside it succeed,
+extended through the stat/access group, reverse translation, the
+manipulation wrappers and `syscall()`.
 
 ## What it is
 
 `diff -ruN` between `work-after-official-patch/` (glibc source with
 `dn-glibc-android.patch` already applied once, per the section above) and
-`work/` (that plus the wiring). Thirty-one files:
+`work/` (that plus the wiring). Thirty-two files:
 
 - New, byte-identical copies of `src/dn-policy/` under
   `sysdeps/unix/sysv/linux/`: `dn-policy.{h,c}`, `dn-policy-fakeroot.c`,
@@ -331,8 +332,18 @@ reverse translation and the manipulation wrappers.
   and `utimensat.c` (`__utimensat64_helper`, which `utimes`/`utime` reach
   too). The `*at` variants that `syscalls.list` generates directly
   (`mkdirat`/`unlinkat`/`symlinkat`/`linkat`/`readlinkat`,
-  `inotify_add_watch`) and `chdir`/`chroot` cannot be reached this way --
-  they fall to the `ptrace` tier until `syscall()` is interposed.
+  `inotify_add_watch`) and `chdir`/`chroot` are generated from
+  `syscalls.list` and have no wrapper to edit; a program that reaches them
+  through a *wrapper function* still falls to the `ptrace` tier, but one
+  that calls `syscall(2)` directly is covered by the next bullet.
+- `sysdeps/unix/sysv/linux/syscall.c`: glibc's `syscall(2)` -- a C function
+  here (the Termux fork renamed the raw entry to `syscallS`) -- now calls
+  `dn_policy_syscall_args()` before the raw call, which translates the path
+  argument(s) of the path-group numbers and honors `O_NOFOLLOW`/
+  `AT_SYMLINK_NOFOLLOW` for `openat`/`newfstatat`/`statx`/`faccessat2` (two
+  paths for `renameat`/`renameat2`/`linkat`). Numbers the aarch64 headers
+  lack (`chown`/`lchown`) are `#ifdef`-guarded, as are the ones the
+  fakesyscall bucket already answers (`statx`/`faccessat2`/`fchmodat2`).
 - `elf/Makefile`: `dn_policy_fake_stat` joins `rtld-stubbed-symbols` -- see
   below.
 
@@ -426,11 +437,16 @@ shell then finds the result exactly where it belongs --
 `TREE/etc/dn-path-work/data` (4 bytes, mtime 2001) and `sym2` as a symlink
 -- with no host `/etc/dn-path-work` created.
 
+A fourth binary calls the kernel with `syscall(2)` directly:
+`syscall(SYS_openat/newfstatat/faccessat/readlinkat ...)` on `/etc/...` all
+reach the tree (right content, `AT_SYMLINK_NOFOLLOW` honored, `ENOENT`
+preserved), `syscall(SYS_getpid)` still works, and `syscall(SYS_mkdirat,
+...)` creates `TREE/etc/dn-sc-work` with no host `/etc/dn-sc-work`.
+
 Covers the public `open`/`openat` and `stat`/`fstatat`/`statx`/`faccessat`
-families, reverse translation (`getcwd`, the `/proc/self` magic links), and
-the `mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/
-`statfs` wrappers. Still open: the chown/chmod/xattr families, `link`/
-`unlink`'s hardlink bookkeeping, `chdir`/`chroot` and the
-`syscalls.list`-generated `*at` variants (all of these until `syscall()`
-interposition or their own slice), the gate page and the `RT/lib` search
-order.
+families, reverse translation (`getcwd`, the `/proc/self` magic links), the
+`mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/`statfs`
+wrappers, and the `syscall(2)` interposition for the path group. Still open:
+the chown/chmod/xattr families, `link`/`unlink`'s hardlink bookkeeping,
+`chdir`/`chroot` and the `syscalls.list`-generated `*at` *wrapper functions*
+(until their own slice), the gate page and the `RT/lib` search order.

@@ -24,8 +24,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/Makef
  ifeq ($(have-ssp),yes)
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- work-after-official-patch/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:03.964680319 +0000
-+++ work/sysdeps/generic/dn-prefix.h	2026-10-08 08:49:59.098284627 +0000
-@@ -149,4 +149,34 @@
++++ work/sysdeps/generic/dn-prefix.h	2026-10-08 08:57:59.554557099 +0000
+@@ -149,4 +149,39 @@
    return path;
  }
  
@@ -57,6 +57,11 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/g
 +   only if it still fits.  Both leave a value outside TREE/RT alone. */
 +extern void dn_policy_getcwd_post (char *buf, size_t cap);
 +extern long dn_policy_readlink_post (char *buf, size_t len, long n);
++/* Pre-translate the path argument(s) of a path-group syscall() call
++   (syscall(2) bypasses the wrappers above).  @a0..@a3 are the first four
++   raw arguments; @p0/@p1 scratch buffers for up to two paths. */
++extern void dn_policy_syscall_args (long number, long *a0, long *a1, long *a2,
++				    long *a3, char *p0, size_t cap, char *p1);
 +#endif
 +
  #endif /* _DN_PREFIX_H */
@@ -757,8 +762,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +}
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c work/sysdeps/unix/sysv/linux/dn-policy-glue.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c	1970-01-01 00:00:00.000000000 +0000
-+++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 08:50:03.558284625 +0000
-@@ -0,0 +1,181 @@
++++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 08:58:37.186557085 +0000
+@@ -0,0 +1,290 @@
 +/* dn-policy glue for glibc itself: wires the already-shipped prefix
 +   self-derivation (__dn_prefix_get, elf/rtld.c) into dn_policy_init(),
 +   and gives open.c and the stat/faccessat family a drop-in replacement
@@ -783,6 +788,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +#include <dn-prefix.h>
 +#include <libc-lock.h>
 +#include <string.h>
++#include <fcntl.h>
++#include <sys/syscall.h>
 +
 +#include "dn-policy.h"
 +
@@ -938,6 +945,113 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +    return n;
 +  memcpy (buf, out, olen);
 +  return (long) olen;
++}
++
++/* glibc's own syscall() (sysdeps/unix/sysv/linux/syscall.c) sends the path
++   argument(s) of a path-group call through here first, so a program that
++   reaches the kernel via syscall(2) instead of a wrapper -- and, later, a
++   call the gate page would otherwise let through unchecked -- is
++   translated too.  @a0..@a3 are the first four raw arguments; @p0/@p1 are
++   the caller's scratch buffers, for up to two paths (renameat/linkat).  A
++   number outside the group, or a path dn-policy declines, is left exactly
++   as it came in.  */
++static void
++dn_syscall_path (long *arg, int follow, char *buf, size_t cap)
++{
++  const char *path = (const char *) (uintptr_t) *arg;
++  const char *out;
++
++  if (path == NULL || path[0] != '/')
++    return;
++  out = follow
++    ? dn_policy_redirect (buf, cap, path)
++    : dn_policy_redirect_nofollow (buf, cap, path);
++  *arg = (long) (uintptr_t) out;
++}
++
++void
++dn_policy_syscall_args (long number, long *a0, long *a1, long *a2, long *a3,
++			char *p0, size_t cap, char *p1)
++{
++  switch (number)
++    {
++    case __NR_openat:
++      dn_syscall_path (a1, !((int) *a2 & O_NOFOLLOW), p0, cap);
++      break;
++    case __NR_newfstatat:
++      dn_syscall_path (a1, !((int) *a3 & AT_SYMLINK_NOFOLLOW), p0, cap);
++      break;
++#ifdef __NR_statx
++    case __NR_statx:
++      dn_syscall_path (a1, !((int) *a2 & AT_SYMLINK_NOFOLLOW), p0, cap);
++      break;
++#endif
++    case __NR_faccessat:
++      dn_syscall_path (a1, 1, p0, cap);
++      break;
++#ifdef __NR_faccessat2
++    case __NR_faccessat2:
++      dn_syscall_path (a1, !((int) *a3 & AT_SYMLINK_NOFOLLOW), p0, cap);
++      break;
++#endif
++    case __NR_readlinkat:
++      dn_syscall_path (a1, 0, p0, cap);
++      break;
++#ifdef __NR_openat2
++    case __NR_openat2:
++      /* open_how carries the flags; assume follow.  */
++      dn_syscall_path (a1, 1, p0, cap);
++      break;
++#endif
++    case __NR_mkdirat:
++    case __NR_mknodat:
++    case __NR_unlinkat:
++    case __NR_fchmodat:
++#ifdef __NR_fchmodat2
++    case __NR_fchmodat2:
++#endif
++    case __NR_utimensat:
++    case __NR_inotify_add_watch:
++      dn_syscall_path (a1, 0, p0, cap);
++      break;
++    case __NR_symlinkat:
++      /* argv[0] is the target text, stored verbatim; argv[2] is the link.  */
++      dn_syscall_path (a2, 0, p0, cap);
++      break;
++    case __NR_renameat:
++#ifdef __NR_renameat2
++    case __NR_renameat2:
++#endif
++    case __NR_linkat:
++      dn_syscall_path (a1, 0, p0, cap);
++      dn_syscall_path (a3, 0, p1, cap);
++      break;
++#ifdef __NR_chown
++    case __NR_chown:
++#endif
++#ifdef __NR_lchown
++    case __NR_lchown:
++#endif
++    case __NR_chdir:
++    case __NR_chroot:
++    case __NR_truncate:
++    case __NR_statfs:
++    case __NR_setxattr:
++    case __NR_lsetxattr:
++    case __NR_getxattr:
++    case __NR_lgetxattr:
++    case __NR_listxattr:
++    case __NR_llistxattr:
++    case __NR_removexattr:
++    case __NR_lremovexattr:
++      dn_syscall_path (a0, 0, p0, cap);
++      break;
++    case __NR_fchownat:
++      dn_syscall_path (a1, 0, p0, cap);
++      break;
++    default:
++      break;
++    }
 +}
 +#endif
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-hardlink.c work/sysdeps/unix/sysv/linux/dn-policy-hardlink.c
@@ -2665,6 +2779,37 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
  #ifdef __NR_symlink
    return INLINE_SYSCALL_CALL (symlink, from, to);
  #else
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/syscall.c work/sysdeps/unix/sysv/linux/syscall.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/syscall.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/syscall.c	2026-10-08 08:58:03.698557097 +0000
+@@ -4,6 +4,7 @@
+ # include <unistd.h>
+ #endif
+ #include <stdarg.h>
++#include <dn-prefix.h>
+ 
+ long int
+ syscall (long int number, ...)
+@@ -18,6 +19,19 @@
+   long int a5 = va_arg (args, long int);
+   va_end (args);
+ 
++#if !IS_IN (rtld)
++  /* dn-policy: syscall(2) bypasses the libc wrappers, so translate the
++     path argument(s) of a path-group number here (runtime.md, "The
++     shared filter's rules": glibc's own syscall() must go through
++     dn-policy too).  The buffers outlive the syscallS call below.  */
++  {
++    char dn_p0[DN_PREFIX_MAX];
++    char dn_p1[DN_PREFIX_MAX];
++    dn_policy_syscall_args (number, &a0, &a1, &a2, &a3,
++			    dn_p0, sizeof dn_p0, dn_p1);
++  }
++#endif
++
+ #ifndef WITHOUT_FAKESYSCALL
+   switch (number)
+ #endif
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/truncate64.c work/sysdeps/unix/sysv/linux/truncate64.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/truncate64.c	2026-10-08 07:51:04.632680319 +0000
 +++ work/sysdeps/unix/sysv/linux/truncate64.c	2026-10-08 08:54:19.734284527 +0000

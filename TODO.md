@@ -164,7 +164,8 @@ below.
     `statx.c`, `faccessat.c`), path translation for the simple manipulation
     wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
     `truncate`, `utimensat`/`utimes`/`utime`, `statfs`), reverse translation
-    for `getcwd()` and `readlink()` of the `/proc/self` magic links, and
+    for `getcwd()` and `readlink()` of the `/proc/self` magic links, the
+    `syscall(2)` interposition for the path group, and
     `dn_policy_fake_stat()` (owner store) on a successful `stat`. rtld is
     kept out entirely (`#if !IS_IN (rtld)`, plus `dn_policy_fake_stat` in
     `elf/Makefile`'s `rtld-stubbed-symbols`). A full `make -O -j8` of glibc
