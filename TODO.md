@@ -85,20 +85,35 @@ time, `patch-maintainer-scripts.sh`) rather than running beside it. Phases
 below match `runtime.md`'s roadmap; each phase must leave the tree runnable
 on the current overlay until it's actually replaced.
 
-**Status**: design only, nothing started.
+**Status**: P1 mostly done, reusing `src/tracer/` (the pruned PRoot fork) as
+`dn-trace`'s core rather than writing one fresh — answers the open question
+below.
 
 **P1 — exec gate, observe-only**:
 
-- Write `dn-trace` as the tree's **root process** (not invoked on-demand by
-  `dn-run` as today): forks a child, child installs the shared seccomp
-  filter (exec rule only for now) and execs `init.sh`.
-- Exec gate classifies every `execve`/`execveat` by ELF header (the 5 rules
-  in `runtime.md`) and logs the classification; changes nothing yet.
-- Decide first: does the existing `src/tracer/` (pruned PRoot fork) become
-  this `dn-trace`'s ptrace core, or is it written fresh? (open question in
-  `runtime.md`).
+- [x] `dn-trace` as the tree's root process needs no new boot-sequence code:
+  `cli/dn-trace.c`'s existing `dn-trace [-v LEVEL] [-b HOST[:GUEST]]... --
+  PROGRAM [ARG...]` already takes any script as `PROGRAM` (`dn-trace --
+  any-init.sh`), and `launch_process()` (`tracee/event.c:139`) already
+  installs the seccomp filter exactly once, which the kernel then carries
+  across every `fork`/`exec` in the tree on its own — no "adopt per static
+  binary" step needed once `dn-trace` is what starts the tree.
+- [x] Exec gate classifies every `execve`/`execveat` by ELF header (the 5
+  rules in `runtime.md`): `classify_exec()` in `execve/enter.c`, logged via
+  `VERBOSE` only, changes nothing else yet. Verified by hand: a script, a
+  static binary, a dynamic glibc binary, a `PT_INTERP` repointed to a
+  foreign loader, and a plain non-ELF file each land in the rule their
+  header says they should.
+- **Not strictly minimal**: the filter installed today (`proot_sysnums` +
+  `fakeroot_sysnums` in `syscall/seccomp.c`) already traces the path and
+  identity groups too, not just `execve`/`execveat` — wider than P1's "exec
+  rule only." Left as is rather than adding a toggle to shrink it, since
+  nothing depends on it being minimal and it'll be superseded for real once
+  dn-policy lands in P2/P3.
 - Done when: `init.sh` and the existing services run under this `dn-trace`
   with no new errors, and a day's real use has a classification log.
+  **Remaining**: the "real tree, real day" run — so far only verified by
+  hand against one-off commands, not a booted prefix.
 
 **P2 — the fast path**:
 

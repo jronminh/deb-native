@@ -532,8 +532,12 @@ that replaces them.
 - [ ] What else does the current shim do besides path redirection? List
       it so everything moves into dn-policy before the shim is dropped in
       P2.
-- [ ] The existing `ptrace` mechanism: becomes `dn-trace`'s core, or
-      rewritten from scratch?
+- [x] The existing `ptrace` mechanism becomes `dn-trace`'s core (resolved):
+      `src/tracer/` (the pruned PRoot fork) is reused as is for P1 — its
+      `proot_sysnums`/`fakeroot_sysnums` lists in `syscall/seccomp.c`
+      already match this design's path/identity groups closely, and
+      `struct seccomp_data`'s `instruction_pointer` field is already enough
+      to add the `P_GATE` ALLOW exception in P2 without a rewrite.
 - [ ] The device's kernel version: decides whether P5 (`ADDFD` needs
       ≥ 5.9) is feasible at all.
 - [ ] Does Termux's data partition allow writing user xattrs: decides how
