@@ -1,34 +1,18 @@
 #!/bin/sh
-# Restore a shipped core-deb to its full package set, from the mirror, inside
-# the prefix itself (docs/spec/prefix.md, "Minimal core-deb and its
-# restore"). Run by the prefix's own bash after ship-prefix.sh:
-#
-#   bash $PREFIX/usr/lib/deb-native/scripts/runtime/bootstrap-prefix.sh
-#
-# 1. apt-get update from the sources the artifact carries;
-# 2. apt-get install of every package named in $PREFIX/.dn/profile
-#    (names only, no pinned versions);
-# 3. check that libc6 and libc-bin are still held (the patched glibc files
-#    must survive) and count the installed packages;
-# 4. write $PREFIX/.dn/bootstrapped, so a second run is a no-op.
-#
-# The prefix is where this script lives, so nothing is passed in. Exit status
-# is the result; re-running after a partial failure is safe (apt skips what is
-# installed).
+# Complete a shipped core-deb: install the packages named in /.dn/profile from
+# the mirror, inside the prefix.  Run by the prefix's init on its first boot,
+# under dn-trace -- so every path here is a **guest** path.
+#   bash /usr/lib/deb-native/scripts/runtime/bootstrap-prefix.sh
+# Re-running after a partial failure is safe (apt skips what is installed).
 set -eu
-# The prefix root: DN_INSTDIR when the caller set it; otherwise it is found
-# from this script's own location.
-HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-DN=${DN_INSTDIR:-$(CDPATH= cd -- "$HERE/../../../../.." && pwd)}
-PATH=$DN/usr/lib/deb-native/priv:$DN/usr/sbin:$DN/usr/bin:$DN/sbin:$DN/bin:$PATH
+PATH=/usr/lib/deb-native/priv:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
-# apt/dpkg put scratch files under $TMPDIR; the host's is outside the prefix
-# (and not redirected), so dpkg could not stat what apt wrote. Keep them inside.
-TMPDIR=$DN/tmp
+# apt/dpkg put scratch files under $TMPDIR; keep them inside the tree.
+TMPDIR=/tmp
 export TMPDIR
 mkdir -p "$TMPDIR"
-PROFILE=$DN/.dn/profile
-DONE=$DN/.dn/bootstrapped
+PROFILE=/.dn/profile
+DONE=/.dn/bootstrapped
 
 [ -f "$PROFILE" ] || { echo "bootstrap: no $PROFILE" >&2; exit 1; }
 if [ -f "$DONE" ]; then

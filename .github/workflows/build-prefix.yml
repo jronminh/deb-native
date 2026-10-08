@@ -44,7 +44,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential libtalloc-dev python3 wget xz-utils dpkg patchelf
+            build-essential libtalloc-dev python3 wget xz-utils dpkg
 
       - name: Take the patched glibc (freshest build-glibc bundle)
         env:

@@ -6,9 +6,10 @@
  *
  *   dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--rt-loader PATH] [--] PROGRAM [ARG...]
  *
- * The guest root is always the host "/", the working directory is the
- * current one, and a -b whose host path does not exist is skipped
- * (PRoot warned about it), so the caller need not check each prefix dir.
+ * The guest root is the tree dn-trace lives in (<tree>/usr/lib/deb-native),
+ * the working directory is the current one, and a -b whose host path does
+ * not exist is skipped (PRoot warned about it), so the caller need not
+ * check each prefix dir.
  * (A subset of proot's arguments; since 0.2.3 there is no proot fallback.)
  *
  * Derived from PRoot's cli/cli.c, Copyright (C) 2015 STMicroelectronics,
@@ -115,6 +116,42 @@ static int initialize_exe(Tracee *tracee, const char *exe)
 	return 0;
 }
 
+/* deb-native: the guest root is the tree dn-trace traces.  It is derived from
+ * the runtime loader the exec gate runs programs through (--rt-loader), which
+ * is a real path inside the tree: the tree is that path minus the loader's own
+ * location.  Guest "/" then maps to the tree, and every guest path a program
+ * uses lands inside it (docs/spec/overlay.md). */
+static const char *dn_tree_root(void)
+{
+	static char tree[PATH_MAX];
+	static bool ready;
+	const char *ld;
+	static const char *const suffixes[] = {
+		"/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
+		"/usr/lib/ld-linux-aarch64.so.1",
+		"/lib/ld-linux-aarch64.so.1",
+	};
+	size_t i, tl, sl;
+
+	if (ready)
+		return tree[0] != '\0' ? tree : NULL;
+	ready = true;
+
+	ld = global_rt_loader;
+	if (ld == NULL || ld[0] != '/')
+		return NULL;
+	tl = strlen(ld);
+	for (i = 0; i < sizeof(suffixes) / sizeof(suffixes[0]); i++) {
+		sl = strlen(suffixes[i]);
+		if (tl > sl && strcmp(ld + tl - sl, suffixes[i]) == 0) {
+			memcpy(tree, ld, tl - sl);
+			tree[tl - sl] = '\0';
+			return tree;
+		}
+	}
+	return NULL;
+}
+
 int main(int argc, char *const argv[])
 {
 	const char *verbose;
@@ -169,9 +206,17 @@ int main(int argc, char *const argv[])
 	}
 	global_verbose_level = tracee->verbose;
 
-	/* The guest root is the host root; -b entries sit on top.  */
-	if (new_binding(tracee, "/", "/", true) == NULL)
-		goto error;
+	/* The guest root is the tree dn-trace lives in; -b entries sit on top.  */
+	{
+		const char *root = dn_tree_root();
+		if (root == NULL) {
+			note(tracee, ERROR, USER,
+				"cannot find the tree from --rt-loader '%s'", global_rt_loader ? global_rt_loader : "(unset)");
+			goto error;
+		}
+		if (new_binding(tracee, root, "/", true) == NULL)
+			goto error;
+	}
 
 	status = initialize_bindings(tracee);
 	if (status < 0)

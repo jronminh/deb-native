@@ -151,7 +151,11 @@ the target.
 
 1. **The overlay.** `scripts/build/build-overlay-glibc.sh` builds `dn-trace`
    from `src/tracer/` and copies `src/syscalls.tsv` — the whole overlay — into
-   `src/.build-glibc/`. It is plain-gcc glibc; no Bionic toolchain. See
+   `src/.build-glibc/`. dn-trace is **static and self-contained** (its talloc
+   is vendored in `src/tracer/talloc/`), linked against the Android-patched
+   glibc's `libc.a` (`DN_GLIBC_LIBC_DIR`): Android's zygote seccomp kills a
+   stock-glibc program at startup, so the patched libc is required. A poor
+   host then starts dn-trace with a bare exec, outside the runtime. See
    [`overlay.md`](overlay.md).
 2. **The patched glibc.** The same host builds glibc from Debian's source at
    the tree's `libc6` version, applying the two patches (Android base +

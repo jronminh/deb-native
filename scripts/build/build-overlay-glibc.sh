@@ -28,8 +28,6 @@ case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
 for t in "$CC" make; do
   command -v "$t" >/dev/null 2>&1 || { echo "E: $t not found (a glibc toolchain is required)" >&2; exit 1; }
 done
-printf '#include <talloc.h>\n' | "$CC" -E -x c - >/dev/null 2>&1 \
-  || { echo "E: talloc.h not found (install libtalloc-dev)" >&2; exit 1; }
 # A Bionic or cross compiler here would silently produce the wrong kind of
 # binary: insist on a glibc target.
 case "$("$CC" -dumpmachine)" in
@@ -42,7 +40,15 @@ T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 cp -R "$ROOT/src/tracer/." "$T/"
 find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-trace \) -type f -exec rm -f {} +
-make -s -C "$T" CC="$CC"
+# Self-contained/static when an Android-patched glibc's lib dir is given: a
+# poor host must start dn-trace with a bare exec, and a stock glibc is killed
+# by Android's seccomp at startup, so link the patched libc.a in
+# (docs/reference/android-platform.md, "Gate A").
+if [ -n "${DN_GLIBC_LIBC_DIR:-}" ]; then
+  make -s -C "$T" CC="$CC" LDFLAGS="-static -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
+else
+  make -s -C "$T" CC="$CC"
+fi
 cp -f "$T/dn-trace" "$OUT/dn-trace"
 
 echo "Copying the syscall catalog ..."

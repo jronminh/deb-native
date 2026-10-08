@@ -14,15 +14,16 @@ STRIP    ?= $(CROSS_COMPILE)strip
 OBJCOPY  ?= $(CROSS_COMPILE)objcopy
 OBJDUMP  ?= $(CROSS_COMPILE)objdump
 
-CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -I. -I$(VPATH)
+CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -I. -Italloc -I$(VPATH)
 CFLAGS   += -Wall -Wextra -O2
-LDFLAGS  += -ltalloc -Wl,-z,noexecstack
+LDFLAGS  += -Wl,-z,noexecstack
 ifdef PROOT_WITH_LIBANDROID_SHMEM
   CFLAGS += -DWITH_LIBANDROID_SHMEM
   LDFLAGS += -landroid-shmem
 endif
 
 OBJECTS += \
+	talloc/talloc.o		\
 	cli/dn-trace.o		\
 	cli/note.o		\
 	execve/enter.o		\
