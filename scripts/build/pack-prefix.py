@@ -5,10 +5,11 @@ docs/spec/prefix.md, "Build invariants". Run on a copy of a built
 prefix (package-prefix.sh stages one); the tree is changed in place:
 
   - PT_INTERP is left as the build wrote it: the exec gate runs a program
-    through the runtime loader, and the entry names ROOT and ROOT/<loader>
-    to dn-trace as absolute paths;
+    through the runtime loader, and dn-trace derives ROOT from its own
+    location, so the entry names no root;
   - an ELF that names ROOT anywhere but in its interpreter fails the build;
-  - text files that name ROOT are listed;
+  - text files that name ROOT are listed (the artifact is relocatable, so
+    this list should be empty);
   - absolute symlinks into ROOT become relative; ld.so.cache is removed;
   - home/, root -> home, mnt -> ../mnt and
     etc/resolv.conf -> ../../app/etc/resolv.conf are made;
@@ -25,11 +26,11 @@ import sys
 
 LOADER = "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 PT_INTERP = 3
-# The command the host runs to open a session: dn-trace boots the tree (ROOT,
-# the guest root) through its runtime loader and execs the prefix's init, a
+# The command the host runs to open a session: dn-trace derives the tree from
+# its own location, uses its runtime loader and execs the prefix's init, a
 # guest path (docs/spec/prefix.md, "Boot").  It is a full command line, run
-# with the prefix root as the working directory.
-ENTRY = ("usr/lib/deb-native/dn-trace {root} {root}/" + LOADER + " -- "
+# with the prefix root as the working directory, and it names no root.
+ENTRY = ("usr/lib/deb-native/dn-trace -- "
          "/usr/bin/bash /usr/lib/deb-native/init.sh")
 
 
@@ -67,7 +68,8 @@ def is_elf(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("tree")
-    ap.add_argument("--root", required=True, help="the absolute path the tree's files name")
+    ap.add_argument("--root", required=True,
+                    help="the path the build assumed; asserted not to be named anywhere")
     ap.add_argument("--name", required=True)
     ap.add_argument("--desc", default="")
     ap.add_argument("--version", default="")
@@ -76,14 +78,14 @@ def main():
         help="host-side activation script, copied to .dn/install.sh")
     ap.add_argument("--entry", default=None,
         help="the command that boots / opens a session, written as the contract's entry= "
-             "(default: dn-trace ROOT ROOT/<loader> -- the init)")
+             "(default: dn-trace -- the init)")
     a = ap.parse_args()
 
     T = os.path.abspath(a.tree)
     ROOT = a.root.rstrip("/")
     rootb = ROOT.encode()
     build_ld = ROOT + "/" + LOADER
-    entry = a.entry if a.entry is not None else ENTRY.format(root=ROOT)
+    entry = a.entry if a.entry is not None else ENTRY
     if not os.path.exists(os.path.join(T, LOADER)):
         sys.exit(f"pack-prefix: {T} has no {LOADER}")
 
@@ -189,7 +191,7 @@ def main():
         lines.append(f"desc={a.desc}")
     if a.version:
         lines.append(f"version={a.version}")
-    lines += ["arch=aarch64", f"root={ROOT}", f"loader={LOADER}",
+    lines += ["arch=aarch64", f"loader={LOADER}",
               "install=.dn/install.sh", f"entry={entry}", f"size={size_mib}"]
     with open(os.path.join(dn, "contract"), "w") as f:
         f.write("\n".join(lines) + "\n")

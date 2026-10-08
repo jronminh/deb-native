@@ -36,19 +36,19 @@ An artifact is one tarball. It carries `home/`, `root -> home`, and
 one that does not gets a dangling link. Extract it where it was built and it
 runs as is; installing it is `tar x` plus two short scripts.
 
-The build **fixes** `TREE` (the prefix root) and `RT` at build time. Every
-glibc ELF keeps the interpreter Debian gave it
+Every glibc ELF keeps the interpreter Debian gave it
 (`/lib/ld-linux-aarch64.so.1`); the kernel never resolves that path, because
 every exec goes through [`overlay.md`](overlay.md)'s exec gate, which runs a
 glibc-dynamic program through `RT/ld.so` itself. A package is therefore
 installed intact, and **nothing repoints a `PT_INTERP` after the build**.
 
-The consequence: the artifact is built for one absolute path, `PREFIX_ROOT`,
-and is **not position-independent**. The loader self-derives the tree from its
-own path, but a few tree config files (`etc/ld.so.conf`, `etc/apt/apt.conf.d/`)
-name `PREFIX_ROOT` absolutely. The host installs the artifact at that path (or
-the build targets the path the host chose); relocating later is not supported
-(see [Open items](#open-items)).
+The prefix root (`TREE`) is **not baked**: `dn-trace` derives it from its own
+location (`TREE/usr/lib/deb-native/dn-trace`), the loader self-derives it from
+its path too, and the tree's config files (`usr/etc/ld.so.conf`,
+`etc/apt/apt.conf.d/`) name **guest** paths, which dn-policy maps into whatever
+tree dn-trace booted. The build still passes a `PREFIX_ROOT` — to *assert*
+nothing names it — but the artifact is relocatable: the host extracts it at any
+`DEST` and installs there.
 
 ## Layers
 
@@ -85,7 +85,7 @@ outside the FHS tree:
 │   ├── contract        data: key=value, read by the host without running code
 │   ├── packages        the Debian packages the prefix contains
 │   ├── profile         the packages a bootstrap restores from the mirror
-│   ├── baked-paths     files the build path is written into (by the build)
+│   ├── baked-paths     files naming the build path (empty: relocatable)
 │   └── install.sh      /system/bin/sh, run by the host's shell: activate
 ├── home/
 ├── root -> home
@@ -95,18 +95,11 @@ outside the FHS tree:
 ```
 
 `.dn/packages` is one `package<TAB>version<TAB>arch` per line.
-`.dn/baked-paths` lists every file the build path is written into, one per
-line, fields tab-separated, paths relative to the root:
-
-```
-text	etc/apt/apt.conf.d/50deb-native
-text	usr/etc/ld.so.conf
-text	usr/etc/ld.so.conf.d/dn.conf
-```
-
-With relocation dropped, an `elf` entry is no longer produced (no `PT_INTERP`
-is rewritten); the `text` entries remain, and they are why the artifact is
-built for a fixed `PREFIX_ROOT`.
+`.dn/baked-paths` records any file the build path (`PREFIX_ROOT`) is written
+into, one per line, fields tab-separated, paths relative to the root.  A
+relocatable artifact names its root nowhere, so the list is **empty**; a
+non-empty `text` list means some file still names the build path, and
+`pack-prefix.py` fails the build on an `elf` that does.
 
 ## The contract file
 
@@ -121,7 +114,6 @@ unknown key warns but does not fail.
 | `desc` | no | one line describing the prefix |
 | `version` | no | the prefix's own version (`VERSION` at the repo root) |
 | `arch` | yes | the CPU architecture (`uname -m`) |
-| `root` | yes | the absolute directory the prefix's files name (`PREFIX_ROOT`); the host must install there (not relocatable) |
 | `loader` | yes | the loader, relative to the root |
 | `install` | yes | the activation script, relative to the root |
 | `entry` | yes | the command that boots / opens a session; a full command line, run by the host with the prefix root as the working directory |
@@ -136,10 +128,9 @@ name=core-deb
 desc=core-deb: core-ultra plus apt and dpkg
 version=0.7.1-dev
 arch=aarch64
-root=/data/local/deb-native
 loader=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 install=.dn/install.sh
-entry=usr/lib/deb-native/dn-trace /data/local/deb-native /data/local/deb-native/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 -- /usr/bin/bash /usr/lib/deb-native/init.sh
+entry=usr/lib/deb-native/dn-trace -- /usr/bin/bash /usr/lib/deb-native/init.sh
 size=200
 ```
 
@@ -191,7 +182,7 @@ The build inputs to step 3:
 | `DEB_LIST` | the pinned `name<TAB>version<TAB>arch` list (packages.tsv) |
 | `DN_GLIBC_PREFIX` | the glibc bundle: a dir with `libc6.deb` + `libc-bin.deb` |
 | `DN_OVERLAY` | `build-overlay-glibc.sh`'s output |
-| `PREFIX_ROOT` | the absolute path the artifact's files name |
+| `PREFIX_ROOT` | the path the build assumes; asserted not to be named (the artifact is relocatable) |
 | `DN_PROFILE` | optional; written as `.dn/profile` |
 | `DEB_CACHE` | downloaded `.debs`, kept across builds |
 | `STAGE_OUT` | optional; keep the built tree (for `cut-core-ultra.py`) |
@@ -201,7 +192,7 @@ invariants and `.dn/`), then `tar --hard-dereference -czf` it (a poor host's
 tar cannot recreate hard links). `pack-prefix.py` makes every symlink inside
 the tree relative, removes any `ld.so.cache`, creates `home/`, `root`,
 `mnt` and `etc/resolv.conf`, records `.dn/baked-paths` and `.dn/packages`, and
-writes `.dn/contract` with `root=PREFIX_ROOT`.
+writes `.dn/contract`. It fails the build if any file names `PREFIX_ROOT`.
 
 ## Ship
 
@@ -210,15 +201,16 @@ run on the host's own shell with only POSIX sh and toybox:
 
 1. **Read the contract without extracting** (`tar -xzOf ARTIFACT
    ./.dn/contract`) and check it: a known contract version, `arch` matching
-   `uname -m`, a valid name, `DEST` equal to the contract's `root`, the target
-   absent, and `size` fitting the free space.
+   `uname -m`, a valid name, the target absent, and `size` fitting the free
+   space. A current artifact names no root; one that still carries `root=` only
+   installs at that path.
 2. **Extract**: `mkdir DEST && tar -xzf`.
-3. **Activate**: `DN_INSTDIR=DEST sh DEST/.dn/install.sh`. It re-checks the
-   path, then wires the host's session entry (`DN_SESSION_SHELL`), if set, to
-   the contract's `entry`. No tree program runs here.
+3. **Activate**: `DN_INSTDIR=DEST sh DEST/.dn/install.sh`. It wires the host's
+   session entry (`DN_SESSION_SHELL`), if set, to the contract's `entry`. No
+   tree program runs here.
 4. **Check the tree runs**: start it through `dn-trace` for a trivial command
-   (`dn-trace DEST DEST/<loader> -- /usr/bin/bash -c 'exit 0'`). This is the
-   acceptance test.
+   (`DEST/usr/lib/deb-native/dn-trace -- /usr/bin/bash -c 'exit 0'`). This is
+   the acceptance test.
 5. On any failure, remove `DEST` and report.
 
 The host never edits a file inside the prefix; everything prefix-specific is
@@ -227,13 +219,17 @@ the prefix's own scripts.
 ## Boot
 
 The host boots the tree by running the contract's `entry` from the prefix
-root. `dn-trace` takes the tree and its runtime loader as absolute host paths
-(the contract's `root` and `root`/`loader`, so it never parses the contract)
-and an optional `-- PROGRAM ARGS...` in guest paths, defaulting to the init:
+root. `dn-trace` **derives** the tree from its own location
+(`TREE/usr/lib/deb-native/dn-trace`) and takes its runtime loader from the
+fixed path `TREE/<loader>`, so it never parses the contract and names no root;
+an optional `-- PROGRAM ARGS...` is in guest paths and defaults to the init:
 
 ```
-dn-trace TREE LOADER [-- PROGRAM ARGS...]
+dn-trace [TREE LOADER] [-- PROGRAM ARGS...]
 ```
+
+(Two absolute `TREE LOADER` arguments still override the derivation, for
+starting a tree by absolute path or for tests.)
 
 It becomes the tree's root process with TREE as the guest root (TREE is also
 bound to itself, so a host path into the tree stays valid in the guest), forks
@@ -262,13 +258,9 @@ self-derives the prefix from the loader's path, so a straight copy is enough.
 
 ## Open items
 
-- **One path per artifact.** With relocation dropped, the artifact is bound to
-  `PREFIX_ROOT`. A host must install there. Making the remaining absolute
-  config paths (`ld.so.conf`, `apt.conf`) self-derived — or restoring a
-  text-only relocation — is the open work to lift this.
 - **Artifact distribution**: both tarballs are published to the rolling
   `prefix` release, and `scripts/host/install-from-release.sh` fetches one and
-  ships it. Verifying that fetch on a real poor host (with `PREFIX_ROOT`
-  writable) is still open.
+  ships it to a chosen `DEST`. Verifying that fetch and a relocated boot on a
+  real poor host is still open.
 - **core-ultra**: still cut *from* a full core-deb build rather than assembled
   as its own recipe; sizes and seed set are experiments.

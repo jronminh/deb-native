@@ -27,10 +27,10 @@ There is **no build on the host**.
   `.dn/contract` without extracting, check it, extract, run `.dn/install.sh`.
   One install path, on a **poor host** (POSIX sh + toybox only).
 - **Activate / boot**: the artifact's own `.dn/install.sh` (host shell) wires
-  the session entry (the artifact is built for its final path, so there is no
-  relocation); the host then boots the tree by running the contract's `entry`,
-  which starts `dn-trace` and the prefix's init -- init completes `.dn/profile`
-  itself on a first boot.
+  the session entry; the host then boots the tree by running the contract's
+  `entry`, which starts `dn-trace` and the prefix's init -- `dn-trace` derives
+  the prefix root from its own location, so the artifact is relocatable; init
+  completes `.dn/profile` itself on a first boot.
 
 Run time is one policy in two places: dn-policy, called in-process by
 dn-glibc (the fast path) and via `dn-trace`'s ptrace fallback

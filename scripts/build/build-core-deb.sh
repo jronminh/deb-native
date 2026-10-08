@@ -25,8 +25,11 @@
 #   DEB_CACHE     downloaded .debs, kept across builds
 #                 (default ~/.cache/deb-native/debs); a cached file is
 #                 only checked against its sha256, never downloaded again
-#   PREFIX_ROOT   the absolute path the artifact's files will name (the
-#                 loader path), e.g. /data/data/org.dn.shell/files/core-deb
+#   PREFIX_ROOT   the absolute path the build assumes for its own tree.  It
+#                 is not baked into the artifact (the artifact is relocatable:
+#                 dn-trace derives the root from its own location): pack-prefix
+#                 takes it only to assert that nothing names it, e.g.
+#                 /data/data/org.dn.shell/files/core-deb
 #   DEB_LIST      the pinned package list to install on top of BASE, one
 #                 `name ver arch` per line (a .dn/packages file). Required.
 #   DN_PROFILE    optional: a file of package names written as .dn/profile
@@ -288,21 +291,21 @@ cp -f "$ROOT/scripts/host/bootstrap-prefix.sh" "$STAGE/usr/lib/deb-native/script
 [ -e "$STAGE/usr/bin/awk" ] || [ -L "$STAGE/usr/bin/awk" ] || ln -s mawk "$STAGE/usr/bin/awk"
 
 # The loader configuration the overlay needs. With a package-derived BASE these
-# may be absent, so the build writes them.
+# may be absent, so the build writes them.  Every path is a **guest** path
+# (dn-policy maps "/" to the tree): the artifact names no host prefix, so it
+# installs anywhere (docs/spec/prefix.md, "Boot").
 mkdir -p "$STAGE/etc" "$STAGE/usr/etc/ld.so.conf.d"
 [ -e "$STAGE/usr/etc/ld.so.conf" ] || \
-  printf 'include %s/usr/etc/ld.so.conf.d/*.conf\n' "$PREFIX_ROOT" > "$STAGE/usr/etc/ld.so.conf"
+  printf 'include /usr/etc/ld.so.conf.d/*.conf\n' > "$STAGE/usr/etc/ld.so.conf"
 [ -e "$STAGE/usr/etc/ld.so.conf.d/dn.conf" ] || \
-  printf '%s/usr/lib/aarch64-linux-gnu\n%s/usr/lib\n' "$PREFIX_ROOT" "$PREFIX_ROOT" > "$STAGE/usr/etc/ld.so.conf.d/dn.conf"
+  printf '/usr/lib/aarch64-linux-gnu\n/usr/lib\n' > "$STAGE/usr/etc/ld.so.conf.d/dn.conf"
 mkdir -p "$STAGE/etc/apt/apt.conf.d"
 cat > "$STAGE/etc/apt/apt.conf.d/50deb-native" <<CONF
-# apt's own directories as absolute prefix paths. apt links fetched files into
-# its cache, and the kernel resolves a symlink's target literally, on the
-# host: a "/var/cache/apt/archives/..." target would name Android's /var.
-# Under $PREFIX_ROOT the targets are real (and still valid in the guest, where
-# dn-trace binds the tree to itself).
-Dir::Cache::archives "$PREFIX_ROOT/var/cache/apt/archives";
-Dir::State::lists "$PREFIX_ROOT/var/lib/apt/lists";
+# apt's own directories, as guest paths (dn-policy maps "/" to the tree, so
+# they resolve to the prefix wherever it is installed).  Explicit, not
+# Debian's defaults, so the intent is visible.
+Dir::Cache::archives "/var/cache/apt/archives";
+Dir::State::lists "/var/lib/apt/lists";
 CONF
 mkdir -p "$STAGE/etc/apt/sources.list.d"
 cat > "$STAGE/etc/apt/sources.list.d/debian.sources" <<SRC

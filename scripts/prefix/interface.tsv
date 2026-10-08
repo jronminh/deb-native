@@ -16,6 +16,7 @@ entry	scripts/prefix/apt-install.sh
 entry	scripts/host/install-prefix.sh
 entry	scripts/host/bootstrap-prefix.sh
 entry	scripts/host/ship-prefix.sh
+entry	scripts/host/install-from-release.sh
 
 # --- build / glibc leaves a build host or tool may call --------------------
 entry	scripts/build/build-overlay-glibc.sh

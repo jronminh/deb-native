@@ -55,10 +55,13 @@ done
 IFS=$oldifs
 set +f
 [ "$contract" = "$CONTRACT_VERSION" ] || die "contract version '${contract:-?}' not supported (this host knows $CONTRACT_VERSION)"
-[ -n "$name" ] && [ -n "$arch" ] && [ -n "$root" ] && [ -n "$loader" ] && [ -n "$entry" ] || die "contract lacks name/arch/root/loader/entry"
+[ -n "$name" ] && [ -n "$arch" ] && [ -n "$loader" ] && [ -n "$entry" ] || die "contract lacks name/arch/loader/entry"
 [ "$arch" = "$(uname -m)" ] || die "artifact is for $arch, this device is $(uname -m)"
-# The artifact is built for one path and is not relocatable.
-[ "$root" = "$D" ] || die "artifact is built for $root; install it there (it is not relocatable)"
+# A current artifact names no root and installs anywhere (dn-trace derives the
+# root from its own location).  One that still carries root= is the old fixed
+# form: it only works at that path.
+[ -z "$root" ] || [ "$root" = "$D" ] \
+  || die "artifact is built for $root; install it there (it is not relocatable)"
 if [ -n "$size" ]; then
   # POSIX format (-P): one line per filesystem, available KiB in field 4.
   # Compare in MiB: Android's mksh does 32-bit arithmetic, so size * 1024
@@ -78,10 +81,16 @@ if [ -n "$install" ]; then
 fi
 # The acceptance test: the tree runs through dn-trace (a poor host starts
 # dn-trace; nothing in the tree runs directly).  A trivial command, so it does
-# not bootstrap or start a session.
+# not bootstrap or start a session.  A current dn-trace derives the root from
+# its own location; an old one (a fixed-root artifact) still needs it passed.
 RT=$D/usr/lib/deb-native
-"$RT/dn-trace" "$D" "$D/$loader" -- /usr/bin/bash -c 'exit 0' \
-  || die "the tree does not run under dn-trace"
+if [ -n "$root" ]; then
+  "$RT/dn-trace" "$D" "$D/$loader" -- /usr/bin/bash -c 'exit 0' \
+    || die "the tree does not run under dn-trace"
+else
+  "$RT/dn-trace" -- /usr/bin/bash -c 'exit 0' \
+    || die "the tree does not run under dn-trace"
+fi
 trap - EXIT
 echo "ship-prefix: $name installed in $D"
 echo "ship-prefix: boot with:  cd $D && $entry"

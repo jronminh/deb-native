@@ -106,8 +106,10 @@ filesystem). `TREE` (with `RT` inside it) ships as one tarball
 ### Boot order
 
 1. The host runs the contract's `entry` from the prefix root
-   ([`prefix.md`](prefix.md), "Boot"): `dn-trace TREE LOADER -- /usr/bin/bash
-   /usr/lib/deb-native/init.sh`, TREE and LOADER absolute host paths.
+   ([`prefix.md`](prefix.md), "Boot"): `dn-trace -- /usr/bin/bash
+   /usr/lib/deb-native/init.sh`. `dn-trace` derives TREE from its own location
+   (it lives at `TREE/usr/lib/deb-native/dn-trace`) and LOADER from
+   `TREE/<loader>`, so the entry names no root.
 2. `dn-trace` forks a child, marked traced (fork, vfork, clone and exec all
    tracked). The child installs the shared filter itself, then execs the
    prefix's init. The filter propagates to every later process.
@@ -465,7 +467,8 @@ Implemented and exercised on-device:
   [What the wiring covers](#what-the-wiring-covers)).
 - **dn-trace** — the tree's root; the shared filter with the gate-IP rule built
   from the embedded catalog; the exec gate rule 3 (through `LOADER`); one
-  static binary, `dn-trace TREE LOADER [-- PROGRAM ARGS...]`. dn-policy is
+  static binary, `dn-trace [TREE LOADER] [-- PROGRAM ARGS...]` (TREE derived
+  from its own location unless two absolute paths override it). dn-policy is
   compiled in (P3, the traced path): the identity group is answered from a
   per-tracee identity with Linux's rules (`set*id` recorded, a dropped id
   cannot take root back, a child inherits; Android's SIGSYS-trapped `set*id`

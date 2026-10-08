@@ -4,15 +4,19 @@
  * PRoot's cli/cli.c + cli/proot.c (option tables, usage, extensions'
  * options, qemu, -r/-w/-0/...).  It keeps only what the runtime passes:
  *
- *   dn-trace [-v LEVEL] [-u] [-b HOST[:GUEST]]... TREE LOADER [-- PROGRAM [ARG...]]
+ *   dn-trace [-v LEVEL] [-u] [-b HOST[:GUEST]]... [TREE LOADER] [-- PROGRAM [ARG...]]
  *
- * TREE is the prefix root and LOADER the runtime loader (dn-glibc's ld.so),
- * both absolute host paths; the host takes them from .dn/contract (root,
- * loader), so dn-trace never parses the contract.  The guest root is TREE;
- * PROGRAM and its arguments are guest paths, and default to the prefix's
- * init (DN_INIT).  The working directory is the current one, and a -b whose
- * host path does not exist is skipped (PRoot warned about it), so the caller
- * need not check each prefix dir.
+ * dn-trace lives at TREE/usr/lib/deb-native/dn-trace, so TREE -- the prefix
+ * root, the guest root -- is whatever contains it: dn-trace derives it from
+ * its own path (/proc/self/exe), and LOADER is the fixed runtime loader
+ * (dn-glibc's ld.so) inside that tree.  Nothing names the root ahead of time:
+ * the artifact is relocatable, and the host takes neither path from the
+ * contract.  Two absolute TREE LOADER arguments still override the
+ * derivation (starting a tree by absolute path, tests).  PROGRAM and its
+ * arguments are guest paths, and default to the prefix's init (DN_INIT).
+ * The working directory is the current one, and a -b whose host path does
+ * not exist is skipped (PRoot warned about it), so the caller need not check
+ * each prefix dir.
  * (A subset of proot's arguments; since 0.2.3 there is no proot fallback.)
  *
  * Derived from PRoot's cli/cli.c, Copyright (C) 2015 STMicroelectronics,
@@ -25,7 +29,7 @@
 #include <string.h>        /* str*(3), */
 #include <talloc.h>        /* talloc*, */
 #include <stdlib.h>        /* exit(3), strtol(3), {g,s}etenv(3), */
-#include <unistd.h>        /* getpid(2), chdir(2), */
+#include <unistd.h>        /* getpid(2), chdir(2), readlink(2), */
 #include <errno.h>         /* errno, */
 
 #include "cli/note.h"
@@ -36,12 +40,51 @@
 #include "path/path.h"
 #include "dn-policy.h"
 
-#define USAGE "usage: dn-trace [-v LEVEL] [-u] [-b HOST[:GUEST]]... TREE LOADER [-- PROGRAM [ARG...]]\n"
+#define USAGE "usage: dn-trace [-v LEVEL] [-u] [-b HOST[:GUEST]]... [TREE LOADER] [-- PROGRAM [ARG...]]\n"
 
 /* The prefix's init, run when no PROGRAM is given (docs/spec/prefix.md).  */
 static char *const DN_INIT[] = {
 	"/usr/bin/bash", "/usr/lib/deb-native/init.sh", NULL,
 };
+
+/* dn-trace's own place in the tree, and the loader beside it, both fixed:
+ * the prefix root is dn-trace's directory with this suffix removed.  */
+#define DN_TRACE_SUFFIX "/usr/lib/deb-native/dn-trace"
+#define DN_LOADER_REL   "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+
+static char derived_tree[PATH_MAX];
+static char derived_loader[PATH_MAX];
+
+/* TREE from dn-trace's own location: /proc/self/exe is
+ * TREE/usr/lib/deb-native/dn-trace, so TREE is that prefix.  */
+static int derive_prefix(const char **tree, const char **loader)
+{
+	char exe[PATH_MAX];
+	ssize_t n;
+	size_t elen, slen;
+
+	n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+	if (n < 0)
+		return -errno;
+	exe[n] = '\0';
+
+	slen = strlen(DN_TRACE_SUFFIX);
+	elen = strlen(exe);
+	if (elen <= slen || strcmp(exe + elen - slen, DN_TRACE_SUFFIX) != 0)
+		return -EINVAL;
+	exe[elen - slen] = '\0';
+
+	if (strlen(exe) + 1 + strlen(DN_LOADER_REL) + 1 > sizeof(derived_loader))
+		return -ENAMETOOLONG;
+	strcpy(derived_tree, exe);
+	strcpy(derived_loader, exe);
+	strcat(derived_loader, "/");
+	strcat(derived_loader, DN_LOADER_REL);
+
+	*tree = derived_tree;
+	*loader = derived_loader;
+	return 0;
+}
 
 /* deb-native, LOADER: the runtime loader the exec gate runs rule-3 programs
    through.  See cli/note.h. */
@@ -160,7 +203,7 @@ int main(int argc, char *const argv[])
 	if (verbose != NULL)
 		tracee->verbose = strtol(verbose, NULL, 10);
 
-	for (i = 1; i < argc && argv[i][0] == '-'; i++) {
+	for (i = 1; i < argc && argv[i][0] == '-' && strcmp(argv[i], "--") != 0; i++) {
 		if (strcmp(argv[i], "-b") == 0 && i + 1 < argc)
 			status = add_binding(tracee, argv[++i]);
 		else if (strcmp(argv[i], "-u") == 0) {
@@ -180,13 +223,21 @@ int main(int argc, char *const argv[])
 	}
 	global_verbose_level = tracee->verbose;
 
-	/* TREE LOADER, both absolute host paths.  */
-	if (argc - i < 2 || argv[i][0] != '/' || argv[i + 1][0] != '/') {
-		fputs(USAGE, stderr);
-		return EXIT_FAILURE;
+	/* TREE LOADER: derived from dn-trace's own location, unless two
+	 * absolute paths are given explicitly.  */
+	if (argc - i >= 2 && argv[i][0] == '/' && argv[i + 1][0] == '/') {
+		global_tree = tree = argv[i++];
+		global_rt_loader = argv[i++];
+	} else {
+		status = derive_prefix(&tree, &global_rt_loader);
+		if (status < 0) {
+			note(tracee, ERROR, USER,
+				"cannot derive the prefix from /proc/self/exe: %s",
+				strerror(-status));
+			goto error;
+		}
+		global_tree = tree;
 	}
-	global_tree = tree = argv[i++];
-	global_rt_loader = argv[i++];
 	if (access(global_rt_loader, X_OK) < 0) {
 		note(tracee, ERROR, SYSTEM, "loader '%s'", global_rt_loader);
 		goto error;

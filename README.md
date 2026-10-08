@@ -24,16 +24,18 @@ scripts/build/package-prefix.sh core-deb --root ... --name core-deb
 ## Install
 
 On a host with `curl` (or toybox `wget`) and `tar`, fetch the rolling `prefix`
-release and ship it — it installs to the contract's `root=`:
+release and ship it to a destination you choose (the artifact is relocatable:
+dn-trace derives the prefix root from its own location):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/scripts/host/install-from-release.sh | sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/scripts/host/install-from-release.sh | sh -s -- core-deb "$HOME/.dn"
 ```
 
-`core-ultra`, or from a checkout:
+The second argument is `DEST` (default `./core-deb`). `core-ultra`, or from a
+checkout:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/scripts/host/install-from-release.sh | sh -s -- core-ultra
+scripts/host/install-from-release.sh core-ultra /data/local/deb-native
 scripts/host/install-from-release.sh core-deb
 ```
 

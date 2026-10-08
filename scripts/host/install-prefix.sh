@@ -1,9 +1,9 @@
 #!/system/bin/sh
 # The artifact's activation step (.dn/install.sh), run by the HOST's own shell
-# (/system/bin/sh: mksh + toybox) right after extraction.  Runtime v1 does not
-# relocate and no tree program runs outside dn-trace, so activation only
-# records how to boot the prefix: it checks the artifact sits at the path it
-# was built for, and writes the host's session entry.
+# (/system/bin/sh: mksh + toybox) right after extraction.  No tree program runs
+# outside dn-trace, so activation only records how to boot the prefix: it
+# writes the host's session entry.  dn-trace derives the root from its own
+# location, so the artifact installs at any path (docs/spec/prefix.md).
 #
 #   sh $PREFIX/.dn/install.sh          (DN_INSTDIR set to the prefix root)
 #
@@ -17,20 +17,17 @@ DN=${DN_INSTDIR:-$(CDPATH= cd -- "$HERE/.." && pwd)}
 C=$DN/.dn/contract
 [ -f "$C" ] || { echo "install: no $C" >&2; exit 1; }
 
-ROOT= ENTRY=
+ENTRY=
 while IFS= read -r l; do
   case $l in
-    root=*)  ROOT=${l#root=} ;;
     entry=*) ENTRY=${l#entry=} ;;
   esac
 done < "$C"
-[ -n "$ROOT" ] && [ -n "$ENTRY" ] \
-  || { echo "install: .dn/contract lacks root=/entry=" >&2; exit 1; }
+[ -n "$ENTRY" ] \
+  || { echo "install: .dn/contract lacks entry=" >&2; exit 1; }
 
-# The artifact is built for one path and is not relocatable: its files,
-# the entry's dn-trace arguments and the loader/apt configuration all name it.
-[ "$ROOT" = "$DN" ] \
-  || { echo "install: built for $ROOT, not $DN (the artifact is not relocatable)" >&2; exit 1; }
+# The artifact is relocatable: it names no root, and dn-trace derives it from
+# its own location, so installation may go anywhere (docs/spec/prefix.md).
 
 # The session entry is the boot command: dn-trace starts the tree, its init
 # completes the prefix on a first boot, then runs the command.  The host owns
