@@ -36,6 +36,13 @@
 #   DESTDIR            the own-glibc build's `make install DESTDIR=` output,
 #                      e.g. ~/dn-glibc-build/destdir-clean/<prefix-path>
 #   OUT_DEB            where to write the repackaged .deb
+# Env:
+#   DN_PREFIX          the build prefix glibc was configured with.  A few
+#                      libc-bin *scripts* (ldd, tzselect) bake it in as text;
+#                      they are rewritten to guest paths ("/usr/..."), so the
+#                      package is relocatable.  ELF programs keep their baked
+#                      prefix -- the loader rebases it at run time.  Unset:
+#                      no rewrite (the scripts stay fixed to the build path).
 set -eu
 REAL_DEB=${1:?usage: dn-package-libc-bin.sh REAL_LIBC_BIN_DEB DESTDIR OUT_DEB}
 DESTDIR=${2:?usage: dn-package-libc-bin.sh REAL_LIBC_BIN_DEB DESTDIR OUT_DEB}
@@ -75,6 +82,25 @@ done
 if [ -f "$WORK/missing" ]; then
   echo "E: $(wc -l < "$WORK/missing") program(s) from the real package have no equivalent in $DESTDIR -- aborting." >&2
   exit 1
+fi
+
+# A few of the copied programs are shell scripts (ldd, tzselect) that bake the
+# build prefix into their text.  Strip it so they name guest paths, which the
+# runtime maps into whatever tree booted the prefix; an ELF keeps its baked
+# prefix because the loader rebases it at run time (docs/spec/overlay.md).
+if [ -n "${DN_PREFIX:-}" ]; then
+  for d in usr/bin usr/sbin; do
+    [ -d "$WORK/pkg/$d" ] || continue
+    for f in "$WORK/pkg/$d"/*; do
+      [ -f "$f" ] && [ ! -L "$f" ] || continue
+      head -c2 "$f" | grep -q '#!' || continue
+      grep -qF "$DN_PREFIX" "$f" || continue
+      sed -i "s|$DN_PREFIX||g" "$f"
+      echo "  rebased the build prefix out of ${f#"$WORK/pkg/"}"
+    done
+  done
+else
+  echo "  DN_PREFIX unset: leaving the build prefix in the scripts (not relocatable)" >&2
 fi
 
 echo "Regenerating DEBIAN/md5sums ..."
