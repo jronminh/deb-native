@@ -192,8 +192,11 @@ below.
   on-device process map, inside the 39-bit range; the loader now maps it
   (`elf/rtld.c`), `r-xp`, and libc issues its syscalls from it
   (`INTERNAL_SYSCALL_RAW` + `syscallS.S`, the non-cancelable path). Still
-  open: the cancelable `syscall_cancel.S` path and the gate-IP rule in the
-  shared filter (`dn-trace`).
+  open before the gate-IP rule in the shared filter (`dn-trace`) is safe:
+  wire `bind` (UNIX socket path) and the identity group (fake root) in
+  dn-glibc, and the cancelable `syscall_cancel.S` path. The
+  `syscalls.list`-generated wrappers issue a raw `svc` (asm), never from the
+  gate, so they stay on ptrace.
 - Turn on exec-gate rules 3/4 (rewrite to `RT/ld.so ...`). Drop the shim.
   - Rule 3 done: `dn-trace --rt-loader PATH` rewrites a glibc-dynamic exec to
     `loader --argv0 <orig argv0> <real path> <args>`. The runtime must pass

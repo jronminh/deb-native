@@ -532,16 +532,22 @@ open: the xattr family and the public `fchownat()`
 (`syscalls.list`-generated), `chdir`/`chroot`, the cancelable
 `syscall_cancel.S` path, and the seccomp filter's gate-IP rule in `dn-trace`.
 
-**Known issue (accepted).** With the gate page now in use, two things must
-land together with the filter's gate-IP rule (still off, so the filter keeps
-tracing them -- correct, just slower):
+**Known issue (accepted): the gate page is used, but the filter has no
+gate-IP rule yet -- on purpose.** Turning that rule on (ALLOW a path/identity
+call whose instruction pointer is in the gate page) requires that *every*
+path-group and identity-group call dn-glibc issues from the gate is already
+translated or rewritten in-process -- otherwise the filter would let an
+untranslated call through unchecked. Two gaps remain:
 
-- the `syscalls.list`-generated wrappers issue their raw syscall from the
-  gate *untranslated* (the macro routes them, but only the wrappers dn-glibc
-  edited do the translation), so they must be overridden/translated before
-  the gate-IP rule may let them through unchecked;
-- the cancelable path (`syscall_cancel.S`) still calls the kernel directly
-  (its `_arch_start`/`_end` cancellation markers would move out of range), so
-  `open`/`read`/`write` are not gate-covered yet.
+- `bind` (a UNIX socket path lives in the sockaddr) is a C wrapper using the
+  syscall macro, so it would issue from the gate untranslated;
+- the whole identity group (`getuid`/.../`setuid`/`fstat`/`fchown`/
+  `fchownat`) is not wired in dn-glibc yet, so gate-issued ones would skip
+  both dn-glibc's fake root and `dn-trace`'s.
 
-This is the intended transitional state, not a regression.
+The `syscalls.list`-generated wrappers are *not* a gap: they issue a raw
+`svc` from `syscall-template.S` (asm `DO_CALL`), not through the macro, so
+they never come from the gate -- they are traced and handled by ptrace, as
+the tier model intends. Until the two gaps are closed the gate-IP rule stays
+off and every group call is traced (correct, just slower). This is the
+intended transitional state, not a regression.
