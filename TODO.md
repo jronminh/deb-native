@@ -134,9 +134,13 @@ below.
   trailing slash translating guest `/`). **Not yet implemented:**
   absolute in-tree symlink resolution (correct for a tree with none,
   see the file's header comment).
-- [ ] Fake root: owner store (probe on-device whether `user.dn.*` xattr
-  writes work before committing to that backend over the `RT/state/` DB
-  fallback), `security.*` xattr faking, the `DnIdentity`-keyed get/setuid.
+- [x] Fake root: `src/dn-policy/dn-policy-fakeroot.c` — owner store
+  (probed on-device: `user.dn.*` xattr works on the app's own data
+  partition, so that's the default backend; the `RT/state/` DB fallback
+  is implemented and reachable via `DN_POLICY_OWNER_BACKEND=db` for a
+  device where it doesn't), `security.*` xattr faking, the
+  `DnIdentity`-keyed get/setuid. Verified by hand against both backends
+  (`.check_fakeroot.c`), including a slot-reuse case for the DB backend.
 - [ ] Hardlinks (`link2symlink` — settle the PRoot-GPL licensing question
   first, per `runtime.md`'s open items).
 - Patch glibc (full rebuild from Debian source, not the shipped 10-file

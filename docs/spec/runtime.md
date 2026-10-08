@@ -540,8 +540,17 @@ that replaces them.
       to add the `P_GATE` ALLOW exception in P2 without a rewrite.
 - [ ] The device's kernel version: decides whether P5 (`ADDFD` needs
       ≥ 5.9) is feasible at all.
-- [ ] Does Termux's data partition allow writing user xattrs: decides how
-      the owner store is kept.
+- [x] Does Termux's data partition allow writing user xattrs (resolved,
+      tested directly on-device): yes -- `/tmp`, the Termux home
+      directory, and the running prefix's own `tmp` all accept a
+      `user.*` `setxattr`/`getxattr`/`removexattr` round-trip. `/sdcard`
+      (FUSE/sdcardfs) does not (`ENOTSUP`), and separately lacks
+      `flock()` (`ENOSYS`) too -- moot either way, since `TREE` never
+      lives there. `dn-policy`'s owner store (`src/dn-policy/
+      dn-policy-fakeroot.c`) picks the `user.dn.*` xattr backend by
+      probing this at `dn_policy_init()`, with the DB-file fallback
+      still implemented and exercisable via `DN_POLICY_OWNER_BACKEND=db`
+      for whatever device turns out to need it.
 - [ ] Choosing `P_GATE`: needs a real memory map of a few on-device
       processes to find free 39-bit space.
 - [x] Borrowing the idea from PRoot's `link2symlink` is not a licensing
