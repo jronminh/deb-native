@@ -78,7 +78,7 @@ extensions' options):
   the tree's own loader has no dn-policy wiring.  Without the option the
   behavior is unchanged;
 - `--syscalls PATH` names the published syscall catalog
-  ([`src/syscalls.tsv`](../../src/syscalls.tsv)): the seccomp filter's gate-IP
+  ([`src/syscalls.tsv`](../../../src/syscalls.tsv)): the seccomp filter's gate-IP
   exemption is built from it (`syscall/dn-syscalls.c`).  Missing = no
   exemption, which is safe;
 - the arguments are a subset of `proot`'s.
