@@ -25,7 +25,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/file.h>
-#include <stdio.h>
+#include <stdio.h> /* rename(3) -- POSIX declares it here, not <unistd.h> */
 #include <pthread.h>
 
 static char links_dir[PATH_MAX];
@@ -37,6 +37,36 @@ static int ensure_dir(const char *path)
 	if (mkdir(path, 0700) < 0 && errno != EEXIST)
 		return -errno;
 	return 0;
+}
+
+/* "<a>/<b>" into @out, bounded by @cap -- memcpy/strlen only, not
+ * snprintf; see dn-policy.c's path_join() for why (confirmed by
+ * bisection: snprintf pulled real malloc/flock-syscall-cancel/etc into
+ * glibc's own elf/librtld.map discovery build step and broke it). */
+static int path_join(char *out, size_t cap, const char *a, const char *b)
+{
+	size_t al = strlen(a), bl = strlen(b);
+
+	if (al + 1 + bl + 1 > cap)
+		return -ENAMETOOLONG;
+	memcpy(out, a, al);
+	out[al] = '/';
+	memcpy(out + al + 1, b, bl + 1);
+	return 0;
+}
+
+/* Copies up to @cap - 1 bytes of @src into @dst and always
+ * NUL-terminates -- not strncpy(), whose own NUL-padding behavior on a
+ * short @src is a well-known footgun and unneeded here regardless
+ * (callers memset() the destination record first). */
+static void bounded_copy(char *dst, size_t cap, const char *src)
+{
+	size_t n = strlen(src);
+
+	if (n > cap - 1)
+		n = cap - 1;
+	memcpy(dst, src, n);
+	dst[n] = '\0';
 }
 
 /* Not called from dn_policy_init() -- see dn_policy_rt_root()'s comment
@@ -58,23 +88,23 @@ int dn_policy_hardlink_init(const char *rt_root)
 	 * hardlinks) -- this file owns creating its own parent. mkdir()
 	 * doesn't create parents, so this must come before links_dir's own
 	 * mkdir() below. */
-	status = snprintf(state_dir, sizeof(state_dir), "%s/state", rt_root);
-	if (status < 0 || (size_t) status >= sizeof(state_dir))
-		return -ENAMETOOLONG;
+	status = path_join(state_dir, sizeof(state_dir), rt_root, "state");
+	if (status < 0)
+		return status;
 	status = ensure_dir(state_dir);
 	if (status < 0)
 		return status;
 
-	status = snprintf(links_dir, sizeof(links_dir), "%s/state/links", rt_root);
-	if (status < 0 || (size_t) status >= sizeof(links_dir))
-		return -ENAMETOOLONG;
+	status = path_join(links_dir, sizeof(links_dir), state_dir, "links");
+	if (status < 0)
+		return status;
 	status = ensure_dir(links_dir);
 	if (status < 0)
 		return status;
 
-	status = snprintf(links_db_path, sizeof(links_db_path), "%s/state/links.db", rt_root);
-	if (status < 0 || (size_t) status >= sizeof(links_db_path))
-		return -ENAMETOOLONG;
+	status = path_join(links_db_path, sizeof(links_db_path), state_dir, "links.db");
+	if (status < 0)
+		return status;
 
 	ready = 1;
 	return 0;
@@ -194,7 +224,7 @@ static int db_set_refcount(const char *id, uint32_t refcount)
 		return fd;
 
 	memset(&rec, 0, sizeof(rec));
-	strncpy(rec.id, id, sizeof(rec.id) - 1);
+	bounded_copy(rec.id, sizeof(rec.id), id);
 	rec.refcount = refcount;
 	rec.valid = 1;
 
@@ -258,17 +288,40 @@ static int db_forget(const char *id)
 
 /* ---- Naming: the hidden file's path, and its <id> -------------------- */
 
+/* Decimal digits of @v into @buf (no sign, no NUL), returning the
+ * digit count. Not snprintf("%llu") -- same reasoning as path_join(). */
+static size_t u64_to_dec(uint64_t v, char *buf)
+{
+	char tmp[20]; /* max digits of a 64-bit unsigned value */
+	size_t n = 0, i;
+
+	if (v == 0) {
+		buf[0] = '0';
+		return 1;
+	}
+	while (v > 0) {
+		tmp[n++] = (char) ('0' + (v % 10));
+		v /= 10;
+	}
+	for (i = 0; i < n; i++)
+		buf[i] = tmp[n - 1 - i];
+	return n;
+}
+
 static void make_id(dev_t dev, ino_t ino, char *out, size_t cap)
 {
-	snprintf(out, cap, "%llu-%llu", (unsigned long long) dev, (unsigned long long) ino);
+	size_t n = 0;
+
+	n += u64_to_dec((uint64_t) dev, out + n);
+	if (n + 1 < cap)
+		out[n++] = '-';
+	n += u64_to_dec((uint64_t) ino, out + n);
+	out[n < cap ? n : cap - 1] = '\0';
 }
 
 static int hidden_path_for_id(const char *id, char *out, size_t cap)
 {
-	int status = snprintf(out, cap, "%s/%s", links_dir, id);
-	if (status < 0 || (size_t) status >= cap)
-		return -ENAMETOOLONG;
-	return 0;
+	return path_join(out, cap, links_dir, id);
 }
 
 /* If @host_path is a symlink into links_dir, fills *@id (and, when

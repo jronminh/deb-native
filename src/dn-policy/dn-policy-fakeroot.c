@@ -32,7 +32,6 @@
 #include <sys/file.h>
 #include <sys/xattr.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <pthread.h>
 
 #define DN_OWNER_XATTR "user.dn.owner"
@@ -94,6 +93,54 @@ static int ensure_dir(const char *path)
 	return 0;
 }
 
+/* "<a>/<b>" into @out, bounded by @cap -- memcpy/strlen only, not
+ * snprintf; see dn-policy.c's path_join() for why (confirmed by
+ * bisection: snprintf pulled real malloc/flock-syscall-cancel/etc into
+ * glibc's own elf/librtld.map discovery build step and broke it). */
+static int path_join(char *out, size_t cap, const char *a, const char *b)
+{
+	size_t al = strlen(a), bl = strlen(b);
+
+	if (al + 1 + bl + 1 > cap)
+		return -ENAMETOOLONG;
+	memcpy(out, a, al);
+	out[al] = '/';
+	memcpy(out + al + 1, b, bl + 1);
+	return 0;
+}
+
+/* Copies up to @cap - 1 bytes of @src into @dst and always
+ * NUL-terminates -- not strncpy(), same reasoning as
+ * dn-policy-hardlink.c's own copy of this helper. */
+static void bounded_copy(char *dst, size_t cap, const char *src)
+{
+	size_t n = strlen(src);
+
+	if (n > cap - 1)
+		n = cap - 1;
+	memcpy(dst, src, n);
+	dst[n] = '\0';
+}
+
+/* @name's value from the environment, by hand: environ is a plain
+ * NULL-terminated array of "KEY=VALUE" strings, and this is the one
+ * entry dn-policy ever looks up -- not getenv(), to keep this file's
+ * dependency surface to exactly what it uses rather than a
+ * general-purpose lookup function. */
+extern char **environ;
+
+static const char *dn_getenv(const char *name)
+{
+	size_t name_len = strlen(name);
+	char **e;
+
+	for (e = environ; e != NULL && *e != NULL; e++) {
+		if (strncmp(*e, name, name_len) == 0 && (*e)[name_len] == '=')
+			return *e + name_len + 1;
+	}
+	return NULL;
+}
+
 /* Returns 1 if the device lets us write/read/remove a user.* xattr on a
  * real file under @rt_root, 0 if not, or a negative errno on an
  * unexpected failure setting the probe up (not on the xattr calls
@@ -105,9 +152,9 @@ static int probe_user_xattr(const char *rt_root)
 	int status;
 	char value[8];
 
-	status = snprintf(probe_path, sizeof(probe_path), "%s/.xattr-probe", state_dir);
-	if (status < 0 || (size_t) status >= sizeof(probe_path))
-		return -ENAMETOOLONG;
+	status = path_join(probe_path, sizeof(probe_path), state_dir, ".xattr-probe");
+	if (status < 0)
+		return status;
 	(void) rt_root;
 
 	fd = open(probe_path, O_CREAT | O_WRONLY, 0600);
@@ -139,20 +186,20 @@ int dn_policy_fakeroot_init(const char *rt_root)
 	if (state_ready)
 		return 0;
 
-	status = snprintf(state_dir, sizeof(state_dir), "%s/state", rt_root);
-	if (status < 0 || (size_t) status >= sizeof(state_dir))
-		return -ENAMETOOLONG;
+	status = path_join(state_dir, sizeof(state_dir), rt_root, "state");
+	if (status < 0)
+		return status;
 
 	status = ensure_dir(state_dir);
 	if (status < 0)
 		return status;
 
-	status = snprintf(owners_db_path, sizeof(owners_db_path), "%s/owners.db", state_dir);
-	if (status < 0 || (size_t) status >= sizeof(owners_db_path))
-		return -ENAMETOOLONG;
-	status = snprintf(xattrs_db_path, sizeof(xattrs_db_path), "%s/xattrs.db", state_dir);
-	if (status < 0 || (size_t) status >= sizeof(xattrs_db_path))
-		return -ENAMETOOLONG;
+	status = path_join(owners_db_path, sizeof(owners_db_path), state_dir, "owners.db");
+	if (status < 0)
+		return status;
+	status = path_join(xattrs_db_path, sizeof(xattrs_db_path), state_dir, "xattrs.db");
+	if (status < 0)
+		return status;
 
 	/* Escape hatch for testing/diagnosis, same convention as DN_ID
 	 * (syscall/exit.c): skips the probe entirely when set. "db" is
@@ -161,7 +208,7 @@ int dn_policy_fakeroot_init(const char *rt_root)
 	 * such partition seen so far does) -- there is otherwise no way
 	 * to reach it short of a filesystem that lacks xattr support. */
 	{
-		const char *forced = getenv("DN_POLICY_OWNER_BACKEND");
+		const char *forced = dn_getenv("DN_POLICY_OWNER_BACKEND");
 		if (forced != NULL && strcmp(forced, "db") == 0) {
 			backend_is_xattr = 0;
 			state_ready = 1;
@@ -541,7 +588,7 @@ int dn_policy_fake_setxattr(const char *host_path, dev_t dev, ino_t ino,
 	memset(&rec, 0, sizeof(rec));
 	rec.dev = dev;
 	rec.ino = ino;
-	strncpy(rec.name, name, sizeof(rec.name) - 1);
+	bounded_copy(rec.name, sizeof(rec.name), name);
 	rec.size = (uint32_t) size;
 	rec.valid = 1;
 	memcpy(rec.value, value, size);

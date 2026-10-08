@@ -19,7 +19,6 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
-#include <stdio.h>
 
 /* Sixteen bytes of slack on top of PATH_MAX: a guest path can be up to
  * PATH_MAX-1 long on its own, and prefixing it with tree_root must
@@ -59,6 +58,76 @@ static int copy_out(const char *src, char *out, size_t cap)
 		return -ENAMETOOLONG;
 	memcpy(out, src, len + 1);
 	return 0;
+}
+
+/* "<a>/<b>" into @out, bounded by @cap. memcpy/strlen only, deliberately
+ * not snprintf: this file is also compiled into dn-glibc
+ * (sysdeps/unix/sysv/linux/), and snprintf pulls in glibc's full
+ * vfprintf machinery (which touches malloc, locking, more) -- fine in
+ * an ordinary program, but fatal here, because glibc's own
+ * elf/librtld.map build step links the loader's minimal object set
+ * against the *entire* libc_pic.a to discover what else it needs, and
+ * hard-fails on any duplicate definition it finds doing so. Pulling in
+ * real malloc/free/realloc (and flock's __syscall_cancel wrapper, and
+ * sbrk, and __libc_fatal) that way is exactly such a duplicate --
+ * confirmed by bisection, not guessed. dn-prefix.h's own __dn_build()/
+ * __dn_redirect() already avoided snprintf for what was probably this
+ * same reason. */
+static int path_join(char *out, size_t cap, const char *a, const char *b)
+{
+	size_t al = strlen(a), bl = strlen(b);
+
+	if (al + 1 + bl + 1 > cap)
+		return -ENAMETOOLONG;
+	memcpy(out, a, al);
+	out[al] = '/';
+	memcpy(out + al + 1, b, bl + 1);
+	return 0;
+}
+
+/* In-place next '/'-separated, non-empty component of *cursor -- same
+ * skip-empty-components behavior as strtok_r(s, "/", ...), but a
+ * hand-rolled single-purpose scan instead: strtok_r is reentrant-safe
+ * (fine), but it, like snprintf, is a general-purpose library function
+ * whose internal cost and whatever it might call isn't something this
+ * file should have to take on faith. Mutates the string in place (each
+ * separator becomes '\0'), same as strtok_r. Returns NULL once
+ * exhausted. */
+static char *next_component(char **cursor)
+{
+	char *start = *cursor;
+	char *p;
+
+	while (*start == '/')
+		start++;
+	if (*start == '\0') {
+		*cursor = start;
+		return NULL;
+	}
+
+	p = start;
+	while (*p != '\0' && *p != '/')
+		p++;
+	if (*p == '/') {
+		*p = '\0';
+		*cursor = p + 1;
+	} else {
+		*cursor = p;
+	}
+	return start;
+}
+
+/* Last '/' in @path, or NULL if there is none -- not strrchr(), same
+ * reasoning as next_component() above. */
+static char *last_slash(const char *path)
+{
+	const char *p = path;
+	const char *found = NULL;
+
+	for (; *p != '\0'; p++)
+		if (*p == '/')
+			found = p;
+	return (char *) found;
 }
 
 int dn_policy_init(const char *tree_root_in, const char *rt_root_in)
@@ -134,7 +203,7 @@ static int normalize_into(const char *path, char *out, size_t cap)
 	char buf[DN_PATH_BUF];
 	const char *stack[64];
 	int top = 0;
-	char *tok, *saveptr;
+	char *cursor, *tok;
 	size_t len;
 	int i;
 
@@ -142,7 +211,8 @@ static int normalize_into(const char *path, char *out, size_t cap)
 		return -ENAMETOOLONG;
 	memcpy(buf, path, strlen(path) + 1);
 
-	tok = strtok_r(buf, "/", &saveptr);
+	cursor = buf;
+	tok = next_component(&cursor);
 	while (tok != NULL) {
 		if (strcmp(tok, ".") == 0) {
 			/* skip */
@@ -154,7 +224,7 @@ static int normalize_into(const char *path, char *out, size_t cap)
 				return -ENAMETOOLONG;
 			stack[top++] = tok;
 		}
-		tok = strtok_r(NULL, "/", &saveptr);
+		tok = next_component(&cursor);
 	}
 
 	len = 0;
@@ -181,7 +251,7 @@ static int normalize_into(const char *path, char *out, size_t cap)
  * only edge case is "/" itself. */
 static int dirname_into(const char *path, char *out, size_t cap)
 {
-	const char *slash = strrchr(path, '/');
+	const char *slash = last_slash(path);
 	size_t len;
 
 	if (slash == NULL)
@@ -237,9 +307,9 @@ static int resolve_symlink_chain(char *current, size_t cap, int depth)
 			status = dirname_into(current, dir, sizeof(dir));
 			if (status < 0)
 				return status;
-			status = snprintf(resolved, sizeof(resolved), "%s/%s", dir, target);
-			if (status < 0 || (size_t) status >= sizeof(resolved))
-				return -ENAMETOOLONG;
+			status = path_join(resolved, sizeof(resolved), dir, target);
+			if (status < 0)
+				return status;
 		}
 
 		if (strlen(resolved) + 1 > cap)
@@ -261,9 +331,9 @@ static int map_and_resolve(const char *guest_path, char *host_path_out, size_t c
 {
 	char current[DN_PATH_BUF];
 	char rest[PATH_MAX];
+	char *cursor;
 	char *component;
-	char *saveptr;
-	char *next_component;
+	char *following;
 	int status;
 
 	if (strlen(guest_path) >= sizeof(rest))
@@ -276,7 +346,8 @@ static int map_and_resolve(const char *guest_path, char *host_path_out, size_t c
 	memcpy(current, tree_root, tree_root_len);
 	current[tree_root_len] = '\0';
 
-	component = strtok_r(rest, "/", &saveptr);
+	cursor = rest;
+	component = next_component(&cursor);
 	while (component != NULL) {
 		size_t cur_len = strlen(current);
 		size_t comp_len = strlen(component);
@@ -286,9 +357,9 @@ static int map_and_resolve(const char *guest_path, char *host_path_out, size_t c
 		current[cur_len] = '/';
 		memcpy(current + cur_len + 1, component, comp_len + 1);
 
-		next_component = strtok_r(NULL, "/", &saveptr);
-		if (next_component == NULL && !follow_last) {
-			component = next_component;
+		following = next_component(&cursor);
+		if (following == NULL && !follow_last) {
+			component = following;
 			break; /* last component, leave it unresolved */
 		}
 
@@ -296,7 +367,7 @@ static int map_and_resolve(const char *guest_path, char *host_path_out, size_t c
 		if (status < 0)
 			return status;
 
-		component = next_component;
+		component = following;
 	}
 
 	{
