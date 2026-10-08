@@ -55,7 +55,7 @@ jobs:
           cd work
           QUILT_PATCHES=debian/patches quilt push -a
 
-      - name: Apply this project's Android patch
+      - name: Apply this project's glibc patches
         run: |
           scripts/glibc/dn-apply-glibc-patch.sh src/work "${DN_PREFIX}"
 

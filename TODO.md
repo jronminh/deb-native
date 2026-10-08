@@ -177,8 +177,16 @@ below.
     dn-policy symbol, and the minimal prefix run under the built loader
     shows `open`/`stat`/`lstat`, the fake-root post-processing, the reverse
     translation and the manipulation wrappers all working (verified
-    2026-10-08; see `patches/README.md`). Not yet in the build workflow —
-    applied by hand in the scratch build.
+    2026-10-08; see `patches/README.md`). Now applied by the build workflow
+    too — `scripts/glibc/dn-apply-glibc-patch.sh` applies this patch right
+    after `dn-glibc-android.patch`.
+    - **Known issue (accepted):** the `syscalls.list`-generated wrappers
+      (`mkdirat`/`unlinkat`/`symlinkat`/`linkat`/`readlinkat`/`fchownat`/
+      `chdir`/`chroot`/`*xattr`) and any path-group call a static/foreign
+      program makes directly fall to the `ptrace` tier — correct, just
+      slower. The gate page is mapped but inert until routing every glibc
+      syscall through it, which must come together with overriding those
+      wrappers and handling `syscall_cancel.S`'s cancellation markers.
 - Pick `P_GATE`, done: `0x100000000` (4 GiB) — found free in every readable
   on-device process map, inside the 39-bit range; the loader now maps it
   (`elf/rtld.c`), `r-xp`. Still open: issue glibc's syscalls from it

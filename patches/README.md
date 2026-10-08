@@ -509,3 +509,14 @@ Still open: the xattr family and the public `fchownat()`
 (`syscalls.list`-generated), `chdir`/`chroot`, issuing every glibc syscall
 from the gate page (`INTERNAL_SYSCALL_RAW` and the cancellation asm), and the
 seccomp filter's gate-IP rule in `dn-trace`.
+
+**Known issue (accepted).** The `syscalls.list`-generated wrappers above, and
+any path-group call a static or foreign program makes directly, are not yet on
+the native path: the shared filter catches them and the `ptrace` tier handles
+them through dn-policy -- **correct, just slower**. The gate page is mapped but
+inert on purpose: routing every glibc syscall through it is not enabled until
+it can be done correctly, because a gate-issued call the filter lets through
+must already be translated, and the generated wrappers issue their syscall
+in-line (untranslated) -- so the routing has to come together with overriding
+those wrappers (and with handling `syscall_cancel.S`'s cancellation markers).
+This is the intended transitional state, not a regression.

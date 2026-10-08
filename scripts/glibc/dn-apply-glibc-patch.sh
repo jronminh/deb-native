@@ -1,11 +1,12 @@
 #!/bin/sh
-# Apply patches/dn-glibc-android.patch to a
-# Debian glibc source tree, substituting the real target prefix for the
-# patch's @DN_PREFIX@ placeholder. The patch is never hand-edited or
-# regenerated to change prefix: every path it bakes at compile time
-# (ld.so.preload, the guest /etc, ...) goes through this one substitution,
-# so the same patch builds the production prefix (.dn) or a throwaway test
-# prefix (docs/spec/dn-glibc-prefix.md, "Install order") alike.
+# Apply the glibc patches to a Debian glibc source tree:
+#   - patches/dn-glibc-android.patch, substituting the real target prefix
+#     for its @DN_PREFIX@ placeholder (every compile-time path it bakes --
+#     ld.so.preload, the guest /etc, ... -- goes through that one
+#     substitution, so the same patch builds the production prefix (.dn) or
+#     a throwaway test prefix; docs/spec/dn-glibc-prefix.md, "Install order");
+#   - then patches/dn-policy-glibc-wiring.patch, which names no prefix (the
+#     dn-policy it embeds derives TREE at run time).
 #
 # Usage: dn-apply-glibc-patch.sh SOURCE_TREE PREFIX
 #   SOURCE_TREE   Debian glibc source, Debian's own debian/patches/series
@@ -30,3 +31,13 @@ PATCH="$HERE/patches/dn-glibc-android.patch"
 
 echo "Applying dn-glibc-android.patch to $SRC for prefix $PREFIX ..."
 sed "s|@DN_PREFIX@|$PREFIX|g" "$PATCH" | patch -p1 -d "$SRC"
+
+# The dn-policy wiring (patches/dn-policy-glibc-wiring.patch) goes on top:
+# it names no prefix (dn-policy derives TREE at run time), so it needs no
+# substitution.  It replaces __dn_redirect in the wrappers with real
+# dn-policy calls, wires syscall(2), and adds the gate page + the RT/lib-first
+# search order (docs/spec/runtime.md, "Building dn-glibc").  Kept a separate
+# file from the Android patch on purpose, so the two can be reviewed and
+# re-generated independently.
+echo "Applying dn-policy-glibc-wiring.patch to $SRC ..."
+patch -p1 -d "$SRC" < "$HERE/patches/dn-policy-glibc-wiring.patch"
