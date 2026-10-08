@@ -127,12 +127,18 @@ below.
   since `dn-trace` tracks many tracees at once (one may drop to `_apt`
   while another stays root) — fixed with a `DnIdentity` handle the caller
   owns one of per traced program.
-- [ ] Implement `dn-policy` against that header: path mapping (longest
-  prefix, `/proc`/`/sys`/`/dev` passthrough), in-tree symlink resolution,
-  reverse translation, fake root (probe on-device whether `user.dn.*` xattr
+- [x] Implement path mapping: `src/dn-policy/dn-policy.c` —
+  `dn_policy_init()`, longest-prefix mapping, `/proc`/`/sys`/`/dev`
+  passthrough, no-double-translation, reverse translation. Verified by
+  hand (`.check_translate.c`), caught and fixed a real bug (a spurious
+  trailing slash translating guest `/`). **Not yet implemented:**
+  absolute in-tree symlink resolution (correct for a tree with none,
+  see the file's header comment).
+- [ ] Fake root: owner store (probe on-device whether `user.dn.*` xattr
   writes work before committing to that backend over the `RT/state/` DB
-  fallback), hardlinks (`link2symlink` — settle the PRoot-GPL licensing
-  question first, per `runtime.md`'s open items).
+  fallback), `security.*` xattr faking, the `DnIdentity`-keyed get/setuid.
+- [ ] Hardlinks (`link2symlink` — settle the PRoot-GPL licensing question
+  first, per `runtime.md`'s open items).
 - Patch glibc (full rebuild from Debian source, not the shipped 10-file
   swap — see `docs/spec/dn-glibc-prefix.md`'s status note): wire dn-policy
   into every path-taking function (public + internal + `syscall()`), route
