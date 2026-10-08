@@ -22,6 +22,11 @@ largest section there).
   shim built here actually covers, measured against a package corpus.
 - [`syscall-boundary.md`](../../reference/syscall-boundary.md) — what this shim cannot
   reach at all (static binaries, raw syscalls, libc-internal NSS).
+- [`../runtime.md`](../runtime.md) — the planned dn-policy, wired into
+  glibc at the source level, which replaces this shim and the
+  maintainer-script `sed` rewrite below (the scope limit this doc hit:
+  interposition can't reach a script's literal paths or glibc's own
+  internal calls — dn-policy reaches both).
 
 ## Faking the Debian layout with our own shim (no kernel view)
 

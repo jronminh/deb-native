@@ -8,6 +8,9 @@ and what is still open. Living doc, not per-release — last major update
 `README.md` keeps the per-file prune list);
 earlier background: `direct-usage.md`,
 `bind-only.md`, [`syscall-boundary.md`](../../reference/syscall-boundary.md).
+Planned: [`../runtime.md`](../runtime.md) makes `dn-trace` the tree's root
+process with one seccomp filter installed once, replacing the
+adopt-on-first-run model described below.
 
 ## Contents
 

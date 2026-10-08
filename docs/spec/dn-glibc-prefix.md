@@ -8,7 +8,14 @@ a package gets in (**packaging**) and how the compiler toolchain fits
 
 Status: shipped (0.6.0+s.1). The mechanism is proven on the phone
 (`fused-shim-self-derives-prefix.md`); the packaging, install order and
-run-time prefix self-derivation below are what shipped.
+run-time prefix self-derivation below are what shipped. Planned:
+[`runtime.md`](runtime.md) replaces this 10-file swap with a full rebuild
+of glibc from Debian source, because dn-policy must be wired into every
+path-taking function (public, internal, and `syscall()`) — internal
+glibc-to-glibc calls bypass the PLT, so the narrower patch here can't
+reach them the way `LD_PRELOAD` interposition couldn't either. The
+run-time self-derivation mechanism below is the proven prior art
+`runtime.md`'s dn-policy reuses for locating `TREE`/`RT`.
 
 ## Contents
 
@@ -38,6 +45,8 @@ run-time prefix self-derivation below are what shipped.
 - `../../docs/log/findings/glibc-patch-swap-set.md`
   -- the exact 10 files the patch affects; the set [Runtime prefix
   self-derivation](#runtime-prefix-self-derivation) makes prefix-agnostic.
+- [`runtime.md`](runtime.md) -- the planned full-source-rebuild
+  replacement for this 10-file swap; see the status note above.
 
 ## What the prefix supplies
 

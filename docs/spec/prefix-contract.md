@@ -12,7 +12,12 @@ ELF with no `PT_INTERP`, so the host shell can exec it -- on the artifact's
 own `dn-elf`, which repoints every glibc ELF's `PT_INTERP` at the new path and
 rewrites the text files with `sed`. The artifact carries the tool that
 relocates it; the host supplies no ELF tool of its own. Status: current; the
-build writes `.dn/` and `ship-prefix.sh` runs `install.sh`.
+build writes `.dn/` and `ship-prefix.sh` runs `install.sh`. Planned:
+[`runtime.md`](runtime.md)'s design drops this relocation mechanism once
+built — `TREE`/`RT` become fixed at build time and the exec gate resolves
+the loader on every `execve`, so no ELF ever needs its interpreter
+rewritten after the build. Until that design is implemented, this
+mechanism is what ships.
 
 ## Contents
 
@@ -36,6 +41,9 @@ build writes `.dn/` and `ship-prefix.sh` runs `install.sh`.
   derives the live prefix from its own path.
 - [`prefix-layers.md`](prefix-layers.md) -- core-ultra and core-deb, the
   artifacts this contract describes.
+- [`runtime.md`](runtime.md) -- the planned runtime (dn-policy, dn-glibc,
+  dn-trace) that replaces this doc's relocation mechanism; see the status
+  note above.
 
 ## The model
 

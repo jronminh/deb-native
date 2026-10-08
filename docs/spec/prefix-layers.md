@@ -26,6 +26,10 @@ experiments cut from one full prefix (sizes below).
 
 - [`prefix-contract.md`](prefix-contract.md) -- the `.dn/` interface every
   layer's artifact carries, and how a host installs one.
+- [`runtime.md`](runtime.md) -- the planned runtime (dn-policy, dn-glibc,
+  dn-trace). Its principle 5 is what lets all three layers below share one
+  build of dn-policy/dn-glibc/dn-trace per (CPU arch, `libc6` ABI version)
+  instead of rebuilding per layer.
 
 ## The layers
 
