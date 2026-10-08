@@ -67,7 +67,7 @@ packages are optional requirements in the README.
 `cli/proot.c`: option tables, help, qemu, `-r`/`-w`/`-0`, the pruned
 extensions' options):
 
-    dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--rt-loader PATH] [--] PROGRAM [ARG...]
+    dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--rt-loader PATH] [--syscalls PATH] [--] PROGRAM [ARG...]
 
 - guest root is always the host `/`, cwd is the current directory;
 - a `-b` whose host path does not exist is skipped (PRoot warned);
@@ -77,6 +77,10 @@ extensions' options):
   "The exec gate") — the kernel cannot find a guest `PT_INTERP` itself, and
   the tree's own loader has no dn-policy wiring.  Without the option the
   behavior is unchanged;
+- `--syscalls PATH` names the published syscall catalog
+  ([`src/syscalls.tsv`](../../src/syscalls.tsv)): the seccomp filter's gate-IP
+  exemption is built from it (`syscall/dn-syscalls.c`).  Missing = no
+  exemption, which is safe;
 - the arguments are a subset of `proot`'s.
 
 ### 3. The kernel execs the program; PRoot's loader is gone

@@ -189,14 +189,14 @@ below.
       syscall through it, which must come together with overriding those
       wrappers and handling `syscall_cancel.S`'s cancellation markers.
 - Pick `P_GATE`, done: `0x100000000` (4 GiB) — found free in every readable
-  on-device process map, inside the 39-bit range; the loader now maps it
+  on-device process map, inside the 39-bit range; the loader maps it
   (`elf/rtld.c`), `r-xp`, and libc issues its syscalls from it
-  (`INTERNAL_SYSCALL_RAW` + `syscallS.S`, the non-cancelable path). Still
-  open before the gate-IP rule in the shared filter (`dn-trace`) is safe:
-  wire `bind` (UNIX socket path) and the identity group (fake root) in
-  dn-glibc, and the cancelable `syscall_cancel.S` path. The
-  `syscalls.list`-generated wrappers issue a raw `svc` (asm), never from the
-  gate, so they stay on ptrace.
+  (`INTERNAL_SYSCALL_RAW` + `syscallS.S`). The filter's gate-IP rule is now
+  built from the published catalog (`src/syscalls.tsv`, `dn-trace
+  --syscalls`): only the syscalls dn-glibc already translates in-process
+  (`gate=yes`) are exempted. Still open: wire `bind`, the identity group
+  (fake root), and the cancelable `syscall_cancel.S` path, then flip their
+  catalog rows to `gate=yes` — the list stays the one source of truth.
 - Turn on exec-gate rules 3/4 (rewrite to `RT/ld.so ...`). Drop the shim.
   - Rule 3 done: `dn-trace --rt-loader PATH` rewrites a glibc-dynamic exec to
     `loader --argv0 <orig argv0> <real path> <args>`. The runtime must pass

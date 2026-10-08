@@ -30,11 +30,15 @@
 #include "path/canon.h"
 #include "path/path.h"
 
-#define USAGE "usage: dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--rt-loader PATH] [--] PROGRAM [ARG...]\n"
+#define USAGE "usage: dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--rt-loader PATH] [--syscalls PATH] [--] PROGRAM [ARG...]\n"
 
 /* deb-native, --rt-loader: the runtime loader the exec gate runs rule-3
    programs through.  See cli/note.h. */
 const char *global_rt_loader = NULL;
+
+/* deb-native, --syscalls: the published syscall catalog the filter's gate-IP
+   exemption is built from.  See cli/note.h. */
+const char *global_syscalls_path = NULL;
 
 /* -b HOST[:GUEST]; GUEST defaults to HOST.  */
 static int add_binding(Tracee *tracee, const char *value)
@@ -146,6 +150,10 @@ int main(int argc, char *const argv[])
 		}
 		else if (strcmp(argv[i], "--rt-loader") == 0 && i + 1 < argc) {
 			global_rt_loader = argv[++i];
+			status = 0;
+		}
+		else if (strcmp(argv[i], "--syscalls") == 0 && i + 1 < argc) {
+			global_syscalls_path = argv[++i];
 			status = 0;
 		}
 		else {

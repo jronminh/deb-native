@@ -1,8 +1,10 @@
 # deb-native syscall catalog -- the exact, categorized list of the syscalls
 # the runtime overlay handles (docs/spec/runtime.md, "The shared filter's
-# rules").  One source of truth: dn-trace builds its seccomp filter from it,
-# dn-glibc wires the rows marked glibc=yes, and tools/check-syscalls.py keeps
-# the two in step (principle 1: one place the rules live).
+# rules").  One source of truth: dn-trace reads it at run time (--syscalls
+# PATH; it is installed next to dn-trace in RT) and builds the filter's
+# gate-IP exemption from the gate=yes rows; dn-glibc wires the glibc=yes rows,
+# and a repo check keeps the two in step (principle 1: one place the rules
+# live).
 #
 # PROVENANCE / SCOPE -- this list is NOT universal; it follows the Android
 # kernel and Android policy, so read it with its version:

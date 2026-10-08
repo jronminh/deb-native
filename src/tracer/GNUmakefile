@@ -38,6 +38,7 @@ OBJECTS += \
 	path/proc.o		\
 	path/temp.o		\
 	syscall/seccomp.o	\
+	syscall/dn-syscalls.o	\
 	syscall/syscall.o	\
 	syscall/chain.o		\
 	syscall/enter.o		\

@@ -40,6 +40,7 @@
 #include <assert.h>        /* assert(3), */
 
 #include "syscall/seccomp.h"
+#include "syscall/dn-syscalls.h"
 #include "tracee/tracee.h"
 #include "syscall/syscall.h"
 #include "syscall/sysnum.h"
@@ -50,6 +51,10 @@
 #include "attribute.h"
 
 #define DEBUG_FILTER(...) /* fprintf(stderr, __VA_ARGS__) */
+
+/* deb-native: the fixed gate page address, mirrored from the dn-glibc build
+   (sysdeps/generic/dn-prefix.h, elf/rtld.c).  Chosen in 39-bit space.  */
+#define DN_GATE_ADDR 0x100000000UL
 
 /**
  * Allocate an empty @program->filter.  This function returns -errno
@@ -122,12 +127,63 @@ static int add_trace_syscall(struct sock_fprog *program, word_t syscall, int fla
 }
 
 /**
+ * Append to @program->filter the statements that ALLOW @syscall when it is
+ * issued from the fixed gate page -- dn-glibc's P_GATE, where it has already
+ * translated the call in-process (docs/spec/runtime.md, "The shared
+ * filter's rules").  @syscall comes from the published catalog
+ * (syscall/dn-syscalls.c, rows with gate=yes).  A call from anywhere else
+ * falls through to the trace rules below.  Assumes a 4 KB P_GATE page that
+ * does not cross a 4 GiB boundary (true for the chosen value).  Returns
+ * -errno on failure.
+ */
+static int add_gate_allow_syscall(struct sock_fprog *program, word_t syscall)
+{
+	const size_t ip_offset = offsetof(struct seccomp_data, instruction_pointer);
+	const uint32_t gate_hi = (uint32_t) ((uint64_t) DN_GATE_ADDR >> 32);
+	const uint32_t gate_lo_end =
+		(uint32_t) ((uint64_t) DN_GATE_ADDR & 0xffffffffu) + 4096;
+	int status;
+
+	/* Sanity check.  */
+	if (syscall > UINT32_MAX)
+		return -ERANGE;
+
+	#define LENGTH_GATE_ALLOW 6
+	struct sock_filter statements[LENGTH_GATE_ALLOW] = {
+		/* Not this syscall: skip this block.  */
+		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, syscall, 0, LENGTH_GATE_ALLOW - 1),
+
+		/* Load the high 32 bits of the instruction pointer.  */
+		BPF_STMT(BPF_LD + BPF_W + BPF_ABS, ip_offset + 4),
+		/* Not the gate's high word: skip this block.  */
+		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, gate_hi, 0, 3),
+
+		/* Load the low 32 bits.  */
+		BPF_STMT(BPF_LD + BPF_W + BPF_ABS, ip_offset),
+		/* At or past the end of the page: skip the allow.  */
+		BPF_JUMP(BPF_JMP + BPF_JGE + BPF_K, gate_lo_end, 1, 0),
+
+		/* Issued from the gate page: already handled, allow.  */
+		BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW)
+	};
+
+	DEBUG_FILTER("FILTER:     allow if ip in gate and syscall == %ld\n", syscall);
+
+	status = add_statements(program, LENGTH_GATE_ALLOW, statements);
+	if (status < 0)
+		return status;
+
+	return 0;
+}
+
+/**
  * Append to @program->filter the statements that allow anything (if
  * unfiltered).  Note that @nb_traced_syscalls is used to make a
  * sanity check.  This function returns -errno if an error occurred,
  * otherwise 0.
  */
-static int end_arch_section(struct sock_fprog *program, size_t nb_traced_syscalls)
+static int end_arch_section(struct sock_fprog *program, size_t nb_traced_syscalls,
+			size_t nb_gate_syscalls)
 {
 	int status;
 
@@ -144,7 +200,9 @@ static int end_arch_section(struct sock_fprog *program, size_t nb_traced_syscall
 
 	/* Sanity check, see start_arch_section().  */
 	if (   talloc_array_length(program->filter) - program->len
-	    != LENGTH_END_SECTION + nb_traced_syscalls * LENGTH_TRACE_SYSCALL)
+	    != LENGTH_END_SECTION
+	     + nb_traced_syscalls * LENGTH_TRACE_SYSCALL
+	     + nb_gate_syscalls * LENGTH_GATE_ALLOW)
 		return -ERANGE;
 
 	return 0;
@@ -250,14 +308,16 @@ static void free_program_filter(struct sock_fprog *program)
  *
  * This function returns -errno if an error occurred, otherwise 0.
  */
-static int set_seccomp_filters(const FilteredSysnum *sysnums)
+static int set_seccomp_filters(const FilteredSysnum *sysnums,
+			const Sysnum *gate_sysnums, size_t nb_gate_sysnums)
 {
 	SeccompArch seccomp_archs[] = SECCOMP_ARCHS;
 	size_t nb_archs = sizeof(seccomp_archs) / sizeof(SeccompArch);
 
 	struct sock_fprog program = { .len = 0, .filter = NULL };
 	size_t nb_traced_syscalls;
-	size_t i, j, k;
+	size_t nb_gate_syscalls;
+	size_t i, j, k, n;
 	int status;
 
 	status = new_program_filter(&program);
@@ -269,6 +329,7 @@ static int set_seccomp_filters(const FilteredSysnum *sysnums)
 		word_t syscall;
 
 		nb_traced_syscalls = 0;
+		nb_gate_syscalls = 0;
 
 		/* Pre-compute the number of traced syscalls for this architecture.  */
 		for (j = 0; j < seccomp_archs[i].nb_abis; j++) {
@@ -279,10 +340,32 @@ static int set_seccomp_filters(const FilteredSysnum *sysnums)
 			}
 		}
 
+		/* Pre-compute the number of gate-allowed syscalls for it too.  */
+		for (n = 0; n < nb_gate_sysnums; n++) {
+			for (j = 0; j < seccomp_archs[i].nb_abis; j++) {
+				syscall = detranslate_sysnum(seccomp_archs[i].abis[j], gate_sysnums[n]);
+				if (syscall != SYSCALL_AVOIDER)
+					nb_gate_syscalls++;
+			}
+		}
+
 		/* Filter: if handled architecture */
 		status = start_arch_section(&program, seccomp_archs[i].value, nb_traced_syscalls);
 		if (status < 0)
 			goto end;
+
+		/* Filter: allow a catalog syscall issued from the gate page.  */
+		for (n = 0; n < nb_gate_sysnums; n++) {
+			for (j = 0; j < seccomp_archs[i].nb_abis; j++) {
+				syscall = detranslate_sysnum(seccomp_archs[i].abis[j], gate_sysnums[n]);
+				if (syscall == SYSCALL_AVOIDER)
+					continue;
+
+				status = add_gate_allow_syscall(&program, syscall);
+				if (status < 0)
+					goto end;
+			}
+		}
 
 		for (j = 0; j < seccomp_archs[i].nb_abis; j++) {
 			for (k = 0; sysnums[k].value != PR_void; k++) {
@@ -299,7 +382,7 @@ static int set_seccomp_filters(const FilteredSysnum *sysnums)
 		}
 
 		/* Filter: allow untraced syscalls for this architecture */
-		status = end_arch_section(&program, nb_traced_syscalls);
+		status = end_arch_section(&program, nb_traced_syscalls, nb_gate_syscalls);
 		if (status < 0)
 			goto end;
 	}
@@ -518,6 +601,8 @@ static int merge_filtered_sysnums(TALLOC_CTX *context, FilteredSysnum **sysnums,
 int enable_syscall_filtering(const Tracee *tracee)
 {
 	FilteredSysnum *filtered_sysnums = NULL;
+	Sysnum *gate_sysnums = NULL;
+	size_t nb_gate_sysnums = 0;
 	Extension *extension;
 	int status;
 
@@ -549,7 +634,18 @@ int enable_syscall_filtering(const Tracee *tracee)
 		}
 	}
 
-	status = set_seccomp_filters(filtered_sysnums);
+	/* deb-native: the gate-IP exemption comes from the published catalog
+	 * (src/syscalls.tsv, installed in RT), not a hand-maintained list.  A
+	 * missing/unreadable file just means no exemption -- safe.  */
+	status = dn_catalog_gate_sysnums(tracee->ctx, global_syscalls_path,
+					 &gate_sysnums, &nb_gate_sysnums);
+	if (status < 0 && status != -ENOENT)
+		return status;
+	if (status < 0 && global_syscalls_path != NULL)
+		note(tracee, WARNING, SYSTEM,
+		     "syscalls catalog not readable: %s", global_syscalls_path);
+
+	status = set_seccomp_filters(filtered_sysnums, gate_sysnums, nb_gate_sysnums);
 	if (status < 0)
 		return status;
 

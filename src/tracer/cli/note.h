@@ -58,4 +58,9 @@ extern const char *global_tool_name;
    NULL by default: behavior is unchanged. */
 extern const char *global_rt_loader;
 
+/* deb-native: the published syscall catalog (src/syscalls.tsv), from
+   --syscalls.  When set, the seccomp filter's gate-IP exemption is built
+   from it (syscall/dn-syscalls.c).  NULL = no exemption. */
+extern const char *global_syscalls_path;
+
 #endif /* NOTE_H */
