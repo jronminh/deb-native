@@ -297,16 +297,16 @@ the only coupling between the runtime and the package set.
   3. Has the loader map the gate page at startup, before opening any file.
   4. Has the loader search libraries in `RT/lib` first, then the tree's own
      library directories, using the tree's own `ld.so.cache`.
-- `RT/lib` holds every library built from glibc source (`libc.so.6`, `libm.so.6`,
-  `libresolv`, `libnss_*`, ...), so the tree's own same-named `libc6` files are
-  never loaded.
+- The patched libraries ship as the `libc6` package and land at the tree's
+  normal multiarch path, so the whole glibc-source runtime set is the patched
+  build. (`RT/lib` — the wiring's first search dir — is a reserved slot; the
+  shipped packages leave it empty.)
 - Data files (gconv, locale) come from the tree. Both sides share a version, so
   they are compatible.
-- Installed by version: `RT/glibc-<version>/`, with a `RT/glibc-current`
-  symlink that switches in one move, and reverts the same way on failure.
-- The build is keyed only to (CPU architecture, `libc6` ABI version); the same
-  `RT/glibc-<version>/` is copied unmodified into every tarball pinned to that
-  version.
+- The package's `+dn<n>` version is the version marker; a new glibc version
+  means a new build of the package. It is keyed only to (CPU architecture,
+  `libc6` ABI version), so the same `.deb` is reused across every tarball
+  pinned to that version.
 
 ### What the wiring covers
 
@@ -360,32 +360,30 @@ are gone: the runtime is the only thing between a package and the kernel.
 
 ### The glibc rule
 
-Packages built from the glibc source must never be upgraded past
-`RT/glibc-current`'s version. `apt` enforces this with version pinning, in a
-file the dn-glibc build generates:
-
-```
-# /etc/apt/preferences.d/dn-glibc  (generated, do not hand-edit)
-Package: libc6 libc6-dev libc-bin locales ...
-Pin: version <RT/glibc-current's version>
-Pin-Priority: 1001
-```
-
-The package list comes from the `Source: glibc` field in the package index,
-not hardcoded. `apt-mark hold` is not used.
+The patched glibc ships as **real Debian packages** — `libc6` and `libc-bin`,
+built from the tree's `libc6` source with the two patches, at version
+`<Debian version>+dn<n>` (`2.41-12+deb13u4+dn1`) so it is plain they are not
+upgradeable from the mirror. They are delivered through the **local repo**
+(below): its origin pin (priority 1001) beats the mirror (500), so `apt` can
+never replace them. There is no separate version-pin file, and `apt-mark hold`
+is not used. The tree ships only the runtime pair; Debian's version-pinned dev
+packages (`libc6-dev`, `libc-dev-bin`, `locales`) are out of scope, and if one
+is ever shipped the whole glibc source binary set is rebuilt at the same
+`+dn<n>` together.
 
 ### The local repo
 
-The local repo holds packages built specifically to run well on Android, and
-always wins over the mirror:
+The local repo is shipped inside `RT` (`RT/repo`, outside the dpkg-managed
+tree) and always wins over the mirror:
 
+- The patched glibc packages (`libc6`, `libc-bin`), at `+dn<n>`.
 - Dynamic builds standing in for a static or Go program in everyday use.
 - `equivs`-built dummy packages, to satisfy a dependency the tree can't use.
 - Packages patched to run on Android, where the runtime can't cover it alone.
 
 ```
-# /etc/apt/sources.list.d/dn-local.list
-deb [trusted=yes] file:/srv/dn-repo ./
+# /etc/apt/sources.list.d/dn-local.list   (the path is a guest path)
+deb [trusted=yes] file:/usr/lib/deb-native/repo ./
 
 # /etc/apt/preferences.d/dn-local
 Package: *
@@ -393,10 +391,12 @@ Pin: release o=deb-native
 Pin-Priority: 1001
 ```
 
-Rules: the pin only applies to a package the repo carries; a whole source
-package's binary set goes in together; a rebuilt package's version is
-`<Debian version>+dn<n>`; glibc-family packages never go in the repo (they use
-the version pin above). A check script lists local-repo packages the mirror has
+The repo's `Release` carries `Origin: deb-native`; the pin recognizes it. The
+mirror's own `libc6`/`libc-bin` are simply shadowed — the tree's `libc6` at
+`+dn<n>` is the candidate apt picks, at priority 1001. Rules: the pin only
+applies to a package the repo carries; a whole source package's binary set
+goes in together; a rebuilt package's version is `<Debian version>+dn<n>` (the
+glibc pair included); a check script lists local-repo packages the mirror has
 a newer version of.
 
 ## Init, services, and hard limits

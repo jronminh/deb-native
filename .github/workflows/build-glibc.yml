@@ -121,8 +121,9 @@ jobs:
           path: dn-glibc-android-${{ github.sha }}.tar.gz
           retention-days: 14
 
-      # The install bundle (DN_GLIBC_PREFIX): the patched files laid out
-      # relative to a prefix, plus Debian's own libc6/libc-bin. Handed to
+      # The install bundle (DN_GLIBC_PREFIX): the patched glibc as real
+      # packages -- libc6.deb and libc-bin.deb at `<Debian version>+dn1`, built
+      # from Debian's own libc6/libc-bin .debs as templates. Handed to
       # build-prefix.yml as an artifact.
       - name: Assemble the install bundle
         run: |
@@ -130,18 +131,19 @@ jobs:
           P="$GITHUB_WORKSPACE/destdir${DN_PREFIX}"
           B="$GITHUB_WORKSPACE/bundle"
           rm -rf "$B"
-          mkdir -p "$B/files/usr/lib/aarch64-linux-gnu" "$B/files/usr/sbin" "$B/files/usr/bin"
-          for f in libc.so.6 ld-linux-aarch64.so.1 libresolv.so.2 libnsl.so.1 \
-                   libnss_compat.so.2 libnss_hesiod.so.2 librt.so.1; do
-            cp -a "$P/usr/lib/$f" "$B/files/usr/lib/aarch64-linux-gnu/$f"
-          done
-          cp -a "$P/usr/sbin/ldconfig" "$B/files/usr/sbin/"
-          cp -a "$P/usr/bin/localedef" "$P/usr/bin/iconv" "$B/files/usr/bin/"
+          mkdir -p "$B"
           cd "$B"
           curl -sLO "https://deb.debian.org/debian/pool/main/g/glibc/libc6_${GLIBC_DEB_VERSION}_arm64.deb"
           curl -sLO "https://deb.debian.org/debian/pool/main/g/glibc/libc-bin_${GLIBC_DEB_VERSION}_arm64.deb"
-          mv libc6_*.deb libc6.deb
-          mv libc-bin_*.deb libc-bin.deb
+          mv libc6_*.deb libc6-real.deb
+          mv libc-bin_*.deb libc-bin-real.deb
+          "$GITHUB_WORKSPACE/scripts/glibc/dn-package-glibc.sh" \
+            libc6-real.deb "$P" libc6.deb
+          "$GITHUB_WORKSPACE/scripts/glibc/dn-package-libc-bin.sh" \
+            libc-bin-real.deb "$P" libc-bin.deb
+          rm -f libc6-real.deb libc-bin-real.deb
+          test -f libc6.deb
+          test -f libc-bin.deb
           tar -C "$B" -czf "$GITHUB_WORKSPACE/dn-glibc-bundle.tar.gz" .
 
       # Hand the just-built bundle to a caller (build-prefix.yml), so the

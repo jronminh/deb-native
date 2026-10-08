@@ -53,7 +53,9 @@ echo "Unpacking $REAL_DEB as the template ..."
 dpkg-deb -R "$REAL_DEB" "$WORK/pkg"
 
 V=$(sed -n 's/^Version: //p' "$WORK/pkg/DEBIAN/control")
-echo "Version: $V (unchanged -- see dn-package-glibc.sh's version comment)"
+V="$V${DN_GLIBC_SUFFIX:-+dn1}"
+sed -i "s/^Version: .*/Version: $V/" "$WORK/pkg/DEBIAN/control"
+echo "Version: $V (+dn suffix -- not upgradeable from the mirror)"
 
 echo "Replacing usr/bin and usr/sbin programs with our own build's ..."
 for d in usr/bin usr/sbin; do

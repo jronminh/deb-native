@@ -12,9 +12,11 @@
 # Inputs:
 #   BASE          a core-ultra tree in build form (cut-core-ultra.py output,
 #                 before pack-prefix.py), with its .dn/packages list.
-#   DN_GLIBC_PREFIX a deb-native prefix whose glibc is the Android-patched
-#                 build (its loader reports "GNU libc"). Its 10 patched files
-#                 replace the ones in Debian's libc6/libc-bin (step 2).
+#   DN_GLIBC_PREFIX a directory holding the patched `libc6.deb` and
+#                 `libc-bin.deb` (built by scripts/glibc/dn-package-glibc.sh
+#                 and dn-package-libc-bin.sh; version `<Debian>+dn1`, loader
+#                 says "GNU libc"). They replace Debian's in step 2, are
+#                 installed in the tree, and ship in the local repo (step 6b).
 #   DN_OVERLAY    the runtime overlay (build-overlay-glibc.sh output):
 #                 dn-trace and the syscall catalog.
 #   DEB_MIRROR    Debian mirror, default http://deb.debian.org/debian
@@ -37,7 +39,7 @@
 set -eu
 BASE=${1:?usage: build-core-deb.sh BASE OUT.tar.gz}
 OUT=${2:?usage: build-core-deb.sh BASE OUT.tar.gz}
-: "${DN_GLIBC_PREFIX:?set DN_GLIBC_PREFIX to a deb-native prefix whose glibc is the patched build}"
+: "${DN_GLIBC_PREFIX:?set DN_GLIBC_PREFIX to the dir holding the patched libc6.deb and libc-bin.deb}"
 : "${DN_OVERLAY:?set DN_OVERLAY to the build-overlay-glibc.sh output dir}"
 : "${PREFIX_ROOT:?set PREFIX_ROOT to the absolute build path of the artifact}"
 : "${DEB_LIST:?set DEB_LIST to the pinned package list (.dn/packages format)}"
@@ -97,38 +99,37 @@ while read -r name ver _arch; do
 done < "$DEB_LIST" > "$W/debs.list"
 echo "build-core-deb: $(wc -l < "$W/debs.list") packages verified"
 
-# 2. Glibc, the way the build always did it (docs/spec/overlay.md): Debian's
-#    own libc6 and libc-bin, extracted like every package in step 3, then the
-#    10 files the Android patch changes overwritten with the patched build from
-#    a deb-native prefix (DN_GLIBC_PREFIX). The patched files are the only glibc
-#    not from Debian; the loader must say "GNU libc" or the script stops.
-PATCHED="usr/lib/aarch64-linux-gnu/libc.so.6
-usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
-usr/lib/aarch64-linux-gnu/libresolv.so.2
-usr/lib/aarch64-linux-gnu/libnsl.so.1
-usr/lib/aarch64-linux-gnu/libnss_compat.so.2
-usr/lib/aarch64-linux-gnu/libnss_hesiod.so.2
-usr/lib/aarch64-linux-gnu/librt.so.1
-usr/sbin/ldconfig
-usr/bin/localedef
-usr/bin/iconv"
-"$DN_GLIBC_PREFIX/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1" --version 2>/dev/null | head -1 | grep -q "GNU libc" \
-  || die "DN_GLIBC_PREFIX's loader is not the patched build (it must say GNU libc)"
-echo "$PATCHED" | while IFS= read -r rel; do
-  [ -e "$DN_GLIBC_PREFIX/$rel" ] || die "patched file missing: $DN_GLIBC_PREFIX/$rel"
+# 2. Glibc is shipped as real packages, not swapped files (docs/spec/prefix.md):
+#    `libc6` and `libc-bin`, built from the tree's libc6 source with the
+#    Android + dn-policy patches, at version `<Debian version>+dn1` so they are
+#    visibly not upgradeable from the mirror. They are delivered through the
+#    local repo (step 6b); DN_GLIBC_PREFIX is the directory holding the two
+#    .debs. Replace the mirror's libc6/libc-bin entries with ours, and check
+#    the loader in libc6 says "GNU libc".
+for p in libc6 libc-bin; do
+  [ -f "$DN_GLIBC_PREFIX/$p.deb" ] || die "missing $DN_GLIBC_PREFIX/$p.deb"
+  [ "$(dpkg-deb -f "$DN_GLIBC_PREFIX/$p.deb" Package)" = "$p" ] \
+    || die "$DN_GLIBC_PREFIX/$p.deb is not the $p package"
 done
+while read -r name ver deb; do
+  case $name in
+    libc6|libc-bin)
+      p=$DN_GLIBC_PREFIX/$name.deb
+      printf '%s %s %s\n' "$name" "$(dpkg-deb -f "$p" Version)" "$p" ;;
+    *) printf '%s %s %s\n' "$name" "$ver" "$deb" ;;
+  esac
+done < "$W/debs.list" > "$W/debs.list.new"
+mv "$W/debs.list.new" "$W/debs.list"
+tmpld=$(mktemp -d "$W/ld.XXXXXX")
+dpkg-deb -x "$DN_GLIBC_PREFIX/libc6.deb" "$tmpld"
+"$tmpld/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1" --version 2>/dev/null | head -1 | grep -q "GNU libc" \
+  || die "libc6.deb's loader is not the patched build (it must say GNU libc)"
+rm -rf "$tmpld"
 
-# 3. Every package: extract the files into the stage (glibc included, from
-#    Debian's pinned debs).
+# 3. Every package: extract the files into the stage (glibc included -- ours).
 while read -r name ver deb; do
   dpkg-deb -x "$deb" "$STAGE"
 done < "$W/debs.list"
-
-# 2b. Overwrite the 10 patched files.
-echo "$PATCHED" | while IFS= read -r rel; do
-  mkdir -p "$STAGE/$(dirname "$rel")"
-  cp -f "$DN_GLIBC_PREFIX/$rel" "$STAGE/$rel"
-done
 
 # 4. Interpreters are left as Debian names them.  Runtime v1 does not relocate
 #    or repoint PT_INTERP: the tree's root dn-trace sees every exec, and its
@@ -166,12 +167,17 @@ done
 #     that no package owns. Such files come from the base tree (library closure)
 #     or are left from a trimmed package. Remove them; directories stay.
 ship_files=$W/owned-ship.txt; all_files=$W/owned-all.txt; : > "$ship_files"; : > "$all_files"
-for d in "$CACHE"/*.deb; do
-  n=$(dpkg-deb -f "$d" Package)
+# Every deb the prune can see: the cache (older builds' packages) plus the
+# ones this build ships -- the patched glibc debs live outside the cache.
+ls "$CACHE"/*.deb > "$W/all-debs.txt" 2>/dev/null || :
+cut -d' ' -f3 "$W/debs.list" >> "$W/all-debs.txt"
+sort -u -o "$W/all-debs.txt" "$W/all-debs.txt"
+while IFS= read -r d; do
+  [ -f "$d" ] || continue
   dpkg-deb -c "$d" | awk '{ f = $6; sub(/^\.\//, "", f); if (f != "" && f !~ /\/$/) print f }' > "$W/f.txt"
   cat "$W/f.txt" >> "$all_files"
   if cut -d' ' -f3 "$W/debs.list" | grep -qx "$d"; then cat "$W/f.txt" >> "$ship_files"; fi
-done
+done < "$W/all-debs.txt"
 sort -u "$ship_files" > "$W/ship.sorted"; sort -u "$all_files" > "$W/all.sorted"
 comm -23 "$W/all.sorted" "$W/ship.sorted" > "$W/orphans.txt"
 pruned=0
@@ -189,6 +195,34 @@ for f in dn-trace syscalls.tsv; do
   cp -f "$DN_OVERLAY/$f" "$STAGE/usr/lib/deb-native/$f"
 done
 
+# 6b. The local repo (docs/spec/overlay.md, "The local repo"): the patched
+#     glibc packages, so apt sees them and the origin pin (below) keeps the
+#     mirror from ever replacing them. It lives in RT, outside the
+#     dpkg-managed tree. Packages and Release are written by hand, so the
+#     build host needs neither dpkg-dev nor apt-utils.
+REPO=$STAGE/usr/lib/deb-native/repo
+mkdir -p "$REPO"
+cp -f "$DN_GLIBC_PREFIX/libc6.deb" "$DN_GLIBC_PREFIX/libc-bin.deb" "$REPO/"
+: > "$REPO/Packages"
+for d in libc6 libc-bin; do
+  {
+    dpkg-deb -f "$REPO/$d.deb"
+    printf 'Filename: ./%s.deb\n' "$d"
+    printf 'Size: %s\n' "$(wc -c < "$REPO/$d.deb")"
+    printf 'SHA256: %s\n' "$(sha256sum "$REPO/$d.deb" | cut -d' ' -f1)"
+    echo
+  } >> "$REPO/Packages"
+done
+gzip -kf "$REPO/Packages"
+cat > "$REPO/Release" <<REL
+Origin: deb-native
+Label: deb-native
+Suite: stable
+Codename: dn
+Architectures: arm64
+Description: deb-native local repo
+REL
+
 
 # 7. deb-native's own layer: the bootstrap helper the prefix runs at login.
 #    Runtime v1 needs no apt hooks -- a .deb installs intact, and dn-policy
@@ -198,16 +232,9 @@ cp -f "$ROOT/scripts/host/bootstrap-prefix.sh" "$STAGE/usr/lib/deb-native/script
 # The alternatives that mawk's configure step would make: the package manager's
 # awk is the link, not the file (a shipped tree is not configured).
 [ -e "$STAGE/usr/bin/awk" ] || [ -L "$STAGE/usr/bin/awk" ] || ln -s mawk "$STAGE/usr/bin/awk"
-GS="$STAGE/usr/lib/deb-native/glibc-swap"
-mkdir -p "$GS"
-echo "$PATCHED" | while IFS= read -r rel; do
-  mkdir -p "$GS/$(dirname "$rel")"
-  cp -f "$DN_GLIBC_PREFIX/$rel" "$GS/$rel"
-done
 
 # The loader configuration the overlay needs. With a package-derived BASE these
-# may be absent, so the build writes them (the paths are baked and relocated
-# with the rest by install.sh).
+# may be absent, so the build writes them.
 mkdir -p "$STAGE/etc" "$STAGE/usr/etc/ld.so.conf.d"
 [ -e "$STAGE/usr/etc/ld.so.conf" ] || \
   printf 'include %s/usr/etc/ld.so.conf.d/*.conf\n' "$PREFIX_ROOT" > "$STAGE/usr/etc/ld.so.conf"
@@ -240,6 +267,18 @@ Suites: $SUITE-security
 Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 SRC
+# The local repo: the patched glibc, and the origin pin that keeps the mirror
+# from replacing it (docs/spec/overlay.md, "The local repo"). The path is a
+# guest path: the runtime translates it into the tree.
+cat > "$STAGE/etc/apt/sources.list.d/dn-local.list" <<SRC
+deb [trusted=yes] file:/usr/lib/deb-native/repo ./
+SRC
+mkdir -p "$STAGE/etc/apt/preferences.d"
+cat > "$STAGE/etc/apt/preferences.d/dn-local" <<CONF
+Package: *
+Pin: release o=deb-native
+Pin-Priority: 1001
+CONF
 if [ -n "${DN_PROFILE:-}" ]; then
   mkdir -p "$STAGE/.dn"
   cp -f "$DN_PROFILE" "$STAGE/.dn/profile"
@@ -253,4 +292,4 @@ if [ -n "$STAGE_OUT" ]; then
 fi
 
 sh "$ROOT/scripts/build/package-prefix.sh" "$STAGE" --root "$PREFIX_ROOT" --name core-deb \
-  --desc "core-deb: core-ultra plus apt, dpkg and the translation hooks" --out "$OUT"
+  --desc "core-deb: core-ultra plus apt, dpkg and the runtime" --out "$OUT"

@@ -3,10 +3,10 @@ name: Build the prefix tarballs
 # Builds core-deb and core-ultra on an arm64 runner, from source, and attaches
 # both tarballs to the rolling `prefix` release (no version in the name).
 #
-# This workflow does NOT build glibc: the patched glibc (the 10 files that are
-# swapped over Debian's libc6/libc-bin -- the two packages themselves are
-# UNPATCHED and unusable on Android) is produced by build-glibc.yml, from
-# Debian's own glibc source. Here we consume the freshest `dn-glibc-bundle`
+# This workflow does NOT build glibc: the patched glibc (shipped as real
+# libc6/libc-bin packages at `<Debian version>+dn1`) is produced by
+# build-glibc.yml, from Debian's own glibc source. Here we consume the freshest
+# `dn-glibc-bundle`
 # artifact that workflow left, so nothing comes from a stale release or a
 # developer machine:
 #   - the runtime overlay: scripts/build/build-overlay-glibc.sh (plain gcc);
@@ -59,14 +59,15 @@ jobs:
           gh run download "$run" -n dn-glibc-bundle -D .
           mkdir -p bundle
           tar -xzf dn-glibc-bundle.tar.gz -C bundle
-          test -x bundle/files/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
+          test -f bundle/libc6.deb
+          test -f bundle/libc-bin.deb
 
       - name: Build the runtime overlay
         run: scripts/build/build-overlay-glibc.sh
 
       - name: Build core-deb on an empty base
         env:
-          DN_GLIBC_PREFIX: ${{ github.workspace }}/bundle/files
+          DN_GLIBC_PREFIX: ${{ github.workspace }}/bundle
           DN_OVERLAY: ${{ github.workspace }}/src/.build-glibc
           PREFIX_ROOT: ${{ env.PREFIX_ROOT }}
           DEB_LIST: ${{ github.workspace }}/scripts/build/packages.tsv

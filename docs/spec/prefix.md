@@ -158,15 +158,18 @@ the target.
    [`overlay.md`](overlay.md).
 2. **The patched glibc.** The same host builds glibc from Debian's source at
    the tree's `libc6` version, applying the two patches (Android base +
-   dn-policy wiring). The result is the **glibc bundle**: the files that differ
-   from stock Debian's `libc6`/`libc-bin`, laid out relative to a prefix. See
+   dn-policy wiring), then packages the result as two real Debian packages —
+   `libc6` and `libc-bin`, at `<Debian version>+dn1`
+   (`scripts/glibc/dn-package-glibc.sh`, `dn-package-libc-bin.sh`). This is the
+   **glibc bundle**: `libc6.deb` + `libc-bin.deb`. See
    [`overlay.md`](overlay.md), "dn-glibc".
 3. **The tree.** `scripts/build/build-core-deb.sh BASE OUT.tar.gz` assembles
    one from an **empty base**: it indexes the mirror, downloads and
-   sha256-verifies every package in the pinned list, extracts them, overwrites
-   Debian's `libc6`/`libc-bin` payload with the patched bundle, builds the
-   `dpkg` database, prunes files no shipped package owns, installs the overlay
-   into `RT`, and writes the loader and apt configuration.
+   sha256-verifies every package in the pinned list (using our `libc6`/
+   `libc-bin` instead of the mirror's), extracts them, builds the `dpkg`
+   database, prunes files no shipped package owns, installs the overlay into
+   `RT`, builds the **local repo** (`RT/repo`) with the patched glibc
+   packages, and writes the loader and apt configuration.
 4. **The tarball.** `scripts/build/package-prefix.sh TREE --root PREFIX_ROOT
    --name NAME --out OUT.tar.gz` writes `.dn/` and tars the tree.
 5. **core-ultra**, optionally, from the core-deb tree
@@ -178,7 +181,7 @@ The build inputs to step 3:
 | --- | --- |
 | `BASE` (arg) | the tree to build on; the canonical build uses an **empty** dir |
 | `DEB_LIST` | the pinned `name<TAB>version<TAB>arch` list (packages.tsv) |
-| `DN_GLIBC_PREFIX` | the glibc bundle's `files/` (the patched files) |
+| `DN_GLIBC_PREFIX` | the glibc bundle: a dir with `libc6.deb` + `libc-bin.deb` |
 | `DN_OVERLAY` | `build-overlay-glibc.sh`'s output |
 | `PREFIX_ROOT` | the absolute path the artifact's files name |
 | `DN_PROFILE` | optional; written as `.dn/profile` |
