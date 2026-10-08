@@ -1,7 +1,31 @@
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/Makefile work/elf/Makefile
+--- work-after-official-patch/elf/Makefile	2026-10-08 07:51:05.224680319 +0000
++++ work/elf/Makefile	2026-10-08 08:44:33.486284751 +0000
+@@ -1465,6 +1465,12 @@
+ # their implementation is provided differently in rtld, and the symbol
+ # discovery mechanism is not compatible with the libc implementation
+ # when compiled for libc.
++#
++# dn_policy_fake_stat: deb-native.  Same reason as the malloc family
++# above -- dn-policy-glue.c's stat post-processing reaches
++# dn-policy-fakeroot.o, which uses malloc/flock.  Stubbing it keeps the
++# owner-store object out of the loader's link map (it must not go into
++# ld.so); libc-proper still links the real one.
+ rtld-stubbed-symbols = \
+   __libc_assert_fail \
+   __syscall_cancel \
+@@ -1472,6 +1478,7 @@
+   free \
+   malloc \
+   realloc \
++  dn_policy_fake_stat \
+   # rtld-stubbed-symbols
+ 
+ ifeq ($(have-ssp),yes)
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- work-after-official-patch/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:03.964680319 +0000
-+++ work/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:59.500680298 +0000
-@@ -149,4 +149,18 @@
++++ work/sysdeps/generic/dn-prefix.h	2026-10-08 08:40:04.346284853 +0000
+@@ -149,4 +149,27 @@
    return path;
  }
  
@@ -9,14 +33,23 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/g
 +   real policy (symlink resolution, no-double-translation, the
 +   /proc,/sys,/dev passthrough), not just __dn_redirect's plain root
 +   list above. Not available to rtld itself (IS_IN (rtld)) -- dn-policy
-+   uses malloc/snprintf/flock, which the minimal rtld build can't link
-+   (see this file's own top comment on why __dn_redirect stays
-+   rtld-safe-only); rtld's own bootstrap paths (ld.so.preload, the
-+   cache) keep using __dn_redirect, only libc-proper's open()/openat()
-+   family (called long after the dynamic linker has finished) call
-+   into dn-policy for real. */
++   uses malloc/flock, which the minimal rtld build can't link (see this
++   file's own top comment on why __dn_redirect stays rtld-safe-only);
++   rtld's own bootstrap paths (ld.so.preload, the cache) keep using
++   __dn_redirect. Only libc-proper calls into dn-policy for real, and
++   only from the calls that need it: the open()/openat() and the
++   stat()/fstatat()/statx()/faccessat() families so far (runtime.md's
++   "path group"), called long after the dynamic linker has finished. */
 +#if !IS_IN (rtld)
 +extern const char *dn_policy_redirect (char *buf, size_t bufsz, const char *path);
++/* Same, but never resolving the final component -- O_NOFOLLOW /
++   AT_SYMLINK_NOFOLLOW (dn_policy_translate_path_nofollow()). */
++extern const char *dn_policy_redirect_nofollow (char *buf, size_t bufsz, const char *path);
++/* Rewrite a stat-family result's owner fields from the owner store
++   before it is handed back to the guest (docs/spec/runtime.md, "Fake
++   root").  @st is really a `struct stat`; spelled void* so this header
++   need not pull <sys/stat.h> into every includer. */
++extern void dn_policy_stat_post (const char *host_path, void *st);
 +#endif
 +
  #endif /* _DN_PREFIX_H */
@@ -717,12 +750,13 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +}
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c work/sysdeps/unix/sysv/linux/dn-policy-glue.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c	1970-01-01 00:00:00.000000000 +0000
-+++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 08:17:42.236679709 +0000
-@@ -0,0 +1,101 @@
++++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 08:44:30.594284752 +0000
+@@ -0,0 +1,137 @@
 +/* dn-policy glue for glibc itself: wires the already-shipped prefix
 +   self-derivation (__dn_prefix_get, elf/rtld.c) into dn_policy_init(),
-+   and gives open.c et al. a drop-in replacement for __dn_redirect with
-+   the exact same calling convention, so call sites barely change.
++   and gives open.c and the stat/faccessat family a drop-in replacement
++   for __dn_redirect with the exact same calling convention, so call
++   sites barely change.
 +   docs/spec/runtime.md, "glibc: build, versioning, and packages" --
 +   this is the first wiring of dn-policy into dn-glibc proper,
 +   replacing __dn_redirect's simple inline 8-root heuristic with the
@@ -797,14 +831,13 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +  __libc_lock_unlock (dn_policy_lock);
 +}
 +
-+/* Drop-in replacement for __dn_redirect (dn-prefix.h), same signature:
-+   translate @path into @buf (capacity @bufsz) and return @buf, or
-+   return @path unchanged if dn-policy isn't ready or declines to
-+   translate it (not absolute, too long, ...) -- open()/openat() et al.
-+   must never fail just because the policy layer had nothing useful to
-+   say.  */
-+const char *
-+dn_policy_redirect (char *buf, size_t bufsz, const char *path)
++/* Shared body of the two redirect entry points below: translate @path
++   into @buf (capacity @bufsz) and return @buf, or return @path
++   unchanged if dn-policy isn't ready or declines to translate it (not
++   absolute, too long, ...) -- the callers must never fail just because
++   the policy layer had nothing useful to say.  */
++static const char *
++dn_policy_redirect_common (char *buf, size_t bufsz, const char *path, int follow)
 +{
 +  int status;
 +
@@ -814,12 +847,48 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +  if (!dn_policy_ready)
 +    return path;
 +
-+  status = dn_policy_translate_path (path, buf, bufsz);
++  status = follow
++    ? dn_policy_translate_path (path, buf, bufsz)
++    : dn_policy_translate_path_nofollow (path, buf, bufsz);
 +  if (status < 0)
 +    return path;
 +
 +  return buf;
 +}
++
++/* Drop-in replacement for __dn_redirect (dn-prefix.h), same signature.  */
++const char *
++dn_policy_redirect (char *buf, size_t bufsz, const char *path)
++{
++  return dn_policy_redirect_common (buf, bufsz, path, 1);
++}
++
++/* O_NOFOLLOW / AT_SYMLINK_NOFOLLOW: the final component must not be
++   resolved (lstat(), open(..., O_NOFOLLOW), ...).  */
++const char *
++dn_policy_redirect_nofollow (char *buf, size_t bufsz, const char *path)
++{
++  return dn_policy_redirect_common (buf, bufsz, path, 0);
++}
++
++/* Rewrite a stat-family result's owner fields from the owner store
++   (dn_policy_fake_stat(), docs/spec/runtime.md "Fake root").  Called
++   with the real, already-translated host path the stat just used --
++   returns nothing, degrades to "no record" rather than failing the
++   stat, so this can never turn a working stat() into an error.
++
++   Not compiled for rtld: dn_policy_fake_stat() lives in
++   dn-policy-fakeroot.o, which uses malloc/flock, none of which belongs
++   in the loader.  The loader's own object set never calls this (the
++   stat wrappers' calls are `#if !IS_IN (rtld)` too), and elf/Makefile's
++   rtld-stubbed-symbols keeps dn-policy-fakeroot.o out of librtld.map.  */
++#if !IS_IN (rtld)
++void
++dn_policy_stat_post (const char *host_path, void *st)
++{
++  dn_policy_fake_stat (host_path, (struct stat *) st);
++}
++#endif
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-hardlink.c work/sysdeps/unix/sysv/linux/dn-policy-hardlink.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-hardlink.c	1970-01-01 00:00:00.000000000 +0000
 +++ work/sysdeps/unix/sysv/linux/dn-policy-hardlink.c	2026-10-08 08:17:49.684679707 +0000
@@ -2052,6 +2121,78 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +#endif
 +
 +#endif /* DN_POLICY_H */
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/faccessat.c work/sysdeps/unix/sysv/linux/faccessat.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/faccessat.c	2026-10-08 07:51:04.644680319 +0000
++++ work/sysdeps/unix/sysv/linux/faccessat.c	2026-10-08 08:40:30.958284843 +0000
+@@ -21,11 +21,26 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ 
+ 
+ int
+ __faccessat (int fd, const char *file, int mode, int flag)
+ {
++#if !IS_IN (rtld)
++  /* dn-policy path rewriting: absolute guest paths only; a relative
++     @file is left for the kernel (its dirfd is already a real path).
++     The stat-based fallback below passes the translated host path
++     through __fstatat64_time64() idempotently, so translating once
++     here covers both branches.  */
++  char dn_path[DN_PREFIX_MAX];
++
++  if (file != NULL && file[0] == '/')
++    file = (flag & AT_SYMLINK_NOFOLLOW)
++      ? dn_policy_redirect_nofollow (dn_path, sizeof dn_path, file)
++      : dn_policy_redirect (dn_path, sizeof dn_path, file);
++#endif
++
+   if ((flag == 0 || ((flag & ~AT_EACCESS) == 0 && ! __libc_enable_secure)))
+     return INLINE_SYSCALL (faccessat, 3, fd, file, mode);
+ 
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/fstatat64.c work/sysdeps/unix/sysv/linux/fstatat64.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/fstatat64.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/fstatat64.c	2026-10-08 08:40:21.134284847 +0000
+@@ -25,6 +25,7 @@
+ #include <time.h>
+ #include <sys/sysmacros.h>
+ #include <internal-stat.h>
++#include <dn-prefix.h>
+ 
+ #if __TIMESIZE == 64 \
+      && (__WORDSIZE == 32 \
+@@ -105,7 +106,29 @@
+ __fstatat64_time64 (int fd, const char *file, struct __stat64_t64 *buf,
+ 		    int flag)
+ {
+-  int r = fstatat64_time64_stat (fd, file, buf, flag);
++  int r;
++
++#if !IS_IN (rtld)
++  /* dn-policy path rewriting (runtime.md's "path group"): translate an
++     absolute guest path before the newfstatat syscall, then rewrite the
++     result's owner fields from the owner store.  A relative @file is
++     left for the kernel (the dirfd or the real cwd is already a real
++     path); a path dn-policy declines to translate stays as it was.  */
++  char dn_path[DN_PREFIX_MAX];
++  const char *dn_host = file;
++
++  if (file != NULL && file[0] == '/')
++    dn_host = (flag & AT_SYMLINK_NOFOLLOW)
++      ? dn_policy_redirect_nofollow (dn_path, sizeof dn_path, file)
++      : dn_policy_redirect (dn_path, sizeof dn_path, file);
++
++  r = fstatat64_time64_stat (fd, dn_host, buf, flag);
++  if (r == 0 && dn_host != file)
++    dn_policy_stat_post (dn_host, buf);
++#else
++  r = fstatat64_time64_stat (fd, file, buf, flag);
++#endif
++
+   return INTERNAL_SYSCALL_ERROR_P (r)
+ 	 ? INLINE_SYSCALL_ERROR_RETURN_VALUE (-r)
+ 	 : 0;
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/open.c work/sysdeps/unix/sysv/linux/open.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/open.c	2026-10-08 07:51:04.648680319 +0000
 +++ work/sysdeps/unix/sysv/linux/open.c	2026-10-08 07:52:23.760680289 +0000
@@ -2195,4 +2336,35 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +#endif
  
    return INLINE_SYSCALL_CALL (openat, fd, file, oflag, mode);
+ }
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/statx.c work/sysdeps/unix/sysv/linux/statx.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/statx.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/statx.c	2026-10-08 08:40:25.782284845 +0000
+@@ -17,13 +17,27 @@
+    <https://www.gnu.org/licenses/>.  */
+ 
+ #include <errno.h>
++#include <fcntl.h>
+ #include <sys/stat.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ #include <fakesyscall.h>
+ 
+ int
+ statx (int fd, const char *path, int flags,
+        unsigned int mask, struct statx *buf)
+ {
++#if !IS_IN (rtld)
++  /* dn-policy path rewriting: absolute guest paths only; a relative
++     @path is left for the kernel's dirfd.  No owner rewrite here --
++     statx never succeeds on Android (the fakesyscall bucket returns
++     ENOSYS), callers fall back to fstatat().  */
++  char dn_path[DN_PREFIX_MAX];
++
++  if (path != NULL && path[0] == '/')
++    path = (flags & AT_SYMLINK_NOFOLLOW)
++      ? dn_policy_redirect_nofollow (dn_path, sizeof dn_path, path)
++      : dn_policy_redirect (dn_path, sizeof dn_path, path);
++#endif
+   return syscall (__NR_statx, fd, path, flags, mask, buf);
  }

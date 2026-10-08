@@ -159,12 +159,16 @@ below.
   into every path-taking function (public + internal + `syscall()`), route
   every kernel call through the gate page, map the gate page at loader
   startup, reorder library search (`RT/lib` first).
-  - First slice done: `patches/dn-policy-glibc-wiring.patch` wires the public
-    `open`/`openat` family (the eight `open*.c` call sites) to
-    `dn_policy_redirect()`, rtld excepted via `#if !IS_IN (rtld)`. A full
-    `make -O -j8` of glibc `2.41-12+deb13u4` with it applied links clean
-    (verified 2026-10-08; see `patches/README.md`). Not yet in the build
-    workflow — applied by hand in the scratch build.
+  - First slices done in `patches/dn-policy-glibc-wiring.patch`: the public
+    `open`/`openat` family (eight `open*.c` call sites) and the stat/access
+    family (`fstatat64.c`, `statx.c`, `faccessat.c`) call dn-policy for path
+    translation, and a successful `stat` is post-processed by
+    `dn_policy_fake_stat()` (owner store). rtld is kept out entirely
+    (`#if !IS_IN (rtld)`, plus `dn_policy_fake_stat` in `elf/Makefile`'s
+    `rtld-stubbed-symbols`). A full `make -O -j8` of glibc `2.41-12+deb13u4`
+    with it applied links clean, and `ld.so` ends up with no dn-policy
+    symbol (verified 2026-10-08; see `patches/README.md`). Not yet in the
+    build workflow — applied by hand in the scratch build.
 - Pick `P_GATE`: inspect a few real on-device process memory maps for free
   39-bit space (open item in `runtime.md`).
 - Turn on exec-gate rules 3/4 (rewrite to `RT/ld.so ...`). Drop the shim.

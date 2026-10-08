@@ -263,20 +263,23 @@ this build's to write `<prefix>/usr/etc/ld.so.cache`
 # dn-policy-glibc-wiring.patch
 
 The second patch in the dn-glibc build, applied **on top of**
-`dn-glibc-android.patch` and kept separate from it. It is the first slice of
-`runtime.md`'s "wire dn-policy into every path-taking function": the public
-`open`/`openat` family now calls `dn_policy_redirect()` -- the real policy
-built and tested in `src/dn-policy/` -- instead of `__dn_redirect`'s inline
-root heuristic. The rest of the wiring (the stat, faccess, chown, xattr,
-symlink and rename families, `syscall()` interposition, the gate page, the
-`RT/lib` search order) is still ahead; this patch is what made the first full
-glibc build with dn-policy inside it succeed.
+`dn-glibc-android.patch` and kept separate from it. It carries the first
+slices of `runtime.md`'s "wire dn-policy into every path-taking function":
+the public `open`/`openat` family and the `stat`/`fstatat`/`statx`/`faccessat`
+family now call into the real policy built and tested in `src/dn-policy/` --
+path translation through `dn_policy_redirect()` (and its `_nofollow` variant),
+plus `dn_policy_stat_post()` rewriting a stat result's owner fields from the
+owner store (fake root) -- instead of `__dn_redirect`'s inline root
+heuristic. The rest of the wiring (the chown, xattr, symlink and rename
+families, `syscall()` interposition, the gate page, the `RT/lib` search
+order) is still ahead; what is here is what made the first full glibc build
+with dn-policy inside it succeed, extended to the stat/access group.
 
 ## What it is
 
 `diff -ruN` between `work-after-official-patch/` (glibc source with
 `dn-glibc-android.patch` already applied once, per the section above) and
-`work/` (that plus the wiring). Sixteen files:
+`work/` (that plus the wiring). Nineteen files:
 
 - New, byte-identical copies of `src/dn-policy/` under
   `sysdeps/unix/sysv/linux/`: `dn-policy.{h,c}`, `dn-policy-fakeroot.c`,
@@ -287,8 +290,9 @@ glibc build with dn-policy inside it succeed.
   `<TREE>/usr/lib/deb-native` (the directory the other non-dpkg runtime tools
   already use), calls `dn_policy_init()` lazily under `__libc_lock` (`open()`
   can be called from any thread immediately, unlike `__dn_prefix_init()`,
-  which runs in `dl_main`), and exposes `dn_policy_redirect()` with
-  `__dn_redirect`'s exact signature.
+  which runs in `dl_main`), and exposes three entry points: `dn_policy_redirect()`
+  (with `__dn_redirect`'s exact signature), `dn_policy_redirect_nofollow()`,
+  and `dn_policy_stat_post()`.
 - `sysdeps/generic/dn-prefix.h`: declares `dn_policy_redirect()` under
   `#if !IS_IN (rtld)`.
 - `sysdeps/unix/sysv/linux/Makefile`: adds the four `dn-policy*` objects to
@@ -296,24 +300,51 @@ glibc build with dn-policy inside it succeed.
 - The eight `open*.c` call sites (`open`, `open64`, `open{,64}_nocancel`,
   `openat`, `openat64`, `openat{,64}_nocancel`): `__dn_redirect` ->
   `dn_policy_redirect`, guarded by `#if !IS_IN (rtld)`.
+- The stat/access family: `fstatat64.c` (the single choke point for `stat`,
+  `lstat`, `fstatat`, `fstatat64` on aarch64 -- all route through
+  `__fstatat64_time64`), `statx.c`, and `faccessat.c`. Each translates an
+  absolute guest path through `dn_policy_redirect()`/`_nofollow()` (the
+  latter for `AT_SYMLINK_NOFOLLOW`, so `lstat` never resolves its final
+  component); a relative path is left to the kernel (its dirfd or cwd is
+  already a real path). On a successful stat, `fstatat64.c` also calls
+  `dn_policy_stat_post()` so `st_uid`/`st_gid`/the setuid bits come from the
+  owner store. This is glibc's side of `runtime.md`'s "path group" for
+  stat/access.
+- `elf/Makefile`: `dn_policy_fake_stat` joins `rtld-stubbed-symbols` -- see
+  below.
 
 No `@DN_PREFIX@`: dn-policy derives the tree at runtime, so this patch is
 prefix-agnostic (principle 5) like dn-policy itself, and needs no
 substitution when applied.
 
-## Why the `IS_IN (rtld)` guard is load-bearing
+## Why the `IS_IN (rtld)` guards and the stub are load-bearing
 
 `elf/librtld.map` links the loader's minimal `dl-allobjs.os` against all of
-`libc_pic.a` to discover which libc members the loader needs; a duplicate
-symbol there is a hard error. The loader already needs `openat64.os`, so an
-unguarded call from `openat64.c` drags the dn-policy call chain in with it,
-and `snprintf` reaches glibc's `vfprintf` machinery -- `malloc`,
-`__syscall_cancel`, `sbrk`, `__libc_fatal` -- which `dl-allobjs.os` already
-defines. `__dn_redirect` stayed clear of this only because it is
-self-contained (string ops only). Keeping rtld on `__dn_redirect` and
-confining dn-policy to libc-proper is what makes the loader link; it is also
-why `dn-policy` uses only leaf libc calls (no `snprintf`/`strtok_r`/
-`getenv`/...), as its own header comment explains.
+`libc_pic.a` to discover which libc members the loader needs; the `malloc`
+family is stubbed there so a stray reference cannot drag the real `malloc`
+in, and any duplicate symbol is a hard error. Two consequences:
+
+- Any glibc object the loader needs (it already needs `openat64.os`, and now
+  also `fstatat64.os`/`faccessat.os`) must not, from the map's point of view,
+  reach a dn-policy object that uses `malloc`/`flock`. The stat wrapper's
+  `dn_policy_stat_post()` reaches `dn-policy-fakeroot.o`, so
+  `dn_policy_fake_stat` is added to `rtld-stubbed-symbols` in `elf/Makefile`
+  -- the sanctioned mechanism for exactly this case ("symbol discovery is
+  not compatible with the libc implementation"). The path-mapping objects
+  (`dn-policy.o`, `dn-policy-glue.o`) need no stub: they use only leaf libc
+  calls.
+- Every call into dn-policy is `#if !IS_IN (rtld)`, so the rtld rebuilds
+  that actually link into `ld.so` (`rtld-openat64.os`, `rtld-fstatat64.os`,
+  ...) reference nothing dn-policy; rtld keeps the self-contained
+  `__dn_redirect`. `dn_policy_stat_post()` (and `dn-policy-glue.c`'s use of
+  it) is guarded the same way.
+
+The lesson that shaped the leaf-call discipline: a path in the wiring that
+reaches `snprintf` drags glibc's `vfprintf` machinery (`malloc`,
+`__syscall_cancel`, `sbrk`, `__libc_fatal`) into the loader's object set,
+where `dl-allobjs.os` already defines them -- which is what first broke the
+build. Hence `dn-policy` uses only leaf libc calls (no `snprintf`/
+`strtok_r`/`getenv`/...), as its own header comment explains.
 
 ## Applying it
 
@@ -347,4 +378,8 @@ diff -rq --exclude='.pc' --exclude='debian' /tmp/roundtrip work
 Build-verified 2026-10-08 against glibc `2.41-12+deb13u4`: full `make -O -j8`
 with this patch applied reaches `libc.so`, `ld.so`, `libm`, `libdl`,
 `libpthread`, `librt` and the tools cleanly (exit 0, no
-`multiple definition`). Covers the public `open`/`openat` family only.
+`multiple definition`). `ld.so` links no dn-policy symbol (the loader stays
+on `__dn_redirect`); `libc.so` carries the full dn-policy. Covers the public
+`open`/`openat` and `stat`/`fstatat`/`statx`/`faccessat` families; the chown,
+xattr, symlink and rename families, `syscall()` interposition, the gate page
+and the `RT/lib` search order are still open.
