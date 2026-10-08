@@ -7,6 +7,9 @@
 set -eu
 PATH=/usr/lib/deb-native/priv:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
+# No terminal to ask on: the package scripts take debconf's defaults.
+DEBIAN_FRONTEND=noninteractive
+export DEBIAN_FRONTEND
 # apt/dpkg put scratch files under $TMPDIR; keep them inside the tree.
 TMPDIR=/tmp
 export TMPDIR
@@ -18,6 +21,31 @@ DONE=/.dn/bootstrapped
 if [ -f "$DONE" ]; then
   echo "bootstrap: already done ($(cat "$DONE"))"
   exit 0
+fi
+
+# 1. Configure the shipped packages.  The build unpacks them but cannot run
+#    their scripts, so they are "unpacked" (debootstrap's second stage does
+#    the same): run what dpkg's unpack would have run first -- the preinst
+#    "install" of each never-configured package, base-passwd's first (it
+#    writes /etc/passwd and /etc/group) -- then configure them all.
+# base-files' postinst wants /mnt a directory: a dangling mnt -> ../mnt (no
+# host-provided sibling) becomes one.
+if [ -L /mnt ] && [ ! -e /mnt ]; then
+  rm -f /mnt
+  mkdir /mnt
+fi
+fresh=$(dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package} ${Config-Version}\n' \
+  | awk '$1 ~ /^.U/ && NF == 2 { print $2 }')
+if [ -n "$fresh" ]; then
+  echo "bootstrap: configuring $(echo "$fresh" | wc -l) shipped packages"
+  for p in $(echo "$fresh" | grep '^base-passwd$'; echo "$fresh" | grep -v '^base-passwd$'); do
+    s=/var/lib/dpkg/info/$p.preinst
+    [ -x "$s" ] || continue
+    DPKG_MAINTSCRIPT_PACKAGE=${p%%:*} DPKG_MAINTSCRIPT_NAME=preinst \
+      DPKG_MAINTSCRIPT_ARCH=$(dpkg-query -W -f='${Architecture}' "$p") DPKG_ROOT= \
+      "$s" install
+  done
+  dpkg --configure -a
 fi
 
 echo "bootstrap: apt-get update"

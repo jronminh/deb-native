@@ -11,6 +11,8 @@
 # prefix from /.dn/profile by itself, then runs the command (default: an
 # interactive shell).
 set -eu
+PATH=/usr/lib/deb-native/priv:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
 # The host's environment reaches the tree through dn-trace: drop the host's
 # deb-native knobs and its locale (the tree ships no locales but C.UTF-8).
 for v in $(env | sed -n 's/^\(DN_[A-Za-z0-9_]*\)=.*/\1/p'); do
@@ -19,8 +21,6 @@ done
 unset LC_ALL LANGUAGE
 LANG=C.UTF-8
 export LANG
-PATH=/usr/lib/deb-native/priv:/usr/sbin:/usr/bin:/sbin:/bin
-export PATH
 HOME=/root
 export HOME
 TMPDIR=/tmp

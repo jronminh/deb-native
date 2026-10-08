@@ -169,7 +169,7 @@ the target.
    one from an **empty base**: it indexes the mirror, downloads and
    sha256-verifies every package in the pinned list (using our `libc6`/
    `libc-bin` instead of the mirror's), extracts them, builds the `dpkg`
-   database as `dpkg` itself would leave it (status with each package's
+   database as `dpkg --unpack` would leave it (status `unpacked`, with each package's
    `Conffiles`, file lists, and every control file: `md5sums`, `conffiles`,
    maintainer scripts, triggers; `<pkg>:<arch>` for a `Multi-Arch: same`
    package), prunes files no shipped package owns, installs the overlay into
@@ -240,9 +240,13 @@ bound to itself, so a host path into the tree stays valid in the guest), forks
 a child that installs the one shared filter, and execs the prefix's init
 (`RT/init.sh`). Its own temp files live in `TREE/tmp`. init sets
 the environment and, on a first boot (no `.dn/bootstrapped`), completes the
-prefix from `.dn/profile` itself — `apt-get update`, `apt-get install` of the
-profile, then the `bootstrapped` marker; a later boot skips straight to the
-command. It ends by exec'ing the command it was given, or an interactive
+prefix itself. The build cannot run a package's scripts, so the shipped
+packages are *unpacked*, not configured (as after debootstrap's first stage):
+the first boot runs each one's `preinst install` (base-passwd's first: it
+writes `/etc/passwd` and `/etc/group`), then `dpkg --configure -a`, under fake
+root. Then it restores `.dn/profile` from the mirror — `apt-get update`,
+`apt-get install` of the profile, the CA bundle — and writes the
+`bootstrapped` marker; a later boot skips straight to the command. It ends by exec'ing the command it was given, or an interactive
 shell.
 
 The glibc packages are held and pinned, so `apt` never replaces the patched

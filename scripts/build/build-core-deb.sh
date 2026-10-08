@@ -164,9 +164,13 @@ while read -r name ver deb; do
   dpkg-deb -e "$deb" "$ctl"
   {
     dpkg-deb -f "$deb"
+    # Unpacked, not configured: the build cannot run a package's scripts,
+    # so the prefix's first boot runs them (bootstrap-prefix.sh: each
+    # preinst, then dpkg --configure -a), as debootstrap's second stage
+    # does.  The conffiles are left in place; dpkg takes them as installed.
     case " libc6 libc-bin " in
-      *" $name "*) echo 'Status: hold ok installed' ;;
-      *) echo 'Status: install ok installed' ;;
+      *" $name "*) echo 'Status: hold ok unpacked' ;;
+      *) echo 'Status: install ok unpacked' ;;
     esac
     if [ -s "$ctl/conffiles" ]; then
       echo 'Conffiles:'
@@ -292,10 +296,6 @@ mkdir -p "$STAGE/etc" "$STAGE/usr/etc/ld.so.conf.d"
   printf '%s/usr/lib/aarch64-linux-gnu\n%s/usr/lib\n' "$PREFIX_ROOT" "$PREFIX_ROOT" > "$STAGE/usr/etc/ld.so.conf.d/dn.conf"
 mkdir -p "$STAGE/etc/apt/apt.conf.d"
 cat > "$STAGE/etc/apt/apt.conf.d/50deb-native" <<CONF
-# apt drops to user _apt for its methods and then checks the switch took.
-# Fake root reports uid 0 whatever set*id() asked for (nothing is recorded),
-# so that check fails: run the methods as root, the prefix's one user.
-APT::Sandbox::User "root";
 # apt's own directories as absolute prefix paths. apt links fetched files into
 # its cache, and the kernel resolves a symlink's target literally, on the
 # host: a "/var/cache/apt/archives/..." target would name Android's /var.
