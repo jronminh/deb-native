@@ -7,13 +7,25 @@
 
 #include <sys/stat.h>
 
-/* Called once from dn_policy_init(), after tree_root/rt_root are
- * validated, to set up the owner-store/fake-xattr state under
- * "<rt_root>/state/" and probe which owner-store backend to use. */
+/* @rt_root, once dn_policy_init() has set it, or NULL before that (or
+ * if init failed). Lets dn-policy-fakeroot.c/dn-policy-hardlink.c
+ * lazily init themselves from their own entry points, independently of
+ * each other and of path mapping -- see dn_policy_init()'s comment on
+ * why: each syscall only pays for the dn-policy subsystem it actually
+ * needs (runtime.md principle 2), so dn_policy_init() itself sets up
+ * path mapping only. */
+const char *dn_policy_rt_root(void);
+
+/* Sets up the owner-store/fake-xattr state under "<rt_root>/state/"
+ * and probes which owner-store backend to use. Idempotent -- safe to
+ * call on every dn-policy-fakeroot.c entry point; a second call after
+ * success is a cheap no-op. Not called from dn_policy_init(); see
+ * dn_policy_rt_root()'s comment. */
 int dn_policy_fakeroot_init(const char *rt_root);
 
-/* Called once from dn_policy_init(), to set up the link2symlink hidden
- * file directory and refcount DB under "<rt_root>/state/links/". */
+/* Sets up the link2symlink hidden file directory and refcount DB under
+ * "<rt_root>/state/links/". Idempotent, not called from
+ * dn_policy_init() -- same reasoning as dn_policy_fakeroot_init(). */
 int dn_policy_hardlink_init(const char *rt_root);
 
 /* Used by dn-policy-fakeroot.c's dn_policy_fake_stat(), before the

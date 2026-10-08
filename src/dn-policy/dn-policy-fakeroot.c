@@ -33,6 +33,7 @@
 #include <sys/xattr.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <pthread.h>
 
 #define DN_OWNER_XATTR "user.dn.owner"
 
@@ -127,13 +128,16 @@ static int probe_user_xattr(const char *rt_root)
 	return 1;
 }
 
-/* Called from dn_policy_init() (dn-policy.c) once tree_root/rt_root are
- * validated and stored. @rt_root is passed again here rather than read
- * back from dn-policy.c's statics, to keep this file's dependency on
- * that one narrow and explicit. */
+/* Not called from dn_policy_init() -- see dn_policy_rt_root()'s comment
+ * in dn-policy-internal.h. Called lazily, on demand, by ensure_ready()
+ * below; idempotent so every public entry point in this file can call
+ * it unconditionally without re-probing once it has already succeeded. */
 int dn_policy_fakeroot_init(const char *rt_root)
 {
 	int status;
+
+	if (state_ready)
+		return 0;
 
 	status = snprintf(state_dir, sizeof(state_dir), "%s/state", rt_root);
 	if (status < 0 || (size_t) status >= sizeof(state_dir))
@@ -177,6 +181,36 @@ int dn_policy_fakeroot_init(const char *rt_root)
 
 	state_ready = 1;
 	return 0;
+}
+
+/* ---- Lazy init, for every public entry point below ----------------- */
+
+static pthread_mutex_t ready_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Called at the top of every dn_policy_owner_*()/dn_policy_fake_*()
+ * function. Cheap once ready (one branch, no lock) -- the lock only
+ * matters for the first call(s), possibly racing from multiple
+ * threads. Plain pthread, not glibc's __libc_lock: this file is built
+ * standalone (dn-trace) as well as folded into dn-glibc. */
+static int ensure_ready(void)
+{
+	const char *rt_root;
+	int status;
+
+	if (state_ready)
+		return 0;
+
+	pthread_mutex_lock(&ready_lock);
+	if (state_ready) {
+		pthread_mutex_unlock(&ready_lock);
+		return 0;
+	}
+
+	rt_root = dn_policy_rt_root();
+	status = (rt_root == NULL) ? -EINVAL : dn_policy_fakeroot_init(rt_root);
+
+	pthread_mutex_unlock(&ready_lock);
+	return status;
 }
 
 /* ---- The DB backend: fixed-size records, scanned linearly --------- */
@@ -379,22 +413,25 @@ static int owner_forget_db(dev_t dev, ino_t ino)
 
 int dn_policy_owner_get(const char *host_path, dev_t dev, ino_t ino, DnOwnerRecord *out)
 {
-	if (!state_ready)
-		return -EINVAL;
+	int status = ensure_ready();
+	if (status < 0)
+		return status;
 	return backend_is_xattr ? owner_get_xattr(host_path, out) : owner_get_db(dev, ino, out);
 }
 
 int dn_policy_owner_set(const char *host_path, dev_t dev, ino_t ino, const DnOwnerRecord *record)
 {
-	if (!state_ready)
-		return -EINVAL;
+	int status = ensure_ready();
+	if (status < 0)
+		return status;
 	return backend_is_xattr ? owner_set_xattr(host_path, record) : owner_set_db(dev, ino, record);
 }
 
 int dn_policy_owner_forget(const char *host_path, dev_t dev, ino_t ino)
 {
-	if (!state_ready)
-		return -EINVAL;
+	int status = ensure_ready();
+	if (status < 0)
+		return status;
 	if (backend_is_xattr) {
 		/* The record lives on the file; it is already gone along
 		 * with the last link. Nothing to do (see dn-policy.h). */
@@ -487,8 +524,9 @@ int dn_policy_fake_setxattr(const char *host_path, dev_t dev, ino_t ino,
 	int fd, status;
 
 	(void) host_path;
-	if (!state_ready)
-		return -EINVAL;
+	status = ensure_ready();
+	if (status < 0)
+		return status;
 	if (size > DN_XATTR_VALUE_CAP || strlen(name) >= DN_XATTR_NAME_CAP)
 		return -ENOSPC;
 
@@ -534,8 +572,9 @@ int dn_policy_fake_getxattr(const char *host_path, dev_t dev, ino_t ino,
 	int fd, status;
 
 	(void) host_path;
-	if (!state_ready)
-		return -EINVAL;
+	status = ensure_ready();
+	if (status < 0)
+		return status;
 
 	fd = open(xattrs_db_path, O_RDWR | O_CREAT, 0600);
 	if (fd < 0)
@@ -567,8 +606,9 @@ int dn_policy_fake_removexattr(const char *host_path, dev_t dev, ino_t ino, cons
 	int fd, status;
 
 	(void) host_path;
-	if (!state_ready)
-		return -EINVAL;
+	status = ensure_ready();
+	if (status < 0)
+		return status;
 
 	fd = open(xattrs_db_path, O_RDWR | O_CREAT, 0600);
 	if (fd < 0)

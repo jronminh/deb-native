@@ -26,6 +26,7 @@
 #include <fcntl.h>
 #include <sys/file.h>
 #include <stdio.h>
+#include <pthread.h>
 
 static char links_dir[PATH_MAX];
 static char links_db_path[PATH_MAX];
@@ -38,9 +39,31 @@ static int ensure_dir(const char *path)
 	return 0;
 }
 
+/* Not called from dn_policy_init() -- see dn_policy_rt_root()'s comment
+ * in dn-policy-internal.h. Called lazily, on demand, by ensure_ready()
+ * below; idempotent so every public entry point in this file can call
+ * it unconditionally. */
 int dn_policy_hardlink_init(const char *rt_root)
 {
 	int status;
+
+	char state_dir[PATH_MAX];
+
+	if (ready)
+		return 0;
+
+	/* "<rt_root>/state" itself: no longer guaranteed to already exist
+	 * by dn_policy_fakeroot_init() having run first (that's lazy too,
+	 * now, and may never run at all in a process that only ever uses
+	 * hardlinks) -- this file owns creating its own parent. mkdir()
+	 * doesn't create parents, so this must come before links_dir's own
+	 * mkdir() below. */
+	status = snprintf(state_dir, sizeof(state_dir), "%s/state", rt_root);
+	if (status < 0 || (size_t) status >= sizeof(state_dir))
+		return -ENAMETOOLONG;
+	status = ensure_dir(state_dir);
+	if (status < 0)
+		return status;
 
 	status = snprintf(links_dir, sizeof(links_dir), "%s/state/links", rt_root);
 	if (status < 0 || (size_t) status >= sizeof(links_dir))
@@ -55,6 +78,32 @@ int dn_policy_hardlink_init(const char *rt_root)
 
 	ready = 1;
 	return 0;
+}
+
+/* Lazy init, same reasoning and pattern as dn-policy-fakeroot.c's
+ * ensure_ready(). Plain pthread, not glibc's __libc_lock: this file is
+ * built standalone (dn-trace) as well as folded into dn-glibc. */
+static pthread_mutex_t ready_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int ensure_ready(void)
+{
+	const char *rt_root;
+	int status;
+
+	if (ready)
+		return 0;
+
+	pthread_mutex_lock(&ready_lock);
+	if (ready) {
+		pthread_mutex_unlock(&ready_lock);
+		return 0;
+	}
+
+	rt_root = dn_policy_rt_root();
+	status = (rt_root == NULL) ? -EINVAL : dn_policy_hardlink_init(rt_root);
+
+	pthread_mutex_unlock(&ready_lock);
+	return status;
 }
 
 /* ---- The refcount DB: fixed-size records, scanned linearly -------- */
@@ -264,10 +313,9 @@ int dn_policy_link(const char *existing_host_path, const char *new_host_path)
 	char hidden_path[PATH_MAX];
 	struct stat st;
 	uint32_t refcount;
-	int status;
-
-	if (!ready)
-		return -EINVAL;
+	int status = ensure_ready();
+	if (status < 0)
+		return status;
 
 	status = read_managed_target(existing_host_path, id, sizeof(id), hidden_path, sizeof(hidden_path));
 	if (status < 0)
@@ -324,10 +372,9 @@ int dn_policy_unlink(const char *host_path)
 	char id[DN_LINK_ID_CAP];
 	char hidden_path[PATH_MAX];
 	uint32_t refcount;
-	int status;
-
-	if (!ready)
-		return -EINVAL;
+	int status = ensure_ready();
+	if (status < 0)
+		return status;
 
 	status = read_managed_target(host_path, id, sizeof(id), hidden_path, sizeof(hidden_path));
 	if (status <= 0)
@@ -351,10 +398,9 @@ int dn_policy_hardlink_fixup_stat(const char *host_path, struct stat *st)
 	char id[DN_LINK_ID_CAP];
 	char hidden_path[PATH_MAX];
 	uint32_t refcount;
-	int status;
-
-	if (!ready)
-		return -EINVAL;
+	int status = ensure_ready();
+	if (status < 0)
+		return status;
 
 	status = read_managed_target(host_path, id, sizeof(id), hidden_path, sizeof(hidden_path));
 	if (status <= 0)

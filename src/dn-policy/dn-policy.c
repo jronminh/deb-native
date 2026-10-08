@@ -64,7 +64,6 @@ static int copy_out(const char *src, char *out, size_t cap)
 int dn_policy_init(const char *tree_root_in, const char *rt_root_in)
 {
 	size_t len;
-	int status;
 
 	if (tree_root_in == NULL || tree_root_in[0] != '/')
 		return -EINVAL;
@@ -94,16 +93,22 @@ int dn_policy_init(const char *tree_root_in, const char *rt_root_in)
 	memcpy(rt_root, rt_root_in, len + 1);
 	rt_root_len = len;
 
-	status = dn_policy_fakeroot_init(rt_root);
-	if (status != 0)
-		return status;
-
-	status = dn_policy_hardlink_init(rt_root);
-	if (status != 0)
-		return status;
+	/* Fake root and hardlinks are NOT set up here (runtime.md
+	 * principle 2: the unit of decision is the individual syscall --
+	 * open()/openat() only ever need path mapping, never fake root or
+	 * hardlink state, so they shouldn't pay for it or pull in its
+	 * dependencies). dn-policy-fakeroot.c and dn-policy-hardlink.c
+	 * lazily call dn_policy_fakeroot_init()/dn_policy_hardlink_init()
+	 * themselves (via dn_policy_rt_root() below), the first time one
+	 * of *their own* functions is actually used. */
 
 	initialized = 1;
 	return 0;
+}
+
+const char *dn_policy_rt_root(void)
+{
+	return initialized ? rt_root : NULL;
 }
 
 /* Loop guard for both the component walk below and the symlink chain
