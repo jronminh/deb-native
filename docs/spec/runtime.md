@@ -551,8 +551,11 @@ that replaces them.
       probing this at `dn_policy_init()`, with the DB-file fallback
       still implemented and exercisable via `DN_POLICY_OWNER_BACKEND=db`
       for whatever device turns out to need it.
-- [ ] Choosing `P_GATE`: needs a real memory map of a few on-device
-      processes to find free 39-bit space.
+- [x] Choosing `P_GATE` (resolved): `0x100000000` (4 GiB), found free in
+      every readable on-device process map and inside the 39-bit range; the
+      loader maps it at startup (`elf/rtld.c`, part of
+      `patches/dn-policy-glibc-wiring.patch`). Issuing syscalls from it and
+      the filter's gate-IP rule are still open (P2).
 - [x] Borrowing the idea from PRoot's `link2symlink` is not a licensing
       problem (resolved): this repo is GPL-3.0-or-later (`LICENSE`), and
       PRoot's own code (already vendored in `src/tracer/`) is

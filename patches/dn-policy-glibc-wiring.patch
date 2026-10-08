@@ -22,6 +22,62 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/Makef
    # rtld-stubbed-symbols
  
  ifeq ($(have-ssp),yes)
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.c work/elf/rtld.c
+--- work-after-official-patch/elf/rtld.c	2026-10-08 07:51:05.032680319 +0000
++++ work/elf/rtld.c	2026-10-08 09:03:37.746556970 +0000
+@@ -1405,6 +1405,42 @@
+   return __dn_prefix_ready ? __dn_prefix_buf : NULL;
+ }
+ 
++/* deb-native: the fixed gate page (docs/spec/runtime.md, "The fixed gate
++   page").  Mapped once at a fixed address in 39-bit space with a bare
++   `svc #0; ret` stub, so dn-glibc can issue its syscalls from a single
++   known instruction address and the shared seccomp filter can tell a
++   dn-glibc call from a stray one by the instruction pointer.  If the
++   address is already taken the mapping simply fails and every call falls
++   back to a direct `svc` (the ptrace tier) -- correct, just slower.  */
++#define DN_GATE_ADDR 0x100000000UL
++
++#ifndef MAP_FIXED_NOREPLACE
++# define MAP_FIXED_NOREPLACE 0x100000
++#endif
++
++void *__dn_gate;
++
++static void
++__dn_gate_map (void)
++{
++  void *want = (void *) DN_GATE_ADDR;
++  unsigned int *code;
++
++  if (__mmap (want, 4096, PROT_READ | PROT_WRITE,
++	      MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0)
++      != want)
++    return;
++
++  code = (unsigned int *) want;
++  code[0] = 0xd4000001u;	/* svc #0	*/
++  code[1] = 0xd65f03c0u;	/* ret		*/
++
++  if (__mprotect (want, 4096, PROT_READ | PROT_EXEC) != 0)
++    return;
++
++  __dn_gate = want;
++}
++
+ static void
+ dl_main (const ElfW(Phdr) *phdr,
+ 	 ElfW(Word) phnum,
+@@ -1799,6 +1835,9 @@
+      paths are built (dn-prefix.h).  Global, not on-demand.  */
+   __dn_prefix_init ();
+ 
++  /* deb-native: map the gate page before anything is opened.  */
++  __dn_gate_map ();
++
+   /* Initialize the data structures for the search paths for shared
+      objects.  */
+   call_init_paths (&state);
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- work-after-official-patch/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:03.964680319 +0000
 +++ work/sysdeps/generic/dn-prefix.h	2026-10-08 08:57:59.554557099 +0000

@@ -165,7 +165,8 @@ below.
     wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
     `truncate`, `utimensat`/`utimes`/`utime`, `statfs`), reverse translation
     for `getcwd()` and `readlink()` of the `/proc/self` magic links, the
-    `syscall(2)` interposition for the path group, and
+    `syscall(2)` interposition for the path group, the loader's mapping of
+    the fixed gate page (`P_GATE`), and
     `dn_policy_fake_stat()` (owner store) on a successful `stat`. rtld is
     kept out entirely (`#if !IS_IN (rtld)`, plus `dn_policy_fake_stat` in
     `elf/Makefile`'s `rtld-stubbed-symbols`). A full `make -O -j8` of glibc
@@ -175,8 +176,11 @@ below.
     translation and the manipulation wrappers all working (verified
     2026-10-08; see `patches/README.md`). Not yet in the build workflow —
     applied by hand in the scratch build.
-- Pick `P_GATE`: inspect a few real on-device process memory maps for free
-  39-bit space (open item in `runtime.md`).
+- Pick `P_GATE`, done: `0x100000000` (4 GiB) — found free in every readable
+  on-device process map, inside the 39-bit range; the loader now maps it
+  (`elf/rtld.c`), `r-xp`. Still open: issue glibc's syscalls from it
+  (`INTERNAL_SYSCALL_RAW` + the cancellation asm) and add the gate-IP rule
+  to the shared filter in `dn-trace`.
 - Turn on exec-gate rules 3/4 (rewrite to `RT/ld.so ...`). Drop the shim.
   Switch glibc-family packages to version pinning (`/etc/apt/preferences.d/dn-glibc`,
   auto-generated from `Source: glibc`), drop the hand-written resolver.

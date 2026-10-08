@@ -273,19 +273,21 @@ owner store (fake root) -- instead of `__dn_redirect`'s inline root
 heuristic. It also carries the reverse translation (`getcwd()` and the
 `/proc/<self>` magic links), path translation for the simple manipulation
 wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
-`truncate`, `utimensat`/`utimes`/`utime`, `statfs`), and the `syscall(2)`
-interposition for the path group. The rest of the wiring (the chown/chmod/
-xattr families, `link`/`unlink`'s hardlink bookkeeping, `chdir`/`chroot`,
-the gate page, the `RT/lib` search order) is still ahead; what is here is
-what made the first full glibc build with dn-policy inside it succeed,
-extended through the stat/access group, reverse translation, the
-manipulation wrappers and `syscall()`.
+`truncate`, `utimensat`/`utimes`/`utime`, `statfs`), the `syscall(2)`
+interposition for the path group, and the loader's mapping of the fixed gate
+page (`P_GATE`) -- the page, though glibc does not yet issue its syscalls
+from it. The rest of the wiring (the chown/chmod/xattr families, `link`/
+`unlink`'s hardlink bookkeeping, `chdir`/`chroot`, routing every syscall
+through the gate page, the `RT/lib` search order) is still ahead; what is
+here is what made the first full glibc build with dn-policy inside it
+succeed, extended through the stat/access group, reverse translation, the
+manipulation wrappers, `syscall()` and the gate page.
 
 ## What it is
 
 `diff -ruN` between `work-after-official-patch/` (glibc source with
 `dn-glibc-android.patch` already applied once, per the section above) and
-`work/` (that plus the wiring). Thirty-two files:
+`work/` (that plus the wiring). Thirty-three files:
 
 - New, byte-identical copies of `src/dn-policy/` under
   `sysdeps/unix/sysv/linux/`: `dn-policy.{h,c}`, `dn-policy-fakeroot.c`,
@@ -344,6 +346,16 @@ manipulation wrappers and `syscall()`.
   paths for `renameat`/`renameat2`/`linkat`). Numbers the aarch64 headers
   lack (`chown`/`lchown`) are `#ifdef`-guarded, as are the ones the
   fakesyscall bucket already answers (`statx`/`faccessat2`/`fchmodat2`).
+- `elf/rtld.c`: the loader maps the fixed gate page -- 4 KB at `P_GATE`
+  (`0x100000000`, chosen by scanning real on-device process maps for an
+  address free in every one, inside the 39-bit range) with
+  `MAP_FIXED_NOREPLACE`, writes a bare `svc #0; ret` stub, and `mprotect`s
+  it `r-x`. If the address is taken the mapping simply fails and every call
+  falls back to a direct `svc` (the `ptrace` tier), the documented
+  behavior. This is the page only: glibc does not yet *issue* its syscalls
+  from it -- `open`/`read`/`write` go through `SYSCALL_CANCEL`'s asm whose
+  `_arch_start`/`_end` cancellation markers the gate would move the PC out
+  of, so that routing needs its own pass (see the status note).
 - `elf/Makefile`: `dn_policy_fake_stat` joins `rtld-stubbed-symbols` -- see
   below.
 
@@ -443,10 +455,17 @@ reach the tree (right content, `AT_SYMLINK_NOFOLLOW` honored, `ENOENT`
 preserved), `syscall(SYS_getpid)` still works, and `syscall(SYS_mkdirat,
 ...)` creates `TREE/etc/dn-sc-work` with no host `/etc/dn-sc-work`.
 
+A fifth binary checks `/proc/self/maps` under the loader: the gate page is
+mapped `r-xp` at `100000000` (the chosen `P_GATE`). Nothing issues through
+it yet, so this proves the mapping, not the routing.
+
 Covers the public `open`/`openat` and `stat`/`fstatat`/`statx`/`faccessat`
 families, reverse translation (`getcwd`, the `/proc/self` magic links), the
 `mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/`statfs`
-wrappers, and the `syscall(2)` interposition for the path group. Still open:
-the chown/chmod/xattr families, `link`/`unlink`'s hardlink bookkeeping,
-`chdir`/`chroot` and the `syscalls.list`-generated `*at` *wrapper functions*
-(until their own slice), the gate page and the `RT/lib` search order.
+wrappers, the `syscall(2)` interposition for the path group, and the
+loader's gate-page mapping. Still open: the chown/chmod/xattr families,
+`link`/`unlink`'s hardlink bookkeeping, `chdir`/`chroot` and the
+`syscalls.list`-generated `*at` *wrapper functions*, issuing every glibc
+syscall from the gate page (`INTERNAL_SYSCALL_RAW` and the cancellation
+asm), the seccomp filter's gate-IP rule in `dn-trace`, and the `RT/lib`
+search order.
