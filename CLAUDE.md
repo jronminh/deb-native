@@ -18,29 +18,28 @@ There is **no build on the host**.
 
 - **Build** (a build host, `scripts/build/` + `scripts/glibc/`): the runtime
   overlay (`scripts/build/build-overlay-glibc.sh` — `dn-trace` and the
-  syscall catalog, plain-gcc), the glibc bundle
-  (`patches/dn-glibc-android.patch`), and the prefix artifact
+  syscall catalog, plain-gcc), the glibc bundle (the two patches in
+  `patches/`, applied by `scripts/glibc/dn-apply-glibc-patch.sh`), and the
+  prefix artifact
   (`build-core-deb.sh` + `package-prefix.sh`, which writes `.dn/` —
-  `docs/spec/prefix-contract.md`).
+  `docs/spec/prefix.md`).
 - **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
   `.dn/contract` without extracting, check it, extract, run `.dn/install.sh`.
   One install path, on a **poor host** (POSIX sh + toybox only).
 - **Activate / complete**: the artifact's own `.dn/install.sh` (host shell)
-  relocates the prefix -- the loader runs the artifact's `dn-elf`, which
-  repoints every ELF -- and wires the session entry; then `.dn/bootstrap.sh`
-  (the prefix's own shell) installs `.dn/profile`. When bootstrap succeeds the
-  prefix is ready.
+  wires the session entry (the artifact is built for its final path, so there
+  is no relocation); then `.dn/bootstrap.sh` (the prefix's own shell) installs
+  `.dn/profile`. When bootstrap succeeds the prefix is ready.
 
 Run time is one policy in two places: dn-policy, called in-process by
 dn-glibc (the fast path) and via `dn-trace`'s ptrace fallback
 (`src/tracer/`). The old shim, maintainer-script rewriting and ELF editor
-are gone; a `.deb` installs intact (`docs/spec/runtime.md`).
+are gone; a `.deb` installs intact (`docs/spec/overlay.md`).
 
-Every translated program's `PT_INTERP` points at the prefix's own fused glibc
-loader; it derives the live prefix from its own path at run time and reads the
-shim from `etc/ld.so.preload`. `patchelf` is gone — `dn-elf` is the ELF
-editor. Prefer a launch-time env var / loader path over a static per-`.deb`
-ELF patch when both would solve the same problem.
+A package keeps its stock Debian `PT_INTERP`; the kernel never resolves it,
+because every exec goes through the exec gate, which runs a glibc-dynamic
+program through the runtime loader. No per-package `PT_INTERP` patching, no
+`patchelf`, no `dn-elf`.
 
 ## Layout
 

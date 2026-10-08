@@ -7,7 +7,7 @@ merely suspected. Each entry says how to reproduce it, what happens, and the
 known root cause or workaround. Future work lives in [`TODO.md`](../../TODO.md);
 whole classes of "what the shim/tracer cannot reach" live in
 [`syscall-boundary.md`](syscall-boundary.md),
-[`../spec/shim/shim-coverage.md`](../spec/shim/shim-coverage.md) and
+[`../spec/overlay.md`](../spec/overlay.md) and
 [`android-platform.md`](android-platform.md).
 
 ## Contents
@@ -18,9 +18,9 @@ whole classes of "what the shim/tracer cannot reach" live in
 
 ## Related docs
 
-- [`../spec/design.md`](../spec/design.md) — the path shim and the
+- [`../spec/overlay.md`](../spec/overlay.md) — the path shim and the
   maintainer-script mechanism these issues hit.
-- [`../spec/shim/shim-coverage.md`](../spec/shim/shim-coverage.md) — the
+- [`../spec/overlay.md`](../spec/overlay.md) — the
   path-shim failure modes.
 - [`syscall-boundary.md`](syscall-boundary.md), [`android-platform.md`](android-platform.md)
   — what libc interposition cannot see, and the platform's enforcement gates.
@@ -144,7 +144,7 @@ The host workarounds are installed for you in
   `passwd`/`group`/`shadow`/`gshadow` from the prefix's own files.
 - **`ldconfig` is a no-op** in the priv layer: `libc-bin`'s postinst calls
   `ldconfig -r "$DPKG_ROOT/"`, which cannot work unprivileged. No `ld.so.cache`
-  ships ([`../spec/dn-glibc-prefix.md`](../spec/dn-glibc-prefix.md)); the loader derives its
+  ships ([`../spec/overlay.md`](../spec/overlay.md)); the loader derives its
   dirs from the live prefix, so a missing cache is non-fatal.
 
 ## Design limitations

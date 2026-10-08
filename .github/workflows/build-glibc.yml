@@ -4,9 +4,9 @@ name: Build the glibc runtime
 #   - the glibc bundle: Debian's real libc6/libc-bin, repackaged with this
 #     project's own Android-patched build (patches/dn-glibc-android.patch);
 #     it is an artifact for build-prefix.yml -- not a release of its own;
-#   - the runtime overlay (dn-shim.so, dn-run, dn-trace, dn-elf).
+#   - the runtime overlay (dn-trace and the syscall catalog).
 # The one published release is `prefix`, from build-prefix.yml
-# (docs/spec/prefix-layers.md).
+# (docs/spec/prefix.md).
 
 on:
   workflow_dispatch: {}
@@ -16,7 +16,7 @@ env:
   GLIBC_VERSION: "2.41"
   GLIBC_DEB_VERSION: "2.41-12+deb13u4"
   # The prefix glibc is BUILT for. It is baked as the fallback the runtime
-  # rewrites (docs/spec/dn-glibc-prefix.md, "Runtime prefix self-derivation"),
+  # rewrites (docs/spec/overlay.md, "Runtime prefix self-derivation"),
   # so it must differ from the artifact's PREFIX_ROOT: if the two were equal,
   # every patched glibc file would name the artifact root and pack-prefix
   # would refuse it (build invariant 6). Keep it a placeholder, not a target.
@@ -121,9 +121,9 @@ jobs:
           path: dn-glibc-android-${{ github.sha }}.tar.gz
           retention-days: 14
 
-      # The install bundle (DN_GLIBC_DEBS): the 10 patched files laid out
-      # relative to a prefix, Debian's own libc6/libc-bin, and the shim built
-      # against this build's glibc. Handed to build-prefix.yml as an artifact.
+      # The install bundle (DN_GLIBC_PREFIX): the patched files laid out
+      # relative to a prefix, plus Debian's own libc6/libc-bin. Handed to
+      # build-prefix.yml as an artifact.
       - name: Assemble the install bundle
         run: |
           set -eu
@@ -142,11 +142,6 @@ jobs:
           curl -sLO "https://deb.debian.org/debian/pool/main/g/glibc/libc-bin_${GLIBC_DEB_VERSION}_arm64.deb"
           mv libc6_*.deb libc6.deb
           mv libc-bin_*.deb libc-bin.deb
-          # Build the shim with the runner's toolchain: the installed glibc
-          # header set is incomplete (no gnu/stubs-lp64.h), and the shim only
-          # uses old libc symbols, satisfied by the prefix's 2.41 at runtime.
-          gcc -O2 -fPIC -shared \
-            -o dn-shim.so "$GITHUB_WORKSPACE/src/dn-shim.c" -ldl
           tar -C "$B" -czf "$GITHUB_WORKSPACE/dn-glibc-bundle.tar.gz" .
 
       # Hand the just-built bundle to a caller (build-prefix.yml), so the

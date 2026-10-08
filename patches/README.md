@@ -42,7 +42,7 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
     instead of the env, and a host `LD_PRELOAD` (Termux's
     `libtermux-exec-ld-preload.so`) is built for another glibc and would
     otherwise abort every prefix program at startup
-    (`docs/spec/dn-glibc-prefix.md`).
+    (`docs/spec/overlay.md`).
   - `fakesyscall.json`'s mechanism (`syscall.c`, `fakesyscall.h`,
     `fakesyscall-base.h`, `syscall.S.patch`, the generated
     `sysdeps/unix/sysv/linux/aarch64/disabled-syscall.h`): only the
@@ -87,7 +87,7 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
 `setregid.c`/`setresgid.c`/`setresuid.c`/`setreuid.c`/`setuid.c`/
 `local-setxid.h` — these unconditionally fake `set*id` success at the
 glibc-patch layer. This doc used to say "waiting on fake-root's fate";
-that fate is now decided (`docs/spec/runtime.md` principle 3): `dn-policy`
+that fate is now decided (`docs/spec/overlay.md` principle 3): `dn-policy`
 is the single source of truth for fake root, called from both the glibc
 fast path and the tracer fallback, specifically so the two can never
 disagree. A second, independent fake-root at the glibc-patch layer would
@@ -115,7 +115,7 @@ The patch itself names no prefix: every path this build must know at
 compile time (`ld.so.preload`, the guest `/etc`, ...) is the placeholder
 `@DN_PREFIX@`, substituted for a real, absolute, no-trailing-slash
 prefix only when applying -- so the same patch targets `.dn` (production)
-or a throwaway test prefix (`docs/spec/dn-glibc-prefix.md`, "Install
+or a throwaway test prefix (`docs/spec/overlay.md`, "Install
 order") without being hand-edited or re-generated.
 
 ```sh

@@ -2,7 +2,7 @@
 
 <!-- template: templates/docs.template.md -->
 
-The shim ([`shim-coverage.md`](../spec/shim/shim-coverage.md)) rewrites paths at the
+The shim ([`shim-coverage.md`](../spec/overlay.md)) rewrites paths at the
 **preemptible dynamic symbol** layer. Everything that reaches the filesystem
 without crossing such a symbol is out of its reach. This doc maps that wider
 boundary, measures it against the in-scope corpus, and records where the
@@ -22,11 +22,11 @@ existing answer (`proot`) already applies.
 
 ## Related docs
 
-- [`shim-coverage.md`](../spec/shim/shim-coverage.md) — the shim this doc's boundary
+- [`shim-coverage.md`](../spec/overlay.md) — the shim this doc's boundary
   sits beyond.
 - `direct-usage.md` — the living investigation into
   what actually crosses this boundary.
-- [`tracer.md`](../spec/tracer/tracer.md) — the mechanism that reaches past it.
+- [`tracer.md`](../spec/overlay.md) — the mechanism that reaches past it.
 - [`android-platform.md`](android-platform.md) — the Android-specific
   limits (seccomp/capability/SELinux) layered on top of this boundary.
 
@@ -48,7 +48,7 @@ one function instead of needing a tracer. Nothing in the current shim does.
 
 ## Measured against the corpus
 
-Corpus: the 258 in-scope packages from [`shim-coverage.md`](../spec/shim/shim-coverage.md),
+Corpus: the 258 in-scope packages from [`shim-coverage.md`](../spec/overlay.md),
 extracted to 668 ELFs.
 
 - **7 `ET_EXEC`** (non-PIE executables), **246 PIE executables** (dynamic),
@@ -74,7 +74,7 @@ a binary needs a **direct-syscall attribute** of its own.
 
 `proot` — a `ptrace` syscall interceptor — is the prior art here. It works at
 the syscall layer, so it covers cases 2–5 uniformly. The project builds its own
-reduced tracer (`dn-trace`, [`../spec/tracer/tracer.md`](../spec/tracer/tracer.md))
+reduced tracer (`dn-trace`, [`../spec/overlay.md`](../spec/overlay.md))
 instead, because `ptrace` overhead on every syscall is the cost to contain, and
 `proot`'s bind model errors on a missing host path.
 

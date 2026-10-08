@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Apply the build invariants to a staged prefix tree and write its .dn/.
 
-docs/spec/prefix-contract.md, "Build invariants". Run on a copy of a built
+docs/spec/prefix.md, "Build invariants". Run on a copy of a built
 prefix (package-prefix.sh stages one); the tree is changed in place:
 
   - every glibc ELF whose PT_INTERP is ROOT/<loader> gets a CAPACITY-byte
@@ -196,7 +196,7 @@ def main():
             if not os.path.islink(p):
                 size_mib += os.path.getsize(p)
     size_mib = size_mib // (1024 * 1024) + 1
-    lines = ["# dn prefix contract (docs/spec/prefix-contract.md)",
+    lines = ["# dn prefix contract (docs/spec/prefix.md)",
              "contract=1", f"name={a.name}"]
     if a.desc:
         lines.append(f"desc={a.desc}")

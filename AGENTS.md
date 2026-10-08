@@ -15,23 +15,23 @@ There is **no build on the host**.
 
 - **Build** (a build host: `scripts/build/`, `scripts/glibc/`): the runtime
   overlay (`scripts/build/build-overlay-glibc.sh` — `dn-trace` and the
-  syscall catalog, plain-gcc), the glibc bundle
-  (`patches/dn-glibc-android.patch`), and the prefix artifact
+  syscall catalog, plain-gcc), the glibc bundle (the two patches in
+  `patches/`, applied by `scripts/glibc/dn-apply-glibc-patch.sh`), and the
+  prefix artifact
   (`build-core-deb.sh` + `package-prefix.sh`, which writes `.dn/` —
-  `docs/spec/prefix-contract.md`).
+  `docs/spec/prefix.md`).
 - **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
   `.dn/contract` without extracting, extract, run `.dn/install.sh`. This is the
   one install path, on a **poor host** (POSIX sh + toybox only).
 - **Activate / complete**: the artifact's own `.dn/install.sh` (host shell)
-  relocates the prefix -- the loader runs the artifact's `dn-elf`, which
-  repoints every ELF -- and wires the session entry; then `.dn/bootstrap.sh`
-  (the prefix's own shell) installs `.dn/profile`. When bootstrap succeeds the
-  prefix is ready.
+  wires the session entry (the artifact is built for its final path, so there
+  is no relocation); then `.dn/bootstrap.sh` (the prefix's own shell) installs
+  `.dn/profile`. When bootstrap succeeds the prefix is ready.
 
 Run time is one policy in two places: dn-policy, called in-process by
 dn-glibc (the fast path) and via `dn-trace`'s ptrace fallback
 (`src/tracer/`). The old shim, maintainer-script rewriting and ELF editor
-are gone; a `.deb` installs intact (`docs/spec/runtime.md`).
+are gone; a `.deb` installs intact (`docs/spec/overlay.md`).
 
 ## Layout
 
@@ -41,10 +41,9 @@ are gone; a `.deb` installs intact (`docs/spec/runtime.md`).
 - `scripts/glibc/` — build host: apply the glibc patch, package `libc6` /
   `libc-bin`.
 - `scripts/host/` — the host's own shell (poor host): ship, bootstrap,
-  install (activation + relocation via the artifact's loader/dn-elf), hooks,
-  adopt, update.
-- `scripts/prefix/` — run by the prefix (its own glibc): apt hooks, package
-  translation, per-package fixes; `interface.tsv` is the module surface.
+  install (activation), update.
+- `scripts/prefix/` — run by the prefix (its own glibc); `interface.tsv` is
+  the module surface.
 - `patches/` — the glibc patches: the Android base + the dn-policy wiring.
 - `tests/` — on-device smoke tests; `tools/` — repo checks + helpers;
   `docs/` — spec, reference, notes.

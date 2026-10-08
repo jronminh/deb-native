@@ -129,7 +129,7 @@ static int add_trace_syscall(struct sock_fprog *program, word_t syscall, int fla
 /**
  * Append to @program->filter the statements that ALLOW @syscall when it is
  * issued from the fixed gate page -- dn-glibc's P_GATE, where it has already
- * translated the call in-process (docs/spec/runtime.md, "The shared
+ * translated the call in-process (docs/spec/overlay.md, "The shared
  * filter's rules").  @syscall comes from the published catalog
  * (syscall/dn-syscalls.c, rows with gate=yes).  A call from anywhere else
  * falls through to the trace rules below.  Assumes a 4 KB P_GATE page that

@@ -20,7 +20,7 @@ actually *for*.
 ## Related docs
 
 - [`elf-interp-patch.md`](elf-interp-patch.md) — the `PT_INTERP` edit this doc's mechanisms treat as a byte range.
-- [`design.md`](../spec/design.md) — the 0.2.0 pivot's own architecture handling.
+- [`design.md`](../spec/overlay.md) — the 0.2.0 pivot's own architecture handling.
 
 ## The `Multi-Arch` control field
 

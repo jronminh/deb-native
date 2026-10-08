@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build core-deb on top of a core-ultra tree (docs/spec/prefix-layers.md).
+# Build core-deb on top of a core-ultra tree (docs/spec/prefix.md).
 #
 # Build stage only. The build host is separate from every target and has full
 # toolchain resources (a CI runner or a Debian arm64 machine with gcc): nothing
@@ -97,7 +97,7 @@ while read -r name ver _arch; do
 done < "$DEB_LIST" > "$W/debs.list"
 echo "build-core-deb: $(wc -l < "$W/debs.list") packages verified"
 
-# 2. Glibc, the way the build always did it (docs/spec/dn-glibc-prefix.md): Debian's
+# 2. Glibc, the way the build always did it (docs/spec/overlay.md): Debian's
 #    own libc6 and libc-bin, extracted like every package in step 3, then the
 #    10 files the Android patch changes overwritten with the patched build from
 #    a deb-native prefix (DN_GLIBC_PREFIX). The patched files are the only glibc
@@ -134,7 +134,7 @@ done
 #    or repoint PT_INTERP: the tree's root dn-trace sees every exec, and its
 #    exec gate runs a glibc-dynamic program through the runtime loader
 #    (RT/ld.so) itself, so the kernel never has to resolve a guest PT_INTERP
-#    (docs/spec/runtime.md, "The exec gate").
+#    (docs/spec/overlay.md, "The exec gate").
 
 # 5. dpkg's database for every package in the artifact: status and file lists,
 #    from the packages' own control and contents, so apt sees them installed
@@ -182,7 +182,7 @@ echo "build-core-deb: pruned $pruned files of packages not shipped"
 
 # 6. Overlay: the runtime -- dn-trace (the tree's root) and the syscall catalog
 #    it reads (--syscalls) to build the filter's gate-IP exemption
-#    (src/syscalls.tsv, docs/spec/runtime.md).
+#    (src/syscalls.tsv, docs/spec/overlay.md).
 mkdir -p "$STAGE/usr/lib/deb-native"
 for f in dn-trace syscalls.tsv; do
   [ -f "$DN_OVERLAY/$f" ] || die "missing $DN_OVERLAY/$f"
@@ -192,7 +192,7 @@ done
 
 # 7. deb-native's own layer: the bootstrap helper the prefix runs at login.
 #    Runtime v1 needs no apt hooks -- a .deb installs intact, and dn-policy
-#    rewrites paths and identities at run time (docs/spec/runtime.md).
+#    rewrites paths and identities at run time (docs/spec/overlay.md).
 mkdir -p "$STAGE/usr/lib/deb-native/scripts/runtime"
 cp -f "$ROOT/scripts/host/bootstrap-prefix.sh" "$STAGE/usr/lib/deb-native/scripts/runtime/"
 # The alternatives that mawk's configure step would make: the package manager's

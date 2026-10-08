@@ -1,6 +1,6 @@
 /* deb-native: read the published syscall catalog (src/syscalls.tsv) so
  * dn-trace builds its filter from the one list instead of hand-maintaining
- * its own (docs/spec/runtime.md, "The shared filter's rules"; principle 1).
+ * its own (docs/spec/overlay.md, "The shared filter's rules"; principle 1).
  * The catalog is installed next to dn-trace in RT and named by --syscalls.
  */
 #ifndef DN_SYSCALLS_H

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install packages (and their dependencies) into a prefix. Since 0.2.0 this is
 # plain apt: with runtime v1 a .deb installs intact (no translation hook), and
-# dn-policy rewrites paths and identities at run time (docs/spec/runtime.md).
+# dn-policy rewrites paths and identities at run time (docs/spec/overlay.md).
 #
 # Usage: apt-install.sh PREFIX package [package...]
 set -eu

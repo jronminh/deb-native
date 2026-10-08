@@ -1,6 +1,6 @@
 #!/bin/sh
 # Ship a prefix artifact: the one install path every host uses
-# (docs/spec/prefix-contract.md, "What the host does"). Runs on the host's
+# (docs/spec/prefix.md, "What the host does"). Runs on the host's
 # own shell with only POSIX sh and what toybox and coreutils both have
 # (tar -z/-O, uname, df -P, mkdir, rm), so Android's mksh + toybox is enough.
 #

@@ -1,5 +1,5 @@
 # deb-native syscall catalog -- the exact, categorized list of the syscalls
-# the runtime overlay handles (docs/spec/runtime.md, "The shared filter's
+# the runtime overlay handles (docs/spec/overlay.md, "The shared filter's
 # rules").  One source of truth: dn-trace reads it at run time (--syscalls
 # PATH; it is installed next to dn-trace in RT) and builds the filter's
 # gate-IP exemption from the gate=yes rows; dn-glibc wires the glibc=yes rows,
@@ -12,7 +12,7 @@
 #   android:  12 (kernel string "android12-9"; recheck per device/API level)
 #   kernel:   5.10.240-android12-9-33405034-abS7110ZHS8GZH6 (observed on the
 #             author's device; see ~/.claude/claude-native/doctor.sh output)
-#   sources:  docs/spec/runtime.md ("The shared filter's rules" -- the
+#   sources:  docs/spec/overlay.md ("The shared filter's rules" -- the
 #             group lists); patches/dn-glibc-android.patch's fakesyscall.json
 #             (Android kernel/ABI buckets) and docs/reference/android-platform.md
 #             (per-file verdict); Termux termux-pacman/glibc-packages

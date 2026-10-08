@@ -4,7 +4,7 @@
 #     for its @DN_PREFIX@ placeholder (every compile-time path it bakes --
 #     ld.so.preload, the guest /etc, ... -- goes through that one
 #     substitution, so the same patch builds the production prefix (.dn) or
-#     a throwaway test prefix; docs/spec/dn-glibc-prefix.md, "Install order");
+#     a throwaway test prefix; docs/spec/overlay.md, "Install order");
 #   - then patches/dn-policy-glibc-wiring.patch, which names no prefix (the
 #     dn-policy it embeds derives TREE at run time).
 #
@@ -36,7 +36,7 @@ sed "s|@DN_PREFIX@|$PREFIX|g" "$PATCH" | patch -p1 -d "$SRC"
 # it names no prefix (dn-policy derives TREE at run time), so it needs no
 # substitution.  It replaces __dn_redirect in the wrappers with real
 # dn-policy calls, wires syscall(2), and adds the gate page + the RT/lib-first
-# search order (docs/spec/runtime.md, "Building dn-glibc").  Kept a separate
+# search order (docs/spec/overlay.md, "Building dn-glibc").  Kept a separate
 # file from the Android patch on purpose, so the two can be reviewed and
 # re-generated independently.
 echo "Applying dn-policy-glibc-wiring.patch to $SRC ..."

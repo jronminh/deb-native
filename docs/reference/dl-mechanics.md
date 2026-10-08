@@ -161,7 +161,7 @@ Because glibc already implements search-dir and preload handling as
 loader does not need to re-implement any of it. The patch reduces to:
 
 1. **Derive the prefix** from the program's `PT_INTERP` (the irreducible
-   core -- the loader cuts it from its own path, [`../spec/dn-glibc-prefix.md`](../spec/dn-glibc-prefix.md)).
+   core -- the loader cuts it from its own path, [`../spec/overlay.md`](../spec/overlay.md)).
 2. **Point the standard surfaces at the prefix**: resolve
    `<prefix>/etc/ld.so.preload` and the prefix's `ld.so.cache` instead of
    the hardcoded host paths. Then the shim is just one line in the prefix's

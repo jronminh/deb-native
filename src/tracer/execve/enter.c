@@ -68,7 +68,7 @@ int translate_and_check_exec(Tracee *tracee, char host_path[PATH_MAX], const cha
 	return 0;
 }
 
-/* deb-native (docs/spec/runtime.md, "The exec gate"): classify the final
+/* deb-native (docs/spec/overlay.md, "The exec gate"): classify the final
  * @host_path by the 5 rules there, purely from its header -- no trial run.
  * Rule 1 (the "#!" script case) is already unwrapped by expand_shebang(),
  * so @host_path here is always the final ELF (or the final non-ELF, for

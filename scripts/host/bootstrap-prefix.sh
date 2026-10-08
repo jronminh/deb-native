@@ -1,6 +1,6 @@
 #!/bin/sh
 # Restore a shipped core-deb to its full package set, from the mirror, inside
-# the prefix itself (docs/spec/prefix-layers.md, "Minimal core-deb and its
+# the prefix itself (docs/spec/prefix.md, "Minimal core-deb and its
 # restore"). Run by the prefix's own bash after ship-prefix.sh:
 #
 #   bash $PREFIX/usr/lib/deb-native/scripts/runtime/bootstrap-prefix.sh

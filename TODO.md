@@ -34,8 +34,8 @@ unprivileged; `apt install gcc` compiles and runs end to end.
 
 ## Prefix artifacts: core-ultra / core-deb, one ship path
 
-Design: [`docs/spec/prefix-contract.md`](docs/spec/prefix-contract.md),
-[`docs/spec/prefix-layers.md`](docs/spec/prefix-layers.md).
+Design: [`docs/spec/prefix.md`](docs/spec/prefix.md),
+[`docs/spec/prefix.md`](docs/spec/prefix.md).
 
 **Status**: shipped. `build-glibc.yml` builds the patched glibc from Debian's
 own source; `build-prefix.yml` builds `core-ultra` and `core-deb` from it (an
@@ -79,7 +79,7 @@ runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
 
 ## Runtime v1: new overlay (dn-policy / dn-glibc / dn-trace)
 
-Design: [`docs/spec/runtime.md`](docs/spec/runtime.md). Replaces the whole
+Design: [`docs/spec/overlay.md`](docs/spec/overlay.md). Replaces the whole
 current overlay (`dn-shim.c`, `dn-run`'s adopt-on-first-run, `dn-elf` at run
 time, `patch-maintainer-scripts.sh`) rather than running beside it. Phases
 below match `runtime.md`'s roadmap; each phase must leave the tree runnable
@@ -155,7 +155,7 @@ below.
   for everything `dn-policy.h` declares; not yet done: caching the
   resolution (every lookup hits the real filesystem directly).
 - Patch glibc (full rebuild from Debian source, not the shipped 10-file
-  swap — see `docs/spec/dn-glibc-prefix.md`'s status note): wire dn-policy
+  swap — see `docs/spec/overlay.md`'s status note): wire dn-policy
   into every path-taking function (public + internal + `syscall()`), route
   every kernel call through the gate page, map the gate page at loader
   startup, reorder library search (`RT/lib` first).
@@ -270,13 +270,13 @@ is a vendored, pruned SINS. Test ladder: `cron` -> `redis` -> `dbus`.
 ## Shim & tracer hardening
 
 **Status**: the libc-interposition layer is complete for its scope
-([`docs/spec/shim/shim-coverage.md`](docs/spec/shim/shim-coverage.md)); NSS
+([`docs/spec/overlay.md`](docs/spec/overlay.md)); NSS
 and raw-syscall/static binaries route to `dn-trace`. `proot` is gone.
 
 **Open**:
 
 - Bake the shim into installed ELFs
-  ([`docs/spec/shim/path-shim.md`](docs/spec/shim/path-shim.md), "Delivering
+  ([`docs/spec/overlay.md`](docs/spec/overlay.md), "Delivering
   the shim") so it survives an empty environment — `DT_AUDIT`/`--add-needed`,
   or `ld.so --preload`.
 - Test `dn-run` -> `dn-trace` from an installed prefix, not just a checkout.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cut core-ultra (the minimal prefix) out of a core-deb tree.
 
-core-ultra v0 (docs/spec/prefix-layers.md): the files of a few seed
+core-ultra v0 (docs/spec/prefix.md): the files of a few seed
 packages (from dpkg's own lists in SRC), the overlay, the small etc files a
 shell and a resolver read, and every library their ELFs need (DT_NEEDED),
 added until the set is closed. Writes DST/.dn/packages (core-ultra has no

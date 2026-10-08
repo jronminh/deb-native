@@ -28,10 +28,10 @@ of how it was found.
   sandbox limits, by direct probe"), moved here in full rather than
   split out separately when the log was later split into
   `docs/log/findings/`.
-- [`design.md`](../spec/design.md) — "Fake root", whose
+- [`design.md`](../spec/overlay.md) — "Fake root", whose
   `set-fakesyscalls-parked.patch` exclusion is permanent (decided, not
   pending), per this doc's per-file fork verdict and
-  [`runtime.md`](../spec/runtime.md) principle 3.
+  [`runtime.md`](../spec/overlay.md) principle 3.
 - `../../patches/README.md` —
   the actual patch this doc's catalog describes.
 
@@ -62,7 +62,7 @@ is assembled from:
   `riscv_hwprobe`, `vfork`, `perf_event_open`, `tkill`, `seccomp`, `open`,
   `stat64`/`stat`, `readlink`, the `io_*` AIO family (`io_setup`,
   `io_submit`, ... — **not `io_uring_setup`/`_enter`/`_register`**,
-  confirming [`runtime-failures.md`](../spec/shim/shim-coverage.md)'s "`io_uring` not
+  confirming [`runtime-failures.md`](../spec/overlay.md)'s "`io_uring` not
   intercepted" is really "not even on the app allowlist"), `execveat`,
   `membarrier`, `userfaultfd`, the `_time64` clock/timer family,
   `pselect6_time64`, `ppoll_time64`, `recvmmsg_time64`,
@@ -168,15 +168,15 @@ assumed.
 
 | finding | where recorded | gate | own-glibc fixes? |
 |---|---|---|---|
-| Debian's stock `libc6` killed at startup | [`design.md`](../spec/design.md) | A — glibc's own dynamic-linker startup, confirmed by direct test (`../log/android-seccomp-audit.md`, "Closed... stock Debian `libc6` doesn't even reach a syscall question") | **partially** — own-glibc *is* "Termux's glibc" in this framing, i.e. the fix is patching glibc's startup path around whatever it trips, same as Termux already does |
-| `set_robust_list` SIGSYS on static binaries | [`tracer.md`](../spec/tracer/tracer.md) | A | no (tracer's SIGSYS emulation already answers it) |
-| NSS opens (`getpwnam`, ...) via `__open_nocancel` | [`shim-coverage.md`](../spec/shim/shim-coverage.md), [`syscall-boundary.md`](syscall-boundary.md) | neither — not a kernel block, a *libc-internal symbol binding* choice | **yes** — this is the case own-glibc already targets |
-| `gconv`/locale modules, `ld.so.cache`, `RUNPATH` | [`runtime-failures.md`](../spec/shim/shim-coverage.md) B | neither — same as NSS, loader-internal path choice | **yes**, same mechanism as NSS |
-| SysV IPC (`shmget`/`semget`/`msgget`) | [`runtime-failures.md`](../spec/shim/shim-coverage.md) E | A or B | out of scope — not a current goal (`../log/android-seccomp-audit.md`'s relevance triage) |
-| `mount`, `pivot_root`, `swapon`, netlink, TUN, ports <1024, `mknod` | [`runtime-failures.md`](../spec/shim/shim-coverage.md) E | B (`CAP_SYS_ADMIN`/similar missing; `pivot_root` confirmed Gate-A-allowed) | no |
+| Debian's stock `libc6` killed at startup | [`design.md`](../spec/overlay.md) | A — glibc's own dynamic-linker startup, confirmed by direct test (`../log/android-seccomp-audit.md`, "Closed... stock Debian `libc6` doesn't even reach a syscall question") | **partially** — own-glibc *is* "Termux's glibc" in this framing, i.e. the fix is patching glibc's startup path around whatever it trips, same as Termux already does |
+| `set_robust_list` SIGSYS on static binaries | [`tracer.md`](../spec/overlay.md) | A | no (tracer's SIGSYS emulation already answers it) |
+| NSS opens (`getpwnam`, ...) via `__open_nocancel` | [`shim-coverage.md`](../spec/overlay.md), [`syscall-boundary.md`](syscall-boundary.md) | neither — not a kernel block, a *libc-internal symbol binding* choice | **yes** — this is the case own-glibc already targets |
+| `gconv`/locale modules, `ld.so.cache`, `RUNPATH` | [`runtime-failures.md`](../spec/overlay.md) B | neither — same as NSS, loader-internal path choice | **yes**, same mechanism as NSS |
+| SysV IPC (`shmget`/`semget`/`msgget`) | [`runtime-failures.md`](../spec/overlay.md) E | A or B | out of scope — not a current goal (`../log/android-seccomp-audit.md`'s relevance triage) |
+| `mount`, `pivot_root`, `swapon`, netlink, TUN, ports <1024, `mknod` | [`runtime-failures.md`](../spec/overlay.md) E | B (`CAP_SYS_ADMIN`/similar missing; `pivot_root` confirmed Gate-A-allowed) | no |
 | `CLONE_NEWUSER` | device probe, above | B, kernel-wide (`CONFIG_USER_NS` off) | no — not even a seccomp question |
 | `CLONE_NEWNS` | device probe, above | B (`CAP_SYS_ADMIN`) | no |
-| `io_uring*` | [`runtime-failures.md`](../spec/shim/shim-coverage.md) A, H | A — absent from both allowlist TXT files | no (tracer would need to emulate it; not attempted) |
+| `io_uring*` | [`runtime-failures.md`](../spec/overlay.md) A, H | A — absent from both allowlist TXT files | no (tracer would need to emulate it; not attempted) |
 | `ip`-class netlink | `../log/android-seccomp-audit.md` | C (SELinux) | no |
 
 Everything but the NSS/loader-internal row is Gate A, B, or C,

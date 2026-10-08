@@ -5,7 +5,7 @@
 # prefix with the toolchain installed, or a Debian arm64 host such as CI.  No
 # Bionic toolchain, no Termux.
 #
-# Runtime v1 (docs/spec/runtime.md): the overlay is dn-trace, the tree's root
+# Runtime v1 (docs/spec/overlay.md): the overlay is dn-trace, the tree's root
 # process, plus the syscall catalog it reads (--syscalls).  The old LD_PRELOAD
 # shim (dn-shim.so), the adopt-on-first-run launcher (dn-run) and the ELF
 # editor (dn-elf) are gone: dn-policy wired into dn-glibc replaces the shim,

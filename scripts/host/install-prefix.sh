@@ -39,7 +39,7 @@ LD=$DN/$LOADER
 # 1. No relocation.  Runtime v1 fixes TREE/RT at build time: the artifact's
 #    files already name the final path, and every exec goes through dn-trace's
 #    exec gate, which runs a glibc-dynamic program through the runtime loader
-#    (RT/ld.so) itself -- nothing repoints a PT_INTERP (docs/spec/runtime.md).
+#    (RT/ld.so) itself -- nothing repoints a PT_INTERP (docs/spec/overlay.md).
 
 # 2. The prefix's own login hooks, host-agnostic: run them now if it ships any.
 for h in "$DN"/etc/deb-native/login.d/*; do

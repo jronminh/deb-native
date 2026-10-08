@@ -3,7 +3,7 @@
 
 Implements the section-based scope in docs/reference/standard.md: every package whose
 Debian `Section` is in scope, minus the tuned size window, is a candidate.
-Used to build the corpus the libc-shim coverage (docs/spec/shim/shim-coverage.md) is
+Used to build the corpus the libc-shim coverage (docs/spec/overlay.md) is
 measured against.
 
 Usage:  python3 scripts/scope-sample.py Packages.gz > sel.tsv 2> scope.txt
