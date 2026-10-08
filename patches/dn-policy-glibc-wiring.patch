@@ -335,6 +335,30 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
  
  # undef INTERNAL_SYSCALL
  # define INTERNAL_SYSCALL(name, nr, args...)			\
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/access.c work/sysdeps/unix/sysv/linux/access.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/access.c	2026-10-08 07:51:04.424680319 +0000
++++ work/sysdeps/unix/sysv/linux/access.c	2026-10-08 12:45:07.151044924 +0000
+@@ -19,10 +19,20 @@
+ #include <fcntl.h>
+ #include <unistd.h>
+ #include <sysdep-cancel.h>
++#include <dn-prefix.h>
+ 
+ int
+ __access (const char *file, int type)
+ {
++#if !IS_IN (rtld)
++  /* dn-policy path rewriting, as in faccessat(): libc issues this call
++     from the gate page, which the filter lets through untraced, so an
++     untranslated guest path would reach the host's tree.  */
++  char dn_path[DN_PREFIX_MAX];
++
++  if (file != NULL && file[0] == '/')
++    file = dn_policy_redirect (dn_path, sizeof dn_path, file);
++#endif
+ #ifdef __NR_access
+   return INLINE_SYSCALL_CALL (access, file, type);
+ #else
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/chmod.c work/sysdeps/unix/sysv/linux/chmod.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/chmod.c	2026-10-08 07:51:04.432680319 +0000
 +++ work/sysdeps/unix/sysv/linux/chmod.c	2026-10-08 12:27:06.355045337 +0000

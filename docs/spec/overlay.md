@@ -315,12 +315,18 @@ the only coupling between the runtime and the package set.
 ### What the wiring covers
 
 The wiring is per syscall, in `src/syscalls.tsv`'s terms. Currently wired
-in-process: the open/openat family; stat/fstatat/statx/faccessat plus the owner
-rewrite; `getcwd` and `readlink(/proc/self/...)` reverse translation;
+in-process: the open/openat family; stat/fstatat/statx/faccessat/`access`
+plus the owner rewrite; `getcwd` and `readlink(/proc/self/...)` reverse translation;
 `mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/`statfs`;
 `syscall(2)` for the path group; `chown`/`lchown`/`chmod`/`fchmodat`;
-`link`/`unlink` (link2symlink). The loader maps the gate page and searches
-`RT/lib` first.
+`link`/`unlink` (link2symlink); paths baked at configure time (the build
+prefix) are rebased onto the live tree. Outside a prefix (no live tree, e.g.
+a static link) the wrappers are plain glibc. The loader maps the gate page and
+searches `RT/lib` first.
+
+A row may be `gate=yes` only when every libc function issuing that syscall is
+wired: libc issues it from the gate page, so an unwired one (as `access()` was,
+beside a wired `faccessat()`) reaches the host's tree untranslated.
 
 Still on the `ptrace` tier (correct, just slower): the `syscalls.list`-generated
 wrappers (`mkdirat`/`unlinkat`/`symlinkat`/`linkat`/`readlinkat`/`fchownat`/
