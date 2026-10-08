@@ -29,9 +29,11 @@
 
 #include "execve/execve.h"
 #include "execve/shebang.h"
+#include "execve/elf.h"
 #include "path/path.h"
 #include "tracee/tracee.h"
 #include "syscall/syscall.h"
+#include "cli/note.h"
 
 /**
  * Translate @user_path into @host_path and check if this latter exists, is
@@ -65,6 +67,78 @@ int translate_and_check_exec(Tracee *tracee, char host_path[PATH_MAX], const cha
 	return 0;
 }
 
+/* deb-native, P1 (docs/spec/runtime.md, "The exec gate"): classify the
+ * final @host_path by the 5 rules there, purely from its header -- no
+ * trial run. Observe-only for now: the result is only logged, nothing
+ * here changes what gets exec'd. P2 wires this into dn-policy and
+ * rewrites the exec per rules 3/4.  */
+
+#define DN_GLIBC_LOADER_SUFFIX "/ld-linux-aarch64.so.1"
+
+typedef struct {
+	int fd;
+	char interp[PATH_MAX];
+	bool found;
+} FindInterp;
+
+/* iterate_program_headers() callback: copy out PT_INTERP's string, then
+ * stop iterating (return 1).  */
+static int find_interp(const ElfHeader *elf_header, const ProgramHeader *program_header, void *data)
+{
+	FindInterp *result = data;
+	uint64_t offset;
+	uint64_t size;
+
+	if (PROGRAM_FIELD(*elf_header, *program_header, type) != PT_INTERP)
+		return 0;
+
+	offset = PROGRAM_FIELD(*elf_header, *program_header, offset);
+	size   = PROGRAM_FIELD(*elf_header, *program_header, filesz);
+	if (size == 0 || size >= sizeof(result->interp))
+		return -ENOTSUP;
+
+	if (lseek(result->fd, offset, SEEK_SET) < 0)
+		return -errno;
+	if (read(result->fd, result->interp, size) != (ssize_t) size)
+		return -EIO;
+
+	result->interp[size] = '\0';
+	result->found = true;
+	return 1;
+}
+
+/* Rules 2-5. Rule 1 (the "#!" script case) is already unwrapped by
+ * expand_shebang() before this runs, so @host_path here is always the
+ * final ELF (or the final non-ELF, for rule 5).  */
+static const char *classify_exec(const char *host_path)
+{
+	ElfHeader elf_header;
+	FindInterp result = { .found = false };
+	size_t suffix_len = sizeof(DN_GLIBC_LOADER_SUFFIX) - 1;
+	size_t interp_len;
+	int status;
+
+	result.fd = open_elf(host_path, &elf_header);
+	if (result.fd < 0)
+		return "rule5-not-runnable";
+
+	status = iterate_program_headers(NULL, result.fd, &elf_header, find_interp, &result);
+	close(result.fd);
+
+	if (status < 0 && status != 1)
+		return "elf-read-error";
+
+	if (!result.found)
+		return "rule2-static";
+
+	interp_len = strlen(result.interp);
+	if (interp_len >= suffix_len
+	    && strcmp(result.interp + interp_len - suffix_len, DN_GLIBC_LOADER_SUFFIX) == 0)
+		return "rule3-glibc-dynamic";
+
+	return "rule4-foreign";
+}
+
 /**
  * deb-native: the kernel execs the translated program itself.
  *
@@ -95,6 +169,9 @@ int translate_execve_enter(Tracee *tracee)
 		/* The Linux kernel actually returns -EACCES when
 		 * trying to execute a directory.  */
 		return status == -EISDIR ? -EACCES : status;
+
+	/* P1 exec gate: classify and log only, see classify_exec() above.  */
+	VERBOSE(tracee, 1, "exec gate: %s -> %s", host_path, classify_exec(host_path));
 
 	/* Remember the new value for "/proc/self/exe", committed by
 	 * translate_execve_exit() once the execve succeeded.  It is
