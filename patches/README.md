@@ -276,18 +276,18 @@ wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
 `truncate`, `utimensat`/`utimes`/`utime`, `statfs`), the `syscall(2)`
 interposition for the path group, fake root's writes (`chown`/`lchown`/
 `chmod`/`fchmodat` record into the owner store), hardlinks (`link`/`unlink`
-are link2symlink), and the loader's mapping of the fixed gate page
-(`P_GATE`) -- the page, though glibc does not yet issue its syscalls from
-it. The rest of the wiring (the xattr family, `chdir`/`chroot`, routing
-every syscall through the gate page, the `RT/lib` search order) is still
-ahead; what is here is what made the first full glibc build with dn-policy
-inside it succeed, extended through every group above.
+are link2symlink), the loader's mapping of the fixed gate page (`P_GATE`)
+-- the page, though glibc does not yet issue its syscalls from it -- and the
+`RT/lib`-first library search order. The rest of the wiring (the xattr
+family, `chdir`/`chroot`, routing every syscall through the gate page) is
+still ahead; what is here is what made the first full glibc build with
+dn-policy inside it succeed, extended through every group above.
 
 ## What it is
 
 `diff -ruN` between `work-after-official-patch/` (glibc source with
 `dn-glibc-android.patch` already applied once, per the section above) and
-`work/` (that plus the wiring). Thirty-nine files:
+`work/` (that plus the wiring). Forty files:
 
 - New, byte-identical copies of `src/dn-policy/` under
   `sysdeps/unix/sysv/linux/`: `dn-policy.{h,c}`, `dn-policy-fakeroot.c`,
@@ -363,6 +363,12 @@ inside it succeed, extended through every group above.
   post-processing (`dn_policy_stat_post()` -> `dn_policy_hardlink_fixup_stat()`)
   makes the managed names report as ordinary regular files with the right
   `st_nlink`, which the runtime check confirms.
+- `elf/dl-load.c`: the loader's system search dirs now start with `RT/lib`
+  (`/usr/lib/deb-native/lib/`, redirected to `<TREE>/usr/lib/deb-native/lib/`
+  like every other dir), then the tree's own `/usr/lib/aarch64-linux-gnu/`
+  and `/usr/lib/` -- `runtime.md`'s "Building dn-glibc" step 4. The runtime's
+  glibc libraries are thus found before the tree's same-named `libc6` files,
+  and the tree's copy is never loaded.
 - `elf/rtld.c`: the loader maps the fixed gate page -- 4 KB at `P_GATE`
   (`0x100000000`, chosen by scanning real on-device process maps for an
   address free in every one, inside the 39-bit range) with
@@ -488,13 +494,18 @@ A seventh binary covers hardlinks: `link()` makes `/etc/dn-link-b` for
 `st_nlink == 2` (on disk both are symlinks into `RT/state/links/`), reading
 either works, and `unlink()` on one leaves the other with `st_nlink == 1`.
 
+An eighth check covers the library search order: with the same
+`libdnorder.so` (one SONAME) placed in both `RT/lib` and the tree's
+`/usr/lib`, a program with no rpath loads the `RT/lib` one (`dn_order == 1`);
+remove that copy and it loads the tree's (`dn_order == 2`).
+
 Covers the public `open`/`openat` and `stat`/`fstatat`/`statx`/`faccessat`
 families, reverse translation (`getcwd`, the `/proc/self` magic links), the
 `mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/`statfs`
 wrappers, the `syscall(2)` interposition for the path group, fake root's
 writes (`chown`/`lchown`/`chmod`/`fchmodat`), hardlinks (`link`/`unlink`),
-and the loader's gate-page mapping. Still open: the xattr family and the
-public `fchownat()` (`syscalls.list`-generated), `chdir`/`chroot`, issuing
-every glibc syscall from the gate page (`INTERNAL_SYSCALL_RAW` and the
-cancellation asm), the seccomp filter's gate-IP rule in `dn-trace`, and the
-`RT/lib` search order.
+the loader's gate-page mapping, and the `RT/lib`-first library search order.
+Still open: the xattr family and the public `fchownat()`
+(`syscalls.list`-generated), `chdir`/`chroot`, issuing every glibc syscall
+from the gate page (`INTERNAL_SYSCALL_RAW` and the cancellation asm), and the
+seccomp filter's gate-IP rule in `dn-trace`.

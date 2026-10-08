@@ -27,6 +27,29 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/Makef
    # rtld-stubbed-symbols
  
  ifeq ($(have-ssp),yes)
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/dl-load.c work/elf/dl-load.c
+--- work-after-official-patch/elf/dl-load.c	2026-10-08 07:51:05.032680319 +0000
++++ work/elf/dl-load.c	2026-10-08 09:52:05.763712398 +0000
+@@ -112,7 +112,10 @@
+    the build-time SYSTEM_DIRS (which bakes the build prefix).  Each entry is
+    run through the same guest->prefix redirect as everything else, so the
+    loader follows the guest model -- it sees /usr/lib and the live prefix is
+-   substituted at run time (docs/spec/dn-glibc-prefix.md).  */
++   substituted at run time (docs/spec/dn-glibc-prefix.md).  RT/lib comes
++   first (runtime.md, "Building dn-glibc" step 4): the runtime's own glibc
++   libraries are found before the tree's same-named libc6 files, so the
++   tree's copy is never loaded. */
+ #define DN_MAX_SYSDIRS 16
+ static char dn_system_dirs[1024];
+ static size_t dn_system_dirs_len[DN_MAX_SYSDIRS];
+@@ -124,6 +127,7 @@
+ dn_init_system_dirs (void)
+ {
+   static const char *const guest[] = {
++    "/usr/lib/deb-native/lib/",		/* RT/lib first */
+     "/usr/lib/aarch64-linux-gnu/",
+     "/usr/lib/",
+     NULL
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.c work/elf/rtld.c
 --- work-after-official-patch/elf/rtld.c	2026-10-08 07:51:05.032680319 +0000
 +++ work/elf/rtld.c	2026-10-08 09:03:37.746556970 +0000
