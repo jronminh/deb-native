@@ -166,9 +166,11 @@ below.
     `dn_policy_fake_stat()` (owner store). rtld is kept out entirely
     (`#if !IS_IN (rtld)`, plus `dn_policy_fake_stat` in `elf/Makefile`'s
     `rtld-stubbed-symbols`). A full `make -O -j8` of glibc `2.41-12+deb13u4`
-    with it applied links clean, and `ld.so` ends up with no dn-policy
-    symbol (verified 2026-10-08; see `patches/README.md`). Not yet in the
-    build workflow — applied by hand in the scratch build.
+    with it applied links clean, `ld.so` ends up with no dn-policy symbol,
+    and a minimal prefix run under the built loader shows `open`/`stat`/
+    `lstat` of `/etc/...` translating into the tree with the fake-root
+    post-processing firing (verified 2026-10-08; see `patches/README.md`).
+    Not yet in the build workflow — applied by hand in the scratch build.
 - Pick `P_GATE`: inspect a few real on-device process memory maps for free
   39-bit space (open item in `runtime.md`).
 - Turn on exec-gate rules 3/4 (rewrite to `RT/ld.so ...`). Drop the shim.

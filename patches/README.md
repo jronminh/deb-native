@@ -375,11 +375,21 @@ diff -rq --exclude='.pc' --exclude='debian' /tmp/roundtrip work
 
 ## Status
 
-Build-verified 2026-10-08 against glibc `2.41-12+deb13u4`: full `make -O -j8`
-with this patch applied reaches `libc.so`, `ld.so`, `libm`, `libdl`,
-`libpthread`, `librt` and the tools cleanly (exit 0, no
-`multiple definition`). `ld.so` links no dn-policy symbol (the loader stays
-on `__dn_redirect`); `libc.so` carries the full dn-policy. Covers the public
-`open`/`openat` and `stat`/`fstatat`/`statx`/`faccessat` families; the chown,
-xattr, symlink and rename families, `syscall()` interposition, the gate page
-and the `RT/lib` search order are still open.
+Build-verified and runtime-verified (2026-10-08) against glibc
+`2.41-12+deb13u4`. `make -O -j8` with this patch applied links cleanly
+(exit 0, no `multiple definition`); `ld.so` ends up with no dn-policy symbol
+(the loader stays on `__dn_redirect`), `libc.so` carries the full dn-policy.
+
+A minimal prefix -- the built `ld.so`/`libc.so.6` laid out under a tree with
+an `etc/dn-runtime-marker` and an absolute in-tree symlink -- was run directly
+under the built loader. `open`, `stat` and `lstat` of `/etc/...` all
+translate into the tree; `lstat` honors `AT_SYMLINK_NOFOLLOW`; `stat` follows
+the symlink; a missing path still gives `ENOENT`; and the fake-root
+post-processing really runs (`dn-policy-fakeroot.o`/`-hardlink.o` are
+reached -- `RT/state/owners.db` and `state/links/` appear once a stat goes
+through). The same binary run directly under the host loader fails, so the
+translation is what made it work.
+
+Covers the public `open`/`openat` and `stat`/`fstatat`/`statx`/`faccessat`
+families; the chown, xattr, symlink and rename families, `syscall()`
+interposition, the gate page and the `RT/lib` search order are still open.
