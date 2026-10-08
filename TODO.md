@@ -117,17 +117,22 @@ below.
 
 **P2 — the fast path**:
 
-- Write `dn-policy` as a standalone static C library: path mapping (longest
+- [x] Define dn-policy's calling convention before either caller is written:
+  `src/dn-policy/dn-policy.h` — function signatures, 0/-errno returns,
+  caller-supplied buffers only (no library heap crossing the glibc/talloc
+  allocator boundary, except the opaque `DnIdentity` handle, matched
+  alloc/free), thread safety, and why `process_vm_readv`/`writev`
+  marshalling is `dn-trace`'s own wrapper's job, not dn-policy's. Caught
+  one real bug while writing it: fake uid/gid can't be a dn-policy global,
+  since `dn-trace` tracks many tracees at once (one may drop to `_apt`
+  while another stays root) — fixed with a `DnIdentity` handle the caller
+  owns one of per traced program.
+- [ ] Implement `dn-policy` against that header: path mapping (longest
   prefix, `/proc`/`/sys`/`/dev` passthrough), in-tree symlink resolution,
   reverse translation, fake root (probe on-device whether `user.dn.*` xattr
   writes work before committing to that backend over the `RT/state/` DB
   fallback), hardlinks (`link2symlink` — settle the PRoot-GPL licensing
   question first, per `runtime.md`'s open items).
-- Define dn-policy's calling convention before either caller is written:
-  function signatures, error/return convention, thread safety, and the
-  `process_vm_readv`/`writev` wrapper `dn-trace` needs that `dn-glibc`
-  doesn't (both callers must agree or principle 3 — "one policy, two
-  enforcement points" — breaks silently).
 - Patch glibc (full rebuild from Debian source, not the shipped 10-file
   swap — see `docs/spec/dn-glibc-prefix.md`'s status note): wire dn-policy
   into every path-taking function (public + internal + `syscall()`), route
