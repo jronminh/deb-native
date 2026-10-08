@@ -15,6 +15,7 @@ whole classes of "what the shim/tracer cannot reach" live in
 - [Bugs with a reproduction](#bugs-with-a-reproduction)
 - [Mitigated breakages](#mitigated-breakages)
 - [Design limitations](#design-limitations)
+- [Gaps toward a complete Debian](#gaps-toward-a-complete-debian)
 
 ## Related docs
 
@@ -186,3 +187,43 @@ By design, not bugs; see the linked specs.
   loudly if upstream changes those lines.
 - **Per-project builds are partly unverified:** `g++`/C++ is untested and
   `rustc`/`ghc` are unresearched.
+
+## Gaps toward a complete Debian
+
+`dn-trace` (with dn-policy/dn-glibc) is the syscall-edge translator, not a
+kernel emulator: it rewrites paths/identity and *answers in place of* the
+kernel when Android blocks a call. "Complete" here means every in-scope
+package installs and its programs run — not a full Linux emulation. The
+sections below are what is still between the current tree and that.
+
+**Answered today (Gate A).** `src/tracer/tracee/seccomp.c` translates the
+older-variant group (`open`→`openat`, `openat2`→`openat`, `accept`→`accept4`,
+`send`/`recv`→`sendto`/`recvfrom`, `link`/`symlink`/`chmod`/`chown`/`unlink`/
+`rmdir`→`*at`, `waitpid`→`wait4`, `utime`/`utimes`→`utimensat`, `statfs`,
+`getpgrp`), fakes success for `mount`/`umount`/`pivot_root`/`unshare`/`setns`/
+`setgroups`/`set*id`, and answers `set_robust_list` with `ENOSYS`.
+
+**Still Gate A, no case (warns `blocked syscall … returning ENOSYS`).** These
+fall to the `default:` branch (`seccomp.c:673`) and each needs an
+emulate-or-refuse decision: `sethostname`, `add_key`/`keyctl`/`request_key`,
+the `io_uring` family, `clone3`, `rseq`, `mq_open`, `open_by_handle_at`,
+`pidfd_send_signal`/`pidfd_getfd`, `kcmp`, `landlock_create_ruleset`,
+`mbind`/`get_mempolicy`/`set_mempolicy`, `get_robust_list`, and the SysV
+message/semaphore calls (`msg*`, `sem*`; `shmget` is already real, via
+`/dev/ashmem`).
+
+**Hard — not dn-trace's to fix (Gate B/C).** See
+[`android-platform.md`](android-platform.md) and
+[`../../TODO.md`](../../TODO.md) ("Blocked / impossible"): user namespaces
+off kernel-wide, `mount`/`CLONE_NEWNS` need `CAP_SYS_ADMIN`, `/dev/fuse`
+root-only, SELinux on `/proc/sys` and netlink, raw sockets in the root netns,
+ports below 1024, setuid/setgid and file capabilities, TUN/firewall. These
+stay silent failures (`EPERM`/`EINVAL`), not warnings — so "no warning" does
+not mean "nothing blocked".
+
+**Prefix-side (not syscall-level).** A POSIX `/dev/shm` is absent (SysV shm
+works) and is fakeable the way `statfs` already reports it; no service
+manager yet (runit is the plan); account files (`/etc/passwd`,
+`/etc/shells`); no TTY for interactive `debconf`; and the core-deb profile
+omits `tzdata`, `locales`, `util-linux`, `procps` — `libtalloc2` (above) is
+the same class.

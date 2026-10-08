@@ -49,6 +49,11 @@ runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
 
 - Build `core-ultra` from its own recipe instead of cutting it from the built
   core-deb tree; `core-deb` = that recipe + the Debian layer.
+- **core-deb profile gaps**: add `tzdata`, `locales`, `util-linux`, `procps`
+  (and `libtalloc2`, already a known issue) to `profile.txt`/`packages.tsv`
+  so stock Debian tools plus timezone/i18n work
+  ([`known-issues.md`](docs/reference/known-issues.md), "Gaps toward a
+  complete Debian").
 - **Bootstrap on a poor host**: where the first artifact comes from, and how
   one artifact yields the next (core-ultra, core-deb, specialized).
 - The `claude` specialized prefix: core-ultra recipe + the Claude binary as a
@@ -212,6 +217,41 @@ for installing packages, compiling, and running a Python script.
 **P5 — optional**: seccomp user notification for hot calls, only if P4's
 numbers justify it.
 
+## Backend emulation (faking what the kernel refuses)
+
+Design: [`docs/spec/emulation.md`](docs/spec/emulation.md). Reimplement the
+operations Android refuses (mount/overlay, raw sockets, privileged ports,
+capabilities, `/proc` reads) in userspace, and answer every interface that
+reads them from one model in dn-policy. The existing
+`mount`/`unshare` binding table, AF_NETLINK substitution and
+`statfs`/`/dev/shm` fake are the template (principle: *answer in place of the
+kernel*, and cover every reader so the two enforcement points cannot disagree).
+
+**Open**:
+
+- **Virtual mount table, complete**: `statfs`/`statvfs`/`statx` and
+  `/proc/self/mounts`/`mountinfo` all read the table `apply_emulated_mount`
+  already writes; today only the binding is recorded.
+- **Overlay copy-up**: userspace CoW for a write on a lower layer, whiteouts
+  on delete, and a merged `readdir` — no overlayfs on this kernel.
+- **Synthetic `/proc`/`/sys`**: a `path -> generator` table covering
+  `/proc/sys/*`, `/proc/net/*`, `/proc/version`, `/proc/self/*`, served on
+  `open`/`stat`/`read`.
+- **Privileged ports**: a bind-translation table plus `getsockname`/`accept`/
+  `connect` and `/proc/net/tcp` back-translation.
+- **Raw ICMP**: substitute the unprivileged ping socket (verify
+  `ping_group_range`), else a userspace helper.
+- **Capabilities**: `capget`/`PR_CAPBSET_READ`/`capset` synthesis.
+- **Normalize divergent platform behaviour**: the silent class (`uname`,
+  `/proc` values, `rlimit`/cgroup, W^X `mprotect`) reports Android and raises
+  no error — make the observation match what a package expects, not just
+  answer the call. Do it in dn-policy and apply it at **both** tiers
+  (dn-glibc for the fast path, dn-trace for static/raw syscalls), not in
+  dn-trace alone ([`emulation.md`](docs/spec/emulation.md), "Two kinds of
+  hard limit").
+- **Refuse, don't fake**: real isolation, TUN and LSM-observable state get a
+  clear refusal, not a fiction.
+
 ## Per-userland home (planned)
 
 Give each prefix a **sparse `$HOME`** (`/data/data/com.termux/files/.dn/<name>/`)
@@ -261,6 +301,15 @@ and raw-syscall/static binaries route to `dn-trace`. `proot` is gone.
 
 **Open**:
 
+- **Remaining Gate-A syscalls**: `seccomp.c`'s `default:` branch still
+  answers these with `ENOSYS` plus a `blocked syscall …` warning — give each
+  an emulate-or-refuse decision
+  ([`known-issues.md`](docs/reference/known-issues.md), "Gaps toward a
+  complete Debian"): `sethostname`, `keyctl`/`add_key`, `io_uring*`,
+  `clone3`/`rseq`, `mq_open`, `pidfd_*`, `mbind`/`*_mempolicy`, and the SysV
+  `msg*`/`sem*` groups.
+- **POSIX `/dev/shm`**: absent on Android, so `shm_open`/`sem_open` fail;
+  fake it in dn-policy the way `statfs` already reports it as tmpfs.
 - Bake the shim into installed ELFs
   ([`docs/spec/overlay.md`](docs/spec/overlay.md), "Delivering
   the shim") so it survives an empty environment — `DT_AUDIT`/`--add-needed`,
@@ -310,4 +359,5 @@ user namespaces off entirely, mount namespaces need `CAP_SYS_ADMIN`,
 `/dev/fuse` root-only. Out of scope: install-view / service-view isolation,
 seccomp+namespace sandboxing, other-architecture loaders and `Multi-Arch`
 skew, setuid/setgid and file capabilities, a TUN device / firewall rules /
-raw sockets.
+raw sockets. SELinux also denies `/proc/sys` and netlink even in a fresh
+namespace, so tools that read them fail regardless of the tracer.

@@ -34,6 +34,10 @@ are exercised on-device; see [Status](#status).
 
 - [`prefix.md`](prefix.md) — the tree and the tarball: how the overlay is
   assembled into a prefix and shipped.
+- [`emulation.md`](emulation.md) — the layer that fakes the operations the
+  platform refuses (mount, raw sockets, privileged ports, capabilities).
+- [`native.md`](native.md) — the execution model those pieces serve:
+  near-full behaviour at near-native speed.
 - [`../../src/dn-policy/`](../../src/dn-policy) — the policy library itself.
 - [`../../src/tracer/`](../../src/tracer) — `dn-trace`, the tracer.
 - [`../../src/syscalls.tsv`](../../src/syscalls.tsv) — the syscall catalog.
