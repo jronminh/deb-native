@@ -165,8 +165,9 @@ below.
     wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
     `truncate`, `utimensat`/`utimes`/`utime`, `statfs`), reverse translation
     for `getcwd()` and `readlink()` of the `/proc/self` magic links, the
-    `syscall(2)` interposition for the path group, the loader's mapping of
-    the fixed gate page (`P_GATE`), and
+    `syscall(2)` interposition for the path group, fake root's writes
+    (`chown`/`lchown`/`chmod`/`fchmodat` via `dn_policy_owner_merge()`), the
+    loader's mapping of the fixed gate page (`P_GATE`), and
     `dn_policy_fake_stat()` (owner store) on a successful `stat`. rtld is
     kept out entirely (`#if !IS_IN (rtld)`, plus `dn_policy_fake_stat` in
     `elf/Makefile`'s `rtld-stubbed-symbols`). A full `make -O -j8` of glibc

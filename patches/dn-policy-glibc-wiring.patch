@@ -1,24 +1,26 @@
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/Makefile work/elf/Makefile
 --- work-after-official-patch/elf/Makefile	2026-10-08 07:51:05.224680319 +0000
-+++ work/elf/Makefile	2026-10-08 08:44:33.486284751 +0000
-@@ -1465,6 +1465,12 @@
++++ work/elf/Makefile	2026-10-08 09:08:36.430556856 +0000
+@@ -1465,6 +1465,13 @@
  # their implementation is provided differently in rtld, and the symbol
  # discovery mechanism is not compatible with the libc implementation
  # when compiled for libc.
 +#
-+# dn_policy_fake_stat: deb-native.  Same reason as the malloc family
-+# above -- dn-policy-glue.c's stat post-processing reaches
-+# dn-policy-fakeroot.o, which uses malloc/flock.  Stubbing it keeps the
-+# owner-store object out of the loader's link map (it must not go into
-+# ld.so); libc-proper still links the real one.
++# dn_policy_fake_stat / dn_policy_owner_merge: deb-native.  Same reason as
++# the malloc family above -- the dn-policy stat post-processing and the
++# chown()/chmod() fakes reach dn-policy-fakeroot.o, which uses
++# malloc/flock.  Stubbing them keeps the owner-store object out of the
++# loader's link map (it must not go into ld.so); libc-proper still links
++# the real ones.
  rtld-stubbed-symbols = \
    __libc_assert_fail \
    __syscall_cancel \
-@@ -1472,6 +1478,7 @@
+@@ -1472,6 +1479,8 @@
    free \
    malloc \
    realloc \
 +  dn_policy_fake_stat \
++  dn_policy_owner_merge \
    # rtld-stubbed-symbols
  
  ifeq ($(have-ssp),yes)
@@ -80,8 +82,16 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.
    call_init_paths (&state);
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- work-after-official-patch/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:03.964680319 +0000
-+++ work/sysdeps/generic/dn-prefix.h	2026-10-08 08:57:59.554557099 +0000
-@@ -149,4 +149,39 @@
++++ work/sysdeps/generic/dn-prefix.h	2026-10-08 09:07:44.022556876 +0000
+@@ -16,6 +16,7 @@
+ #define _DN_PREFIX_H 1
+ 
+ #include <string.h>
++#include <stdint.h>
+ 
+ /* The prefix this build baked at compile time; substituted when the patch
+    is applied.  Paths that still carry it are rewritten at run time.  */
+@@ -149,4 +150,46 @@
    return path;
  }
  
@@ -118,6 +128,13 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/g
 +   raw arguments; @p0/@p1 scratch buffers for up to two paths. */
 +extern void dn_policy_syscall_args (long number, long *a0, long *a1, long *a2,
 +				    long *a3, char *p0, size_t cap, char *p1);
++/* Fake root's writes (runtime.md, "Fake root"): merge new ids and/or
++   setuid/setgid bits into the owner store.  chown()/lchown()/chmod()/
++   fchmodat() call this instead of the real kernel call. */
++extern int dn_policy_owner_merge (const char *host_path, uint64_t dev,
++				  uint64_t ino, int set_ids, uint32_t uid,
++				  uint32_t gid, int set_mode,
++				  uint32_t mode_bits);
 +#endif
 +
  #endif /* _DN_PREFIX_H */
@@ -135,10 +152,93 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
    # sysdep_routines
  
  CFLAGS-gethostid.c = -fexceptions
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/chmod.c work/sysdeps/unix/sysv/linux/chmod.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/chmod.c	2026-10-08 07:51:04.432680319 +0000
++++ work/sysdeps/unix/sysv/linux/chmod.c	2026-10-08 09:08:49.750556851 +0000
+@@ -18,11 +18,38 @@
+ 
+ #include <fcntl.h>
+ #include <sysdep.h>
++#include <errno.h>
++#include <sys/stat.h>
++#include <dn-prefix.h>
+ 
+ /* Change the protections of FILE to MODE.  */
+ int
+ __chmod (const char *file, mode_t mode)
+ {
++#if !IS_IN (rtld)
++  /* Fake root (runtime.md): the ordinary permission bits go on the real
++     file, the setuid/setgid bits are recorded in the store (Android would
++     drop them, and a real chmod() with them would not stick). */
++  if (file != NULL && file[0] == '/')
++    {
++      char dn_path[DN_PREFIX_MAX];
++      struct __stat64_t64 st;
++      const char *host = dn_policy_redirect (dn_path, sizeof dn_path, file);
++
++      if (__stat64_time64 (host, &st) != 0)
++	return -1;
++      if (INLINE_SYSCALL_CALL (fchmodat, AT_FDCWD, host, mode & ~07000) != 0)
++	return -1;
++      if (dn_policy_owner_merge (host, (uint64_t) st.st_dev,
++				 (uint64_t) st.st_ino, 0, 0, 0, 1,
++				 (uint32_t) mode) < 0)
++	{
++	  __set_errno (EIO);
++	  return -1;
++	}
++      return 0;
++    }
++#endif
+ #ifdef __NR_chmod
+   return INLINE_SYSCALL_CALL (chmod, file, mode);
+ #else
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/chown.c work/sysdeps/unix/sysv/linux/chown.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/chown.c	2026-10-08 07:51:04.432680319 +0000
++++ work/sysdeps/unix/sysv/linux/chown.c	2026-10-08 09:08:49.750556851 +0000
+@@ -18,12 +18,37 @@
+ 
+ #include <unistd.h>
+ #include <fcntl.h>
++#include <errno.h>
+ #include <sysdep.h>
++#include <sys/stat.h>
++#include <dn-prefix.h>
+ 
+ /* Change the owner and group of FILE.  */
+ int
+ __chown (const char *file, uid_t owner, gid_t group)
+ {
++#if !IS_IN (rtld)
++  /* Fake root (runtime.md): never touch the real file.  chown() follows a
++     final symlink, so stat() the translated host path and record the new
++     owner in the store instead. */
++  if (file != NULL && file[0] == '/')
++    {
++      char dn_path[DN_PREFIX_MAX];
++      struct __stat64_t64 st;
++      const char *host = dn_policy_redirect (dn_path, sizeof dn_path, file);
++
++      if (__stat64_time64 (host, &st) != 0)
++	return -1;
++      if (dn_policy_owner_merge (host, (uint64_t) st.st_dev,
++				 (uint64_t) st.st_ino, 1,
++				 (uint32_t) owner, (uint32_t) group, 0, 0) < 0)
++	{
++	  __set_errno (EIO);
++	  return -1;
++	}
++      return 0;
++    }
++#endif
+ #ifdef __NR_chown
+   return INLINE_SYSCALL_CALL (chown, file, owner, groups);
+ #else
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c work/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c	1970-01-01 00:00:00.000000000 +0000
-+++ work/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c	2026-10-08 08:17:49.676679707 +0000
-@@ -0,0 +1,677 @@
++++ work/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c	2026-10-08 09:07:35.686556879 +0000
+@@ -0,0 +1,707 @@
 +/* dn-policy -- fake root. See dn-policy.h for the calling convention
 + * and docs/spec/runtime.md, "dn-policy" > "Fake root" for the rules
 + * implemented here.
@@ -653,6 +753,36 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +	st->st_uid = record.uid;
 +	st->st_gid = record.gid;
 +	st->st_mode = (st->st_mode & ~07000) | (record.mode_bits & 07000);
++}
++
++int
++dn_policy_owner_merge(const char *host_path, uint64_t dev, uint64_t ino,
++		      int set_ids, uint32_t uid, uint32_t gid,
++		      int set_mode, uint32_t mode_bits)
++{
++	DnOwnerRecord record;
++	int status;
++
++	status = dn_policy_owner_get(host_path, (dev_t) dev, (ino_t) ino,
++				     &record);
++	if (status < 0) {
++		/* No record yet: start from the "ordinary Debian install"
++		 * view and override only what this call is about. */
++		record.uid = 0;
++		record.gid = 0;
++		record.mode_bits = 0;
++		record.rdev = 0;
++	}
++
++	if (set_ids) {
++		record.uid = (uid_t) uid;
++		record.gid = (gid_t) gid;
++	}
++	if (set_mode)
++		record.mode_bits = (mode_t) (mode_bits & 07000);
++
++	return dn_policy_owner_set(host_path, (dev_t) dev, (ino_t) ino,
++				   &record);
 +}
 +
 +/* ---- Fake security.* xattrs: always the DB, never the real xattr -- */
@@ -2093,8 +2223,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +}
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy.h work/sysdeps/unix/sysv/linux/dn-policy.h
 --- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy.h	1970-01-01 00:00:00.000000000 +0000
-+++ work/sysdeps/unix/sysv/linux/dn-policy.h	2026-10-08 07:51:31.144680309 +0000
-@@ -0,0 +1,247 @@
++++ work/sysdeps/unix/sysv/linux/dn-policy.h	2026-10-08 09:07:35.682556879 +0000
+@@ -0,0 +1,257 @@
 +/* dn-policy -- the one place path-remapping, fake-root and hardlink rules
 + * live (docs/spec/runtime.md, "dn-policy"). A static C library, linked
 + * into both dn-glibc (the fast path, in-process) and dn-trace (the
@@ -2294,6 +2424,16 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 + * occasionally under-reporting an owner). */
 +void dn_policy_fake_stat(const char *host_path, struct stat *st);
 +
++/* Record a chown()/chmod() the way fake root must: update only the fields
++ * that call is about, keeping whatever the existing record already holds
++ * (a chown must not wipe chmod's setuid bits, and vice versa).  With no
++ * existing record the missing fields default to the "ordinary Debian
++ * install" values (uid/gid 0, no special bits).  @dev/@ino identify the
++ * file, as for dn_policy_owner_set().  Returns 0 or a negative errno. */
++int dn_policy_owner_merge(const char *host_path, uint64_t dev, uint64_t ino,
++			  int set_ids, uint32_t uid, uint32_t gid,
++			  int set_mode, uint32_t mode_bits);
++
 +/* security.* xattrs (setcap and friends): always faked, always
 + * succeeds -- a *real* write of one of these is what's failing in the
 + * first place (Android denies it), so this never attempts the real
@@ -2372,6 +2512,52 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
    if ((flag == 0 || ((flag & ~AT_EACCESS) == 0 && ! __libc_enable_secure)))
      return INLINE_SYSCALL (faccessat, 3, fd, file, mode);
  
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/fchmodat.c work/sysdeps/unix/sysv/linux/fchmodat.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/fchmodat.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/fchmodat.c	2026-10-08 09:08:49.730556851 +0000
+@@ -24,6 +24,7 @@
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ #include <unistd.h>
+ 
+ static int
+@@ -89,7 +90,33 @@
+ fchmodat (int fd, const char *file, mode_t mode, int flag)
+ {
+   if (flag == 0)
+-    return INLINE_SYSCALL_CALL (fchmodat, fd, file, mode);
++    {
++#if !IS_IN (rtld)
++      /* Fake root: ordinary bits real, setuid/setgid recorded.  An absolute
++	 path is translated; a relative one is relative to @fd, already a
++	 real host descriptor. */
++      if (file != NULL && file[0] == '/')
++	{
++	  char dn_path[DN_PREFIX_MAX];
++	  struct __stat64_t64 st;
++	  const char *host = dn_policy_redirect (dn_path, sizeof dn_path, file);
++
++	  if (__stat64_time64 (host, &st) != 0)
++	    return -1;
++	  if (INLINE_SYSCALL_CALL (fchmodat, AT_FDCWD, host, mode & ~07000) != 0)
++	    return -1;
++	  if (dn_policy_owner_merge (host, (uint64_t) st.st_dev,
++				     (uint64_t) st.st_ino, 0, 0, 0, 1,
++				     (uint32_t) mode) < 0)
++	    {
++	      __set_errno (EIO);
++	      return -1;
++	    }
++	  return 0;
++	}
++#endif
++      return INLINE_SYSCALL_CALL (fchmodat, fd, file, mode);
++    }
+ 
+   return fchmodat_fallback (fd, file, mode, flag);
+ }
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/fstatat64.c work/sysdeps/unix/sysv/linux/fstatat64.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/fstatat64.c	2026-10-08 07:51:04.648680319 +0000
 +++ work/sysdeps/unix/sysv/linux/fstatat64.c	2026-10-08 08:40:21.134284847 +0000
@@ -2449,6 +2635,46 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
        return result;
      }
  
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/lchown.c work/sysdeps/unix/sysv/linux/lchown.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/lchown.c	2026-10-08 07:51:04.444680319 +0000
++++ work/sysdeps/unix/sysv/linux/lchown.c	2026-10-08 09:08:49.750556851 +0000
+@@ -19,11 +19,36 @@
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <sysdep.h>
++#include <errno.h>
++#include <sys/stat.h>
++#include <dn-prefix.h>
+ 
+ /* Change the owner and group of FILE.  */
+ int
+ __lchown (const char *file, uid_t owner, gid_t group)
+ {
++#if !IS_IN (rtld)
++  /* Fake root: record the owner, never touch the real file.  lchown()
++     does not follow a final symlink. */
++  if (file != NULL && file[0] == '/')
++    {
++      char dn_path[DN_PREFIX_MAX];
++      struct __stat64_t64 st;
++      const char *host = dn_policy_redirect_nofollow (dn_path,
++						      sizeof dn_path, file);
++
++      if (__lstat64_time64 (host, &st) != 0)
++	return -1;
++      if (dn_policy_owner_merge (host, (uint64_t) st.st_dev,
++				 (uint64_t) st.st_ino, 1,
++				 (uint32_t) owner, (uint32_t) group, 0, 0) < 0)
++	{
++	  __set_errno (EIO);
++	  return -1;
++	}
++      return 0;
++    }
++#endif
+ #ifdef __NR_lchown
+   return INLINE_SYSCALL_CALL (lchown, file, owner, group);
+ #else
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/mkdir.c work/sysdeps/unix/sysv/linux/mkdir.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/mkdir.c	2026-10-08 07:51:04.460680319 +0000
 +++ work/sysdeps/unix/sysv/linux/mkdir.c	2026-10-08 08:54:08.890284531 +0000

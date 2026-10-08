@@ -514,6 +514,36 @@ void dn_policy_fake_stat(const char *host_path, struct stat *st)
 	st->st_mode = (st->st_mode & ~07000) | (record.mode_bits & 07000);
 }
 
+int
+dn_policy_owner_merge(const char *host_path, uint64_t dev, uint64_t ino,
+		      int set_ids, uint32_t uid, uint32_t gid,
+		      int set_mode, uint32_t mode_bits)
+{
+	DnOwnerRecord record;
+	int status;
+
+	status = dn_policy_owner_get(host_path, (dev_t) dev, (ino_t) ino,
+				     &record);
+	if (status < 0) {
+		/* No record yet: start from the "ordinary Debian install"
+		 * view and override only what this call is about. */
+		record.uid = 0;
+		record.gid = 0;
+		record.mode_bits = 0;
+		record.rdev = 0;
+	}
+
+	if (set_ids) {
+		record.uid = (uid_t) uid;
+		record.gid = (gid_t) gid;
+	}
+	if (set_mode)
+		record.mode_bits = (mode_t) (mode_bits & 07000);
+
+	return dn_policy_owner_set(host_path, (dev_t) dev, (ino_t) ino,
+				   &record);
+}
+
 /* ---- Fake security.* xattrs: always the DB, never the real xattr -- */
 
 int dn_policy_is_fake_xattr(const char *name)

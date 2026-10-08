@@ -197,6 +197,16 @@ int dn_policy_owner_forget(const char *host_path, dev_t dev, ino_t ino);
  * occasionally under-reporting an owner). */
 void dn_policy_fake_stat(const char *host_path, struct stat *st);
 
+/* Record a chown()/chmod() the way fake root must: update only the fields
+ * that call is about, keeping whatever the existing record already holds
+ * (a chown must not wipe chmod's setuid bits, and vice versa).  With no
+ * existing record the missing fields default to the "ordinary Debian
+ * install" values (uid/gid 0, no special bits).  @dev/@ino identify the
+ * file, as for dn_policy_owner_set().  Returns 0 or a negative errno. */
+int dn_policy_owner_merge(const char *host_path, uint64_t dev, uint64_t ino,
+			  int set_ids, uint32_t uid, uint32_t gid,
+			  int set_mode, uint32_t mode_bits);
+
 /* security.* xattrs (setcap and friends): always faked, always
  * succeeds -- a *real* write of one of these is what's failing in the
  * first place (Android denies it), so this never attempts the real
