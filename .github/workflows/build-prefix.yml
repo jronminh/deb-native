@@ -5,12 +5,12 @@ name: Build the prefix tarballs
 #
 # This workflow does NOT build glibc: the patched glibc (shipped as real
 # libc6/libc-bin packages at `<Debian version>+dn1`) is produced by
-# build-glibc.yml, from Debian's own glibc source. Here we consume the freshest
-# `dn-glibc-bundle`
-# artifact that workflow left, so nothing comes from a stale release or a
-# developer machine:
-#   - the runtime overlay: scripts/build/build-overlay-glibc.sh (plain gcc);
-#   - the patched glibc: build-glibc.yml's newest dn-glibc-bundle artifact;
+# build-glibc.yml, from Debian's own glibc source. Here we consume the
+# `dn-glibc-bundle` and `dn-overlay` artifacts of one build-glibc run (the one
+# that triggered this, or the newest successful), so nothing comes from a
+# stale release or a developer machine:
+#   - the runtime overlay: dn-trace, static against that run's patched libc.a;
+#   - the patched glibc: that run's dn-glibc-bundle;
 #   - the package set: scripts/build/packages.tsv (pinned) + profile.txt,
 #     fetched from the Debian mirror.
 # core-deb is built on an EMPTY base (build-core-deb.sh writes the loader
@@ -44,9 +44,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential libtalloc-dev python3 wget xz-utils dpkg
+            python3 wget xz-utils dpkg
 
-      - name: Take the patched glibc (freshest build-glibc bundle)
+      - name: Take the patched glibc and the overlay (one build-glibc run)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -55,15 +55,15 @@ jobs:
             run=$(gh run list --workflow "$GLIBC_WORKFLOW" --status success -L1 \
                     --json databaseId --jq '.[0].databaseId')
           fi
-          echo "glibc bundle from build-glibc run $run"
+          echo "glibc bundle and overlay from build-glibc run $run"
           gh run download "$run" -n dn-glibc-bundle -D .
           mkdir -p bundle
           tar -xzf dn-glibc-bundle.tar.gz -C bundle
           test -f bundle/libc6.deb
           test -f bundle/libc-bin.deb
-
-      - name: Build the runtime overlay
-        run: scripts/build/build-overlay-glibc.sh
+          gh run download "$run" -n dn-overlay -D src/.build-glibc
+          # An artifact does not keep the executable bit.
+          chmod 755 src/.build-glibc/dn-trace
 
       - name: Build core-deb on an empty base
         env:

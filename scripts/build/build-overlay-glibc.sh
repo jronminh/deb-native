@@ -44,9 +44,10 @@ find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-trace -o -name dn-catalog.c 
 # Self-contained/static when an Android-patched glibc's lib dir is given: a
 # poor host must start dn-trace with a bare exec, and a stock glibc is killed
 # by Android's seccomp at startup, so link the patched libc.a in
-# (docs/reference/android-platform.md, "Gate A").
+# (docs/reference/android-platform.md, "Gate A") -- with that build's own
+# start files (csu/crt1.o ...), not the build host's glibc's.
 if [ -n "${DN_GLIBC_LIBC_DIR:-}" ]; then
-  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" LDFLAGS="-static -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
+  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" LDFLAGS="-static -B$DN_GLIBC_LIBC_DIR/csu -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
 else
   make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy"
 fi

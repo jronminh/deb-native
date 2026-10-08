@@ -37,7 +37,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential quilt bison gawk gettext python3 \
             xz-utils file rdfind symlinks netbase gperf texinfo \
-            make libtalloc-dev
+            make
 
       - name: Fetch Debian's real glibc source
         run: |
@@ -154,8 +154,11 @@ jobs:
           path: dn-glibc-bundle.tar.gz
           retention-days: 14
 
+      # dn-trace is static, linked against the libc.a just built: a stock
+      # glibc is killed by Android's seccomp at startup
+      # (docs/reference/android-platform.md).  Handed to build-prefix.yml.
       - name: Build the runtime overlay
-        run: scripts/build/build-overlay-glibc.sh
+        run: DN_GLIBC_LIBC_DIR="$GITHUB_WORKSPACE/objdir" scripts/build/build-overlay-glibc.sh
 
       - uses: actions/upload-artifact@v4
         with:
