@@ -1,7 +1,7 @@
 # deb-native syscall catalog -- the exact, categorized list of the syscalls
 # the runtime overlay handles (docs/spec/overlay.md, "The shared filter's
-# rules").  One source of truth: dn-trace reads it at run time (--syscalls
-# PATH; it is installed next to dn-trace in RT) and builds the filter's
+# rules").  One source of truth: the build embeds it in dn-trace verbatim
+# (src/tracer/GNUmakefile -> syscall/dn-catalog.c), which builds the filter's
 # gate-IP exemption from the gate=yes rows; dn-glibc wires the glibc=yes rows,
 # and a repo check keeps the two in step (principle 1: one place the rules
 # live).
@@ -30,7 +30,10 @@
 #            fake-xattr | reverse | map-sockaddr | none
 #   glibc    yes = dn-glibc translates/rewrites it in-process
 #   gate     yes = dn-glibc issues its kernel call from the gate page, so the
-#            filter may ALLOW it; no = it is TRACEd and ptrace handles it
+#            filter may ALLOW it -- only when EVERY libc entry point issuing
+#            it translates (a syscalls.list-generated wrapper such as
+#            unlinkat() does not, so unlinkat is "no" even though unlink() is
+#            wired); no = it is TRACEd and ptrace handles it
 #            (a `no` row is still correct, just slower).  The filter's rule:
 #            TRACE every path/identity call, except ALLOW one with gate=yes
 #            that really came from the gate page.
@@ -41,14 +44,14 @@ faccessat	path	map	yes	yes
 faccessat2	path	map	no	no
 newfstatat	path	map,resolve,fake-stat	yes	yes
 statx	path	map	yes	yes
-readlinkat	path	map,resolve,reverse	yes	yes
-mkdirat	path	map	yes	yes
+readlinkat	path	map,resolve,reverse	yes	no
+mkdirat	path	map	yes	no
 mknodat	path	map,fake-owner	no	no
-unlinkat	path	map,link2symlink	yes	yes
+unlinkat	path	map,link2symlink	yes	no
 renameat	path	map	yes	yes
 renameat2	path	map	yes	yes
 linkat	path	map,link2symlink	no	no
-symlinkat	path	map	yes	yes
+symlinkat	path	map	yes	no
 chdir	path	map	no	no
 chroot	path	map	no	no
 fchmodat	path	map,fake-owner	yes	yes

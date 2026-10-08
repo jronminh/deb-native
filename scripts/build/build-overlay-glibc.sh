@@ -1,12 +1,13 @@
 #!/bin/sh
 # Build the runtime overlay with a plain glibc toolchain (the repo layout):
-# dn-trace, and the published syscall catalog beside it.  Needs gcc, make and
-# libtalloc's headers (libtalloc-dev) -- an arm64 Debian userland: a deb-native
-# prefix with the toolchain installed, or a Debian arm64 host such as CI.  No
-# Bionic toolchain, no Termux.
+# dn-trace, one self-contained binary.  Needs gcc and make (talloc is
+# vendored) -- an arm64 Debian userland: a deb-native prefix with the
+# toolchain installed, or a Debian arm64 host such as CI.  No Bionic
+# toolchain, no Termux.
 #
 # Runtime v1 (docs/spec/overlay.md): the overlay is dn-trace, the tree's root
-# process, plus the syscall catalog it reads (--syscalls).  The old LD_PRELOAD
+# process; the syscall catalog (src/syscalls.tsv) is embedded in it at build
+# time, so it reads no file at run time.  The old LD_PRELOAD
 # shim (dn-shim.so), the adopt-on-first-run launcher (dn-run) and the ELF
 # editor (dn-elf) are gone: dn-policy wired into dn-glibc replaces the shim,
 # the exec gate replaces dn-run, and TREE/RT are fixed at build time so no
@@ -39,20 +40,17 @@ echo "Building dn-trace ..."
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 cp -R "$ROOT/src/tracer/." "$T/"
-find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-trace \) -type f -exec rm -f {} +
+find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-trace -o -name dn-catalog.c \) -type f -exec rm -f {} +
 # Self-contained/static when an Android-patched glibc's lib dir is given: a
 # poor host must start dn-trace with a bare exec, and a stock glibc is killed
 # by Android's seccomp at startup, so link the patched libc.a in
 # (docs/reference/android-platform.md, "Gate A").
 if [ -n "${DN_GLIBC_LIBC_DIR:-}" ]; then
-  make -s -C "$T" CC="$CC" LDFLAGS="-static -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
+  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" LDFLAGS="-static -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
 else
-  make -s -C "$T" CC="$CC"
+  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv"
 fi
 cp -f "$T/dn-trace" "$OUT/dn-trace"
-
-echo "Copying the syscall catalog ..."
-cp -f "$ROOT/src/syscalls.tsv" "$OUT/syscalls.tsv"
 
 echo "overlay (glibc) in $OUT:"
 ls -l "$OUT"

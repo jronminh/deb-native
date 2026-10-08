@@ -72,7 +72,7 @@ int translate_and_check_exec(Tracee *tracee, char host_path[PATH_MAX], const cha
  * @host_path by the 5 rules there, purely from its header -- no trial run.
  * Rule 1 (the "#!" script case) is already unwrapped by expand_shebang(),
  * so @host_path here is always the final ELF (or the final non-ELF, for
- * rule 5).  Rule 3 is acted on (via --rt-loader); rules 2/4/5 are only
+ * rule 5).  Rule 3 is acted on (via LOADER); rules 2/4/5 are only
  * classified for now.  */
 
 #define DN_GLIBC_LOADER_SUFFIX "/ld-linux-aarch64.so.1"
@@ -249,8 +249,8 @@ int translate_execve_enter(Tracee *tracee)
 
 	/* Rule 3: run it through the runtime's loader (dn-glibc), which
 	 * carries the dn-policy wiring; the tree's own loader does not.
-	 * Only when --rt-loader names an existing loader -- otherwise the
-	 * behavior is unchanged.  */
+	 * Only when LOADER (dn-trace's argument) is executable -- otherwise
+	 * the program is exec'd directly.  */
 	if (rule == DN_RULE_GLIBC
 	    && global_rt_loader != NULL
 	    && access(global_rt_loader, X_OK) == 0) {

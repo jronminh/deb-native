@@ -17,8 +17,8 @@ status `ii` and its program runs by name, unprivileged.
 There is **no build on the host**.
 
 - **Build** (a build host, `scripts/build/` + `scripts/glibc/`): the runtime
-  overlay (`scripts/build/build-overlay-glibc.sh` — `dn-trace` and the
-  syscall catalog, plain-gcc), the glibc bundle (the two patches in
+  overlay (`scripts/build/build-overlay-glibc.sh` — `dn-trace`, one static
+  binary with the syscall catalog embedded, plain-gcc), the glibc bundle (the two patches in
   `patches/`, applied by `scripts/glibc/dn-apply-glibc-patch.sh`), and the
   prefix artifact
   (`build-core-deb.sh` + `package-prefix.sh`, which writes `.dn/` —

@@ -40,6 +40,7 @@ OBJECTS += \
 	path/temp.o		\
 	syscall/seccomp.o	\
 	syscall/dn-syscalls.o	\
+	syscall/dn-catalog.o	\
 	syscall/syscall.o	\
 	syscall/chain.o		\
 	syscall/enter.o		\
@@ -127,6 +128,20 @@ LINK    = $($(quiet)LD) -o $@ $^ $(LDFLAGS)
 
 dn-trace: $(OBJECTS)
 	$(LINK)
+
+# deb-native: the syscall catalog (src/syscalls.tsv, the one source of truth)
+# is embedded verbatim as a C string, so dn-trace reads no file at run time.
+# A build from a copy of this directory passes CATALOG=<repo>/src/syscalls.tsv.
+CATALOG ?= $(SRC)../syscalls.tsv
+
+syscall/dn-catalog.c: $(CATALOG)
+	@mkdir -p $(dir $@)
+	$($(quiet)GEN)
+	$(Q){ echo "/* Generated from syscalls.tsv by GNUmakefile; do not edit.  */"; \
+	      echo "const char dn_catalog_tsv[] ="; \
+	      sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' \
+	          -e 's/^/	"/' -e 's/$$/\\n"/' $<; \
+	      echo "	;"; } > $@
 
 # Special case to compute which files depend on the auto-generated
 # file "build.h".

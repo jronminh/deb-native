@@ -18,7 +18,8 @@
 #                 says "GNU libc"). They replace Debian's in step 2, are
 #                 installed in the tree, and ship in the local repo (step 6b).
 #   DN_OVERLAY    the runtime overlay (build-overlay-glibc.sh output):
-#                 dn-trace and the syscall catalog.
+#                 dn-trace, one self-contained binary (the syscall catalog is
+#                 embedded in it).
 #   DEB_MIRROR    Debian mirror, default http://deb.debian.org/debian
 #   DEB_SUITE     default trixie
 #   DEB_CACHE     downloaded .debs, kept across builds
@@ -186,14 +187,12 @@ while IFS= read -r f; do
 done < "$W/orphans.txt"
 echo "build-core-deb: pruned $pruned files of packages not shipped"
 
-# 6. Overlay: the runtime -- dn-trace (the tree's root) and the syscall catalog
-#    it reads (--syscalls) to build the filter's gate-IP exemption
-#    (src/syscalls.tsv, docs/spec/overlay.md).
+# 6. Overlay: the runtime -- dn-trace, the tree's root.  The syscall catalog
+#    (src/syscalls.tsv) is embedded in it, so it is the only file
+#    (docs/spec/overlay.md).
 mkdir -p "$STAGE/usr/lib/deb-native"
-for f in dn-trace syscalls.tsv; do
-  [ -f "$DN_OVERLAY/$f" ] || die "missing $DN_OVERLAY/$f"
-  cp -f "$DN_OVERLAY/$f" "$STAGE/usr/lib/deb-native/$f"
-done
+[ -f "$DN_OVERLAY/dn-trace" ] || die "missing $DN_OVERLAY/dn-trace"
+cp -f "$DN_OVERLAY/dn-trace" "$STAGE/usr/lib/deb-native/dn-trace"
 # The prefix's init: the host boots the tree through dn-trace into this, and it
 # completes the prefix by itself on a first boot (docs/spec/prefix.md, "Boot").
 cp -f "$ROOT/scripts/prefix/init.sh" "$STAGE/usr/lib/deb-native/init.sh"

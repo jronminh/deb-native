@@ -51,21 +51,15 @@
 #include "extension/extension.h"
 #include "arch.h"
 
-/* deb-native fake root: a traced program sees itself as root, as prefix
- * programs do through the shim (native/dn-shim.c, dn_init): the
- * identity calls report 0, files owned by the real uid/gid show as
- * root's, and set*id()/chown() refused only for lack of rights succeed.
- * Nothing is recorded; no right is gained. DN_ID=user (in dn-trace's
- * environment) turns it off.  */
+/* deb-native fake root (docs/spec/overlay.md, "Fake root"): a traced
+ * program sees itself as root: the identity calls report 0, files owned
+ * by the real uid/gid show as root's, and set*id()/chown() refused only
+ * for lack of rights succeed.  No right is gained.  On unless dn-trace
+ * runs with -u (the real ids, for diagnosis); never read from the
+ * environment, which is the host's.  */
 bool dn_fake_root(void)
 {
-	static int on = -1;
-
-	if (on < 0) {
-		const char *id = getenv("DN_ID");
-		on = !(id != NULL && strcmp(id, "user") == 0);
-	}
-	return on;
+	return !global_real_ids;
 }
 
 /* Rewrite the owner fields at @uid_addr/@gid_addr of a stat buffer in the
@@ -792,10 +786,16 @@ void translate_syscall_exit(Tracee *tracee)
 	case PR_getgroups: {
 		const uint32_t zero = 0;
 
-		if (!dn_fake_root() || (int) syscall_result < 0)
+		/* The answer is one group, 0, whatever the kernel said: a
+		 * buffer sized for that one group gets EINVAL from the kernel
+		 * (the real list is longer), so its result is not trusted.  */
+		if (!dn_fake_root())
 			goto end;
-		if ((int) peek_reg(tracee, ORIGINAL, SYSARG_1) > 0)
-			(void) write_data(tracee, peek_reg(tracee, ORIGINAL, SYSARG_2), &zero, sizeof(zero));
+		if ((int) peek_reg(tracee, ORIGINAL, SYSARG_1) > 0
+		    && write_data(tracee, peek_reg(tracee, ORIGINAL, SYSARG_2), &zero, sizeof(zero)) < 0) {
+			poke_reg(tracee, SYSARG_RESULT, (word_t) -EFAULT);
+			goto end;
+		}
 		poke_reg(tracee, SYSARG_RESULT, 1);
 		goto end;
 	}

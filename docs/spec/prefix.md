@@ -139,7 +139,7 @@ arch=aarch64
 root=/data/local/deb-native
 loader=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 install=.dn/install.sh
-entry=usr/lib/deb-native/dn-trace --rt-loader usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 --syscalls usr/lib/deb-native/syscalls.tsv -- usr/bin/bash usr/lib/deb-native/init.sh
+entry=usr/lib/deb-native/dn-trace /data/local/deb-native /data/local/deb-native/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 -- /usr/bin/bash /usr/lib/deb-native/init.sh
 size=200
 ```
 
@@ -150,8 +150,9 @@ A build host: an `arm64` Linux machine with `gcc`, `make`, `libtalloc-dev`,
 the target.
 
 1. **The overlay.** `scripts/build/build-overlay-glibc.sh` builds `dn-trace`
-   from `src/tracer/` and copies `src/syscalls.tsv` — the whole overlay — into
-   `src/.build-glibc/`. dn-trace is **static and self-contained** (its talloc
+   from `src/tracer/` into `src/.build-glibc/` — the whole overlay, one file:
+   the syscall catalog `src/syscalls.tsv` is embedded in it at build time.
+   dn-trace is **static and self-contained** (its talloc
    is vendored in `src/tracer/talloc/`), linked against the Android-patched
    glibc's `libc.a` (`DN_GLIBC_LIBC_DIR`): Android's zygote seccomp kills a
    stock-glibc program at startup, so the patched libc is required. A poor
@@ -211,7 +212,8 @@ run on the host's own shell with only POSIX sh and toybox:
    path, then wires the host's session entry (`DN_SESSION_SHELL`), if set, to
    the contract's `entry`. No tree program runs here.
 4. **Check the tree runs**: start it through `dn-trace` for a trivial command
-   (`… -- usr/bin/bash -c 'exit 0'`). This is the acceptance test.
+   (`dn-trace DEST DEST/<loader> -- /usr/bin/bash -c 'exit 0'`). This is the
+   acceptance test.
 5. On any failure, remove `DEST` and report.
 
 The host never edits a file inside the prefix; everything prefix-specific is
@@ -220,8 +222,18 @@ the prefix's own scripts.
 ## Boot
 
 The host boots the tree by running the contract's `entry` from the prefix
-root: `dn-trace` becomes the tree's root process, forks a child that installs
-the one shared filter, and execs the prefix's init (`RT/init.sh`). init sets
+root. `dn-trace` takes the tree and its runtime loader as absolute host paths
+(the contract's `root` and `root`/`loader`, so it never parses the contract)
+and an optional `-- PROGRAM ARGS...` in guest paths, defaulting to the init:
+
+```
+dn-trace TREE LOADER [-- PROGRAM ARGS...]
+```
+
+It becomes the tree's root process with TREE as the guest root (TREE is also
+bound to itself, so a host path into the tree stays valid in the guest), forks
+a child that installs the one shared filter, and execs the prefix's init
+(`RT/init.sh`). Its own temp files live in `TREE/tmp`. init sets
 the environment and, on a first boot (no `.dn/bootstrapped`), completes the
 prefix from `.dn/profile` itself — `apt-get update`, `apt-get install` of the
 profile, then the `bootstrapped` marker; a later boot skips straight to the

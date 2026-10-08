@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Check the syscall catalog (src/syscalls.tsv).
 
-It is the single source of truth the overlay is built from: dn-trace reads it
-to build the seccomp filter's gate-IP exemption, and dn-glibc is meant to wire
-the rows marked glibc=yes.  This checks the catalog is well-formed and
+It is the single source of truth the overlay is built from: the build embeds
+it in dn-trace verbatim (src/tracer/GNUmakefile -> syscall/dn-catalog.c), which
+builds the seccomp filter's gate-IP exemption from it, and dn-glibc is meant
+to wire the rows marked glibc=yes.  This checks the catalog is well-formed and
 internally consistent, and that it still carries its kernel/Android
 provenance -- the list follows the Android kernel and policy, so a missing or
 stale provenance block is a real problem, not a nit.
@@ -17,6 +18,11 @@ What it checks:
      gate only if dn-glibc already handles it in-process), and implies the
      row is in the path or identity group (nothing else is treated specially).
   4. No syscall is listed twice.
+  5. gate=no for every syscall whose dn-glibc wrapper is generated from
+     syscalls.list and so does not translate (UNTRANSLATED_WRAPPERS): libc
+     issues it from the gate page, so gate=yes would let the untranslated
+     call through to the host.
+  6. Every line fits dn-trace's embedded parser (LINE_MAX bytes).
 
 Usage: tools/check-syscalls.py [--root DIR]
 
@@ -34,6 +40,17 @@ HANDLING = {
     "fake-xattr", "reverse", "map-sockaddr",
 }
 PROVENANCE_KEYS = ["arch", "android", "kernel", "sources", "updated"]
+# dn-glibc wrappers generated from syscalls.list: no .c to wire, so the
+# function (e.g. unlinkat()) passes its path through untranslated even when a
+# sibling (unlink()) is wired.  Drop a name once dn-glibc overrides it.
+UNTRANSLATED_WRAPPERS = {
+    "mkdirat", "unlinkat", "symlinkat", "linkat", "readlinkat", "fchownat",
+    "chdir", "chroot", "inotify_add_watch",
+    "setxattr", "lsetxattr", "getxattr", "lgetxattr", "listxattr",
+    "llistxattr", "removexattr", "lremovexattr",
+}
+# syscall/dn-syscalls.c parses each line into a char[512] (with its NUL).
+LINE_MAX = 511
 
 
 def parse(path):
@@ -85,6 +102,11 @@ def main():
 
     print("== Rows ==")
     seen = {}
+    with open(path, encoding="utf-8") as f:
+        for lineno, line in enumerate(f, 1):
+            if len(line.rstrip("\n").encode()) > LINE_MAX:
+                problems.append(f"line {lineno}: longer than {LINE_MAX} bytes "
+                                "(dn-trace's embedded parser would reject the catalog)")
     for lineno, fields in rows:
         if len(fields) != len(COLUMNS):
             problems.append(f"line {lineno}: expected {len(COLUMNS)} columns, got {len(fields)}")
@@ -109,6 +131,9 @@ def main():
         if row["gate"] == "yes" and row["glibc"] != "yes":
             problems.append(f"line {lineno}: '{name}' is gate=yes but glibc=no "
                             "(a gate-issued call must already be handled in-process)")
+        if row["gate"] == "yes" and name in UNTRANSLATED_WRAPPERS:
+            problems.append(f"line {lineno}: '{name}' is gate=yes but its dn-glibc wrapper "
+                            "does not translate (syscalls.list-generated)")
         if row["gate"] == "yes" and row["group"] == "other":
             problems.append(f"line {lineno}: '{name}' is gate=yes but group 'other'")
 

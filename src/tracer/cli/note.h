@@ -51,16 +51,19 @@ extern void note(const Tracee *tracee, Severity severity, Origin origin, const c
 extern int global_verbose_level;
 extern const char *global_tool_name;
 
-/* deb-native: the runtime's loader (dn-glibc's ld.so), from --rt-loader.
-   When set, the exec gate runs a rule-3 (glibc dynamic) program through it
-   instead of exec'ing the program directly -- the tree's own loader has no
-   dn-policy wiring, this one does (docs/spec/overlay.md, "The exec gate").
-   NULL by default: behavior is unchanged. */
+/* deb-native: the runtime's loader (dn-glibc's ld.so), a host path derived
+   from the tree: <TREE>/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1.
+   The exec gate runs a rule-3 (glibc dynamic) program through it instead of
+   exec'ing the program directly (docs/spec/overlay.md, "The exec gate"). */
 extern const char *global_rt_loader;
 
-/* deb-native: the published syscall catalog (src/syscalls.tsv), from
-   --syscalls.  When set, the seccomp filter's gate-IP exemption is built
-   from it (syscall/dn-syscalls.c).  NULL = no exemption. */
-extern const char *global_syscalls_path;
+/* deb-native: the tree (TREE), an absolute host path: the guest root, and
+   home of the tracer's own temp dir (<TREE>/tmp; the host's /tmp is not
+   writable on Android). */
+extern const char *global_tree;
+
+/* deb-native, -u: run with the real ids, fake root off (syscall/exit.c,
+   dn_fake_root()). */
+extern bool global_real_ids;
 
 #endif /* NOTE_H */

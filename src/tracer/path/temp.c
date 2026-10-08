@@ -12,7 +12,8 @@
 
 /**
  * Return the path to a directory where temporary files should be
- * created.
+ * created: $PROOT_TMP_DIR, else deb-native's <TREE>/tmp (the host's
+ * P_tmpdir, "/tmp", is not writable on Android).
  */
 const char *get_temp_directory()
 {
@@ -23,6 +24,9 @@ const char *get_temp_directory()
 		return temp_directory;
 
 	temp_directory = getenv("PROOT_TMP_DIR");
+	if (temp_directory == NULL && global_tree != NULL) {
+		temp_directory = talloc_asprintf(talloc_autofree_context(), "%s/tmp", global_tree);
+	}
 	if (temp_directory == NULL) {
 		temp_directory = P_tmpdir;
 	}

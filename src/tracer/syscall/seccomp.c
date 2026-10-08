@@ -519,7 +519,7 @@ static FilteredSysnum proot_sysnums[] = {
 
 /* deb-native fake root (syscall/exit.c): these stop at exit so their
  * results can be rewritten. Filtered only while fake root is on
- * (DN_ID=user turns it off), since stopping every stat() costs time.  */
+ * (dn-trace -u turns it off), since stopping every stat() costs time.  */
 static FilteredSysnum fakeroot_sysnums[] = {
 	{ PR_getuid,		FILTER_SYSEXIT },
 	{ PR_geteuid,		FILTER_SYSEXIT },
@@ -634,16 +634,12 @@ int enable_syscall_filtering(const Tracee *tracee)
 		}
 	}
 
-	/* deb-native: the gate-IP exemption comes from the published catalog
-	 * (src/syscalls.tsv, installed in RT), not a hand-maintained list.  A
-	 * missing/unreadable file just means no exemption -- safe.  */
-	status = dn_catalog_gate_sysnums(tracee->ctx, global_syscalls_path,
-					 &gate_sysnums, &nb_gate_sysnums);
-	if (status < 0 && status != -ENOENT)
+	/* deb-native: the gate-IP exemption comes from the syscall catalog
+	 * (src/syscalls.tsv, embedded at build time), not a hand-maintained
+	 * list.  */
+	status = dn_catalog_gate_sysnums(tracee->ctx, &gate_sysnums, &nb_gate_sysnums);
+	if (status < 0)
 		return status;
-	if (status < 0 && global_syscalls_path != NULL)
-		note(tracee, WARNING, SYSTEM,
-		     "syscalls catalog not readable: %s", global_syscalls_path);
 
 	status = set_seccomp_filters(filtered_sysnums, gate_sysnums, nb_gate_sysnums);
 	if (status < 0)

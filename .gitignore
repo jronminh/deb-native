@@ -6,6 +6,7 @@ src/tracer/**/*.o
 src/tracer/**/*.d
 src/tracer/dn-trace
 src/tracer/build.h
+src/tracer/syscall/dn-catalog.c
 src/tracer/licenses
 src/tracer/loader/loader
 src/tracer/loader/loader-m32

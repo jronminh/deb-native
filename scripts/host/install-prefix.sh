@@ -28,7 +28,7 @@ done < "$C"
   || { echo "install: .dn/contract lacks root=/entry=" >&2; exit 1; }
 
 # The artifact is built for one path and is not relocatable: its files,
-# dn-trace's interpreter and the loader/apt configuration all name it.
+# the entry's dn-trace arguments and the loader/apt configuration all name it.
 [ "$ROOT" = "$DN" ] \
   || { echo "install: built for $ROOT, not $DN (the artifact is not relocatable)" >&2; exit 1; }
 

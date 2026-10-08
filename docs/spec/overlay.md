@@ -106,8 +106,8 @@ filesystem). `TREE` (with `RT` inside it) ships as one tarball
 ### Boot order
 
 1. The host runs the contract's `entry` from the prefix root
-   ([`prefix.md`](prefix.md), "Boot"): `dn-trace` with the runtime loader, the
-   catalog, and `RT/init.sh`.
+   ([`prefix.md`](prefix.md), "Boot"): `dn-trace TREE LOADER -- /usr/bin/bash
+   /usr/lib/deb-native/init.sh`, TREE and LOADER absolute host paths.
 2. `dn-trace` forks a child, marked traced (fork, vfork, clone and exec all
    tracked). The child installs the shared filter itself, then execs the
    prefix's init. The filter propagates to every later process.
@@ -337,8 +337,13 @@ carries its own provenance (architecture, Android/kernel scope, sources,
 updated), because both the list and the handling follow the Android kernel and
 policy and drift over time.
 
-`dn-trace` builds the filter's gate-IP exemption from it (`--syscalls`), so it
-never maintains a list of its own; `tools/check-syscalls.py` checks it.
+The build embeds it in `dn-trace` verbatim (`src/tracer/GNUmakefile` generates
+`syscall/dn-catalog.c`), and `dn-trace` builds the filter's gate-IP exemption
+from it, so it never maintains a list of its own and reads no file at run
+time; `tools/check-syscalls.py` checks it. A row is `gate=yes` only when every
+libc entry point issuing that syscall translates its path: the
+`syscalls.list`-generated wrappers above do not, so `mkdirat`, `unlinkat`,
+`symlinkat` and `readlinkat` stay `gate=no`.
 
 ## apt and dpkg under the runtime
 
@@ -452,7 +457,8 @@ Implemented and exercised on-device:
   search order; the path group wired in-process (see
   [What the wiring covers](#what-the-wiring-covers)).
 - **dn-trace** — the tree's root; the shared filter with the gate-IP rule built
-  from the catalog; the exec gate rule 3 (`--rt-loader`).
+  from the embedded catalog; the exec gate rule 3 (through `LOADER`); one
+  static binary, `dn-trace TREE LOADER [-- PROGRAM ARGS...]`.
 - **`src/syscalls.tsv`** — the catalog, checked by `tools/check-syscalls.py`.
 
 Still open (P2/P3):

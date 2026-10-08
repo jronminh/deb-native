@@ -34,4 +34,3 @@ source	src/tracer
 
 # --- artifacts build produces, and where install places them ---------------
 artifact	dn-trace	src/.build-glibc/dn-trace	usr/lib/deb-native/dn-trace
-artifact	syscalls.tsv	src/.build-glibc/syscalls.tsv	usr/lib/deb-native/syscalls.tsv

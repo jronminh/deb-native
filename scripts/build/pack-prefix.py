@@ -5,8 +5,8 @@ docs/spec/prefix.md, "Build invariants". Run on a copy of a built
 prefix (package-prefix.sh stages one); the tree is changed in place:
 
   - PT_INTERP is left as the build wrote it: the exec gate runs a program
-    through the runtime loader, and dn-trace itself names ROOT/<loader> so a
-    poor host can start it;
+    through the runtime loader, and the entry names ROOT and ROOT/<loader>
+    to dn-trace as absolute paths;
   - an ELF that names ROOT anywhere but in its interpreter fails the build;
   - text files that name ROOT are listed;
   - absolute symlinks into ROOT become relative; ld.so.cache is removed;
@@ -25,12 +25,12 @@ import sys
 
 LOADER = "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 PT_INTERP = 3
-# The command the host runs to open a session: dn-trace boots the tree and
-# execs the prefix's init (docs/spec/prefix.md, "Boot").  It is a full command
-# line, run with the prefix root as the working directory.
-ENTRY = (f"usr/lib/deb-native/dn-trace --rt-loader {LOADER} "
-         "--syscalls usr/lib/deb-native/syscalls.tsv -- "
-         "usr/bin/bash usr/lib/deb-native/init.sh")
+# The command the host runs to open a session: dn-trace boots the tree (ROOT,
+# the guest root) through its runtime loader and execs the prefix's init, a
+# guest path (docs/spec/prefix.md, "Boot").  It is a full command line, run
+# with the prefix root as the working directory.
+ENTRY = ("usr/lib/deb-native/dn-trace {root} {root}/" + LOADER + " -- "
+         "/usr/bin/bash /usr/lib/deb-native/init.sh")
 
 
 def elf_interp(path):
@@ -74,14 +74,16 @@ def main():
     ap.add_argument("--install", default=os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts/host/install-prefix.sh"),
         help="host-side activation script, copied to .dn/install.sh")
-    ap.add_argument("--entry", default=ENTRY,
-        help="the command that boots / opens a session, written as the contract's entry=")
+    ap.add_argument("--entry", default=None,
+        help="the command that boots / opens a session, written as the contract's entry= "
+             "(default: dn-trace ROOT ROOT/<loader> -- the init)")
     a = ap.parse_args()
 
     T = os.path.abspath(a.tree)
     ROOT = a.root.rstrip("/")
     rootb = ROOT.encode()
     build_ld = ROOT + "/" + LOADER
+    entry = a.entry if a.entry is not None else ENTRY.format(root=ROOT)
     if not os.path.exists(os.path.join(T, LOADER)):
         sys.exit(f"pack-prefix: {T} has no {LOADER}")
 
@@ -188,7 +190,7 @@ def main():
     if a.version:
         lines.append(f"version={a.version}")
     lines += ["arch=aarch64", f"root={ROOT}", f"loader={LOADER}",
-              "install=.dn/install.sh", f"entry={a.entry}", f"size={size_mib}"]
+              "install=.dn/install.sh", f"entry={entry}", f"size={size_mib}"]
     with open(os.path.join(dn, "contract"), "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"pack-prefix: {a.name}: {len(text)} text, "

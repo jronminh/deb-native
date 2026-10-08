@@ -1,6 +1,5 @@
 /* deb-native: the syscall-catalog reader.  See syscall/dn-syscalls.h. */
-#include <stdio.h>		/* fopen(3), fgets(3), */
-#include <string.h>		/* strcmp(3), strtok_r(3), */
+#include <string.h>		/* strcmp(3), strtok_r(3), strchr(3), */
 #include <errno.h>		/* E*, */
 
 #include "syscall/dn-syscalls.h"
@@ -19,38 +18,38 @@ static Sysnum dn_name_to_sysnum(const char *name)
 	return PR_void;
 }
 
-int dn_catalog_gate_sysnums(TALLOC_CTX *context, const char *path,
-			    Sysnum **out, size_t *count)
+int dn_catalog_gate_sysnums(TALLOC_CTX *context, Sysnum **out, size_t *count)
 {
+	const char *cursor = dn_catalog_tsv;
 	char line[512];
 	Sysnum *list = NULL;
 	size_t n = 0;
-	FILE *f;
 
 	*out = NULL;
 	*count = 0;
 
-	if (path == NULL)
-		return -ENOENT;
-
-	f = fopen(path, "r");
-	if (f == NULL)
-		return -errno;
-
-	while (fgets(line, sizeof line, f) != NULL) {
+	while (*cursor != '\0') {
 		char *name, *group, *handling, *glibc, *gate, *save;
+		const char *end = strchr(cursor, '\n');
+		size_t length = end != NULL ? (size_t) (end - cursor) : strlen(cursor);
 		Sysnum sysnum;
+
+		if (length >= sizeof line)
+			return -EINVAL;
+		memcpy(line, cursor, length);
+		line[length] = '\0';
+		cursor += length + (end != NULL);
 
 		/* '#' comments (the provenance block, the column header) and
 		 * blank lines are skipped.  */
-		if (line[0] == '#' || line[0] == '\n')
+		if (line[0] == '#' || line[0] == '\0')
 			continue;
 
-		name     = strtok_r(line, "\t\n", &save);
-		group    = strtok_r(NULL, "\t\n", &save);
-		handling = strtok_r(NULL, "\t\n", &save);
-		glibc    = strtok_r(NULL, "\t\n", &save);
-		gate     = strtok_r(NULL, "\t\n", &save);
+		name     = strtok_r(line, "\t", &save);
+		group    = strtok_r(NULL, "\t", &save);
+		handling = strtok_r(NULL, "\t", &save);
+		glibc    = strtok_r(NULL, "\t", &save);
+		gate     = strtok_r(NULL, "\t", &save);
 		(void) group; (void) handling; (void) glibc;
 
 		if (name == NULL || gate == NULL || strcmp(gate, "yes") != 0)
@@ -61,13 +60,10 @@ int dn_catalog_gate_sysnums(TALLOC_CTX *context, const char *path,
 			continue;
 
 		list = talloc_realloc(context, list, Sysnum, n + 1);
-		if (list == NULL) {
-			fclose(f);
+		if (list == NULL)
 			return -ENOMEM;
-		}
 		list[n++] = sysnum;
 	}
-	fclose(f);
 
 	*out = list;
 	*count = n;

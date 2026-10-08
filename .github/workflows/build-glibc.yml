@@ -4,7 +4,7 @@ name: Build the glibc runtime
 #   - the glibc bundle: Debian's real libc6/libc-bin, repackaged with this
 #     project's own Android-patched build (patches/dn-glibc-android.patch);
 #     it is an artifact for build-prefix.yml -- not a release of its own;
-#   - the runtime overlay (dn-trace and the syscall catalog).
+#   - the runtime overlay (dn-trace, the syscall catalog embedded in it).
 # The one published release is `prefix`, from build-prefix.yml
 # (docs/spec/prefix.md).
 

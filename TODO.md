@@ -192,15 +192,16 @@ below.
   on-device process map, inside the 39-bit range; the loader maps it
   (`elf/rtld.c`), `r-xp`, and libc issues its syscalls from it
   (`INTERNAL_SYSCALL_RAW` + `syscallS.S`). The filter's gate-IP rule is now
-  built from the published catalog (`src/syscalls.tsv`, `dn-trace
-  --syscalls`): only the syscalls dn-glibc already translates in-process
-  (`gate=yes`) are exempted. Still open: wire `bind`, the identity group
+  built from the catalog (`src/syscalls.tsv`, embedded in `dn-trace` at
+  build time): only the syscalls every libc entry point already translates
+  in-process (`gate=yes`) are exempted. Override the `syscalls.list`
+  wrappers (`mkdirat`/`unlinkat`/`symlinkat`/`readlinkat`) to flip theirs. Still open: wire `bind`, the identity group
   (fake root), and the cancelable `syscall_cancel.S` path, then flip their
   catalog rows to `gate=yes` — the list stays the one source of truth.
 - Turn on exec-gate rules 3/4 (rewrite to `RT/ld.so ...`). Drop the shim.
-  - Rule 3 done: `dn-trace --rt-loader PATH` rewrites a glibc-dynamic exec to
-    `loader --argv0 <orig argv0> <real path> <args>`. The runtime must pass
-    its own loader path. Rule 4 (a foreign loader) still to do.
+  - Rule 3 done: `dn-trace TREE LOADER` rewrites a glibc-dynamic exec to
+    `LOADER --argv0 <orig argv0> <real path> <args>`. Rule 4 (a foreign
+    loader) still to do.
   Switch glibc-family packages to version pinning (`/etc/apt/preferences.d/dn-glibc`,
   auto-generated from `Source: glibc`), drop the hand-written resolver.
 - Done when: packages in use, reinstalled from stock `.deb`s, run correctly;

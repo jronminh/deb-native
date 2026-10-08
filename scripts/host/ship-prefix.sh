@@ -80,8 +80,7 @@ fi
 # dn-trace; nothing in the tree runs directly).  A trivial command, so it does
 # not bootstrap or start a session.
 RT=$D/usr/lib/deb-native
-"$RT/dn-trace" --rt-loader "$D/$loader" --syscalls "$RT/syscalls.tsv" \
-  -- "$D/usr/bin/bash" -c 'exit 0' \
+"$RT/dn-trace" "$D" "$D/$loader" -- /usr/bin/bash -c 'exit 0' \
   || die "the tree does not run under dn-trace"
 trap - EXIT
 echo "ship-prefix: $name installed in $D"
