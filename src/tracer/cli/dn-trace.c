@@ -25,7 +25,8 @@
 #include <string.h>        /* str*(3), */
 #include <talloc.h>        /* talloc*, */
 #include <stdlib.h>        /* exit(3), strtol(3), {g,s}etenv(3), */
-#include <unistd.h>        /* getpid(2), */
+#include <unistd.h>        /* getpid(2), chdir(2), */
+#include <errno.h>         /* errno, */
 
 #include "cli/note.h"
 #include "tracee/tracee.h"
@@ -82,9 +83,15 @@ static int initialize_cwd(Tracee *tracee)
 	if (status < 0)
 		return status;
 
+	/* Outside every binding: start at "/", and move the real cwd there
+	 * too -- the kernel resolves a relative path against it, and so does
+	 * dn-glibc (relative paths are left to the kernel).  */
 	status = detranslate_path(tracee, path, NULL);
-	if (status < 0)
-		return status;
+	if (status < 0) {
+		if (chdir(global_tree) < 0)
+			return -errno;
+		strcpy(path, "/");
+	}
 
 	/* The ending "." makes canonicalize() fail on a non-directory.  */
 	status = join_paths(3, path2, path, ".", ".");
@@ -200,13 +207,27 @@ int main(int argc, char *const argv[])
 	if (new_binding(tracee, tree, tree, true) == NULL)
 		goto error;
 
+	/* The real system's /dev, /proc and /sys, as dn-policy passes them
+	 * through (docs/spec/overlay.md, "Path rewriting"): /dev/null is the
+	 * device, not a file the tree grows.  */
+	{
+		static const char *const passthrough[] = { "/dev", "/proc", "/sys" };
+		size_t k;
+
+		for (k = 0; k < sizeof(passthrough) / sizeof(passthrough[0]); k++)
+			(void) new_binding(tracee, passthrough[k], passthrough[k], false);
+	}
+
 	status = initialize_bindings(tracee);
 	if (status < 0)
 		goto error;
 
 	status = initialize_cwd(tracee);
-	if (status < 0)
+	if (status < 0) {
+		note(tracee, ERROR, INTERNAL, "can't set the guest's working directory: %s",
+			strerror(-status));
 		goto error;
+	}
 
 	/* which() reports a missing PROGRAM itself.  */
 	status = initialize_exe(tracee, program[0]);

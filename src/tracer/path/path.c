@@ -459,9 +459,13 @@ int translate_path(Tracee *tracee, char result[PATH_MAX], int dir_fd,
 	 * cross a bind boundary) and for /proc, whose links PRoot must
 	 * emulate: under the loader, the kernel's /proc/self/exe is the
 	 * loader, so a static busybox re-executing itself for an applet
-	 * died with SIGBUS. */
+	 * died with SIGBUS.  Only valid while the guest root is the host's
+	 * "/": with a tree as the root (deb-native), the kernel would resolve
+	 * an absolute in-tree symlink (/etc/ssl/certs/X.pem ->
+	 * /usr/share/...) against Android's root.  */
 	comparison = compare_paths("/proc", guest_path);
 	if (bind_only_enabled()
+	    && compare_paths(get_root(tracee), "/") == PATHS_ARE_EQUAL
 	    && comparison != PATHS_ARE_EQUAL && comparison != PATH1_IS_PREFIX) {
 		strcpy(result, guest_path);
 		if (normalize_guest_path(result) == 0) {

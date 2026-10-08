@@ -49,7 +49,8 @@ UNTRANSLATED_WRAPPERS = {
     "setxattr", "lsetxattr", "getxattr", "lgetxattr", "listxattr",
     "llistxattr", "removexattr", "lremovexattr",
 }
-# syscall/dn-syscalls.c parses each line into a char[512] (with its NUL).
+# dn-trace's embedded-catalog parser reads each line into a char[512] (with
+# its NUL).
 LINE_MAX = 511
 
 

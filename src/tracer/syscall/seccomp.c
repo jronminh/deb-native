@@ -139,6 +139,7 @@ static int add_trace_syscall(struct sock_fprog *program, word_t syscall, int fla
 static int add_gate_allow_syscall(struct sock_fprog *program, word_t syscall)
 {
 	const size_t ip_offset = offsetof(struct seccomp_data, instruction_pointer);
+	const size_t nr_offset = offsetof(struct seccomp_data, nr);
 	const uint32_t gate_hi = (uint32_t) ((uint64_t) DN_GATE_ADDR >> 32);
 	const uint32_t gate_lo_end =
 		(uint32_t) ((uint64_t) DN_GATE_ADDR & 0xffffffffu) + 4096;
@@ -148,23 +149,30 @@ static int add_gate_allow_syscall(struct sock_fprog *program, word_t syscall)
 	if (syscall > UINT32_MAX)
 		return -ERANGE;
 
-	#define LENGTH_GATE_ALLOW 6
+	/* Every rule after this block compares the accumulator with a syscall
+	 * number, so a call that is not let through here must leave with the
+	 * number reloaded, not the instruction pointer this block loaded.  */
+	#define LENGTH_GATE_ALLOW 7
 	struct sock_filter statements[LENGTH_GATE_ALLOW] = {
-		/* Not this syscall: skip this block.  */
+		/* Not this syscall: skip this block (the number is still loaded).  */
 		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, syscall, 0, LENGTH_GATE_ALLOW - 1),
 
 		/* Load the high 32 bits of the instruction pointer.  */
 		BPF_STMT(BPF_LD + BPF_W + BPF_ABS, ip_offset + 4),
-		/* Not the gate's high word: skip this block.  */
+		/* Not the gate's high word: go reload the number.  */
 		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, gate_hi, 0, 3),
 
 		/* Load the low 32 bits.  */
 		BPF_STMT(BPF_LD + BPF_W + BPF_ABS, ip_offset),
-		/* At or past the end of the page: skip the allow.  */
+		/* At or past the end of the page: go reload the number.  */
 		BPF_JUMP(BPF_JMP + BPF_JGE + BPF_K, gate_lo_end, 1, 0),
 
 		/* Issued from the gate page: already handled, allow.  */
-		BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW)
+		BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
+
+		/* Not from the gate: the number back in the accumulator, on to
+		 * the trace rules.  */
+		BPF_STMT(BPF_LD + BPF_W + BPF_ABS, nr_offset)
 	};
 
 	DEBUG_FILTER("FILTER:     allow if ip in gate and syscall == %ld\n", syscall);
@@ -214,12 +222,14 @@ static int end_arch_section(struct sock_fprog *program, size_t nb_traced_syscall
  * sanity check.  This function returns -errno if an error occurred,
  * otherwise 0.
  */
-static int start_arch_section(struct sock_fprog *program, uint32_t arch, size_t nb_traced_syscalls)
+static int start_arch_section(struct sock_fprog *program, uint32_t arch, size_t nb_traced_syscalls,
+			size_t nb_gate_syscalls)
 {
 	const size_t arch_offset    = offsetof(struct seccomp_data, arch);
 	const size_t syscall_offset = offsetof(struct seccomp_data, nr);
 	const size_t section_length = LENGTH_END_SECTION +
-					nb_traced_syscalls * LENGTH_TRACE_SYSCALL;
+					nb_traced_syscalls * LENGTH_TRACE_SYSCALL +
+					nb_gate_syscalls * LENGTH_GATE_ALLOW;
 	int status;
 
 	/* Sanity checks.  */
@@ -350,7 +360,8 @@ static int set_seccomp_filters(const FilteredSysnum *sysnums,
 		}
 
 		/* Filter: if handled architecture */
-		status = start_arch_section(&program, seccomp_archs[i].value, nb_traced_syscalls);
+		status = start_arch_section(&program, seccomp_archs[i].value, nb_traced_syscalls,
+					    nb_gate_syscalls);
 		if (status < 0)
 			goto end;
 
