@@ -23,12 +23,18 @@ scripts/build/package-prefix.sh core-deb --root ... --name core-deb
 
 ## Install
 
-Fetch the rolling `prefix` release and ship it (installs to the contract's
-`root=`):
+On a host with `curl` (or toybox `wget`) and `tar`, fetch the rolling `prefix`
+release and ship it — it installs to the contract's `root=`:
 
 ```sh
-scripts/host/install-from-release.sh            # core-deb
-scripts/host/install-from-release.sh core-ultra
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/scripts/host/install-from-release.sh | sh
+```
+
+`core-ultra`, or from a checkout:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/scripts/host/install-from-release.sh | sh -s -- core-ultra
+scripts/host/install-from-release.sh core-deb
 ```
 
 Or ship a tarball already on disk:
