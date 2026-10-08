@@ -287,7 +287,7 @@ dn-policy inside it succeed, extended through every group above.
 
 `diff -ruN` between `work-after-official-patch/` (glibc source with
 `dn-glibc-android.patch` already applied once, per the section above) and
-`work/` (that plus the wiring). Forty files:
+`work/` (that plus the wiring). Forty-one files:
 
 - New, byte-identical copies of `src/dn-policy/` under
   `sysdeps/unix/sysv/linux/`: `dn-policy.{h,c}`, `dn-policy-fakeroot.c`,
@@ -369,6 +369,13 @@ dn-policy inside it succeed, extended through every group above.
   and `/usr/lib/` -- `runtime.md`'s "Building dn-glibc" step 4. The runtime's
   glibc libraries are thus found before the tree's same-named `libc6` files,
   and the tree's copy is never loaded.
+- `/proc/self/exe`: the loader records the real program path (`__dn_prog`,
+  exported as `__dn_prog_get` in `elf/rtld.c`/`elf/Versions`), and
+  `readlink()` of `/proc/self/exe` answers with it through
+  `dn_policy_exe_link()`. Needed because a rule-3 launch runs through
+  `RT/ld.so` (the exec gate), so the kernel's own `/proc/self/exe` is the
+  loader, not the program; a plain `PT_INTERP` launch has no record and the
+  kernel value is reverse-translated as before.
 - `elf/rtld.c`: the loader maps the fixed gate page -- 4 KB at `P_GATE`
   (`0x100000000`, chosen by scanning real on-device process maps for an
   address free in every one, inside the 39-bit range) with
@@ -499,9 +506,15 @@ An eighth check covers the library search order: with the same
 `/usr/lib`, a program with no rpath loads the `RT/lib` one (`dn_order == 1`);
 remove that copy and it loads the tree's (`dn_order == 2`).
 
+A ninth check runs the reverse-translation binary in the rule-3 shape
+(`ld.so --argv0 <name> <real path> ...`): `readlink("/proc/self/exe")` then
+reports the real program path, not the loader; the plain `PT_INTERP` launch
+reports it too.
+
 Covers the public `open`/`openat` and `stat`/`fstatat`/`statx`/`faccessat`
-families, reverse translation (`getcwd`, the `/proc/self` magic links), the
-`mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/`statfs`
+families, reverse translation (`getcwd`, the `/proc/self` magic links, and
+`/proc/self/exe` answering with the real program path under a rule-3 launch),
+the `mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/`statfs`
 wrappers, the `syscall(2)` interposition for the path group, fake root's
 writes (`chown`/`lchown`/`chmod`/`fchmodat`), hardlinks (`link`/`unlink`),
 the loader's gate-page mapping, and the `RT/lib`-first library search order.

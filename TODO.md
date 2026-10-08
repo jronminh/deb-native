@@ -164,8 +164,9 @@ below.
     `statx.c`, `faccessat.c`), path translation for the simple manipulation
     wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
     `truncate`, `utimensat`/`utimes`/`utime`, `statfs`), reverse translation
-    for `getcwd()` and `readlink()` of the `/proc/self` magic links, the
-    `syscall(2)` interposition for the path group, fake root's writes
+    for `getcwd()` and `readlink()` of the `/proc/self` magic links (with
+    `/proc/self/exe` answering the real program path under a rule-3 launch),
+    the `syscall(2)` interposition for the path group, fake root's writes
     (`chown`/`lchown`/`chmod`/`fchmodat` via `dn_policy_owner_merge()`),
     hardlinks (`link`/`unlink` via `dn_policy_link()`/`dn_policy_unlink()`),
     the loader's mapping of the fixed gate page (`P_GATE`), the `RT/lib`-first
