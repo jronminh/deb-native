@@ -194,6 +194,9 @@ for f in dn-shim.so dn-run dn-trace dn-elf; do
   [ -f "$DN_OVERLAY/$f" ] || die "missing $DN_OVERLAY/$f"
   cp -f "$DN_OVERLAY/$f" "$STAGE/usr/lib/deb-native/$f"
 done
+# The published syscall catalog: dn-trace reads it (--syscalls) to build the
+# filter's gate-IP exemption (src/syscalls.tsv, docs/spec/runtime.md).
+cp -f "$ROOT/src/syscalls.tsv" "$STAGE/usr/lib/deb-native/syscalls.tsv"
 # The overlay is built against the build host's loader, and it is copied after the
 # translation step: point its interpreter at this prefix's loader here.
 for f in usr/lib/deb-native/dn-run usr/lib/deb-native/dn-trace usr/lib/deb-native/dn-elf; do
