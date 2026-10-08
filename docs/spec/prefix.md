@@ -266,7 +266,9 @@ self-derives the prefix from the loader's path, so a straight copy is enough.
   `PREFIX_ROOT`. A host must install there. Making the remaining absolute
   config paths (`ld.so.conf`, `apt.conf`) self-derived — or restoring a
   text-only relocation — is the open work to lift this.
-- **Artifact distribution**: the build emits the tarball; publishing it, and a
-  default source a host can fetch from, is still open.
+- **Artifact distribution**: both tarballs are published to the rolling
+  `prefix` release, and `scripts/host/install-from-release.sh` fetches one and
+  ships it. Verifying that fetch on a real poor host (with `PREFIX_ROOT`
+  writable) is still open.
 - **core-ultra**: still cut *from* a full core-deb build rather than assembled
   as its own recipe; sizes and seed set are experiments.

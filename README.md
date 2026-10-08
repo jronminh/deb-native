@@ -23,6 +23,16 @@ scripts/build/package-prefix.sh core-deb --root ... --name core-deb
 
 ## Install
 
+Fetch the rolling `prefix` release and ship it (installs to the contract's
+`root=`):
+
+```sh
+scripts/host/install-from-release.sh            # core-deb
+scripts/host/install-from-release.sh core-ultra
+```
+
+Or ship a tarball already on disk:
+
 ```sh
 scripts/host/ship-prefix.sh core-deb.tar.gz DEST
 ```
