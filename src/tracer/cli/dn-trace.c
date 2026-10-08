@@ -2,13 +2,13 @@
  *
  * dn-trace: deb-native's front end for the fork-lite tracer, replacing
  * PRoot's cli/cli.c + cli/proot.c (option tables, usage, extensions'
- * options, qemu, -r/-w/-0/...).  It keeps only what dn-run passes:
+ * options, qemu, -r/-w/-0/...).  It keeps only what the runtime passes:
  *
  *   dn-trace [-v LEVEL] [-b HOST[:GUEST]]... [--rt-loader PATH] [--] PROGRAM [ARG...]
  *
  * The guest root is always the host "/", the working directory is the
  * current one, and a -b whose host path does not exist is skipped
- * (PRoot warned about it), so dn-run need not check each prefix dir.
+ * (PRoot warned about it), so the caller need not check each prefix dir.
  * (A subset of proot's arguments; since 0.2.3 there is no proot fallback.)
  *
  * Derived from PRoot's cli/cli.c, Copyright (C) 2015 STMicroelectronics,

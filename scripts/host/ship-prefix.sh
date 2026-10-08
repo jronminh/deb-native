@@ -73,9 +73,8 @@ mkdir "$D"
 trap 'rm -rf "$D"' EXIT
 tar -xzf "$A" -C "$D" || die "extract failed"
 if [ -n "$install" ]; then
-  # Activation, the host's own shell (mksh + toybox on Android): it relocates
-  # the artifact to D and wires the session entry, using the artifact's own
-  # loader + dn-elf.
+  # Activation, the host's own shell (mksh + toybox on Android): it wires the
+  # session entry (runtime v1 needs no relocation).
   DN_INSTDIR=$D sh "$D/$install" "$D" || die "activation failed"
 fi
 "$D/${entry%% *}" -c 'exit 0' || die "the prefix's shell ($D/${entry%% *}) does not run"

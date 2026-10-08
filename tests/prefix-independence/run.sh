@@ -89,14 +89,12 @@ if [ -L "$P/etc/resolv.conf" ]; then
 fi
 ok "resolv.conf is the prefix's own"
 
-# 9. the runtime commands are present
-for f in "$P/usr/bin/dn-sh" "$P/usr/lib/deb-native/dn-run" \
-         "$P/usr/lib/deb-native/dn-shim.so" "$P/usr/lib/deb-native/bin/dn-adopt"; do
+# 9. the runtime pieces are present
+for f in "$P/usr/bin/dn-sh" "$P/usr/lib/deb-native/dn-trace" \
+         "$P/usr/lib/deb-native/syscalls.tsv"; do
   [ -e "$f" ] || fail "missing runtime piece: $f"
 done
-[ -x "$P/usr/lib/deb-native/dn-trace" ] && ok "dn-trace present" \
-  || note "no dn-trace (static/raw-syscall programs run untranslated)"
-ok "runtime pieces present (dn-shell, dn-run, shim, dn-adopt)"
+ok "runtime pieces present (dn-sh, dn-trace, syscalls catalog)"
 
 # 9b. Independence at the ELF level, not just in the environment. Masking
 #     Termux with DN_HOST_PREFIX does NOT reach the Bionic host-layer

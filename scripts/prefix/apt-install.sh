@@ -1,9 +1,7 @@
 #!/bin/sh
-# Install packages (and their dependencies) into a prefix set up by
-# setup-apt-prefix.sh. Since 0.2.0 this is plain apt: the prefix's apt.conf
-# runs the translation pipeline in apt's own hooks (dn-hook-pre.sh /
-# dn-hook-post.sh), so dpkg keeps its own Pre-Depends ordering and the
-# 0.1.x one-package-at-a-time loop is gone (docs/spec/design.md).
+# Install packages (and their dependencies) into a prefix. Since 0.2.0 this is
+# plain apt: with runtime v1 a .deb installs intact (no translation hook), and
+# dn-policy rewrites paths and identities at run time (docs/spec/runtime.md).
 #
 # Usage: apt-install.sh PREFIX package [package...]
 set -eu

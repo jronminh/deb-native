@@ -36,8 +36,6 @@ target() {
     ldconfig)       echo "$INST/usr/sbin/ldconfig" ;;
     localedef)      echo "$INST/usr/bin/localedef" ;;
     iconv)          echo "$INST/usr/bin/iconv" ;;
-    shim)           echo "$INST/usr/lib/deb-native/dn-shim.so" ;;
-    run)            echo "$INST/usr/lib/deb-native/dn-run" ;;
     trace)          echo "$INST/usr/lib/deb-native/dn-trace" ;;
     shell)          echo "$INST/usr/bin/bash" ;;
     hooks)          echo "$INST/usr/lib/deb-native/scripts" ;;

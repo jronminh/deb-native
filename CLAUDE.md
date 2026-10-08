@@ -17,8 +17,8 @@ status `ii` and its program runs by name, unprivileged.
 There is **no build on the host**.
 
 - **Build** (a build host, `scripts/build/` + `scripts/glibc/`): the runtime
-  overlay (`scripts/build/build-overlay-glibc.sh` — `dn-shim.so`, `dn-run`,
-  `dn-trace`, `dn-elf`, plain-gcc glibc), the glibc bundle
+  overlay (`scripts/build/build-overlay-glibc.sh` — `dn-trace` and the
+  syscall catalog, plain-gcc), the glibc bundle
   (`patches/dn-glibc-android.patch`), and the prefix artifact
   (`build-core-deb.sh` + `package-prefix.sh`, which writes `.dn/` —
   `docs/spec/prefix-contract.md`).
@@ -31,9 +31,10 @@ There is **no build on the host**.
   (the prefix's own shell) installs `.dn/profile`. When bootstrap succeeds the
   prefix is ready.
 
-Run time has three path mechanisms: maintainer-script rewrites
-(`scripts/prefix/dn-translate-deb.sh`, via `dn-elf`), the shim
-(`src/dn-shim.c`), and the tracer (`src/tracer/`).
+Run time is one policy in two places: dn-policy, called in-process by
+dn-glibc (the fast path) and via `dn-trace`'s ptrace fallback
+(`src/tracer/`). The old shim, maintainer-script rewriting and ELF editor
+are gone; a `.deb` installs intact (`docs/spec/runtime.md`).
 
 Every translated program's `PT_INTERP` points at the prefix's own fused glibc
 loader; it derives the live prefix from its own path at run time and reads the
@@ -43,8 +44,8 @@ ELF patch when both would solve the same problem.
 
 ## Layout
 
-- `src/` — the compiled runtime (`dn-shim.c`, `dn-run.c`, `dn-elf.c`,
-  `dn-child.h`, `tracer/`, a pruned PRoot fork).
+- `src/` — `dn-policy/` (the shared policy library), `tracer/` (dn-trace, a
+  pruned PRoot fork), `syscalls.tsv` (the syscall catalog).
 - `scripts/build/`, `scripts/glibc/` — a build host.
 - `scripts/host/`, `scripts/prefix/` — the host / the prefix.
 - `patches/` — the glibc patches (Android base + dn-policy wiring).

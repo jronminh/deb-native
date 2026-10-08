@@ -3,14 +3,12 @@
 # (/system/bin/sh: mksh + toybox) right after extraction. It makes the prefix
 # runnable at the directory it was extracted into, then wires the session entry.
 #
-# Everything in the artifact names the BUILD path's loader in PT_INTERP, so
-# nothing in it runs until that interpreter is repointed at the extraction
-# path. The one ELF that runs unconditionally is the loader itself -- the
-# dynamic linker has no PT_INTERP -- so the host shell runs it; the loader runs
-# the artifact's own dn-elf; dn-elf rewrites each ELF's interpreter to
-# $DN/$loader. Text files that name the build path are rewritten with sed. That
-# is the activation, and it uses only the host shell, toybox (sed) and the
-# artifact's own loader + dn-elf: a poor host needs nothing else.
+# Everything in the artifact already names the final path: runtime v1 fixes
+# TREE/RT at build time and leaves PT_INTERP alone. Every exec goes through the
+# artifact's dn-trace, the tree's root process, whose exec gate runs a
+# glibc-dynamic program through the runtime loader (RT/ld.so) itself. So
+# activation only needs the host's own shell (/system/bin/sh: mksh + toybox) --
+# no relocation, no ELF editing.
 #
 #   sh $PREFIX/.dn/install.sh          (DN_INSTDIR set to the prefix root)
 #
@@ -38,28 +36,10 @@ done < "$C"
 LD=$DN/$LOADER
 [ -e "$LD" ] || { echo "install: no loader at $LD" >&2; exit 1; }
 
-# 1. Relocate to where the artifact was extracted. The loader (no PT_INTERP)
-#    runs dn-elf, which repoints each glibc ELF's PT_INTERP to $DN/$LOADER; the
-#    build reserved the capacity, so the new path fits in place. Then the text
-#    files that name the build path.
-if [ "$ROOT" != "$DN" ]; then
-  ELF=$DN/usr/lib/deb-native/dn-elf
-  LIB=$DN/usr/lib/aarch64-linux-gnu
-  BP=$DN/.dn/baked-paths
-  [ -e "$ELF" ] || { echo "install: no dn-elf at $ELF" >&2; exit 1; }
-  [ -f "$BP" ]  || { echo "install: no $BP" >&2; exit 1; }
-  TAB=$(printf '\t')
-  while IFS="$TAB" read -r kind f rest; do
-    [ "$kind" = elf ] || continue
-    "$LD" --library-path "$LIB" "$ELF" set-interp "$DN/$f" "$DN/$LOADER" 256 \
-      || { echo "install: cannot relocate $f" >&2; exit 1; }
-  done < "$BP"
-  while IFS="$TAB" read -r kind f rest; do
-    [ "$kind" = text ] || continue
-    sed -i "s|$ROOT|$DN|g" "$DN/$f"
-  done < "$BP"
-  sed -i "s|^root=.*|root=$DN|" "$C"
-fi
+# 1. No relocation.  Runtime v1 fixes TREE/RT at build time: the artifact's
+#    files already name the final path, and every exec goes through dn-trace's
+#    exec gate, which runs a glibc-dynamic program through the runtime loader
+#    (RT/ld.so) itself -- nothing repoints a PT_INTERP (docs/spec/runtime.md).
 
 # 2. The prefix's own login hooks, host-agnostic: run them now if it ships any.
 for h in "$DN"/etc/deb-native/login.d/*; do

@@ -7,8 +7,7 @@
 # The .debs are fetched here, and only their translated result goes into the
 # tarball. Installing core-deb needs no network; a later `apt update` does.
 #
-# Build host tools: dpkg-deb, wget, xz, sha256sum, awk, sh, and the overlay's
-# own dn-elf (from DN_OVERLAY) to translate interpreters.
+# Build host tools: dpkg-deb, wget, xz, sha256sum, awk, sh.
 #
 # Inputs:
 #   BASE          a core-ultra tree in build form (cut-core-ultra.py output,
@@ -16,8 +15,8 @@
 #   DN_GLIBC_PREFIX a deb-native prefix whose glibc is the Android-patched
 #                 build (its loader reports "GNU libc"). Its 10 patched files
 #                 replace the ones in Debian's libc6/libc-bin (step 2).
-#   DN_OVERLAY    the glibc overlay (build-overlay-glibc.sh output): dn-shim.so,
-#                 dn-run, dn-trace, dn-elf.
+#   DN_OVERLAY    the runtime overlay (build-overlay-glibc.sh output):
+#                 dn-trace and the syscall catalog.
 #   DEB_MIRROR    Debian mirror, default http://deb.debian.org/debian
 #   DEB_SUITE     default trixie
 #   DEB_CACHE     downloaded .debs, kept across builds
@@ -52,8 +51,6 @@ LOADER=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 
 die() { echo "build-core-deb: $*" >&2; exit 1; }
 for t in dpkg-deb wget xz; do command -v "$t" >/dev/null 2>&1 || die "$t not found"; done
-ELF=$DN_OVERLAY/dn-elf
-[ -x "$ELF" ] || die "no dn-elf in DN_OVERLAY ($ELF)"
 [ -d "$BASE" ] || die "BASE is not a directory: $BASE"
 
 W=$(mktemp -d)
@@ -133,16 +130,11 @@ echo "$PATCHED" | while IFS= read -r rel; do
   cp -f "$DN_GLIBC_PREFIX/$rel" "$STAGE/$rel"
 done
 
-# 4. Translate: every glibc ELF whose interpreter is a Debian loader gets the
-#    prefix's own loader (dn-elf grows the PT_LOAD if the path is longer);
-#    pack-prefix.py then gives it the 256-byte capacity.
-#    Bionic binaries keep their /system/bin/linker64.
-find "$STAGE" -type f | while IFS= read -r f; do
-  i=$("$ELF" get-interp "$f" 2>/dev/null) || continue
-  case $i in
-    */ld-linux-aarch64.so.1) "$ELF" set-interp "$f" "$PREFIX_ROOT/$LOADER" 256 ;;
-  esac
-done
+# 4. Interpreters are left as Debian names them.  Runtime v1 does not relocate
+#    or repoint PT_INTERP: the tree's root dn-trace sees every exec, and its
+#    exec gate runs a glibc-dynamic program through the runtime loader
+#    (RT/ld.so) itself, so the kernel never has to resolve a guest PT_INTERP
+#    (docs/spec/runtime.md, "The exec gate").
 
 # 5. dpkg's database for every package in the artifact: status and file lists,
 #    from the packages' own control and contents, so apt sees them installed
@@ -188,31 +180,23 @@ while IFS= read -r f; do
 done < "$W/orphans.txt"
 echo "build-core-deb: pruned $pruned files of packages not shipped"
 
-# 6. Overlay: the glibc-built runtime.
+# 6. Overlay: the runtime -- dn-trace (the tree's root) and the syscall catalog
+#    it reads (--syscalls) to build the filter's gate-IP exemption
+#    (src/syscalls.tsv, docs/spec/runtime.md).
 mkdir -p "$STAGE/usr/lib/deb-native"
-for f in dn-shim.so dn-run dn-trace dn-elf; do
+for f in dn-trace syscalls.tsv; do
   [ -f "$DN_OVERLAY/$f" ] || die "missing $DN_OVERLAY/$f"
   cp -f "$DN_OVERLAY/$f" "$STAGE/usr/lib/deb-native/$f"
 done
-# The published syscall catalog: dn-trace reads it (--syscalls) to build the
-# filter's gate-IP exemption (src/syscalls.tsv, docs/spec/runtime.md).
-cp -f "$ROOT/src/syscalls.tsv" "$STAGE/usr/lib/deb-native/syscalls.tsv"
-# The overlay is built against the build host's loader, and it is copied after the
-# translation step: point its interpreter at this prefix's loader here.
-for f in usr/lib/deb-native/dn-run usr/lib/deb-native/dn-trace usr/lib/deb-native/dn-elf; do
-  "$ELF" set-interp "$STAGE/$f" "$PREFIX_ROOT/$LOADER" 256
-done
 
 
-# 7. deb-native's own layer, which the prefix needs to translate what apt
-#    installs later: the apt hooks and their scripts, the launcher scripts,
-#    and the stash of the patched glibc files that dn-fix-glibc restores.
-#    The apt configuration names the hooks by their installed path.
-sh "$ROOT/scripts/host/install-hooks.sh" "$STAGE"
+# 7. deb-native's own layer: the bootstrap helper the prefix runs at login.
+#    Runtime v1 needs no apt hooks -- a .deb installs intact, and dn-policy
+#    rewrites paths and identities at run time (docs/spec/runtime.md).
 mkdir -p "$STAGE/usr/lib/deb-native/scripts/runtime"
 cp -f "$ROOT/scripts/host/bootstrap-prefix.sh" "$STAGE/usr/lib/deb-native/scripts/runtime/"
 # The alternatives that mawk's configure step would make: the package manager's
-# and the hooks' awk is the link, not the file (a shipped tree is not configured).
+# awk is the link, not the file (a shipped tree is not configured).
 [ -e "$STAGE/usr/bin/awk" ] || [ -L "$STAGE/usr/bin/awk" ] || ln -s mawk "$STAGE/usr/bin/awk"
 GS="$STAGE/usr/lib/deb-native/glibc-swap"
 mkdir -p "$GS"
@@ -225,19 +209,12 @@ done
 # may be absent, so the build writes them (the paths are baked and relocated
 # with the rest by install.sh).
 mkdir -p "$STAGE/etc" "$STAGE/usr/etc/ld.so.conf.d"
-[ -e "$STAGE/etc/ld.so.preload" ] || \
-  printf '%s\n' "$PREFIX_ROOT/usr/lib/deb-native/dn-shim.so" > "$STAGE/etc/ld.so.preload"
 [ -e "$STAGE/usr/etc/ld.so.conf" ] || \
   printf 'include %s/usr/etc/ld.so.conf.d/*.conf\n' "$PREFIX_ROOT" > "$STAGE/usr/etc/ld.so.conf"
 [ -e "$STAGE/usr/etc/ld.so.conf.d/dn.conf" ] || \
   printf '%s/usr/lib/aarch64-linux-gnu\n%s/usr/lib\n' "$PREFIX_ROOT" "$PREFIX_ROOT" > "$STAGE/usr/etc/ld.so.conf.d/dn.conf"
-HK=$PREFIX_ROOT/usr/lib/deb-native/scripts/install
 mkdir -p "$STAGE/etc/apt/apt.conf.d"
 cat > "$STAGE/etc/apt/apt.conf.d/50deb-native" <<CONF
-DPkg::Pre-Install-Pkgs { "$HK/dn-hook-pre.sh"; };
-DPkg::Tools::Options::$HK/dn-hook-pre.sh "";
-DPkg::Tools::Options::$HK/dn-hook-pre.sh::Version "3";
-DPkg::Post-Invoke { "$HK/dn-hook-post.sh"; };
 # apt drops to user _apt for its methods; the prefix is one user (fake root),
 # where that switch is refused. Run the methods as the current user.
 APT::Sandbox::User "root";

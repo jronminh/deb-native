@@ -40,8 +40,6 @@ mkdir -p "$(dirname "$MAN")"
 for f in \
   usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 \
   usr/lib/aarch64-linux-gnu/libc.so.6 \
-  usr/lib/deb-native/dn-shim.so \
-  usr/lib/deb-native/dn-run \
   usr/lib/deb-native/dn-trace \
   ; do
   [ -e "$PREFIX/$f" ] || continue

@@ -1,17 +1,19 @@
 #!/bin/sh
-# Build the runtime overlay with a plain glibc toolchain (the repo layout, B2):
-# dn-shim.so, dn-run and dn-trace, all glibc programs linked against the
-# glibc they will run on. Needs gcc, make and libtalloc's headers
-# (libtalloc-dev) -- an arm64 Debian userland: a deb-native prefix with the
-# toolchain installed, or a Debian arm64 host such as CI. No Bionic
-# toolchain, no Termux.
+# Build the runtime overlay with a plain glibc toolchain (the repo layout):
+# dn-trace, and the published syscall catalog beside it.  Needs gcc, make and
+# libtalloc's headers (libtalloc-dev) -- an arm64 Debian userland: a deb-native
+# prefix with the toolchain installed, or a Debian arm64 host such as CI.  No
+# Bionic toolchain, no Termux.
 #
-# This is the overlay the shipped artifacts carry (docs/spec/prefix-layers.md).
-# It is the only overlay builder: the in-place Bionic runtime that used to sit
-# beside it (build-core.sh) is retired with the in-place bootstrap.
+# Runtime v1 (docs/spec/runtime.md): the overlay is dn-trace, the tree's root
+# process, plus the syscall catalog it reads (--syscalls).  The old LD_PRELOAD
+# shim (dn-shim.so), the adopt-on-first-run launcher (dn-run) and the ELF
+# editor (dn-elf) are gone: dn-policy wired into dn-glibc replaces the shim,
+# the exec gate replaces dn-run, and TREE/RT are fixed at build time so no
+# interpreter is relocated.
 #
-# dn-trace is built in a scratch copy of src/tracer, so its objects never
-# mix with the in-tree build.
+# dn-trace is built in a scratch copy of src/tracer, so its objects never mix
+# with the in-tree build.
 #
 # Usage: build-overlay-glibc.sh [OUTDIR]   (default: src/.build-glibc)
 set -eu
@@ -35,12 +37,6 @@ case "$("$CC" -dumpmachine)" in
   *) echo "E: $CC targets $("$CC" -dumpmachine), not glibc" >&2; exit 1 ;;
 esac
 
-echo "Building dn-shim.so ..."
-"$CC" -O2 -Wall -fPIC -shared -o "$OUT/dn-shim.so" "$SRC/dn-shim.c" -ldl
-
-echo "Building dn-run ..."
-"$CC" -O2 -Wall -o "$OUT/dn-run" "$SRC/dn-run.c"
-
 echo "Building dn-trace ..."
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
@@ -49,8 +45,8 @@ find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-trace \) -type f -exec rm -f
 make -s -C "$T" CC="$CC"
 cp -f "$T/dn-trace" "$OUT/dn-trace"
 
-echo "Building dn-elf ..."
-"$CC" -O2 -Wall -Wextra -o "$OUT/dn-elf" "$SRC/dn-elf.c"
+echo "Copying the syscall catalog ..."
+cp -f "$ROOT/src/syscalls.tsv" "$OUT/syscalls.tsv"
 
 echo "overlay (glibc) in $OUT:"
 ls -l "$OUT"

@@ -17,10 +17,8 @@ import sys
 SEED = ("libc6 libc-bin base-files base-passwd bash dash coreutils debianutils "
         "diffutils dpkg findutils grep gzip hostname init-system-helpers "
         "ncurses-base ncurses-bin perl-base sed tar").split()
-EXTRA = ["usr/lib/deb-native/dn-shim.so",
-         "usr/lib/deb-native/dn-run", "usr/lib/deb-native/dn-trace",
-         "usr/lib/deb-native/dn-elf",
-         "etc/ld.so.preload", "usr/etc/ld.so.conf", "usr/etc/ld.so.conf.d",
+EXTRA = ["usr/lib/deb-native/dn-trace", "usr/lib/deb-native/syscalls.tsv",
+         "usr/etc/ld.so.conf", "usr/etc/ld.so.conf.d",
          "etc/hosts", "etc/nsswitch.conf", "etc/host.conf", "etc/gai.conf",
          "etc/inputrc", "etc/bash.bashrc", "etc/profile", "etc/profile.d",
          "etc/passwd", "etc/group", "etc/shadow", "etc/ssl",

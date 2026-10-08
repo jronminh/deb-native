@@ -69,9 +69,8 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--desc", default="")
     ap.add_argument("--version", default="")
-    ap.add_argument("--dn-elf", default=os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "..", "src/.build-glibc/dn-elf"),
-        help="dn-elf binary that reserves the PT_INTERP capacity")
+    ap.add_argument("--dn-elf", default=None,
+        help="unused: runtime v1 leaves PT_INTERP alone (the exec gate loads via RT/ld.so)")
     ap.add_argument("--install", default=os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts/host/install-prefix.sh"),
         help="host-side activation script, copied to .dn/install.sh")

@@ -11,12 +11,8 @@
 # other module calls a declared script that is not listed as an `entry`.
 
 # --- entry points: callable by the build / host / prefix -------------------
-entry	scripts/prefix/dn-translate-deb.sh
-entry	scripts/prefix/dn-hook-pre.sh
-entry	scripts/prefix/dn-hook-post.sh
 entry	scripts/prefix/apt-install.sh
 entry	scripts/host/install-prefix.sh
-entry	scripts/host/install-hooks.sh
 entry	scripts/host/bootstrap-prefix.sh
 entry	scripts/host/ship-prefix.sh
 
@@ -31,14 +27,10 @@ entry	scripts/glibc/dn-package-glibc.sh
 entry	scripts/glibc/dn-package-libc-bin.sh
 
 # --- sources the build compiles --------------------------------------------
-source	src/dn-shim.c
-source	src/dn-run.c
-source	src/dn-elf.c
-source	src/dn-child.h
+source	src/dn-policy
+source	src/syscalls.tsv
 source	src/tracer
 
 # --- artifacts build produces, and where install places them ---------------
-artifact	dn-shim.so	src/.build-glibc/dn-shim.so	usr/lib/deb-native/dn-shim.so
-artifact	dn-run	src/.build-glibc/dn-run	usr/lib/deb-native/dn-run
 artifact	dn-trace	src/.build-glibc/dn-trace	usr/lib/deb-native/dn-trace
-artifact	dn-elf	src/.build-glibc/dn-elf	usr/lib/deb-native/dn-elf
+artifact	syscalls.tsv	src/.build-glibc/syscalls.tsv	usr/lib/deb-native/syscalls.tsv
