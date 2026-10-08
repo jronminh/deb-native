@@ -77,6 +77,69 @@ runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
 - **One build entry**: wrap the build steps in a single command (a `Makefile`
   or `scripts/build.sh`), so the README's build section is one line.
 
+## Runtime v1: new overlay (dn-policy / dn-glibc / dn-trace)
+
+Design: [`docs/spec/runtime.md`](docs/spec/runtime.md). Replaces the whole
+current overlay (`dn-shim.c`, `dn-run`'s adopt-on-first-run, `dn-elf` at run
+time, `patch-maintainer-scripts.sh`) rather than running beside it. Phases
+below match `runtime.md`'s roadmap; each phase must leave the tree runnable
+on the current overlay until it's actually replaced.
+
+**Status**: design only, nothing started.
+
+**P1 — exec gate, observe-only**:
+
+- Write `dn-trace` as the tree's **root process** (not invoked on-demand by
+  `dn-run` as today): forks a child, child installs the shared seccomp
+  filter (exec rule only for now) and execs `init.sh`.
+- Exec gate classifies every `execve`/`execveat` by ELF header (the 5 rules
+  in `runtime.md`) and logs the classification; changes nothing yet.
+- Decide first: does the existing `src/tracer/` (pruned PRoot fork) become
+  this `dn-trace`'s ptrace core, or is it written fresh? (open question in
+  `runtime.md`).
+- Done when: `init.sh` and the existing services run under this `dn-trace`
+  with no new errors, and a day's real use has a classification log.
+
+**P2 — the fast path**:
+
+- Write `dn-policy` as a standalone static C library: path mapping (longest
+  prefix, `/proc`/`/sys`/`/dev` passthrough), in-tree symlink resolution,
+  reverse translation, fake root (probe on-device whether `user.dn.*` xattr
+  writes work before committing to that backend over the `RT/state/` DB
+  fallback), hardlinks (`link2symlink` — settle the PRoot-GPL licensing
+  question first, per `runtime.md`'s open items).
+- Define dn-policy's calling convention before either caller is written:
+  function signatures, error/return convention, thread safety, and the
+  `process_vm_readv`/`writev` wrapper `dn-trace` needs that `dn-glibc`
+  doesn't (both callers must agree or principle 3 — "one policy, two
+  enforcement points" — breaks silently).
+- Patch glibc (full rebuild from Debian source, not the shipped 10-file
+  swap — see `docs/spec/dn-glibc-prefix.md`'s status note): wire dn-policy
+  into every path-taking function (public + internal + `syscall()`), route
+  every kernel call through the gate page, map the gate page at loader
+  startup, reorder library search (`RT/lib` first).
+- Pick `P_GATE`: inspect a few real on-device process memory maps for free
+  39-bit space (open item in `runtime.md`).
+- Turn on exec-gate rules 3/4 (rewrite to `RT/ld.so ...`). Drop the shim.
+  Switch glibc-family packages to version pinning (`/etc/apt/preferences.d/dn-glibc`,
+  auto-generated from `Source: glibc`), drop the hand-written resolver.
+- Done when: packages in use, reinstalled from stock `.deb`s, run correctly;
+  `apt update`/`install`/`upgrade` run end to end with no install-script
+  failures.
+
+**P3 — the fallback path**: turn on the path/identity syscall groups in the
+shared filter; `dn-trace` handles them via `ptrace` through dn-policy,
+replacing the current ptrace mechanism. Done when `busybox-static`, a
+static Go program, and a Go-with-cgo program all run correctly.
+
+**P4 — measure and optimize**: per-program/per-syscall counters in
+`dn-trace`; `process_vm_readv`/`writev`; path-resolution and exec-gate
+classification caches. Done when there's a per-tier call-distribution table
+for installing packages, compiling, and running a Python script.
+
+**P5 — optional**: seccomp user notification for hot calls, only if P4's
+numbers justify it.
+
 ## Per-userland home (planned)
 
 Give each prefix a **sparse `$HOME`** (`/data/data/com.termux/files/.dn/<name>/`)
