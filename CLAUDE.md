@@ -47,7 +47,8 @@ ELF patch when both would solve the same problem.
   `dn-child.h`, `tracer/`, a pruned PRoot fork).
 - `scripts/build/`, `scripts/glibc/` — a build host.
 - `scripts/host/`, `scripts/prefix/` — the host / the prefix.
-- `patches/` — the glibc Android patch. `tests/` `tools/` `docs/`.
+- `patches/` — the glibc patches (Android base + dn-policy wiring).
+  `tests/` `tools/` `docs/`.
 
 ## Priority: ship the idea fast, don't study every failure
 

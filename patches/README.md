@@ -259,3 +259,92 @@ this build's to write `<prefix>/usr/etc/ld.so.cache`
 (`docs/log/findings/own-glibc-missing-libc-bin.md`). Remaining out of scope:
 `libc6-dev` (headers/static libs, no script needed) and
 `libc-l10n`/`locales` (still pinned, untested).
+
+# dn-policy-glibc-wiring.patch
+
+The second patch in the dn-glibc build, applied **on top of**
+`dn-glibc-android.patch` and kept separate from it. It is the first slice of
+`runtime.md`'s "wire dn-policy into every path-taking function": the public
+`open`/`openat` family now calls `dn_policy_redirect()` -- the real policy
+built and tested in `src/dn-policy/` -- instead of `__dn_redirect`'s inline
+root heuristic. The rest of the wiring (the stat, faccess, chown, xattr,
+symlink and rename families, `syscall()` interposition, the gate page, the
+`RT/lib` search order) is still ahead; this patch is what made the first full
+glibc build with dn-policy inside it succeed.
+
+## What it is
+
+`diff -ruN` between `work-after-official-patch/` (glibc source with
+`dn-glibc-android.patch` already applied once, per the section above) and
+`work/` (that plus the wiring). Sixteen files:
+
+- New, byte-identical copies of `src/dn-policy/` under
+  `sysdeps/unix/sysv/linux/`: `dn-policy.{h,c}`, `dn-policy-fakeroot.c`,
+  `dn-policy-hardlink.c`, `dn-policy-internal.h`. The checked-in source of
+  truth stays `src/`; the patch embeds a snapshot of it.
+- New `sysdeps/unix/sysv/linux/dn-policy-glue.c` -- the glibc side only, not
+  in `src/`. It derives `TREE` from `__dn_prefix_get()` and `RT` as
+  `<TREE>/usr/lib/deb-native` (the directory the other non-dpkg runtime tools
+  already use), calls `dn_policy_init()` lazily under `__libc_lock` (`open()`
+  can be called from any thread immediately, unlike `__dn_prefix_init()`,
+  which runs in `dl_main`), and exposes `dn_policy_redirect()` with
+  `__dn_redirect`'s exact signature.
+- `sysdeps/generic/dn-prefix.h`: declares `dn_policy_redirect()` under
+  `#if !IS_IN (rtld)`.
+- `sysdeps/unix/sysv/linux/Makefile`: adds the four `dn-policy*` objects to
+  `sysdep_routines`.
+- The eight `open*.c` call sites (`open`, `open64`, `open{,64}_nocancel`,
+  `openat`, `openat64`, `openat{,64}_nocancel`): `__dn_redirect` ->
+  `dn_policy_redirect`, guarded by `#if !IS_IN (rtld)`.
+
+No `@DN_PREFIX@`: dn-policy derives the tree at runtime, so this patch is
+prefix-agnostic (principle 5) like dn-policy itself, and needs no
+substitution when applied.
+
+## Why the `IS_IN (rtld)` guard is load-bearing
+
+`elf/librtld.map` links the loader's minimal `dl-allobjs.os` against all of
+`libc_pic.a` to discover which libc members the loader needs; a duplicate
+symbol there is a hard error. The loader already needs `openat64.os`, so an
+unguarded call from `openat64.c` drags the dn-policy call chain in with it,
+and `snprintf` reaches glibc's `vfprintf` machinery -- `malloc`,
+`__syscall_cancel`, `sbrk`, `__libc_fatal` -- which `dl-allobjs.os` already
+defines. `__dn_redirect` stayed clear of this only because it is
+self-contained (string ops only). Keeping rtld on `__dn_redirect` and
+confining dn-policy to libc-proper is what makes the loader link; it is also
+why `dn-policy` uses only leaf libc calls (no `snprintf`/`strtok_r`/
+`getenv`/...), as its own header comment explains.
+
+## Applying it
+
+```sh
+# inside a work/ that already has dn-glibc-android.patch applied
+patch -p1 < <repo>/patches/dn-policy-glibc-wiring.patch
+```
+
+Not part of the build workflow yet: `.github/workflows/build-glibc.yml`
+applies only `dn-glibc-android.patch`. Applied by hand in the on-device
+scratch build until P2 is complete and the tree can actually switch.
+
+## Regenerating it
+
+```sh
+diff -ruN --exclude='.pc' --exclude='debian' work-after-official-patch work \
+  > dn-policy-glibc-wiring.patch
+```
+
+Round-trip-verify before trusting it (fresh copy of
+`work-after-official-patch`, apply, diff against `work` -- expect nothing):
+
+```sh
+cp -r work-after-official-patch /tmp/roundtrip
+( cd /tmp/roundtrip && patch -p1 < dn-policy-glibc-wiring.patch )
+diff -rq --exclude='.pc' --exclude='debian' /tmp/roundtrip work
+```
+
+## Status
+
+Build-verified 2026-10-08 against glibc `2.41-12+deb13u4`: full `make -O -j8`
+with this patch applied reaches `libc.so`, `ld.so`, `libm`, `libdl`,
+`libpthread`, `librt` and the tools cleanly (exit 0, no
+`multiple definition`). Covers the public `open`/`openat` family only.

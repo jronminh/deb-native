@@ -44,7 +44,7 @@ Run time has three path mechanisms: maintainer-script rewrites
   adopt, update.
 - `scripts/prefix/` — run by the prefix (its own glibc): apt hooks, package
   translation, per-package fixes; `interface.tsv` is the module surface.
-- `patches/` — the glibc Android patch.
+- `patches/` — the glibc patches: the Android base + the dn-policy wiring.
 - `tests/` — on-device smoke tests; `tools/` — repo checks + helpers;
   `docs/` — spec, reference, notes.
 

@@ -1,0 +1,2198 @@
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
+--- work-after-official-patch/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:03.964680319 +0000
++++ work/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:59.500680298 +0000
+@@ -149,4 +149,18 @@
+   return path;
+ }
+ 
++/* dn-policy wiring (sysdeps/unix/sysv/linux/dn-policy-glue.c): the
++   real policy (symlink resolution, no-double-translation, the
++   /proc,/sys,/dev passthrough), not just __dn_redirect's plain root
++   list above. Not available to rtld itself (IS_IN (rtld)) -- dn-policy
++   uses malloc/snprintf/flock, which the minimal rtld build can't link
++   (see this file's own top comment on why __dn_redirect stays
++   rtld-safe-only); rtld's own bootstrap paths (ld.so.preload, the
++   cache) keep using __dn_redirect, only libc-proper's open()/openat()
++   family (called long after the dynamic linker has finished) call
++   into dn-policy for real. */
++#if !IS_IN (rtld)
++extern const char *dn_policy_redirect (char *buf, size_t bufsz, const char *path);
++#endif
++
+ #endif /* _DN_PREFIX_H */
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/Makefile work/sysdeps/unix/sysv/linux/Makefile
+--- work-after-official-patch/sysdeps/unix/sysv/linux/Makefile	2026-10-08 07:51:04.644680319 +0000
++++ work/sysdeps/unix/sysv/linux/Makefile	2026-10-08 08:17:53.928679705 +0000
+@@ -113,6 +113,10 @@
+   xmknodat \
+   xstat \
+   xstat64 \
++  dn-policy \
++  dn-policy-glue \
++  dn-policy-fakeroot \
++  dn-policy-hardlink \
+   # sysdep_routines
+ 
+ CFLAGS-gethostid.c = -fexceptions
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c work/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c	1970-01-01 00:00:00.000000000 +0000
++++ work/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c	2026-10-08 08:17:49.676679707 +0000
+@@ -0,0 +1,677 @@
++/* dn-policy -- fake root. See dn-policy.h for the calling convention
++ * and docs/spec/runtime.md, "dn-policy" > "Fake root" for the rules
++ * implemented here.
++ *
++ * Two owner-store backends, chosen once at dn_policy_init() by probing
++ * the device (runtime.md: "phải thử trên máy"):
++ *
++ *   - xattr: the record lives on the file itself, as the "user.dn.owner"
++ *     xattr, serialized as a fixed-size blob. No key needed -- the file
++ *     carries its own record and it survives a rename for free.
++ *   - db: a flat file of fixed-size records at "<rt_root>/state/owners.db",
++ *     keyed by (st_dev, st_ino), guarded by an flock() for the whole
++ *     read-modify-write (multiple *processes* write this, not just
++ *     threads -- a plain in-process mutex is not enough).
++ *
++ * security.* xattrs are never attempted for real (that real write is
++ * what's failing to begin with) -- they always go into a second DB file,
++ * "<rt_root>/state/xattrs.db", regardless of which backend above was
++ * chosen for ownership.
++ *
++ * This file does no path translation of its own; every @host_path it
++ * receives is assumed already translated by the caller.
++ */
++
++#include "dn-policy.h"
++#include "dn-policy-internal.h"
++
++#include <string.h>
++#include <errno.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <sys/file.h>
++#include <sys/xattr.h>
++#include <stdlib.h>
++#include <pthread.h>
++
++#define DN_OWNER_XATTR "user.dn.owner"
++
++static char state_dir[PATH_MAX];
++static char owners_db_path[PATH_MAX];
++static char xattrs_db_path[PATH_MAX];
++static int backend_is_xattr;
++static int state_ready;
++
++/* ---- DnIdentity (per traced program, never a dn-policy global) ---- */
++
++struct DnIdentity {
++	uid_t uid;
++	gid_t gid;
++};
++
++DnIdentity *dn_policy_identity_new(void)
++{
++	DnIdentity *id = malloc(sizeof(*id));
++	if (id == NULL)
++		return NULL;
++	id->uid = 0;
++	id->gid = 0;
++	return id;
++}
++
++void dn_policy_identity_free(DnIdentity *id)
++{
++	free(id);
++}
++
++uid_t dn_policy_fake_getuid(const DnIdentity *id)
++{
++	return id->uid;
++}
++
++gid_t dn_policy_fake_getgid(const DnIdentity *id)
++{
++	return id->gid;
++}
++
++void dn_policy_fake_setuid(DnIdentity *id, uid_t uid)
++{
++	id->uid = uid;
++}
++
++void dn_policy_fake_setgid(DnIdentity *id, gid_t gid)
++{
++	id->gid = gid;
++}
++
++/* ---- Setup: probe once, from dn_policy_init() ---------------------- */
++
++static int ensure_dir(const char *path)
++{
++	if (mkdir(path, 0700) < 0 && errno != EEXIST)
++		return -errno;
++	return 0;
++}
++
++/* "<a>/<b>" into @out, bounded by @cap -- memcpy/strlen only, not
++ * snprintf; see dn-policy.c's path_join() for why (confirmed by
++ * bisection: snprintf pulled real malloc/flock-syscall-cancel/etc into
++ * glibc's own elf/librtld.map discovery build step and broke it). */
++static int path_join(char *out, size_t cap, const char *a, const char *b)
++{
++	size_t al = strlen(a), bl = strlen(b);
++
++	if (al + 1 + bl + 1 > cap)
++		return -ENAMETOOLONG;
++	memcpy(out, a, al);
++	out[al] = '/';
++	memcpy(out + al + 1, b, bl + 1);
++	return 0;
++}
++
++/* Copies up to @cap - 1 bytes of @src into @dst and always
++ * NUL-terminates -- not strncpy(), same reasoning as
++ * dn-policy-hardlink.c's own copy of this helper. */
++static void bounded_copy(char *dst, size_t cap, const char *src)
++{
++	size_t n = strlen(src);
++
++	if (n > cap - 1)
++		n = cap - 1;
++	memcpy(dst, src, n);
++	dst[n] = '\0';
++}
++
++/* @name's value from the environment, by hand: environ is a plain
++ * NULL-terminated array of "KEY=VALUE" strings, and this is the one
++ * entry dn-policy ever looks up -- not getenv(), to keep this file's
++ * dependency surface to exactly what it uses rather than a
++ * general-purpose lookup function. */
++extern char **environ;
++
++static const char *dn_getenv(const char *name)
++{
++	size_t name_len = strlen(name);
++	char **e;
++
++	for (e = environ; e != NULL && *e != NULL; e++) {
++		if (strncmp(*e, name, name_len) == 0 && (*e)[name_len] == '=')
++			return *e + name_len + 1;
++	}
++	return NULL;
++}
++
++/* Returns 1 if the device lets us write/read/remove a user.* xattr on a
++ * real file under @rt_root, 0 if not, or a negative errno on an
++ * unexpected failure setting the probe up (not on the xattr calls
++ * themselves -- failing *those* just means "0, use the DB instead"). */
++static int probe_user_xattr(const char *rt_root)
++{
++	char probe_path[PATH_MAX];
++	int fd;
++	int status;
++	char value[8];
++
++	status = path_join(probe_path, sizeof(probe_path), state_dir, ".xattr-probe");
++	if (status < 0)
++		return status;
++	(void) rt_root;
++
++	fd = open(probe_path, O_CREAT | O_WRONLY, 0600);
++	if (fd < 0)
++		return -errno;
++	close(fd);
++
++	if (setxattr(probe_path, "user.dn.probe", "1", 1, 0) < 0) {
++		unlink(probe_path);
++		return 0;
++	}
++	if (getxattr(probe_path, "user.dn.probe", value, sizeof(value)) != 1) {
++		unlink(probe_path);
++		return 0;
++	}
++	removexattr(probe_path, "user.dn.probe");
++	unlink(probe_path);
++	return 1;
++}
++
++/* Not called from dn_policy_init() -- see dn_policy_rt_root()'s comment
++ * in dn-policy-internal.h. Called lazily, on demand, by ensure_ready()
++ * below; idempotent so every public entry point in this file can call
++ * it unconditionally without re-probing once it has already succeeded. */
++int dn_policy_fakeroot_init(const char *rt_root)
++{
++	int status;
++
++	if (state_ready)
++		return 0;
++
++	status = path_join(state_dir, sizeof(state_dir), rt_root, "state");
++	if (status < 0)
++		return status;
++
++	status = ensure_dir(state_dir);
++	if (status < 0)
++		return status;
++
++	status = path_join(owners_db_path, sizeof(owners_db_path), state_dir, "owners.db");
++	if (status < 0)
++		return status;
++	status = path_join(xattrs_db_path, sizeof(xattrs_db_path), state_dir, "xattrs.db");
++	if (status < 0)
++		return status;
++
++	/* Escape hatch for testing/diagnosis, same convention as DN_ID
++	 * (syscall/exit.c): skips the probe entirely when set. "db" is
++	 * also how to exercise the DB backend's code path on a device
++	 * whose app-data partition does support user.* xattrs (every
++	 * such partition seen so far does) -- there is otherwise no way
++	 * to reach it short of a filesystem that lacks xattr support. */
++	{
++		const char *forced = dn_getenv("DN_POLICY_OWNER_BACKEND");
++		if (forced != NULL && strcmp(forced, "db") == 0) {
++			backend_is_xattr = 0;
++			state_ready = 1;
++			return 0;
++		}
++		if (forced != NULL && strcmp(forced, "xattr") == 0) {
++			backend_is_xattr = 1;
++			state_ready = 1;
++			return 0;
++		}
++	}
++
++	status = probe_user_xattr(rt_root);
++	if (status < 0)
++		return status;
++	backend_is_xattr = status;
++
++	state_ready = 1;
++	return 0;
++}
++
++/* ---- Lazy init, for every public entry point below ----------------- */
++
++static pthread_mutex_t ready_lock = PTHREAD_MUTEX_INITIALIZER;
++
++/* Called at the top of every dn_policy_owner_*()/dn_policy_fake_*()
++ * function. Cheap once ready (one branch, no lock) -- the lock only
++ * matters for the first call(s), possibly racing from multiple
++ * threads. Plain pthread, not glibc's __libc_lock: this file is built
++ * standalone (dn-trace) as well as folded into dn-glibc. */
++static int ensure_ready(void)
++{
++	const char *rt_root;
++	int status;
++
++	if (state_ready)
++		return 0;
++
++	pthread_mutex_lock(&ready_lock);
++	if (state_ready) {
++		pthread_mutex_unlock(&ready_lock);
++		return 0;
++	}
++
++	rt_root = dn_policy_rt_root();
++	status = (rt_root == NULL) ? -EINVAL : dn_policy_fakeroot_init(rt_root);
++
++	pthread_mutex_unlock(&ready_lock);
++	return status;
++}
++
++/* ---- The DB backend: fixed-size records, scanned linearly --------- */
++
++typedef struct {
++	uint64_t dev;
++	uint64_t ino;
++	uint32_t uid;
++	uint32_t gid;
++	uint32_t mode_bits;
++	uint32_t rdev;
++	uint8_t  valid;
++} DbRecord;
++
++/* Opens @path, takes an exclusive flock() for the lifetime of the fd
++ * (released on close()), creating the file if absent. Returns the fd,
++ * or a negative errno. */
++static int open_locked(const char *path)
++{
++	int fd = open(path, O_RDWR | O_CREAT, 0600);
++	if (fd < 0)
++		return -errno;
++	if (flock(fd, LOCK_EX) < 0) {
++		int err = -errno;
++		close(fd);
++		return err;
++	}
++	return fd;
++}
++
++static int db_find(int fd, uint64_t dev, uint64_t ino, DbRecord *out, off_t *offset_out)
++{
++	DbRecord rec;
++	off_t offset = 0;
++	ssize_t n;
++
++	if (lseek(fd, 0, SEEK_SET) < 0)
++		return -errno;
++
++	for (;;) {
++		n = read(fd, &rec, sizeof(rec));
++		if (n == 0)
++			return -ENOENT;
++		if (n != (ssize_t) sizeof(rec))
++			return -EIO;
++		if (rec.valid && rec.dev == dev && rec.ino == ino) {
++			if (out != NULL)
++				*out = rec;
++			if (offset_out != NULL)
++				*offset_out = offset;
++			return 0;
++		}
++		offset += (off_t) sizeof(rec);
++	}
++}
++
++static int db_write_at(int fd, off_t offset, const DbRecord *rec)
++{
++	ssize_t n = pwrite(fd, rec, sizeof(*rec), offset);
++	if (n != (ssize_t) sizeof(*rec))
++		return -EIO;
++	return 0;
++}
++
++static int db_append(int fd, const DbRecord *rec)
++{
++	off_t end = lseek(fd, 0, SEEK_END);
++	if (end < 0)
++		return -errno;
++	return db_write_at(fd, end, rec);
++}
++
++/* Finds the first invalid (freed) slot, for reuse by a later set().
++ * Returns 0 with *@offset_out set, or -ENOENT if every record so far is
++ * valid (caller should append instead). */
++static int db_find_free_slot(int fd, off_t *offset_out)
++{
++	DbRecord rec;
++	off_t offset = 0;
++	ssize_t n;
++
++	if (lseek(fd, 0, SEEK_SET) < 0)
++		return -errno;
++
++	for (;;) {
++		n = read(fd, &rec, sizeof(rec));
++		if (n == 0)
++			return -ENOENT;
++		if (n != (ssize_t) sizeof(rec))
++			return -EIO;
++		if (!rec.valid) {
++			*offset_out = offset;
++			return 0;
++		}
++		offset += (off_t) sizeof(rec);
++	}
++}
++
++/* ---- Owner store, dispatched to whichever backend was probed ------ */
++
++static void record_to_disk(const DnOwnerRecord *in, uint64_t dev, uint64_t ino, DbRecord *out)
++{
++	out->dev = dev;
++	out->ino = ino;
++	out->uid = in->uid;
++	out->gid = in->gid;
++	out->mode_bits = (uint32_t) in->mode_bits;
++	out->rdev = (uint32_t) in->rdev;
++	out->valid = 1;
++}
++
++static void disk_to_record(const DbRecord *in, DnOwnerRecord *out)
++{
++	out->uid = in->uid;
++	out->gid = in->gid;
++	out->mode_bits = in->mode_bits;
++	out->rdev = in->rdev;
++}
++
++static int owner_get_xattr(const char *host_path, DnOwnerRecord *out)
++{
++	ssize_t n = getxattr(host_path, DN_OWNER_XATTR, out, sizeof(*out));
++	if (n < 0)
++		return (errno == ENODATA) ? -ENOENT : -errno; /* Linux has no ENOATTR */
++	if (n != (ssize_t) sizeof(*out))
++		return -EIO;
++	return 0;
++}
++
++static int owner_set_xattr(const char *host_path, const DnOwnerRecord *record)
++{
++	if (setxattr(host_path, DN_OWNER_XATTR, record, sizeof(*record), 0) < 0)
++		return -errno;
++	return 0;
++}
++
++static int owner_get_db(dev_t dev, ino_t ino, DnOwnerRecord *out)
++{
++	DbRecord rec;
++	int fd, status;
++
++	fd = open_locked(owners_db_path);
++	if (fd < 0)
++		return fd;
++
++	status = db_find(fd, dev, ino, &rec, NULL);
++	close(fd); /* also releases the flock() */
++	if (status < 0)
++		return status;
++
++	disk_to_record(&rec, out);
++	return 0;
++}
++
++static int owner_set_db(dev_t dev, ino_t ino, const DnOwnerRecord *record)
++{
++	DbRecord rec, existing;
++	off_t offset;
++	int fd, status;
++
++	fd = open_locked(owners_db_path);
++	if (fd < 0)
++		return fd;
++
++	record_to_disk(record, dev, ino, &rec);
++
++	status = db_find(fd, dev, ino, &existing, &offset);
++	if (status == 0) {
++		status = db_write_at(fd, offset, &rec);
++	} else if (status == -ENOENT) {
++		status = db_find_free_slot(fd, &offset);
++		status = (status == 0) ? db_write_at(fd, offset, &rec) : db_append(fd, &rec);
++	}
++
++	close(fd);
++	return status;
++}
++
++static int owner_forget_db(dev_t dev, ino_t ino)
++{
++	off_t offset;
++	int fd, status;
++	DbRecord rec;
++
++	fd = open_locked(owners_db_path);
++	if (fd < 0)
++		return fd;
++
++	status = db_find(fd, dev, ino, &rec, &offset);
++	if (status == 0) {
++		rec.valid = 0;
++		status = db_write_at(fd, offset, &rec);
++	} else if (status == -ENOENT) {
++		status = 0; /* nothing to forget is not an error */
++	}
++
++	close(fd);
++	return status;
++}
++
++int dn_policy_owner_get(const char *host_path, dev_t dev, ino_t ino, DnOwnerRecord *out)
++{
++	int status = ensure_ready();
++	if (status < 0)
++		return status;
++	return backend_is_xattr ? owner_get_xattr(host_path, out) : owner_get_db(dev, ino, out);
++}
++
++int dn_policy_owner_set(const char *host_path, dev_t dev, ino_t ino, const DnOwnerRecord *record)
++{
++	int status = ensure_ready();
++	if (status < 0)
++		return status;
++	return backend_is_xattr ? owner_set_xattr(host_path, record) : owner_set_db(dev, ino, record);
++}
++
++int dn_policy_owner_forget(const char *host_path, dev_t dev, ino_t ino)
++{
++	int status = ensure_ready();
++	if (status < 0)
++		return status;
++	if (backend_is_xattr) {
++		/* The record lives on the file; it is already gone along
++		 * with the last link. Nothing to do (see dn-policy.h). */
++		(void) host_path;
++		return 0;
++	}
++	return owner_forget_db(dev, ino);
++}
++
++void dn_policy_fake_stat(const char *host_path, struct stat *st)
++{
++	DnOwnerRecord record;
++
++	/* Hardlink fixup first: it may replace *st wholesale with the
++	 * hidden file's own stat(), so the owner lookup below sees that
++	 * file's real (dev, ino) -- the same for every hardlinked name,
++	 * matching real hardlink semantics (one owner per inode, not per
++	 * name). Its own failure is not fatal to the rest of fake_stat:
++	 * it only means "not a managed name" or "couldn't tell", and
++	 * either way *st is then whatever the caller's own real stat/
++	 * lstat already gave us. */
++	(void) dn_policy_hardlink_fixup_stat(host_path, st);
++
++	if (dn_policy_owner_get(host_path, st->st_dev, st->st_ino, &record) < 0) {
++		/* No record: "an ordinary Debian install" (runtime.md). */
++		st->st_uid = 0;
++		st->st_gid = 0;
++		return;
++	}
++
++	st->st_uid = record.uid;
++	st->st_gid = record.gid;
++	st->st_mode = (st->st_mode & ~07000) | (record.mode_bits & 07000);
++}
++
++/* ---- Fake security.* xattrs: always the DB, never the real xattr -- */
++
++int dn_policy_is_fake_xattr(const char *name)
++{
++	return strncmp(name, "security.", 9) == 0;
++}
++
++/* Variable-length value, fixed-size slot (256 bytes is generous for
++ * anything security.* carries in practice, e.g. a capability set). */
++#define DN_XATTR_VALUE_CAP 256
++#define DN_XATTR_NAME_CAP 64
++
++typedef struct {
++	uint64_t dev;
++	uint64_t ino;
++	char     name[DN_XATTR_NAME_CAP];
++	uint32_t size;
++	uint8_t  valid;
++	char     value[DN_XATTR_VALUE_CAP];
++} XattrRecord;
++
++static int xattr_find(int fd, uint64_t dev, uint64_t ino, const char *name,
++		XattrRecord *out, off_t *offset_out)
++{
++	XattrRecord rec;
++	off_t offset = 0;
++	ssize_t n;
++
++	if (lseek(fd, 0, SEEK_SET) < 0)
++		return -errno;
++
++	for (;;) {
++		n = read(fd, &rec, sizeof(rec));
++		if (n == 0)
++			return -ENOENT;
++		if (n != (ssize_t) sizeof(rec))
++			return -EIO;
++		if (rec.valid && rec.dev == dev && rec.ino == ino
++		    && strncmp(rec.name, name, sizeof(rec.name)) == 0) {
++			if (out != NULL)
++				*out = rec;
++			if (offset_out != NULL)
++				*offset_out = offset;
++			return 0;
++		}
++		offset += (off_t) sizeof(rec);
++	}
++}
++
++int dn_policy_fake_setxattr(const char *host_path, dev_t dev, ino_t ino,
++		const char *name, const void *value, size_t size)
++{
++	XattrRecord rec;
++	off_t offset;
++	int fd, status;
++
++	(void) host_path;
++	status = ensure_ready();
++	if (status < 0)
++		return status;
++	if (size > DN_XATTR_VALUE_CAP || strlen(name) >= DN_XATTR_NAME_CAP)
++		return -ENOSPC;
++
++	fd = open(xattrs_db_path, O_RDWR | O_CREAT, 0600);
++	if (fd < 0)
++		return -errno;
++	if (flock(fd, LOCK_EX) < 0) {
++		status = -errno;
++		goto out;
++	}
++
++	memset(&rec, 0, sizeof(rec));
++	rec.dev = dev;
++	rec.ino = ino;
++	bounded_copy(rec.name, sizeof(rec.name), name);
++	rec.size = (uint32_t) size;
++	rec.valid = 1;
++	memcpy(rec.value, value, size);
++
++	status = xattr_find(fd, dev, ino, name, NULL, &offset);
++	if (status < 0 && status != -ENOENT)
++		goto out;
++	if (status == -ENOENT) {
++		off_t end = lseek(fd, 0, SEEK_END);
++		if (end < 0) {
++			status = -errno;
++			goto out;
++		}
++		offset = end;
++	}
++
++	status = (pwrite(fd, &rec, sizeof(rec), offset) == (ssize_t) sizeof(rec)) ? 0 : -EIO;
++
++out:
++	close(fd);
++	return status;
++}
++
++int dn_policy_fake_getxattr(const char *host_path, dev_t dev, ino_t ino,
++		const char *name, void *value_out, size_t cap)
++{
++	XattrRecord rec;
++	int fd, status;
++
++	(void) host_path;
++	status = ensure_ready();
++	if (status < 0)
++		return status;
++
++	fd = open(xattrs_db_path, O_RDWR | O_CREAT, 0600);
++	if (fd < 0)
++		return -errno;
++	if (flock(fd, LOCK_EX) < 0) {
++		status = -errno;
++		goto out;
++	}
++
++	status = xattr_find(fd, dev, ino, name, &rec, NULL);
++	if (status == 0) {
++		if (rec.size > cap) {
++			status = -ERANGE;
++		} else {
++			memcpy(value_out, rec.value, rec.size);
++			status = (int) rec.size;
++		}
++	}
++
++out:
++	close(fd);
++	return status;
++}
++
++int dn_policy_fake_removexattr(const char *host_path, dev_t dev, ino_t ino, const char *name)
++{
++	XattrRecord rec;
++	off_t offset;
++	int fd, status;
++
++	(void) host_path;
++	status = ensure_ready();
++	if (status < 0)
++		return status;
++
++	fd = open(xattrs_db_path, O_RDWR | O_CREAT, 0600);
++	if (fd < 0)
++		return -errno;
++	if (flock(fd, LOCK_EX) < 0) {
++		status = -errno;
++		goto out;
++	}
++
++	status = xattr_find(fd, dev, ino, name, &rec, &offset);
++	if (status == 0) {
++		rec.valid = 0;
++		status = (pwrite(fd, &rec, sizeof(rec), offset) == (ssize_t) sizeof(rec)) ? 0 : -EIO;
++	}
++
++out:
++	close(fd);
++	return status;
++}
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c work/sysdeps/unix/sysv/linux/dn-policy-glue.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c	1970-01-01 00:00:00.000000000 +0000
++++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 08:17:42.236679709 +0000
+@@ -0,0 +1,101 @@
++/* dn-policy glue for glibc itself: wires the already-shipped prefix
++   self-derivation (__dn_prefix_get, elf/rtld.c) into dn_policy_init(),
++   and gives open.c et al. a drop-in replacement for __dn_redirect with
++   the exact same calling convention, so call sites barely change.
++   docs/spec/runtime.md, "glibc: build, versioning, and packages" --
++   this is the first wiring of dn-policy into dn-glibc proper,
++   replacing __dn_redirect's simple inline 8-root heuristic with the
++   real policy (symlink resolution, no-double-translation, the
++   /proc,/sys,/dev passthrough already built and tested standalone in
++   src/dn-policy/).
++
++   RT lives at "<TREE>/usr/lib/deb-native", the same directory this
++   project's other non-dpkg-managed runtime tools (dn-shim.so, dn-run,
++   dn-trace, dn-elf) already use -- not a new convention.
++
++   Lazily initialized on first call, under a lock: open() et al. can be
++   called from any thread immediately, so this can't assume
++   single-threaded startup the way __dn_prefix_init() (run from dl_main,
++   provably before any thread exists) can.  */
++
++#include <dn-prefix.h>
++#include <libc-lock.h>
++#include <string.h>
++
++#include "dn-policy.h"
++
++__libc_lock_define_initialized (static, dn_policy_lock);
++static int dn_policy_ready;
++static int dn_policy_broken;
++
++static void
++dn_policy_try_init (void)
++{
++  const char *tree;
++  char rt[PATH_MAX];
++  int status;
++
++  __libc_lock_lock (dn_policy_lock);
++  if (dn_policy_ready || dn_policy_broken)
++    goto out;
++
++  tree = __dn_prefix_get ();
++  if (tree == NULL)
++    {
++      /* No live prefix yet (e.g. the loader's own path didn't match --
++	 dn-prefix.h's own fallback case). Leave untranslated rather
++	 than guess; a later call may still succeed once it's known. */
++      goto out;
++    }
++
++  {
++    static const char suffix[] = "/usr/lib/deb-native";
++    size_t tl = strlen (tree);
++    if (tl + sizeof (suffix) > sizeof (rt))
++      {
++	dn_policy_broken = 1;
++	goto out;
++      }
++    memcpy (rt, tree, tl);
++    memcpy (rt + tl, suffix, sizeof (suffix));
++  }
++
++  status = dn_policy_init (tree, rt);
++  if (status < 0)
++    {
++      /* Not fatal to the caller: dn_policy_redirect() below falls
++	 back to the untranslated path on any failure, same as
++	 __dn_redirect's own behavior.  Don't retry every call. */
++      dn_policy_broken = 1;
++      goto out;
++    }
++
++  dn_policy_ready = 1;
++
++out:
++  __libc_lock_unlock (dn_policy_lock);
++}
++
++/* Drop-in replacement for __dn_redirect (dn-prefix.h), same signature:
++   translate @path into @buf (capacity @bufsz) and return @buf, or
++   return @path unchanged if dn-policy isn't ready or declines to
++   translate it (not absolute, too long, ...) -- open()/openat() et al.
++   must never fail just because the policy layer had nothing useful to
++   say.  */
++const char *
++dn_policy_redirect (char *buf, size_t bufsz, const char *path)
++{
++  int status;
++
++  if (!dn_policy_ready && !dn_policy_broken)
++    dn_policy_try_init ();
++
++  if (!dn_policy_ready)
++    return path;
++
++  status = dn_policy_translate_path (path, buf, bufsz);
++  if (status < 0)
++    return path;
++
++  return buf;
++}
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-hardlink.c work/sysdeps/unix/sysv/linux/dn-policy-hardlink.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-hardlink.c	1970-01-01 00:00:00.000000000 +0000
++++ work/sysdeps/unix/sysv/linux/dn-policy-hardlink.c	2026-10-08 08:17:49.684679707 +0000
+@@ -0,0 +1,472 @@
++/* dn-policy -- hardlinks via link2symlink. See dn-policy.h for the
++ * calling convention and docs/spec/runtime.md, "dn-policy" >
++ * "Hardlinks" for the rules implemented here.
++ *
++ * A hardlinked name is really a symlink to a hidden regular file under
++ * "<rt_root>/state/links/<id>". <id> is "<dev>-<ino>" of the original
++ * file at the moment it was first linked (the only point its real
++ * identity is still around to name the hidden file with) -- a
++ * near-certain-in-practice but not airtight key, since a (dev, ino)
++ * pair can be reused once the original file is gone; accepted as a
++ * known limitation of this increment rather than adding a persisted
++ * counter for one more bit of robustness. "<rt_root>/state/links.db" is
++ * the refcount for each <id>, a flat file of fixed-size records
++ * guarded by flock() -- the same shape as dn-policy-fakeroot.c's
++ * owners.db, kept as a separate file (and separate, if near-identical,
++ * helper functions here) rather than sharing code with it, since the
++ * two stores have no reason to ever be read or locked together.
++ */
++
++#include "dn-policy.h"
++#include "dn-policy-internal.h"
++
++#include <string.h>
++#include <errno.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <sys/file.h>
++#include <stdio.h> /* rename(3) -- POSIX declares it here, not <unistd.h> */
++#include <pthread.h>
++
++static char links_dir[PATH_MAX];
++static char links_db_path[PATH_MAX];
++static int ready;
++
++static int ensure_dir(const char *path)
++{
++	if (mkdir(path, 0700) < 0 && errno != EEXIST)
++		return -errno;
++	return 0;
++}
++
++/* "<a>/<b>" into @out, bounded by @cap -- memcpy/strlen only, not
++ * snprintf; see dn-policy.c's path_join() for why (confirmed by
++ * bisection: snprintf pulled real malloc/flock-syscall-cancel/etc into
++ * glibc's own elf/librtld.map discovery build step and broke it). */
++static int path_join(char *out, size_t cap, const char *a, const char *b)
++{
++	size_t al = strlen(a), bl = strlen(b);
++
++	if (al + 1 + bl + 1 > cap)
++		return -ENAMETOOLONG;
++	memcpy(out, a, al);
++	out[al] = '/';
++	memcpy(out + al + 1, b, bl + 1);
++	return 0;
++}
++
++/* Copies up to @cap - 1 bytes of @src into @dst and always
++ * NUL-terminates -- not strncpy(), whose own NUL-padding behavior on a
++ * short @src is a well-known footgun and unneeded here regardless
++ * (callers memset() the destination record first). */
++static void bounded_copy(char *dst, size_t cap, const char *src)
++{
++	size_t n = strlen(src);
++
++	if (n > cap - 1)
++		n = cap - 1;
++	memcpy(dst, src, n);
++	dst[n] = '\0';
++}
++
++/* Not called from dn_policy_init() -- see dn_policy_rt_root()'s comment
++ * in dn-policy-internal.h. Called lazily, on demand, by ensure_ready()
++ * below; idempotent so every public entry point in this file can call
++ * it unconditionally. */
++int dn_policy_hardlink_init(const char *rt_root)
++{
++	int status;
++
++	char state_dir[PATH_MAX];
++
++	if (ready)
++		return 0;
++
++	/* "<rt_root>/state" itself: no longer guaranteed to already exist
++	 * by dn_policy_fakeroot_init() having run first (that's lazy too,
++	 * now, and may never run at all in a process that only ever uses
++	 * hardlinks) -- this file owns creating its own parent. mkdir()
++	 * doesn't create parents, so this must come before links_dir's own
++	 * mkdir() below. */
++	status = path_join(state_dir, sizeof(state_dir), rt_root, "state");
++	if (status < 0)
++		return status;
++	status = ensure_dir(state_dir);
++	if (status < 0)
++		return status;
++
++	status = path_join(links_dir, sizeof(links_dir), state_dir, "links");
++	if (status < 0)
++		return status;
++	status = ensure_dir(links_dir);
++	if (status < 0)
++		return status;
++
++	status = path_join(links_db_path, sizeof(links_db_path), state_dir, "links.db");
++	if (status < 0)
++		return status;
++
++	ready = 1;
++	return 0;
++}
++
++/* Lazy init, same reasoning and pattern as dn-policy-fakeroot.c's
++ * ensure_ready(). Plain pthread, not glibc's __libc_lock: this file is
++ * built standalone (dn-trace) as well as folded into dn-glibc. */
++static pthread_mutex_t ready_lock = PTHREAD_MUTEX_INITIALIZER;
++
++static int ensure_ready(void)
++{
++	const char *rt_root;
++	int status;
++
++	if (ready)
++		return 0;
++
++	pthread_mutex_lock(&ready_lock);
++	if (ready) {
++		pthread_mutex_unlock(&ready_lock);
++		return 0;
++	}
++
++	rt_root = dn_policy_rt_root();
++	status = (rt_root == NULL) ? -EINVAL : dn_policy_hardlink_init(rt_root);
++
++	pthread_mutex_unlock(&ready_lock);
++	return status;
++}
++
++/* ---- The refcount DB: fixed-size records, scanned linearly -------- */
++
++#define DN_LINK_ID_CAP 48 /* "<dev>-<ino>" as decimal, comfortably fits */
++
++typedef struct {
++	char     id[DN_LINK_ID_CAP];
++	uint32_t refcount;
++	uint8_t  valid;
++} LinkRecord;
++
++static int open_locked(const char *path)
++{
++	int fd = open(path, O_RDWR | O_CREAT, 0600);
++	if (fd < 0)
++		return -errno;
++	if (flock(fd, LOCK_EX) < 0) {
++		int err = -errno;
++		close(fd);
++		return err;
++	}
++	return fd;
++}
++
++static int db_find(int fd, const char *id, LinkRecord *out, off_t *offset_out)
++{
++	LinkRecord rec;
++	off_t offset = 0;
++	ssize_t n;
++
++	if (lseek(fd, 0, SEEK_SET) < 0)
++		return -errno;
++
++	for (;;) {
++		n = read(fd, &rec, sizeof(rec));
++		if (n == 0)
++			return -ENOENT;
++		if (n != (ssize_t) sizeof(rec))
++			return -EIO;
++		if (rec.valid && strncmp(rec.id, id, sizeof(rec.id)) == 0) {
++			if (out != NULL)
++				*out = rec;
++			if (offset_out != NULL)
++				*offset_out = offset;
++			return 0;
++		}
++		offset += (off_t) sizeof(rec);
++	}
++}
++
++static int db_find_free_slot(int fd, off_t *offset_out)
++{
++	LinkRecord rec;
++	off_t offset = 0;
++	ssize_t n;
++
++	if (lseek(fd, 0, SEEK_SET) < 0)
++		return -errno;
++
++	for (;;) {
++		n = read(fd, &rec, sizeof(rec));
++		if (n == 0)
++			return -ENOENT;
++		if (n != (ssize_t) sizeof(rec))
++			return -EIO;
++		if (!rec.valid) {
++			*offset_out = offset;
++			return 0;
++		}
++		offset += (off_t) sizeof(rec);
++	}
++}
++
++static int db_write_at(int fd, off_t offset, const LinkRecord *rec)
++{
++	return (pwrite(fd, rec, sizeof(*rec), offset) == (ssize_t) sizeof(*rec)) ? 0 : -EIO;
++}
++
++static int db_set_refcount(const char *id, uint32_t refcount)
++{
++	LinkRecord rec, existing;
++	off_t offset;
++	int fd, status;
++
++	fd = open_locked(links_db_path);
++	if (fd < 0)
++		return fd;
++
++	memset(&rec, 0, sizeof(rec));
++	bounded_copy(rec.id, sizeof(rec.id), id);
++	rec.refcount = refcount;
++	rec.valid = 1;
++
++	status = db_find(fd, id, &existing, &offset);
++	if (status == 0) {
++		status = db_write_at(fd, offset, &rec);
++	} else if (status == -ENOENT) {
++		status = db_find_free_slot(fd, &offset);
++		if (status == 0) {
++			status = db_write_at(fd, offset, &rec);
++		} else {
++			off_t end = lseek(fd, 0, SEEK_END);
++			status = (end < 0) ? -errno : db_write_at(fd, end, &rec);
++		}
++	}
++
++	close(fd);
++	return status;
++}
++
++/* Returns 0 with *@out set, or -ENOENT if @id has no record. */
++static int db_get_refcount(const char *id, uint32_t *out)
++{
++	LinkRecord rec;
++	int fd, status;
++
++	fd = open_locked(links_db_path);
++	if (fd < 0)
++		return fd;
++
++	status = db_find(fd, id, &rec, NULL);
++	close(fd);
++	if (status < 0)
++		return status;
++
++	*out = rec.refcount;
++	return 0;
++}
++
++static int db_forget(const char *id)
++{
++	LinkRecord rec;
++	off_t offset;
++	int fd, status;
++
++	fd = open_locked(links_db_path);
++	if (fd < 0)
++		return fd;
++
++	status = db_find(fd, id, &rec, &offset);
++	if (status == 0) {
++		rec.valid = 0;
++		status = db_write_at(fd, offset, &rec);
++	} else if (status == -ENOENT) {
++		status = 0;
++	}
++
++	close(fd);
++	return status;
++}
++
++/* ---- Naming: the hidden file's path, and its <id> -------------------- */
++
++/* Decimal digits of @v into @buf (no sign, no NUL), returning the
++ * digit count. Not snprintf("%llu") -- same reasoning as path_join(). */
++static size_t u64_to_dec(uint64_t v, char *buf)
++{
++	char tmp[20]; /* max digits of a 64-bit unsigned value */
++	size_t n = 0, i;
++
++	if (v == 0) {
++		buf[0] = '0';
++		return 1;
++	}
++	while (v > 0) {
++		tmp[n++] = (char) ('0' + (v % 10));
++		v /= 10;
++	}
++	for (i = 0; i < n; i++)
++		buf[i] = tmp[n - 1 - i];
++	return n;
++}
++
++static void make_id(dev_t dev, ino_t ino, char *out, size_t cap)
++{
++	size_t n = 0;
++
++	n += u64_to_dec((uint64_t) dev, out + n);
++	if (n + 1 < cap)
++		out[n++] = '-';
++	n += u64_to_dec((uint64_t) ino, out + n);
++	out[n < cap ? n : cap - 1] = '\0';
++}
++
++static int hidden_path_for_id(const char *id, char *out, size_t cap)
++{
++	return path_join(out, cap, links_dir, id);
++}
++
++/* If @host_path is a symlink into links_dir, fills *@id (and, when
++ * non-NULL, *@hidden_path) and returns 1. Returns 0 if @host_path is
++ * not a symlink, or is a symlink elsewhere (an ordinary one, not ours).
++ * A negative errno only for an unexpected failure, never for "it's
++ * just not a managed name". */
++static int read_managed_target(const char *host_path, char *id_out, size_t id_cap,
++		char *hidden_path_out, size_t hidden_cap)
++{
++	char target[PATH_MAX];
++	ssize_t n;
++	size_t dir_len = strlen(links_dir);
++	const char *base;
++
++	n = readlink(host_path, target, sizeof(target) - 1);
++	if (n < 0)
++		return (errno == EINVAL) ? 0 : 0; /* EINVAL: not a symlink at all */
++	target[n] = '\0';
++
++	if (strncmp(target, links_dir, dir_len) != 0 || target[dir_len] != '/')
++		return 0;
++
++	base = target + dir_len + 1;
++	if (strlen(base) >= id_cap)
++		return -ENAMETOOLONG;
++	memcpy(id_out, base, strlen(base) + 1);
++
++	if (hidden_path_out != NULL) {
++		if ((size_t) n >= hidden_cap)
++			return -ENAMETOOLONG;
++		memcpy(hidden_path_out, target, (size_t) n + 1);
++	}
++	return 1;
++}
++
++/* ---- Public API ------------------------------------------------------ */
++
++int dn_policy_link(const char *existing_host_path, const char *new_host_path)
++{
++	char id[DN_LINK_ID_CAP];
++	char hidden_path[PATH_MAX];
++	struct stat st;
++	uint32_t refcount;
++	int status = ensure_ready();
++	if (status < 0)
++		return status;
++
++	status = read_managed_target(existing_host_path, id, sizeof(id), hidden_path, sizeof(hidden_path));
++	if (status < 0)
++		return status;
++
++	if (status == 1) {
++		/* Already managed: just add another symlink and bump the
++		 * count. */
++		if (symlink(hidden_path, new_host_path) < 0)
++			return -errno;
++		status = db_get_refcount(id, &refcount);
++		if (status < 0)
++			return status;
++		return db_set_refcount(id, refcount + 1);
++	}
++
++	/* First time: @existing_host_path must be an ordinary regular
++	 * file right now. */
++	if (lstat(existing_host_path, &st) < 0)
++		return -errno;
++	if (!S_ISREG(st.st_mode))
++		return -EPERM;
++
++	make_id(st.st_dev, st.st_ino, id, sizeof(id));
++	status = hidden_path_for_id(id, hidden_path, sizeof(hidden_path));
++	if (status < 0)
++		return status;
++
++	/* A stale hidden file from a crashed earlier run, or (vanishingly
++	 * unlikely) a (dev, ino) collision -- refuse rather than silently
++	 * overwrite something that might still be in use. */
++	if (access(hidden_path, F_OK) == 0)
++		return -EEXIST;
++
++	if (rename(existing_host_path, hidden_path) < 0)
++		return -errno;
++	if (symlink(hidden_path, existing_host_path) < 0) {
++		/* Best-effort rollback so the name isn't left missing. */
++		rename(hidden_path, existing_host_path);
++		return -errno;
++	}
++	if (symlink(hidden_path, new_host_path) < 0) {
++		int err = -errno;
++		unlink(existing_host_path);
++		rename(hidden_path, existing_host_path);
++		return err;
++	}
++
++	return db_set_refcount(id, 2);
++}
++
++int dn_policy_unlink(const char *host_path)
++{
++	char id[DN_LINK_ID_CAP];
++	char hidden_path[PATH_MAX];
++	uint32_t refcount;
++	int status = ensure_ready();
++	if (status < 0)
++		return status;
++
++	status = read_managed_target(host_path, id, sizeof(id), hidden_path, sizeof(hidden_path));
++	if (status <= 0)
++		return (status < 0) ? status : 0; /* not managed: nothing to do */
++
++	status = db_get_refcount(id, &refcount);
++	if (status < 0)
++		return 0; /* no record: stale, nothing sensible to do */
++
++	if (refcount <= 1) {
++		if (unlink(hidden_path) < 0 && errno != ENOENT)
++			return -errno;
++		return db_forget(id);
++	}
++
++	return db_set_refcount(id, refcount - 1);
++}
++
++int dn_policy_hardlink_fixup_stat(const char *host_path, struct stat *st)
++{
++	char id[DN_LINK_ID_CAP];
++	char hidden_path[PATH_MAX];
++	uint32_t refcount;
++	int status = ensure_ready();
++	if (status < 0)
++		return status;
++
++	status = read_managed_target(host_path, id, sizeof(id), hidden_path, sizeof(hidden_path));
++	if (status <= 0)
++		return status;
++
++	/* Replace *st wholesale: an lstat() on a real hardlink never
++	 * differs from stat(), so a managed name must not either,
++	 * regardless of which one the caller actually issued. */
++	if (stat(hidden_path, st) < 0)
++		return -errno;
++
++	status = db_get_refcount(id, &refcount);
++	st->st_nlink = (status == 0) ? refcount : 1;
++
++	return 1;
++}
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-internal.h work/sysdeps/unix/sysv/linux/dn-policy-internal.h
+--- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-internal.h	1970-01-01 00:00:00.000000000 +0000
++++ work/sysdeps/unix/sysv/linux/dn-policy-internal.h	2026-10-08 07:51:31.148680309 +0000
+@@ -0,0 +1,45 @@
++/* Internal plumbing shared between dn-policy.c and
++ * dn-policy-fakeroot.c/dn-policy-hardlink.c. Not part of the public API
++ * in dn-policy.h -- nothing outside this directory includes this file. */
++
++#ifndef DN_POLICY_INTERNAL_H
++#define DN_POLICY_INTERNAL_H
++
++#include <sys/stat.h>
++
++/* @rt_root, once dn_policy_init() has set it, or NULL before that (or
++ * if init failed). Lets dn-policy-fakeroot.c/dn-policy-hardlink.c
++ * lazily init themselves from their own entry points, independently of
++ * each other and of path mapping -- see dn_policy_init()'s comment on
++ * why: each syscall only pays for the dn-policy subsystem it actually
++ * needs (runtime.md principle 2), so dn_policy_init() itself sets up
++ * path mapping only. */
++const char *dn_policy_rt_root(void);
++
++/* Sets up the owner-store/fake-xattr state under "<rt_root>/state/"
++ * and probes which owner-store backend to use. Idempotent -- safe to
++ * call on every dn-policy-fakeroot.c entry point; a second call after
++ * success is a cheap no-op. Not called from dn_policy_init(); see
++ * dn_policy_rt_root()'s comment. */
++int dn_policy_fakeroot_init(const char *rt_root);
++
++/* Sets up the link2symlink hidden file directory and refcount DB under
++ * "<rt_root>/state/links/". Idempotent, not called from
++ * dn_policy_init() -- same reasoning as dn_policy_fakeroot_init(). */
++int dn_policy_hardlink_init(const char *rt_root);
++
++/* Used by dn-policy-fakeroot.c's dn_policy_fake_stat(), before the
++ * owner-store lookup (so that lookup sees the hidden file's real
++ * (dev, ino), identical for every hardlinked name -- matching real
++ * hardlink semantics, where one owner applies to every name). If
++ * @host_path is a managed link2symlink name, *@st is replaced wholesale
++ * with the hidden file's own real stat() (this is needed under lstat()
++ * too, not just stat() -- an lstat() on a real hardlink never differs
++ * from stat(), so a managed name must behave the same way regardless of
++ * which one the caller actually issued) and st_nlink is overridden from
++ * the stored refcount. Returns 1 if it did that, 0 if @host_path is not
++ * a managed name (leaves *@st untouched), or a negative errno on an
++ * unexpected failure reading the link or the refcount DB. */
++int dn_policy_hardlink_fixup_stat(const char *host_path, struct stat *st);
++
++#endif /* DN_POLICY_INTERNAL_H */
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy.c work/sysdeps/unix/sysv/linux/dn-policy.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy.c	1970-01-01 00:00:00.000000000 +0000
++++ work/sysdeps/unix/sysv/linux/dn-policy.c	2026-10-08 08:17:49.668679707 +0000
+@@ -0,0 +1,452 @@
++/* dn-policy -- path rewriting. See dn-policy.h for the calling
++ * convention this follows and docs/spec/runtime.md, "dn-policy" >
++ * "Path rewriting" for the rules implemented here.
++ *
++ * This file implements dn_policy_init(), the three translate/
++ * detranslate functions (longest-prefix mapping, the /proc,/sys,/dev
++ * passthrough, no-double-translation), and absolute in-tree symlink
++ * resolution (runtime.md: "Symlink tuyệt đối trong cây... phải tự
++ * giải từng thành phần"). Not implemented yet: caching the resolution
++ * (runtime.md says this too belongs here eventually; every lookup
++ * below hits the real filesystem directly, correct but not free).
++ * Fake root and hardlinks (dn-policy.h's other two sections) are
++ * separate files.
++ */
++
++#include "dn-policy.h"
++#include "dn-policy-internal.h"
++
++#include <string.h>
++#include <errno.h>
++#include <unistd.h>
++
++/* Sixteen bytes of slack on top of PATH_MAX: a guest path can be up to
++ * PATH_MAX-1 long on its own, and prefixing it with tree_root must
++ * still be checked, not silently truncated. */
++#define DN_PATH_BUF (PATH_MAX + 16)
++
++static char tree_root[PATH_MAX];
++static size_t tree_root_len;
++static char rt_root[PATH_MAX];
++static size_t rt_root_len;
++static int initialized;
++
++/* runtime.md: "Ngoại lệ đi thẳng ra hệ thật: /proc, /sys, /dev." Fixed
++ * for now; runtime.md says this list belongs in a config file, which is
++ * a P4-ish refinement once there's an actual file format to read it
++ * from -- these three are architecture/kernel-fixed, not prefix-fixed,
++ * so hardcoding them is not a principle-5 violation the way a
++ * prefix-specific value would be. */
++static const char *const passthrough[] = { "/proc", "/sys", "/dev" };
++#define N_PASSTHROUGH (sizeof(passthrough) / sizeof(passthrough[0]))
++
++/* True if @path equals @prefix, or starts with @prefix followed by a
++ * '/'. @prefix_len excludes any trailing '/'. Rejects a false match
++ * like "/data" against prefix "/dat". */
++static int has_path_prefix(const char *path, const char *prefix, size_t prefix_len)
++{
++	if (strncmp(path, prefix, prefix_len) != 0)
++		return 0;
++	return path[prefix_len] == '\0' || path[prefix_len] == '/';
++}
++
++static int copy_out(const char *src, char *out, size_t cap)
++{
++	size_t len = strlen(src);
++
++	if (len + 1 > cap)
++		return -ENAMETOOLONG;
++	memcpy(out, src, len + 1);
++	return 0;
++}
++
++/* "<a>/<b>" into @out, bounded by @cap. memcpy/strlen only, deliberately
++ * not snprintf: this file is also compiled into dn-glibc
++ * (sysdeps/unix/sysv/linux/), and snprintf pulls in glibc's full
++ * vfprintf machinery (which touches malloc, locking, more) -- fine in
++ * an ordinary program, but fatal here, because glibc's own
++ * elf/librtld.map build step links the loader's minimal object set
++ * against the *entire* libc_pic.a to discover what else it needs, and
++ * hard-fails on any duplicate definition it finds doing so. Pulling in
++ * real malloc/free/realloc (and flock's __syscall_cancel wrapper, and
++ * sbrk, and __libc_fatal) that way is exactly such a duplicate --
++ * confirmed by bisection, not guessed. dn-prefix.h's own __dn_build()/
++ * __dn_redirect() already avoided snprintf for what was probably this
++ * same reason. */
++static int path_join(char *out, size_t cap, const char *a, const char *b)
++{
++	size_t al = strlen(a), bl = strlen(b);
++
++	if (al + 1 + bl + 1 > cap)
++		return -ENAMETOOLONG;
++	memcpy(out, a, al);
++	out[al] = '/';
++	memcpy(out + al + 1, b, bl + 1);
++	return 0;
++}
++
++/* In-place next '/'-separated, non-empty component of *cursor -- same
++ * skip-empty-components behavior as strtok_r(s, "/", ...), but a
++ * hand-rolled single-purpose scan instead: strtok_r is reentrant-safe
++ * (fine), but it, like snprintf, is a general-purpose library function
++ * whose internal cost and whatever it might call isn't something this
++ * file should have to take on faith. Mutates the string in place (each
++ * separator becomes '\0'), same as strtok_r. Returns NULL once
++ * exhausted. */
++static char *next_component(char **cursor)
++{
++	char *start = *cursor;
++	char *p;
++
++	while (*start == '/')
++		start++;
++	if (*start == '\0') {
++		*cursor = start;
++		return NULL;
++	}
++
++	p = start;
++	while (*p != '\0' && *p != '/')
++		p++;
++	if (*p == '/') {
++		*p = '\0';
++		*cursor = p + 1;
++	} else {
++		*cursor = p;
++	}
++	return start;
++}
++
++/* Last '/' in @path, or NULL if there is none -- not strrchr(), same
++ * reasoning as next_component() above. */
++static char *last_slash(const char *path)
++{
++	const char *p = path;
++	const char *found = NULL;
++
++	for (; *p != '\0'; p++)
++		if (*p == '/')
++			found = p;
++	return (char *) found;
++}
++
++int dn_policy_init(const char *tree_root_in, const char *rt_root_in)
++{
++	size_t len;
++
++	if (tree_root_in == NULL || tree_root_in[0] != '/')
++		return -EINVAL;
++	if (rt_root_in == NULL || rt_root_in[0] != '/')
++		return -EINVAL;
++
++	len = strlen(tree_root_in);
++	if (len == 0 || len >= sizeof(tree_root))
++		return -ENAMETOOLONG;
++	/* No trailing slash, so has_path_prefix()'s boundary check is
++	 * meaningful (a bare "/" tree_root is the one legal exception:
++	 * every absolute path is then "under" it, which is correct). */
++	if (len > 1 && tree_root_in[len - 1] == '/')
++		return -EINVAL;
++
++	memcpy(tree_root, tree_root_in, len + 1);
++	tree_root_len = (len == 1 /* "/" */) ? 0 : len;
++
++	len = strlen(rt_root_in);
++	if (len == 0 || len >= sizeof(rt_root))
++		return -ENAMETOOLONG;
++	if (len > 1 && rt_root_in[len - 1] == '/')
++		return -EINVAL;
++	if (!has_path_prefix(rt_root_in, tree_root, tree_root_len))
++		return -EINVAL; /* RT must sit inside TREE, see runtime.md */
++
++	memcpy(rt_root, rt_root_in, len + 1);
++	rt_root_len = len;
++
++	/* Fake root and hardlinks are NOT set up here (runtime.md
++	 * principle 2: the unit of decision is the individual syscall --
++	 * open()/openat() only ever need path mapping, never fake root or
++	 * hardlink state, so they shouldn't pay for it or pull in its
++	 * dependencies). dn-policy-fakeroot.c and dn-policy-hardlink.c
++	 * lazily call dn_policy_fakeroot_init()/dn_policy_hardlink_init()
++	 * themselves (via dn_policy_rt_root() below), the first time one
++	 * of *their own* functions is actually used. */
++
++	initialized = 1;
++	return 0;
++}
++
++const char *dn_policy_rt_root(void)
++{
++	return initialized ? rt_root : NULL;
++}
++
++/* Loop guard for both the component walk below and the symlink chain
++ * it may chase at each step -- Linux's own SYMLOOP_MAX, not something
++ * that needs to be prefix-configurable. */
++#define DN_MAX_SYMLINK_DEPTH 40
++
++static int map_and_resolve(const char *guest_path, char *host_path_out, size_t cap,
++			int follow_last, int depth);
++
++/* Collapses "." and ".." out of an absolute @path -- needed because a
++ * relative symlink target is resolved by plain concatenation against
++ * its parent directory (resolve_symlink_chain() below), which can
++ * leave a literal ".." in the result; the kernel resolves that fine at
++ * every syscall made along the way, but the final string handed back
++ * to the caller should be clean, not just functional. A ".." past the
++ * root is clamped at the root rather than treated as an error --
++ * runtime.md: this is not a security boundary, and a crafted path
++ * escaping is someone shooting their own foot, not dn-policy's to
++ * police. */
++static int normalize_into(const char *path, char *out, size_t cap)
++{
++	char buf[DN_PATH_BUF];
++	const char *stack[64];
++	int top = 0;
++	char *cursor, *tok;
++	size_t len;
++	int i;
++
++	if (strlen(path) >= sizeof(buf))
++		return -ENAMETOOLONG;
++	memcpy(buf, path, strlen(path) + 1);
++
++	cursor = buf;
++	tok = next_component(&cursor);
++	while (tok != NULL) {
++		if (strcmp(tok, ".") == 0) {
++			/* skip */
++		} else if (strcmp(tok, "..") == 0) {
++			if (top > 0)
++				top--;
++		} else {
++			if (top >= (int) (sizeof(stack) / sizeof(stack[0])))
++				return -ENAMETOOLONG;
++			stack[top++] = tok;
++		}
++		tok = next_component(&cursor);
++	}
++
++	len = 0;
++	for (i = 0; i < top; i++) {
++		size_t comp_len = strlen(stack[i]);
++		if (len + 1 + comp_len + 1 > cap)
++			return -ENAMETOOLONG;
++		out[len++] = '/';
++		memcpy(out + len, stack[i], comp_len);
++		len += comp_len;
++	}
++	if (top == 0) {
++		if (cap < 2)
++			return -ENAMETOOLONG;
++		out[0] = '/';
++		len = 1;
++	}
++	out[len] = '\0';
++	return 0;
++}
++
++/* The directory part of @path (everything before its last '/'), which
++ * for every caller below is non-empty and already absolute, so the
++ * only edge case is "/" itself. */
++static int dirname_into(const char *path, char *out, size_t cap)
++{
++	const char *slash = last_slash(path);
++	size_t len;
++
++	if (slash == NULL)
++		return -EINVAL; /* can't happen for an absolute path */
++
++	len = (slash == path) ? 1 : (size_t) (slash - path); /* keep the leading "/" for "/x" */
++	if (len + 1 > cap)
++		return -ENAMETOOLONG;
++	memcpy(out, path, len);
++	out[len] = '\0';
++	return 0;
++}
++
++/* Resolves whatever @current (a concrete host path, already fully
++ * built up to and including its last component) turns out to be: not
++ * a symlink (left as is), a relative symlink (resolved against its
++ * own parent directory, looping to check the result too), or an
++ * absolute symlink (interpreted as a *guest* path per runtime.md and
++ * re-resolved from TREE via map_and_resolve(), always following,
++ * since this is resolving a symlink's own target, not the caller's
++ * final request component). A target or an intermediate component
++ * that doesn't exist yet (-ENOENT) is not an error here -- a caller
++ * about to create a new file hits this normally -- @current is simply
++ * left as its own answer. */
++static int resolve_symlink_chain(char *current, size_t cap, int depth)
++{
++	char target[PATH_MAX];
++	char dir[DN_PATH_BUF];
++	char resolved[DN_PATH_BUF];
++	struct stat st;
++	ssize_t n;
++	int status;
++
++	for (;;) {
++		if (depth++ > DN_MAX_SYMLINK_DEPTH)
++			return -ELOOP;
++
++		if (lstat(current, &st) < 0)
++			return (errno == ENOENT) ? 0 : -errno;
++		if (!S_ISLNK(st.st_mode))
++			return 0;
++
++		n = readlink(current, target, sizeof(target) - 1);
++		if (n < 0)
++			return -errno;
++		target[n] = '\0';
++
++		if (target[0] == '/') {
++			status = map_and_resolve(target, resolved, sizeof(resolved), 1, depth);
++			if (status < 0)
++				return status;
++		} else {
++			status = dirname_into(current, dir, sizeof(dir));
++			if (status < 0)
++				return status;
++			status = path_join(resolved, sizeof(resolved), dir, target);
++			if (status < 0)
++				return status;
++		}
++
++		if (strlen(resolved) + 1 > cap)
++			return -ENAMETOOLONG;
++		memcpy(current, resolved, strlen(resolved) + 1);
++		/* Loop again: @resolved may itself be a symlink.  */
++	}
++}
++
++/* The component walk: starts at tree_root and appends one guest_path
++ * component at a time, resolving any symlink found along the way
++ * (resolve_symlink_chain()) before appending the next component on
++ * top of it -- so a later component is always appended to where an
++ * earlier symlink *really* points, not textually past it. The final
++ * component is left alone (not symlink-resolved) when @follow_last is
++ * false, matching O_NOFOLLOW/AT_SYMLINK_NOFOLLOW. */
++static int map_and_resolve(const char *guest_path, char *host_path_out, size_t cap,
++			int follow_last, int depth)
++{
++	char current[DN_PATH_BUF];
++	char rest[PATH_MAX];
++	char *cursor;
++	char *component;
++	char *following;
++	int status;
++
++	if (strlen(guest_path) >= sizeof(rest))
++		return -ENAMETOOLONG;
++	memcpy(rest, guest_path, strlen(guest_path) + 1);
++
++	/* tree_root_len is 0 exactly when tree_root == "/" (see
++	 * dn_policy_init()), in which case current must start as "" so
++	 * the first appended component becomes "/comp", not "//comp".  */
++	memcpy(current, tree_root, tree_root_len);
++	current[tree_root_len] = '\0';
++
++	cursor = rest;
++	component = next_component(&cursor);
++	while (component != NULL) {
++		size_t cur_len = strlen(current);
++		size_t comp_len = strlen(component);
++
++		if (cur_len + 1 + comp_len + 1 > sizeof(current))
++			return -ENAMETOOLONG;
++		current[cur_len] = '/';
++		memcpy(current + cur_len + 1, component, comp_len + 1);
++
++		following = next_component(&cursor);
++		if (following == NULL && !follow_last) {
++			component = following;
++			break; /* last component, leave it unresolved */
++		}
++
++		status = resolve_symlink_chain(current, sizeof(current), depth);
++		if (status < 0)
++			return status;
++
++		component = following;
++	}
++
++	{
++		char normalized[DN_PATH_BUF];
++		status = normalize_into(current, normalized, sizeof(normalized));
++		if (status < 0)
++			return status;
++		return copy_out(normalized, host_path_out, cap);
++	}
++}
++
++static int translate_path_common(const char *guest_path, char *host_path_out, size_t cap,
++				int follow_last)
++{
++	size_t i;
++
++	if (!initialized)
++		return -EINVAL;
++	if (guest_path == NULL || guest_path[0] != '/')
++		return -EINVAL;
++
++	/* Already a host path (TREE covers RT too, since RT sits inside
++	 * TREE) -- "Dịch không được lặp."  */
++	if (has_path_prefix(guest_path, tree_root, tree_root_len))
++		return copy_out(guest_path, host_path_out, cap);
++
++	/* /proc, /sys, /dev: shared with the real system unchanged, no
++	 * in-tree symlink semantics apply.  */
++	for (i = 0; i < N_PASSTHROUGH; i++) {
++		size_t plen = strlen(passthrough[i]);
++		if (has_path_prefix(guest_path, passthrough[i], plen))
++			return copy_out(guest_path, host_path_out, cap);
++	}
++
++	/* guest_path == "/": tree_root itself, not "tree_root/" (which
++	 * has_path_prefix() would still match later, but a bare root is
++	 * cleaner with no trailing slash to begin with), and never a
++	 * symlink worth resolving.  */
++	if (guest_path[1] == '\0')
++		return copy_out(tree_root, host_path_out, cap);
++
++	return map_and_resolve(guest_path, host_path_out, cap, follow_last, 0);
++}
++
++int dn_policy_translate_path(const char *guest_path, char *host_path_out, size_t cap)
++{
++	return translate_path_common(guest_path, host_path_out, cap, 1);
++}
++
++int dn_policy_translate_path_nofollow(const char *guest_path, char *host_path_out, size_t cap)
++{
++	return translate_path_common(guest_path, host_path_out, cap, 0);
++}
++
++int dn_policy_detranslate_path(const char *host_path, char *guest_path_out, size_t cap)
++{
++	const char *rest;
++
++	if (!initialized)
++		return -EINVAL;
++	if (host_path == NULL || host_path[0] != '/')
++		return -EINVAL;
++
++	if (has_path_prefix(host_path, tree_root, tree_root_len)) {
++		rest = host_path + tree_root_len;
++		if (rest[0] == '\0')
++			return copy_out("/", guest_path_out, cap);
++		return copy_out(rest, guest_path_out, cap);
++	}
++
++	/* /proc, /sys, /dev: shared, unchanged (see translate_path_common).  */
++	{
++		size_t i;
++		for (i = 0; i < N_PASSTHROUGH; i++) {
++			size_t plen = strlen(passthrough[i]);
++			if (has_path_prefix(host_path, passthrough[i], plen))
++				return copy_out(host_path, guest_path_out, cap);
++		}
++	}
++
++	return -ENOENT;
++}
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy.h work/sysdeps/unix/sysv/linux/dn-policy.h
+--- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy.h	1970-01-01 00:00:00.000000000 +0000
++++ work/sysdeps/unix/sysv/linux/dn-policy.h	2026-10-08 07:51:31.144680309 +0000
+@@ -0,0 +1,247 @@
++/* dn-policy -- the one place path-remapping, fake-root and hardlink rules
++ * live (docs/spec/runtime.md, "dn-policy"). A static C library, linked
++ * into both dn-glibc (the fast path, in-process) and dn-trace (the
++ * fallback path, via ptrace) so the two can never disagree -- principle 3
++ * in runtime.md.
++ *
++ * Calling convention, settled here before either caller is written:
++ *
++ * - Plain C ABI, no exceptions. Every function returns 0 on success or a
++ *   negative errno on failure, matching the rest of this codebase
++ *   (translate_path() et al. in src/tracer/) and the kernel's own
++ *   convention.
++ *
++ * - No library-owned heap crosses the API. Every out-param is a
++ *   caller-supplied buffer with a caller-supplied capacity (PATH_MAX is
++ *   enough for every path here). dn-glibc uses glibc's own allocator;
++ *   dn-trace's codebase uses talloc; dn-policy must not hand either side
++ *   a pointer it has to free with the other's allocator. Internally,
++ *   dn-policy may allocate (e.g. for the symlink-resolution cache) but
++ *   never returns that memory to the caller.
++ *
++ * - Two different invocation contexts, same function bodies:
++ *     - dn-glibc calls these directly, in-process: the path it has is
++ *       already in its own address space.
++ *     - dn-trace calls these in *its own* process, on *its own* copy of
++ *       the tracee's data (read out with process_vm_readv() before the
++ *       call, written back with process_vm_writev() or PTRACE_POKEDATA
++ *       after, or into registers for a return value). dn-policy itself
++ *       never touches another process's memory -- that marshalling is
++ *       dn-trace's wrapper, not dn-policy's job. This is also why path
++ *       resolution issues real syscalls (stat, readlink) directly rather
++ *       than taking them as parameters: both dn-glibc and dn-trace are
++ *       ordinary processes with real filesystem access, so dn-policy can
++ *       just call the kernel itself instead of asking the caller to.
++ *
++ * - Thread safety: dn-glibc is multi-threaded, so every function here
++ *   must tolerate concurrent calls from multiple threads of the *same*
++ *   process. The symlink-resolution cache and the owner-store's on-disk
++ *   fallback need their own internal locking (per runtime.md: a file lock
++ *   for the on-disk store, since multiple *processes* -- not just
++ *   threads -- write it). No function here holds a lock across a
++ *   syscall that can block indefinitely.
++ *
++ * - Idempotent translation: calling dn_policy_translate_path() on an
++ *   already-in-tree path is a no-op (runtime.md: "Dịch không được lặp").
++ *   Safe to call more than once on the same input.
++ *
++ * - Nothing here is prefix-specific (principle 5, runtime.md): dn_policy_init()
++ *   takes TREE/RT as plain strings the *caller* already derived (dn-glibc
++ *   from its own loader path, as the shipped self-derivation already
++ *   does; dn-trace from wherever it gets its own equivalent, still
++ *   open -- see below). dn-policy itself never hardcodes a path.
++ */
++
++#ifndef DN_POLICY_H
++#define DN_POLICY_H
++
++#include <sys/stat.h>
++#include <sys/types.h>
++#include <stdint.h>
++#include <linux/limits.h> /* PATH_MAX */
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* ---- Setup -------------------------------------------------------- */
++
++/* Must be called once per process before any other dn_policy_*()
++ * function. @tree_root and @rt_root are absolute, caller-derived (see
++ * the file comment above) and are copied internally -- the caller's
++ * buffers need not outlive this call.
++ *
++ * Probes the device for what dn_policy_owner_set() can use (the
++ * "user.dn.*" xattr vs. the RT/state/ DB fallback, runtime.md's "Fake
++ * root"/"The owner store") and records the choice for the rest of the
++ * process's lifetime. Returns 0, or a negative errno if @tree_root/
++ * @rt_root are unusable (not absolute, too long, ...).
++ *
++ * DN_POLICY_OWNER_BACKEND=db|xattr in the environment skips the probe
++ * and forces that backend (diagnosis, and testing the DB backend's code
++ * path on a device where xattr happens to work everywhere TREE could
++ * live).
++ */
++int dn_policy_init(const char *tree_root, const char *rt_root);
++
++/* ---- Path rewriting ------------------------------------------------ */
++
++/* Translate @guest_path (as a program in the tree sees it) into
++ * @host_path_out (the real, on-device path), up to @cap bytes including
++ * the NUL. Longest-prefix mapping, /proc "/sys /dev passthrough, and
++ * absolute in-tree symlink resolution are all applied here (runtime.md,
++ * "Path rewriting"). A relative @guest_path is rejected with -EINVAL --
++ * resolving a relative path is the kernel's job (via the real cwd),
++ * callers never need to ask dn-policy for that; the one exception
++ * (blocking ".." above TREE's root) is the caller's responsibility to
++ * check against the resolved absolute path, not dn-policy's.
++ *
++ * Idempotent: a @guest_path already under TREE or RT comes back
++ * unchanged (mod NUL-termination).
++ *
++ * Returns 0 on success, or a negative errno:
++ *   -ENAMETOOLONG  the result doesn't fit in @cap
++ *   -ELOOP         a symlink chain inside the tree is too deep
++ *   -EINVAL        @guest_path is not absolute
++ */
++int dn_policy_translate_path(const char *guest_path, char *host_path_out, size_t cap);
++
++/* The reverse of dn_policy_translate_path(): turn a real, on-device
++ * @host_path back into the guest path a program in the tree should see
++ * (runtime.md: getcwd(), /proc/self/{cwd,fd/N,exe}). @host_path need not
++ * already be canonical.
++ *
++ * Returns 0 on success, or a negative errno:
++ *   -ENAMETOOLONG  the result doesn't fit in @cap
++ *   -ENOENT        @host_path is not under TREE or RT at all
++ */
++int dn_policy_detranslate_path(const char *host_path, char *guest_path_out, size_t cap);
++
++/* O_NOFOLLOW / AT_SYMLINK_NOFOLLOW: callers that must not resolve the
++ * final path component call this instead of dn_policy_translate_path(),
++ * which otherwise resolves every component including the last. */
++int dn_policy_translate_path_nofollow(const char *guest_path, char *host_path_out, size_t cap);
++
++/* ---- Fake root ------------------------------------------------------ */
++
++/* get*id()/set*id() family: trivial, no real privilege involved -- but
++ * the current fake uid/gid is state *per traced program*, not a global
++ * inside dn-policy. dn-glibc runs in-process, so it only ever has one
++ * program to track and can keep a single static DnIdentity of its own.
++ * dn-trace tracks many tracees at once (runtime.md : "apt hạ quyền xuống
++ * _apt" while another tracee stays root), so it must keep one DnIdentity
++ * per Tracee it already has a struct for, not share one across all of
++ * them -- a global here would let one tracee's setuid() leak into
++ * another's getuid().
++ *
++ * DnIdentity is an opaque handle dn-policy allocates and frees; it is
++ * the one exception to "no library-owned heap crosses the API" above,
++ * since the pair of calls below is matched and the caller never calls
++ * free() on it directly. */
++typedef struct DnIdentity DnIdentity;
++
++DnIdentity *dn_policy_identity_new(void);
++void dn_policy_identity_free(DnIdentity *id);
++
++uid_t dn_policy_fake_getuid(const DnIdentity *id);
++gid_t dn_policy_fake_getgid(const DnIdentity *id);
++/* set*id(): records the value and always succeeds. */
++void dn_policy_fake_setuid(DnIdentity *id, uid_t uid);
++void dn_policy_fake_setgid(DnIdentity *id, gid_t gid);
++
++/* The owner-store record for one file, identified by (st_dev, st_ino) so
++ * it survives a rename. All fields are what runtime.md's "Fake root"
++ * fakes: chown/fchown/fchownat's target, chmod's setuid/setgid bits, and
++ * mknod's device type. */
++typedef struct {
++	uid_t  uid;
++	gid_t  gid;
++	mode_t mode_bits;  /* only the setuid/setgid/device-type bits this
++			    * store owns; never the full st_mode */
++	dev_t  rdev;       /* for a faked device file (mknod) */
++} DnOwnerRecord;
++
++/* Look up the owner-store record for @host_path (identified by
++ * (@dev, @ino) so a rename is still the same record under the DB
++ * backend; the xattr backend ignores dev/ino and reads @host_path's
++ * own xattr directly -- both are needed because the two backends key
++ * the record differently, not because the caller should pick one).
++ * Returns 0 with *@out filled in, or -ENOENT if the file has no record
++ * (caller should then report uid 0, gid 0 -- "an ordinary Debian
++ * install", per runtime.md), or another negative errno on a real
++ * failure reading the store. */
++int dn_policy_owner_get(const char *host_path, dev_t dev, ino_t ino, DnOwnerRecord *out);
++
++/* Record a new owner for @host_path, creating the entry if absent.
++ * Returns 0, or a negative errno (-EIO for the on-disk backend, -ENOSPC
++ * if the xattr backend's value is rejected by the filesystem, ...). */
++int dn_policy_owner_set(const char *host_path, dev_t dev, ino_t ino, const DnOwnerRecord *record);
++
++/* Called when a file's last link is removed (runtime.md: "mục bị xóa khi
++ * file bị xóa link cuối cùng"). Not an error if there was no record.
++ * @host_path may already be gone (the unlink that triggered this call
++ * already happened) -- only the DB backend needs it to still exist;
++ * the xattr backend's record disappears with the file on its own, so
++ * this is a no-op there. */
++int dn_policy_owner_forget(const char *host_path, dev_t dev, ino_t ino);
++
++/* Rewrite @st's st_uid/st_gid/permission bits from the owner store
++ * before a stat-family result is returned to the guest program.
++ * @host_path is the path the real stat/fstatat/statx call just used --
++ * needed here for the same reason dn_policy_owner_get() needs it (the
++ * xattr backend has no other way to find the record); @st already
++ * carries (st_dev, st_ino) for the DB backend's key. A file absent from
++ * the store is left reporting uid 0, gid 0. Returns 0 always (a
++ * store-read failure here degrades to "no record", not an error --
++ * breaking every stat() call over a store hiccup is worse than
++ * occasionally under-reporting an owner). */
++void dn_policy_fake_stat(const char *host_path, struct stat *st);
++
++/* security.* xattrs (setcap and friends): always faked, always
++ * succeeds -- a *real* write of one of these is what's failing in the
++ * first place (Android denies it), so this never attempts the real
++ * xattr regardless of which owner-store backend is active; it always
++ * goes in the internal store, keyed the same way as the owner record
++ * above. @name is the full xattr name (e.g. "security.capability");
++ * callers should route here only when dn_policy_is_fake_xattr(name) is
++ * true. */
++int dn_policy_is_fake_xattr(const char *name);
++int dn_policy_fake_setxattr(const char *host_path, dev_t dev, ino_t ino, const char *name, const void *value, size_t size);
++int dn_policy_fake_getxattr(const char *host_path, dev_t dev, ino_t ino, const char *name, void *value_out, size_t cap);
++int dn_policy_fake_removexattr(const char *host_path, dev_t dev, ino_t ino, const char *name);
++
++/* ---- Hardlinks ------------------------------------------------------ */
++
++/* link2symlink (runtime.md, "Hardlinks" -- a clean-room reimplementation
++ * of PRoot's extension of the same name; see runtime.md's resolved
++ * open item on why copying the idea needed no license decision).
++ *
++ * dn_policy_link() implements link(@existing_host_path,
++ * @new_host_path): moves @existing_host_path's content into a hidden
++ * file on first use, making both names symlinks to it with a shared
++ * link count. @existing_host_path must be an ordinary regular file the
++ * first time this is called on it; a later call (a third name for the
++ * same content) recognizes it's already a managed symlink and just adds
++ * another one. dn_policy_fake_stat() (above) already rewrites
++ * st_nlink/st_mode/st_dev/st_ino for these names so they report as an
++ * ordinary multiply-linked regular file, never a symlink, under either
++ * stat() or lstat() -- callers don't need a separate function for that,
++ * only to route fake_stat() every stat-family result through it as
++ * already documented.
++ *
++ * dn_policy_unlink() decrements the link count for whatever
++ * @host_path's *current* symlink target is, and removes the hidden file
++ * once it reaches zero. ORDER MATTERS: call this *before* the real
++ * unlink(@host_path) runs -- once that real unlink happens there is no
++ * symlink left here to read the target back out of. Not an error if
++ * @host_path isn't a managed name at all (an ordinary file or symlink);
++ * that case is simply a no-op, since this is only bookkeeping and the
++ * real unlink() is the caller's to make regardless. */
++int dn_policy_link(const char *existing_host_path, const char *new_host_path);
++int dn_policy_unlink(const char *host_path);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* DN_POLICY_H */
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/open.c work/sysdeps/unix/sysv/linux/open.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/open.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/open.c	2026-10-08 07:52:23.760680289 +0000
+@@ -42,7 +42,14 @@
+     }
+ 
+   char dn_path[512];
++#if !IS_IN (rtld)
++  file = dn_policy_redirect (dn_path, sizeof dn_path, file);
++#else
++  /* rtld's own minimal object set never calls into dn-policy --
++     see dn-prefix.h and runtime.md; it keeps the plain
++     __dn_redirect it already had. */
+   file = __dn_redirect (dn_path, sizeof dn_path, file);
++#endif
+ 
+   return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag, mode);
+ }
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/open64.c work/sysdeps/unix/sysv/linux/open64.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/open64.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/open64.c	2026-10-08 07:52:23.776680289 +0000
+@@ -40,7 +40,14 @@
+     }
+ 
+   char dn_path[512];
++#if !IS_IN (rtld)
++  file = dn_policy_redirect (dn_path, sizeof dn_path, file);
++#else
++  /* rtld's own minimal object set never calls into dn-policy --
++     see dn-prefix.h and runtime.md; it keeps the plain
++     __dn_redirect it already had. */
+   file = __dn_redirect (dn_path, sizeof dn_path, file);
++#endif
+ 
+   return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag | O_LARGEFILE,
+ 			 mode);
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/open64_nocancel.c work/sysdeps/unix/sysv/linux/open64_nocancel.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/open64_nocancel.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/open64_nocancel.c	2026-10-08 07:52:23.792680289 +0000
+@@ -38,7 +38,14 @@
+     }
+ 
+   char dn_path[512];
++#if !IS_IN (rtld)
++  file = dn_policy_redirect (dn_path, sizeof dn_path, file);
++#else
++  /* rtld's own minimal object set never calls into dn-policy --
++     see dn-prefix.h and runtime.md; it keeps the plain
++     __dn_redirect it already had. */
+   file = __dn_redirect (dn_path, sizeof dn_path, file);
++#endif
+ 
+   return INLINE_SYSCALL_CALL (openat, AT_FDCWD, file, oflag | O_LARGEFILE,
+ 			      mode);
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/open_nocancel.c work/sysdeps/unix/sysv/linux/open_nocancel.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/open_nocancel.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/open_nocancel.c	2026-10-08 07:52:23.804680289 +0000
+@@ -41,7 +41,14 @@
+     }
+ 
+   char dn_path[512];
++#if !IS_IN (rtld)
++  file = dn_policy_redirect (dn_path, sizeof dn_path, file);
++#else
++  /* rtld's own minimal object set never calls into dn-policy --
++     see dn-prefix.h and runtime.md; it keeps the plain
++     __dn_redirect it already had. */
+   file = __dn_redirect (dn_path, sizeof dn_path, file);
++#endif
+ 
+   return INLINE_SYSCALL_CALL (openat, AT_FDCWD, file, oflag, mode);
+ }
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/openat.c work/sysdeps/unix/sysv/linux/openat.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/openat.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/openat.c	2026-10-08 07:52:23.820680289 +0000
+@@ -40,7 +40,14 @@
+     }
+ 
+   char dn_path[512];
++#if !IS_IN (rtld)
++  file = dn_policy_redirect (dn_path, sizeof dn_path, file);
++#else
++  /* rtld's own minimal object set never calls into dn-policy --
++     see dn-prefix.h and runtime.md; it keeps the plain
++     __dn_redirect it already had. */
+   file = __dn_redirect (dn_path, sizeof dn_path, file);
++#endif
+ 
+   return SYSCALL_CANCEL (openat, fd, file, oflag, mode);
+ }
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/openat64.c work/sysdeps/unix/sysv/linux/openat64.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/openat64.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/openat64.c	2026-10-08 07:52:23.836680289 +0000
+@@ -38,7 +38,14 @@
+     }
+ 
+   char dn_path[512];
++#if !IS_IN (rtld)
++  file = dn_policy_redirect (dn_path, sizeof dn_path, file);
++#else
++  /* rtld's own minimal object set never calls into dn-policy --
++     see dn-prefix.h and runtime.md; it keeps the plain
++     __dn_redirect it already had. */
+   file = __dn_redirect (dn_path, sizeof dn_path, file);
++#endif
+ 
+   return SYSCALL_CANCEL (openat, fd, file, oflag | O_LARGEFILE, mode);
+ }
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/openat64_nocancel.c work/sysdeps/unix/sysv/linux/openat64_nocancel.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/openat64_nocancel.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/openat64_nocancel.c	2026-10-08 07:52:23.848680289 +0000
+@@ -36,7 +36,14 @@
+     }
+ 
+   char dn_path[512];
++#if !IS_IN (rtld)
++  file = dn_policy_redirect (dn_path, sizeof dn_path, file);
++#else
++  /* rtld's own minimal object set never calls into dn-policy --
++     see dn-prefix.h and runtime.md; it keeps the plain
++     __dn_redirect it already had. */
+   file = __dn_redirect (dn_path, sizeof dn_path, file);
++#endif
+ 
+   return INLINE_SYSCALL_CALL (openat, fd, file, oflag | O_LARGEFILE,
+ 			      mode);
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/openat_nocancel.c work/sysdeps/unix/sysv/linux/openat_nocancel.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/openat_nocancel.c	2026-10-08 07:51:04.648680319 +0000
++++ work/sysdeps/unix/sysv/linux/openat_nocancel.c	2026-10-08 07:52:23.868680289 +0000
+@@ -38,7 +38,14 @@
+     }
+ 
+   char dn_path[512];
++#if !IS_IN (rtld)
++  file = dn_policy_redirect (dn_path, sizeof dn_path, file);
++#else
++  /* rtld's own minimal object set never calls into dn-policy --
++     see dn-prefix.h and runtime.md; it keeps the plain
++     __dn_redirect it already had. */
+   file = __dn_redirect (dn_path, sizeof dn_path, file);
++#endif
+ 
+   return INLINE_SYSCALL_CALL (openat, fd, file, oflag, mode);
+ }
