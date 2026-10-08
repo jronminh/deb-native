@@ -212,18 +212,31 @@ int dn_policy_fake_removexattr(const char *host_path, dev_t dev, ino_t ino, cons
 
 /* ---- Hardlinks ------------------------------------------------------ */
 
-/* link2symlink (runtime.md, "Hardlinks", borrowed from PRoot's
- * extension of the same name -- GPL licensing question still open, see
- * runtime.md's open items, before any of PRoot's actual code is copied
- * rather than just the idea reimplemented here).
+/* link2symlink (runtime.md, "Hardlinks" -- a clean-room reimplementation
+ * of PRoot's extension of the same name; see runtime.md's resolved
+ * open item on why copying the idea needed no license decision).
  *
  * dn_policy_link() implements link(@existing_host_path,
  * @new_host_path): moves @existing_host_path's content into a hidden
  * file on first use, making both names symlinks to it with a shared
- * link count. dn_policy_unlink() decrements that count and removes the
- * hidden file at zero. dn_policy_fake_stat() (above) already rewrites
- * st_nlink/st_mode for these names so they report as regular files, not
- * symlinks -- callers don't need a separate function for that. */
+ * link count. @existing_host_path must be an ordinary regular file the
+ * first time this is called on it; a later call (a third name for the
+ * same content) recognizes it's already a managed symlink and just adds
+ * another one. dn_policy_fake_stat() (above) already rewrites
+ * st_nlink/st_mode/st_dev/st_ino for these names so they report as an
+ * ordinary multiply-linked regular file, never a symlink, under either
+ * stat() or lstat() -- callers don't need a separate function for that,
+ * only to route fake_stat() every stat-family result through it as
+ * already documented.
+ *
+ * dn_policy_unlink() decrements the link count for whatever
+ * @host_path's *current* symlink target is, and removes the hidden file
+ * once it reaches zero. ORDER MATTERS: call this *before* the real
+ * unlink(@host_path) runs -- once that real unlink happens there is no
+ * symlink left here to read the target back out of. Not an error if
+ * @host_path isn't a managed name at all (an ordinary file or symlink);
+ * that case is simply a no-op, since this is only bookkeeping and the
+ * real unlink() is the caller's to make regardless. */
 int dn_policy_link(const char *existing_host_path, const char *new_host_path);
 int dn_policy_unlink(const char *host_path);
 

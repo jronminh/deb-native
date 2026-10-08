@@ -97,6 +97,10 @@ int dn_policy_init(const char *tree_root_in, const char *rt_root_in)
 	if (status != 0)
 		return status;
 
+	status = dn_policy_hardlink_init(rt_root);
+	if (status != 0)
+		return status;
+
 	initialized = 1;
 	return 0;
 }

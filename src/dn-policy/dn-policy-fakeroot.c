@@ -408,6 +408,16 @@ void dn_policy_fake_stat(const char *host_path, struct stat *st)
 {
 	DnOwnerRecord record;
 
+	/* Hardlink fixup first: it may replace *st wholesale with the
+	 * hidden file's own stat(), so the owner lookup below sees that
+	 * file's real (dev, ino) -- the same for every hardlinked name,
+	 * matching real hardlink semantics (one owner per inode, not per
+	 * name). Its own failure is not fatal to the rest of fake_stat:
+	 * it only means "not a managed name" or "couldn't tell", and
+	 * either way *st is then whatever the caller's own real stat/
+	 * lstat already gave us. */
+	(void) dn_policy_hardlink_fixup_stat(host_path, st);
+
 	if (dn_policy_owner_get(host_path, st->st_dev, st->st_ino, &record) < 0) {
 		/* No record: "an ordinary Debian install" (runtime.md). */
 		st->st_uid = 0;
