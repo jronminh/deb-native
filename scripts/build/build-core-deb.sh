@@ -19,6 +19,8 @@
 #                 installed in the tree, and ship in the local repo (step 6b).
 #   DN_OVERLAY    the runtime overlay (build-overlay-glibc.sh output):
 #                 dn-trace and the syscall catalog.
+#   DN_TALLOC     optional: path to libtalloc.so.2, shipped into RT/lib so the
+#                 tree's dn-trace runs (default /usr/lib/aarch64-linux-gnu/).
 #   DEB_MIRROR    Debian mirror, default http://deb.debian.org/debian
 #   DEB_SUITE     default trixie
 #   DEB_CACHE     downloaded .debs, kept across builds
@@ -52,7 +54,7 @@ ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd)
 LOADER=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 
 die() { echo "build-core-deb: $*" >&2; exit 1; }
-for t in dpkg-deb wget xz; do command -v "$t" >/dev/null 2>&1 || die "$t not found"; done
+for t in dpkg-deb wget xz patchelf; do command -v "$t" >/dev/null 2>&1 || die "$t not found"; done
 [ -d "$BASE" ] || die "BASE is not a directory: $BASE"
 
 W=$(mktemp -d)
@@ -194,6 +196,20 @@ for f in dn-trace syscalls.tsv; do
   [ -f "$DN_OVERLAY/$f" ] || die "missing $DN_OVERLAY/$f"
   cp -f "$DN_OVERLAY/$f" "$STAGE/usr/lib/deb-native/$f"
 done
+# The prefix's init: the host boots the tree through dn-trace into this, and it
+# completes the prefix by itself on a first boot (docs/spec/prefix.md, "Boot").
+cp -f "$ROOT/scripts/prefix/init.sh" "$STAGE/usr/lib/deb-native/init.sh"
+chmod 755 "$STAGE/usr/lib/deb-native/init.sh"
+# dn-trace is the tree's root and a poor host must be able to start it with a
+# bare exec, so it must resolve on its own:
+#   - its interpreter is the loader in the tarball (PREFIX_ROOT is fixed);
+#   - the one library it needs beyond libc, libtalloc, ships in RT/lib, the
+#     loader's first search dir.  (libc.so.6 comes from the patched libc6.)
+TALLOC=${DN_TALLOC:-/usr/lib/aarch64-linux-gnu/libtalloc.so.2}
+[ -f "$TALLOC" ] || die "libtalloc not found at $TALLOC (set DN_TALLOC)"
+patchelf --set-interpreter "$PREFIX_ROOT/$LOADER" "$STAGE/usr/lib/deb-native/dn-trace"
+mkdir -p "$STAGE/usr/lib/deb-native/lib"
+cp -f "$TALLOC" "$STAGE/usr/lib/deb-native/lib/libtalloc.so.2"
 
 # 6b. The local repo (docs/spec/overlay.md, "The local repo"): the patched
 #     glibc packages, so apt sees them and the origin pin (below) keeps the

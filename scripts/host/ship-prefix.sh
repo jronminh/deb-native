@@ -1,16 +1,14 @@
 #!/bin/sh
 # Ship a prefix artifact: the one install path every host uses
-# (docs/spec/prefix.md, "What the host does"). Runs on the host's
-# own shell with only POSIX sh and what toybox and coreutils both have
-# (tar -z/-O, uname, df -P, mkdir, rm), so Android's mksh + toybox is enough.
+# (docs/spec/prefix.md, "Ship"). Rows on the host's own shell with only POSIX
+# sh and what toybox and coreutils both have (tar -z/-O, uname, df -P, mkdir,
+# rm), so Android's mksh + toybox is enough.
 #
 #   1. read .dn/contract from the tarball without extracting it, and check it;
-#   2. extract into DEST;
+#   2. extract into DEST -- which must be the path the artifact was built for;
 #   3. run the artifact's activation script (contract install=) with the host's
-#      own shell: it relocates the artifact to DEST and wires the session entry;
-#   4. check that the prefix's shell runs (contract entry=, with -c 'exit 0');
-#   5. run the artifact's completion script (contract bootstrap=) through the
-#      prefix's own shell -- the prefix installs .dn/profile from the mirror.
+#      own shell: it checks the path and wires the session entry;
+#   4. check the tree runs: start it through dn-trace for a trivial command.
 # Any failure after DEST is created removes DEST. The host never edits a file
 # inside the prefix; everything prefix-specific is the prefix's own scripts.
 #
@@ -32,7 +30,7 @@ parent=${D%/*}
 
 # 1. The contract, read without extracting.
 C=$(tar -xzOf "$A" ./.dn/contract 2>/dev/null) || die "$A carries no .dn/contract"
-contract= name= arch= root= loader= install= bootstrap= entry= size=
+contract= name= arch= root= loader= install= entry= size=
 # Line by line without a here-document: mksh writes those to a temporary
 # file, and an app may have no writable TMPDIR.
 oldifs=$IFS
@@ -48,7 +46,6 @@ for l in $C; do
     root=*) root=${l#*=} ;;
     loader=*) loader=${l#*=} ;;
     install=*) install=${l#*=} ;;
-    bootstrap=*) bootstrap=${l#*=} ;;
     entry=*) entry=${l#*=} ;;
     size=*) size=${l#*=} ;;
     desc=*|version=*) ;;
@@ -60,6 +57,8 @@ set +f
 [ "$contract" = "$CONTRACT_VERSION" ] || die "contract version '${contract:-?}' not supported (this host knows $CONTRACT_VERSION)"
 [ -n "$name" ] && [ -n "$arch" ] && [ -n "$root" ] && [ -n "$loader" ] && [ -n "$entry" ] || die "contract lacks name/arch/root/loader/entry"
 [ "$arch" = "$(uname -m)" ] || die "artifact is for $arch, this device is $(uname -m)"
+# The artifact is built for one path and is not relocatable.
+[ "$root" = "$D" ] || die "artifact is built for $root; install it there (it is not relocatable)"
 if [ -n "$size" ]; then
   # POSIX format (-P): one line per filesystem, available KiB in field 4.
   # Compare in MiB: Android's mksh does 32-bit arithmetic, so size * 1024
@@ -68,20 +67,22 @@ if [ -n "$size" ]; then
   [ $((avail / 1024)) -ge "$size" ] || die "needs ${size} MiB in $parent, $((avail / 1024)) MiB free"
 fi
 
-# 2-5. Extract, activate, check, complete; undo on failure.
+# 2-4. Extract, activate, check; undo on failure.
 mkdir "$D"
 trap 'rm -rf "$D"' EXIT
 tar -xzf "$A" -C "$D" || die "extract failed"
 if [ -n "$install" ]; then
-  # Activation, the host's own shell (mksh + toybox on Android): it wires the
-  # session entry (runtime v1 needs no relocation).
-  DN_INSTDIR=$D sh "$D/$install" "$D" || die "activation failed"
+  # Activation, the host's own shell (mksh + toybox on Android): it checks the
+  # path and wires the session entry.  No tree program runs here.
+  DN_INSTDIR=$D sh "$D/$install" || die "activation failed"
 fi
-"$D/${entry%% *}" -c 'exit 0' || die "the prefix's shell ($D/${entry%% *}) does not run"
-if [ -n "$bootstrap" ]; then
-  # Completion, the prefix's own shell: it has apt and coreutils, the host
-  # does not need them.
-  DN_INSTDIR=$D "$D/usr/bin/bash" "$D/$bootstrap" || die "completion failed"
-fi
+# The acceptance test: the tree runs through dn-trace (a poor host starts
+# dn-trace; nothing in the tree runs directly).  A trivial command, so it does
+# not bootstrap or start a session.
+RT=$D/usr/lib/deb-native
+"$RT/dn-trace" --rt-loader "$D/$loader" --syscalls "$RT/syscalls.tsv" \
+  -- "$D/usr/bin/bash" -c 'exit 0' \
+  || die "the tree does not run under dn-trace"
 trap - EXIT
 echo "ship-prefix: $name installed in $D"
+echo "ship-prefix: boot with:  cd $D && $entry"

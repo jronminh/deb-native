@@ -18,7 +18,7 @@ stages below are what the scripts do.
 - [The contract file](#the-contract-file)
 - [Build](#build)
 - [Ship](#ship)
-- [Completion](#completion)
+- [Completion](#boot)
 - [Host updates](#host-updates)
 - [Open items](#open-items)
 
@@ -86,8 +86,7 @@ outside the FHS tree:
 │   ├── packages        the Debian packages the prefix contains
 │   ├── profile         the packages a bootstrap restores from the mirror
 │   ├── baked-paths     files the build path is written into (by the build)
-│   ├── install.sh      /system/bin/sh, run by the host's shell: activate
-│   └── bootstrap.sh    optional: run by the prefix's own shell, completes it
+│   └── install.sh      /system/bin/sh, run by the host's shell: activate
 ├── home/
 ├── root -> home
 ├── mnt -> ../mnt
@@ -122,11 +121,10 @@ unknown key warns but does not fail.
 | `desc` | no | one line describing the prefix |
 | `version` | no | the prefix's own version (`VERSION` at the repo root) |
 | `arch` | yes | the CPU architecture (`uname -m`) |
-| `root` | yes | the absolute directory the prefix's files name (`PREFIX_ROOT`) |
-| `loader` | yes | the loader, relative to the root; the one ELF a host shell can exec directly |
+| `root` | yes | the absolute directory the prefix's files name (`PREFIX_ROOT`); the host must install there (not relocatable) |
+| `loader` | yes | the loader, relative to the root |
 | `install` | yes | the activation script, relative to the root |
-| `bootstrap` | no | the completion script; absent means the prefix is complete as shipped |
-| `entry` | yes | the command, relative to the root, that opens a session |
+| `entry` | yes | the command that boots / opens a session; a full command line, run by the host with the prefix root as the working directory |
 | `size` | no | the extracted size in MiB, for a free-space check |
 
 Example (core-deb):
@@ -141,8 +139,7 @@ arch=aarch64
 root=/data/local/deb-native
 loader=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 install=.dn/install.sh
-bootstrap=.dn/bootstrap.sh
-entry=usr/bin/bash -i
+entry=usr/lib/deb-native/dn-trace --rt-loader usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 --syscalls usr/lib/deb-native/syscalls.tsv -- usr/bin/bash usr/lib/deb-native/init.sh
 size=200
 ```
 
@@ -169,7 +166,8 @@ the target.
    `libc-bin` instead of the mirror's), extracts them, builds the `dpkg`
    database, prunes files no shipped package owns, installs the overlay into
    `RT`, builds the **local repo** (`RT/repo`) with the patched glibc
-   packages, and writes the loader and apt configuration.
+   packages, ships the prefix's init and the loader, and writes the apt
+   configuration.
 4. **The tarball.** `scripts/build/package-prefix.sh TREE --root PREFIX_ROOT
    --name NAME --out OUT.tar.gz` writes `.dn/` and tars the tree.
 5. **core-ultra**, optionally, from the core-deb tree
@@ -202,34 +200,32 @@ run on the host's own shell with only POSIX sh and toybox:
 
 1. **Read the contract without extracting** (`tar -xzOf ARTIFACT
    ./.dn/contract`) and check it: a known contract version, `arch` matching
-   `uname -m`, a valid name, the target absent, and `size` fitting the free
-   space.
+   `uname -m`, a valid name, `DEST` equal to the contract's `root`, the target
+   absent, and `size` fitting the free space.
 2. **Extract**: `mkdir DEST && tar -xzf`.
-3. **Activate**: `DN_INSTDIR=DEST sh DEST/.dn/install.sh`. `.dn/install.sh`
-   runs the prefix's own `login.d` hooks and wires the host's session entry
-   (`DN_SESSION_SHELL`), if set. **There is no relocation**: the artifact was
-   built for `PREFIX_ROOT`, so the host installs it there.
-4. **Check that the prefix's shell runs**: `DEST/<entry> -c 'exit 0'` — the
-   acceptance test of every prefix.
-5. **Complete**: run `.dn/bootstrap.sh` through the prefix's own shell.
-6. On any failure, remove `DEST` and report.
+3. **Activate**: `DN_INSTDIR=DEST sh DEST/.dn/install.sh`. It re-checks the
+   path, then wires the host's session entry (`DN_SESSION_SHELL`), if set, to
+   the contract's `entry`. No tree program runs here.
+4. **Check the tree runs**: start it through `dn-trace` for a trivial command
+   (`… -- usr/bin/bash -c 'exit 0'`). This is the acceptance test.
+5. On any failure, remove `DEST` and report.
 
 The host never edits a file inside the prefix; everything prefix-specific is
 the prefix's own scripts.
 
-## Completion
+## Boot
 
-`.dn/bootstrap.sh` restores a shipped core-deb to its full package set, from
-the mirror, inside the prefix (the prefix's own bash runs it):
+The host boots the tree by running the contract's `entry` from the prefix
+root: `dn-trace` becomes the tree's root process, forks a child that installs
+the one shared filter, and execs the prefix's init (`RT/init.sh`). init sets
+the environment and, on a first boot (no `.dn/bootstrapped`), completes the
+prefix from `.dn/profile` itself — `apt-get update`, `apt-get install` of the
+profile, then the `bootstrapped` marker; a later boot skips straight to the
+command. It ends by exec'ing the command it was given, or an interactive
+shell.
 
-1. `apt-get update`;
-2. `apt-get install` of every package named in `.dn/profile` (names only);
-3. check `libc6` and `libc-bin` are still held (the patched glibc must
-   survive);
-4. write `.dn/bootstrapped`, so a second run is a no-op.
-
-The glibc packages are held so `apt` never replaces the patched files; the
-version pin is in [`overlay.md`](overlay.md), "the glibc rule".
+The glibc packages are held and pinned, so `apt` never replaces the patched
+files ([`overlay.md`](overlay.md), "the glibc rule").
 
 ## Host updates
 

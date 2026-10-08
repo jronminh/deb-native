@@ -4,31 +4,33 @@
 docs/spec/prefix.md, "Build invariants". Run on a copy of a built
 prefix (package-prefix.sh stages one); the tree is changed in place:
 
-  - every glibc ELF whose PT_INTERP is ROOT/<loader> gets a CAPACITY-byte
-    interpreter (a placeholder reserved with dn-elf, then the real path and a
-    NUL written at its start), and its offset is recorded;
-  - ELFs with any other interpreter (the system's Bionic linker) are left
-    alone;
-  - text files that name ROOT are listed; a binary that names ROOT anywhere
-    but in PT_INTERP fails the build;
+  - PT_INTERP is left as the build wrote it: the exec gate runs a program
+    through the runtime loader, and dn-trace itself names ROOT/<loader> so a
+    poor host can start it;
+  - an ELF that names ROOT anywhere but in its interpreter fails the build;
+  - text files that name ROOT are listed;
   - absolute symlinks into ROOT become relative; ld.so.cache is removed;
   - home/, root -> home, mnt -> ../mnt and
     etc/resolv.conf -> ../../app/etc/resolv.conf are made;
-  - .dn/contract, .dn/baked-paths and .dn/packages are written.
+  - .dn/contract, .dn/packages and .dn/baked-paths are written.
 
 Usage: pack-prefix.py TREE --root ROOT --name NAME [--desc TEXT]
-                      [--version V] [--dn-elf PATH]
+                      [--version V]
 """
 import argparse
 import os
 import shutil
 import struct
-import subprocess
 import sys
 
 LOADER = "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
-CAPACITY = 256
 PT_INTERP = 3
+# The command the host runs to open a session: dn-trace boots the tree and
+# execs the prefix's init (docs/spec/prefix.md, "Boot").  It is a full command
+# line, run with the prefix root as the working directory.
+ENTRY = (f"usr/lib/deb-native/dn-trace --rt-loader {LOADER} "
+         "--syscalls usr/lib/deb-native/syscalls.tsv -- "
+         "usr/bin/bash usr/lib/deb-native/init.sh")
 
 
 def elf_interp(path):
@@ -69,14 +71,11 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--desc", default="")
     ap.add_argument("--version", default="")
-    ap.add_argument("--dn-elf", default=None,
-        help="unused: runtime v1 leaves PT_INTERP alone (the exec gate loads via RT/ld.so)")
     ap.add_argument("--install", default=os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts/host/install-prefix.sh"),
         help="host-side activation script, copied to .dn/install.sh")
-    ap.add_argument("--bootstrap", default=os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts/host/bootstrap-prefix.sh"),
-        help="prefix-side completion script, copied to .dn/bootstrap.sh")
+    ap.add_argument("--entry", default=ENTRY,
+        help="the command that boots / opens a session, written as the contract's entry=")
     a = ap.parse_args()
 
     T = os.path.abspath(a.tree)
@@ -104,7 +103,7 @@ def main():
                 os.remove(p)
         os.symlink(target, p)
 
-    elf, text, bad, relinked, foreign_links = [], [], [], 0, []
+    text, bad, relinked, foreign_links = [], [], 0, []
     for dp, dns, fns in os.walk(T):
         rel_dp = os.path.relpath(dp, T)
         if rel_dp == ".dn" or rel_dp.startswith(".dn/"):
@@ -126,22 +125,16 @@ def main():
             ip = elf_interp(p)
             if ip is not None:
                 off, size, cur = ip
-                if cur != build_ld:
-                    if rootb in open(p, "rb").read():
-                        bad.append((rel, f"interpreter {cur}, and names the build path"))
-                    continue            # Bionic or another loader: not ours
-                if size != CAPACITY:
-                    placeholder = "/" + "x" * (CAPACITY - 2)   # CAPACITY-1 chars + NUL
-                    subprocess.run([a.dn_elf, "set-interp", p, placeholder], check=True)
-                    off, size, _ = elf_interp(p)
-                    if size != CAPACITY:
-                        sys.exit(f"pack-prefix: {rel}: PT_INTERP is {size} bytes after dn-elf, wanted {CAPACITY}")
-                with open(p, "r+b") as f:
-                    f.seek(off)
-                    f.write(build_ld.encode() + b"\0" * (CAPACITY - len(build_ld)))
-                if open(p, "rb").read().count(rootb) != 1:
-                    bad.append((rel, "names the build path outside PT_INTERP"))
-                elf.append((rel, off, CAPACITY))
+                data = open(p, "rb").read()
+                # Runtime v1 leaves PT_INTERP alone.  An ELF that names ROOT
+                # must name it only in its interpreter string: dn-trace names
+                # ROOT/<loader> (so a poor host can start it) and is correct as
+                # built.
+                if cur == build_ld:
+                    if data.count(rootb) != 1:
+                        bad.append((rel, "names the build path outside PT_INTERP"))
+                elif rootb in data:
+                    bad.append((rel, f"interpreter {cur}, and names the build path"))
                 continue
             data = open(p, "rb").read()
             if rootb in data:
@@ -159,14 +152,11 @@ def main():
 
     dn = os.path.join(T, ".dn")
     os.makedirs(dn, exist_ok=True)
-    # The relocation script was retired: install.sh relocates with the loader +
-    # dn-elf. Drop one an older artifact left in the tree.
+    # The relocation script was retired: there is no relocation.
     stale = os.path.join(dn, "relocate.sh")
     if os.path.exists(stale):
         os.remove(stale)
     with open(os.path.join(dn, "baked-paths"), "w") as f:
-        for rel, off, cap in sorted(elf):
-            f.write(f"elf\t{rel}\t{off}\t{cap}\n")
         for rel in sorted(text):
             f.write(f"text\t{rel}\n")
 
@@ -179,16 +169,11 @@ def main():
                 if kv.get("Status", "").endswith(" installed") and "Package" in kv:
                     o.write(f"{kv['Package']}\t{kv.get('Version', '')}\t{kv.get('Architecture', '')}\n")
 
-    # The activation scripts the contract names. install is always carried;
-    # bootstrap only when the artifact is incomplete, i.e. ships a .dn/profile
-    # for the prefix to restore from the mirror.
+    # The host-side activation script the contract names.  The prefix's
+    # completion is not a script here: the prefix's own init does it on its
+    # first boot (docs/spec/prefix.md, "Boot").
     shutil.copyfile(a.install, os.path.join(dn, "install.sh"))
     os.chmod(os.path.join(dn, "install.sh"), 0o755)
-    has_profile = os.path.exists(os.path.join(dn, "profile"))
-    if has_profile:
-        shutil.copyfile(a.bootstrap, os.path.join(dn, "bootstrap.sh"))
-        os.chmod(os.path.join(dn, "bootstrap.sh"), 0o755)
-
     size_mib = 0
     for dp, dns, fns in os.walk(T):
         for n in fns:
@@ -203,13 +188,10 @@ def main():
     if a.version:
         lines.append(f"version={a.version}")
     lines += ["arch=aarch64", f"root={ROOT}", f"loader={LOADER}",
-              "install=.dn/install.sh"]
-    if has_profile:
-        lines.append("bootstrap=.dn/bootstrap.sh")
-    lines += ["entry=usr/bin/bash -i", f"size={size_mib}"]
+              "install=.dn/install.sh", f"entry={a.entry}", f"size={size_mib}"]
     with open(os.path.join(dn, "contract"), "w") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"pack-prefix: {a.name}: {len(elf)} elf, {len(text)} text, "
+    print(f"pack-prefix: {a.name}: {len(text)} text, "
           f"{relinked} links made relative, {size_mib} MiB")
 
 

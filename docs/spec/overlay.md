@@ -98,21 +98,25 @@ filesystem). `TREE` (with `RT` inside it) ships as one tarball
 | dn-policy | A static C library | The path-mapping table, in-tree symlink resolution, reverse translation, fake root, hardlinks. Never runs on its own; linked into both dn-glibc and dn-trace |
 | dn-glibc | glibc and `ld.so`, built from Debian source, placed in `RT` | The fast path: calls dn-policy before every path-taking syscall, then calls the kernel through the fixed gate page |
 | dn-trace | The tracer, the tree's root process | Installs the shared filter for the first child; runs the exec gate; handles every caught call via `ptrace`, through dn-policy |
-| init.sh | The tree's shell script | Sets up the environment, ends with `exec runsvdir` |
+| init.sh | The tree's shell script | Sets up the environment, completes the prefix on a first boot, then runs the command |
 
 `apt` and `dpkg` run in the tree like any other program (see
 [apt and dpkg](#apt-and-dpkg-under-the-runtime)).
 
 ### Boot order
 
-1. The session entry runs `dn-trace` (see [`prefix.md`](prefix.md), "Ship").
+1. The host runs the contract's `entry` from the prefix root
+   ([`prefix.md`](prefix.md), "Boot"): `dn-trace` with the runtime loader, the
+   catalog, and `RT/init.sh`.
 2. `dn-trace` forks a child, marked traced (fork, vfork, clone and exec all
-   tracked). The child installs the shared filter itself, then execs `init.sh`.
-   The filter propagates to every later process.
-3. That `exec` of `init.sh` already passes through the exec gate. The tree's
-   shell is a dynamic ELF, so it runs through dn-glibc from this step on.
-4. `init.sh` sets up the environment: env vars, `TREE/tmp`, state directories.
-5. `init.sh` execs `runsvdir`; each service is a directory with a `run` file.
+   tracked). The child installs the shared filter itself, then execs the
+   prefix's init. The filter propagates to every later process.
+3. That `exec` already passes through the exec gate. The init runs under the
+   tree's own shell, so from this step on it runs through dn-glibc.
+4. init sets the environment (env vars, `TREE/tmp`, `resolv.conf`,
+   `policy-rc.d`) and, on a first boot, completes the prefix from
+   `.dn/profile` itself; then it execs the command it was given, or an
+   interactive shell.
 
 Every process in the tree is a descendant of `dn-trace`. Nothing execs into
 the tree from outside.
@@ -403,14 +407,17 @@ a newer version of.
 
 ### What init.sh does
 
-1. Sets basic environment variables (`PATH`, `HOME`, `LANG`). No `LD_PRELOAD`
-   or `LD_LIBRARY_PATH` needed.
-2. Creates the tree's `/tmp` with mode 1777.
-3. Writes the tree's `/etc/resolv.conf`, from a config file. Android provides
-   no such file, and without it no glibc program can resolve a domain name.
-4. Sets `/usr/sbin/policy-rc.d` to return 101 — Debian's standard mechanism to
+1. Sets environment variables (`PATH`, `HOME`, `TMPDIR`). No `LD_PRELOAD` or
+   `LD_LIBRARY_PATH` needed.
+2. Creates the tree's `tmp` with mode 1777.
+3. Writes the tree's `etc/resolv.conf` when the artifact did not link it.
+   Android provides no such file, and without it no glibc program can resolve
+   a domain name.
+4. Sets `usr/sbin/policy-rc.d` to return 101 — Debian's standard mechanism to
    stop an install script from starting a service on its own.
-5. `exec runsvdir /etc/service`.
+5. On a first boot (no `.dn/bootstrapped`), completes the prefix from
+   `.dn/profile`.
+6. `exec`s the command it was given, or an interactive shell.
 
 ### Services
 

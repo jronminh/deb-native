@@ -9,7 +9,7 @@ root, no `chroot`, no namespaces, and the host's own tree untouched. Goal: a
 package reaches `dpkg` status **`ii`** and its program runs **by name**,
 unprivileged. "Install and run, not emulate" — no isolation.
 
-## How it ships: build → ship → bootstrap
+## How it ships: build → ship → boot
 
 There is **no build on the host**.
 
@@ -23,10 +23,11 @@ There is **no build on the host**.
 - **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
   `.dn/contract` without extracting, extract, run `.dn/install.sh`. This is the
   one install path, on a **poor host** (POSIX sh + toybox only).
-- **Activate / complete**: the artifact's own `.dn/install.sh` (host shell)
-  wires the session entry (the artifact is built for its final path, so there
-  is no relocation); then `.dn/bootstrap.sh` (the prefix's own shell) installs
-  `.dn/profile`. When bootstrap succeeds the prefix is ready.
+- **Activate / boot**: the artifact's own `.dn/install.sh` (host shell) wires
+  the session entry (the artifact is built for its final path, so there is no
+  relocation); the host then boots the tree by running the contract's `entry`,
+  which starts `dn-trace` and the prefix's init -- init completes `.dn/profile`
+  itself on a first boot.
 
 Run time is one policy in two places: dn-policy, called in-process by
 dn-glibc (the fast path) and via `dn-trace`'s ptrace fallback
@@ -40,7 +41,7 @@ are gone; a `.deb` installs intact (`docs/spec/overlay.md`).
 - `scripts/build/` — build host: overlay, artifact assembly, packaging.
 - `scripts/glibc/` — build host: apply the glibc patch, package `libc6` /
   `libc-bin`.
-- `scripts/host/` — the host's own shell (poor host): ship, bootstrap,
+- `scripts/host/` — the host's own shell (poor host): ship,
   install (activation), update.
 - `scripts/prefix/` — run by the prefix (its own glibc); `interface.tsv` is
   the module surface.
