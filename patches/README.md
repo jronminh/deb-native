@@ -277,9 +277,10 @@ wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
 interposition for the path group, fake root's writes (`chown`/`lchown`/
 `chmod`/`fchmodat` record into the owner store), hardlinks (`link`/`unlink`
 are link2symlink), the loader's mapping of the fixed gate page (`P_GATE`)
--- the page, though glibc does not yet issue its syscalls from it -- and the
-`RT/lib`-first library search order. The rest of the wiring (the xattr
-family, `chdir`/`chroot`, routing every syscall through the gate page) is
+and libc issuing its syscalls from it (the non-cancelable path; the
+cancellation asm still calls the kernel directly), and the `RT/lib`-first
+library search order. The rest of the wiring (the xattr family,
+`chdir`/`chroot`, the cancellation asm, the seccomp filter's gate-IP rule) is
 still ahead; what is here is what made the first full glibc build with
 dn-policy inside it succeed, extended through every group above.
 
@@ -287,7 +288,7 @@ dn-policy inside it succeed, extended through every group above.
 
 `diff -ruN` between `work-after-official-patch/` (glibc source with
 `dn-glibc-android.patch` already applied once, per the section above) and
-`work/` (that plus the wiring). Forty-one files:
+`work/` (that plus the wiring). Forty-three files:
 
 - New, byte-identical copies of `src/dn-policy/` under
   `sysdeps/unix/sysv/linux/`: `dn-policy.{h,c}`, `dn-policy-fakeroot.c`,
@@ -382,10 +383,16 @@ dn-policy inside it succeed, extended through every group above.
   `MAP_FIXED_NOREPLACE`, writes a bare `svc #0; ret` stub, and `mprotect`s
   it `r-x`. If the address is taken the mapping simply fails and every call
   falls back to a direct `svc` (the `ptrace` tier), the documented
-  behavior. This is the page only: glibc does not yet *issue* its syscalls
-  from it -- `open`/`read`/`write` go through `SYSCALL_CANCEL`'s asm whose
-  `_arch_start`/`_end` cancellation markers the gate would move the PC out
-  of, so that routing needs its own pass (see the status note).
+  behavior. The loader exports the address as `__dn_gate_get()` for libc.
+- `sysdeps/unix/sysv/linux/aarch64/sysdep.h` + `syscallS.S`: libc's
+  `INTERNAL_SYSCALL_RAW` and the C `syscall()` entry now issue from the gate
+  page when `__dn_gate` is set, else a direct `svc` (the loader build keeps
+  the direct `svc`). `dn_policy_gate_probe()` (in the glue) copies
+  `__dn_gate_get()`'s value into `__dn_gate` on the first path call. The
+  cancelable path (`syscall_cancel.S` -- `open`/`read`/`write`) is
+  deliberately left direct for now: its `_arch_start`/`_end` cancellation
+  markers assume the `svc` is inline, and branching to the gate moves the PC
+  out of range.
 - `elf/Makefile`: `dn_policy_fake_stat` joins `rtld-stubbed-symbols` -- see
   below.
 
@@ -487,9 +494,11 @@ reach the tree (right content, `AT_SYMLINK_NOFOLLOW` honored, `ENOENT`
 preserved), `syscall(SYS_getpid)` still works, and `syscall(SYS_mkdirat,
 ...)` creates `TREE/etc/dn-sc-work` with no host `/etc/dn-sc-work`.
 
-A fifth binary checks `/proc/self/maps` under the loader: the gate page is
-mapped `r-xp` at `100000000` (the chosen `P_GATE`). Nothing issues through
-it yet, so this proves the mapping, not the routing.
+A fifth binary checks the gate page: `/proc/self/maps` shows it mapped `r-xp`
+at `100000000` (the chosen `P_GATE`), and `__dn_gate_get()` returns
+`0x100000000`. libc's `INTERNAL_SYSCALL_RAW` and `syscall()` entry now issue
+from it (the non-cancelable path), which every other check exercises -- a
+wrong macro would break every syscall.
 
 A sixth binary covers fake root's writes: `chown("/etc/...", 1234, 5678)`
 then `stat()` shows `1234:5678`; `chmod("/etc/...", 04755)` then `stat()`
@@ -517,19 +526,22 @@ families, reverse translation (`getcwd`, the `/proc/self` magic links, and
 the `mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/`statfs`
 wrappers, the `syscall(2)` interposition for the path group, fake root's
 writes (`chown`/`lchown`/`chmod`/`fchmodat`), hardlinks (`link`/`unlink`),
-the loader's gate-page mapping, and the `RT/lib`-first library search order.
-Still open: the xattr family and the public `fchownat()`
-(`syscalls.list`-generated), `chdir`/`chroot`, issuing every glibc syscall
-from the gate page (`INTERNAL_SYSCALL_RAW` and the cancellation asm), and the
-seccomp filter's gate-IP rule in `dn-trace`.
+the loader's gate-page mapping with libc issuing its syscalls from it (the
+non-cancelable path), and the `RT/lib`-first library search order. Still
+open: the xattr family and the public `fchownat()`
+(`syscalls.list`-generated), `chdir`/`chroot`, the cancelable
+`syscall_cancel.S` path, and the seccomp filter's gate-IP rule in `dn-trace`.
 
-**Known issue (accepted).** The `syscalls.list`-generated wrappers above, and
-any path-group call a static or foreign program makes directly, are not yet on
-the native path: the shared filter catches them and the `ptrace` tier handles
-them through dn-policy -- **correct, just slower**. The gate page is mapped but
-inert on purpose: routing every glibc syscall through it is not enabled until
-it can be done correctly, because a gate-issued call the filter lets through
-must already be translated, and the generated wrappers issue their syscall
-in-line (untranslated) -- so the routing has to come together with overriding
-those wrappers (and with handling `syscall_cancel.S`'s cancellation markers).
+**Known issue (accepted).** With the gate page now in use, two things must
+land together with the filter's gate-IP rule (still off, so the filter keeps
+tracing them -- correct, just slower):
+
+- the `syscalls.list`-generated wrappers issue their raw syscall from the
+  gate *untranslated* (the macro routes them, but only the wrappers dn-glibc
+  edited do the translation), so they must be overridden/translated before
+  the gate-IP rule may let them through unchecked;
+- the cancelable path (`syscall_cancel.S`) still calls the kernel directly
+  (its `_arch_start`/`_end` cancellation markers would move out of range), so
+  `open`/`read`/`write` are not gate-covered yet.
+
 This is the intended transitional state, not a regression.

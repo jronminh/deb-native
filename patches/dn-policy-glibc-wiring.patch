@@ -29,12 +29,13 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/Makef
  ifeq ($(have-ssp),yes)
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/Versions work/elf/Versions
 --- work-after-official-patch/elf/Versions	2026-10-08 07:51:05.032680319 +0000
-+++ work/elf/Versions	2026-10-08 10:04:19.299712118 +0000
-@@ -65,6 +65,7 @@
++++ work/elf/Versions	2026-10-08 10:16:39.899711835 +0000
+@@ -65,6 +65,8 @@
      _dl_audit_symbind_alt; _dl_audit_preinit;
      _rtld_global; _rtld_global_ro;
      __dn_prefix_get;
 +    __dn_prog_get;
++    __dn_gate_get;
  
      # Only here for gdb while a better method is developed.
      _dl_debug_state;
@@ -63,8 +64,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/dl-lo
      NULL
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.c work/elf/rtld.c
 --- work-after-official-patch/elf/rtld.c	2026-10-08 07:51:05.032680319 +0000
-+++ work/elf/rtld.c	2026-10-08 10:04:15.043712120 +0000
-@@ -1405,6 +1405,57 @@
++++ work/elf/rtld.c	2026-10-08 10:20:35.063711746 +0000
+@@ -1405,6 +1405,61 @@
    return __dn_prefix_ready ? __dn_prefix_buf : NULL;
  }
  
@@ -77,10 +78,18 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.
 +   already the program and libc just reverse-translates it.  */
 +static const char *__dn_prog;
 +
++static void *__dn_gate_page;
++
 +const char *
 +__dn_prog_get (void)
 +{
 +  return __dn_prog;
++}
++
++void *
++__dn_gate_get (void)
++{
++  return __dn_gate_page;
 +}
 +
 +/* deb-native: the fixed gate page (docs/spec/runtime.md, "The fixed gate
@@ -90,13 +99,9 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.
 +   dn-glibc call from a stray one by the instruction pointer.  If the
 +   address is already taken the mapping simply fails and every call falls
 +   back to a direct `svc` (the ptrace tier) -- correct, just slower.  */
-+#define DN_GATE_ADDR 0x100000000UL
-+
 +#ifndef MAP_FIXED_NOREPLACE
 +# define MAP_FIXED_NOREPLACE 0x100000
 +#endif
-+
-+void *__dn_gate;
 +
 +static void
 +__dn_gate_map (void)
@@ -116,13 +121,13 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.
 +  if (__mprotect (want, 4096, PROT_READ | PROT_EXEC) != 0)
 +    return;
 +
-+  __dn_gate = want;
++  __dn_gate_page = want;
 +}
 +
  static void
  dl_main (const ElfW(Phdr) *phdr,
  	 ElfW(Word) phnum,
-@@ -1653,6 +1704,12 @@
+@@ -1653,6 +1708,12 @@
        /* Now the map for the main executable is available.  */
        main_map = GL(dl_ns)[LM_ID_BASE]._ns_loaded;
  
@@ -135,7 +140,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.
        if (__glibc_likely (state.mode == rtld_mode_normal))
  	rtld_chain_load (main_map, argv0);
  
-@@ -1799,6 +1856,9 @@
+@@ -1799,6 +1860,9 @@
       paths are built (dn-prefix.h).  Global, not on-demand.  */
    __dn_prefix_init ();
  
@@ -147,7 +152,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.
    call_init_paths (&state);
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- work-after-official-patch/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:03.964680319 +0000
-+++ work/sysdeps/generic/dn-prefix.h	2026-10-08 10:04:28.203712114 +0000
++++ work/sysdeps/generic/dn-prefix.h	2026-10-08 10:16:34.911711837 +0000
 @@ -16,6 +16,7 @@
  #define _DN_PREFIX_H 1
  
@@ -156,11 +161,24 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/g
  
  /* The prefix this build baked at compile time; substituted when the patch
     is applied.  Paths that still carry it are rewritten at run time.  */
-@@ -31,10 +32,14 @@
+@@ -25,16 +26,29 @@
+ 
+ #define DN_PREFIX_MAX 512
+ 
++/* The fixed gate page (docs/spec/runtime.md, "The fixed gate page"): the
++   loader maps a 4 KB `svc #0; ret` stub here and libc issues its syscalls
++   from it, so the shared seccomp filter can tell a dn-glibc call from a
++   stray one by the instruction pointer.  Chosen in 39-bit space.  */
++#define DN_GATE_ADDR 0x100000000UL
++
+ #if IS_IN (rtld)
+ /* Provided by elf/rtld.c.  Using a function (instead of _dl_rtld_map
+    directly) keeps this header usable from libc sources compiled for rtld,
     which do not include ldsodefs.h.  */
  extern const char *__dn_rtld_self_path (void) attribute_hidden;
  extern const char *__dn_prefix_get (void);
 +extern const char *__dn_prog_get (void);
++extern void *__dn_gate_get (void);
  #else
  /* Provided by ld.so and exported (elf/Versions).  Weak so a static libc.a
     link resolves it to NULL instead of failing.  */
@@ -168,10 +186,12 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/g
 +/* The real program path, for readlink("/proc/self/exe") (NULL when the
 +   loader ran as an interpreter, where the kernel value is already right). */
 +extern const char *__dn_prog_get (void) __attribute__((weak));
++/* The gate page address, or NULL if the loader could not map it. */
++extern void *__dn_gate_get (void) __attribute__((weak));
  #endif
  
  /* strstr-alike, rtld-safe.  */
-@@ -149,4 +154,56 @@
+@@ -149,4 +163,56 @@
    return path;
  }
  
@@ -242,6 +262,76 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
    # sysdep_routines
  
  CFLAGS-gethostid.c = -fexceptions
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/aarch64/syscallS.S work/sysdeps/unix/sysv/linux/aarch64/syscallS.S
+--- work-after-official-patch/sysdeps/unix/sysv/linux/aarch64/syscallS.S	2026-10-08 07:51:04.420680319 +0000
++++ work/sysdeps/unix/sysv/linux/aarch64/syscallS.S	2026-10-08 10:17:05.839711825 +0000
+@@ -35,8 +35,17 @@
+ 	mov	x4, x5
+ 	mov	x5, x6
+ 	mov	x6, x7
+-	svc	0x0
+-	cmn	x0, #4095
++	/* deb-native: issue from the gate page when it is mapped (__dn_gate,
++	   set by dn_policy_gate_probe); else call the kernel directly.  */
++	adrp	x9, __dn_gate
++	ldr	x9, [x9, #:lo12:__dn_gate]
++	cbz	x9, 10f
++	mov	x10, x30
++	blr	x9
++	mov	x30, x10
++	b	11f
++10:	svc	0x0
++11:	cmn	x0, #4095
+ 	b.cs	1f
+ 	RET
+ 1:
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/aarch64/sysdep.h work/sysdeps/unix/sysv/linux/aarch64/sysdep.h
+--- work-after-official-patch/sysdeps/unix/sysv/linux/aarch64/sysdep.h	2026-10-08 07:51:04.420680319 +0000
++++ work/sysdeps/unix/sysv/linux/aarch64/sysdep.h	2026-10-08 10:16:56.875711829 +0000
+@@ -182,7 +182,8 @@
+ # define HAVE_CLONE3_WRAPPER		1
+ 
+ # undef INTERNAL_SYSCALL_RAW
+-# define INTERNAL_SYSCALL_RAW(name, nr, args...)		\
++# if IS_IN (rtld)
++#  define INTERNAL_SYSCALL_RAW(name, nr, args...)		\
+   ({ long _sys_result;						\
+      {								\
+        LOAD_ARGS_##nr (args)					\
+@@ -192,6 +193,33 @@
+        _sys_result = _x0;					\
+      }								\
+      _sys_result; })
++# else
++/* deb-native: issue the syscall from the fixed gate page when the loader
++   mapped it (__dn_gate, set by dn_policy_gate_probe), so the shared seccomp
++   filter can recognize a dn-glibc call by instruction address
++   (docs/spec/runtime.md, "The fixed gate page").  Falls back to a direct
++   `svc` when the gate is not there.  x30 is saved/restored in x10 so it
++   stays out of the clobber list.  */
++#  define INTERNAL_SYSCALL_RAW(name, nr, args...)		\
++  ({ long _sys_result;						\
++     {								\
++       LOAD_ARGS_##nr (args)					\
++       register long _x8 asm ("x8") = (name);			\
++       asm volatile ("adrp	x9, __dn_gate\n\t"		\
++		     "ldr	x9, [x9, #:lo12:__dn_gate]\n\t"	\
++		     "cbz	x9, 1f\n\t"			\
++		     "mov	x10, x30\n\t"			\
++		     "blr	x9\n\t"				\
++		     "mov	x30, x10\n\t"			\
++		     "b	2f\n\t"				\
++		     "1: svc	0	// syscall " # name "\n\t" \
++		     "2:"					\
++		     : "=r" (_x0) : "r"(_x8) ASM_ARGS_##nr	\
++		     : "x9", "x10", "memory");			\
++       _sys_result = _x0;					\
++     }								\
++     _sys_result; })
++# endif
+ 
+ # undef INTERNAL_SYSCALL
+ # define INTERNAL_SYSCALL(name, nr, args...)			\
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/chmod.c work/sysdeps/unix/sysv/linux/chmod.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/chmod.c	2026-10-08 07:51:04.432680319 +0000
 +++ work/sysdeps/unix/sysv/linux/chmod.c	2026-10-08 09:08:49.750556851 +0000
@@ -1038,8 +1128,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +}
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c work/sysdeps/unix/sysv/linux/dn-policy-glue.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c	1970-01-01 00:00:00.000000000 +0000
-+++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 10:04:33.219712113 +0000
-@@ -0,0 +1,322 @@
++++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 10:16:47.119711833 +0000
+@@ -0,0 +1,338 @@
 +/* dn-policy glue for glibc itself: wires the already-shipped prefix
 +   self-derivation (__dn_prefix_get, elf/rtld.c) into dn_policy_init(),
 +   and gives open.c and the stat/faccessat family a drop-in replacement
@@ -1072,6 +1162,20 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +__libc_lock_define_initialized (static, dn_policy_lock);
 +static int dn_policy_ready;
 +static int dn_policy_broken;
++
++/* deb-native: the fixed gate page address (docs/spec/runtime.md, "The fixed
++   gate page").  The loader maps it; dn_policy_gate_probe() copies the
++   address here so the syscall macro (sysdeps/.../aarch64/sysdep.h) can issue
++   from it.  NULL until then, keeping every syscall on the direct `svc`
++   path.  */
++attribute_hidden void *__dn_gate;
++
++static void
++dn_policy_gate_probe (void)
++{
++  if (__dn_gate == NULL && __dn_gate_get != NULL)
++    __dn_gate = __dn_gate_get ();
++}
 +
 +static void
 +dn_policy_try_init (void)
@@ -1130,6 +1234,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +dn_policy_redirect_common (char *buf, size_t bufsz, const char *path, int follow)
 +{
 +  int status;
++
++  dn_policy_gate_probe ();
 +
 +  if (!dn_policy_ready && !dn_policy_broken)
 +    dn_policy_try_init ();
