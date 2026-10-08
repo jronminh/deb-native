@@ -2279,6 +2279,27 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
        return result;
      }
  
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/mkdir.c work/sysdeps/unix/sysv/linux/mkdir.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/mkdir.c	2026-10-08 07:51:04.460680319 +0000
++++ work/sysdeps/unix/sysv/linux/mkdir.c	2026-10-08 08:54:08.890284531 +0000
+@@ -19,11 +19,17 @@
+ #include <fcntl.h>
+ #include <sys/stat.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ 
+ /* Create a directory named PATH with protections MODE.  */
+ int
+ __mkdir (const char *path, mode_t mode)
+ {
++#if !IS_IN (rtld)
++  char dn_path[DN_PREFIX_MAX];
++  if (path != NULL && path[0] == '/')
++    path = dn_policy_redirect_nofollow (dn_path, sizeof dn_path, path);
++#endif
+ #ifdef __NR_mkdir
+   return INLINE_SYSCALL_CALL (mkdir,  path, mode);
+ #else
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/open.c work/sysdeps/unix/sysv/linux/open.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/open.c	2026-10-08 07:51:04.648680319 +0000
 +++ work/sysdeps/unix/sysv/linux/open.c	2026-10-08 07:52:23.760680289 +0000
@@ -2476,6 +2497,120 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +  return n;
  }
  weak_alias (__readlink, readlink)
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/rename.c work/sysdeps/unix/sysv/linux/rename.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/rename.c	2026-10-08 07:51:04.592680319 +0000
++++ work/sysdeps/unix/sysv/linux/rename.c	2026-10-08 08:54:19.734284527 +0000
+@@ -19,12 +19,20 @@
+ #include <stdio.h>
+ #include <fcntl.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ #include <errno.h>
+ 
+ /* Rename the file OLD to NEW.  */
+ int
+ rename (const char *old, const char *new)
+ {
++#if !IS_IN (rtld)
++  char dn_old[DN_PREFIX_MAX], dn_new[DN_PREFIX_MAX];
++  if (old != NULL && old[0] == '/')
++    old = dn_policy_redirect_nofollow (dn_old, sizeof dn_old, old);
++  if (new != NULL && new[0] == '/')
++    new = dn_policy_redirect_nofollow (dn_new, sizeof dn_new, new);
++#endif
+ #if defined (__NR_rename)
+   return INLINE_SYSCALL_CALL (rename, old, new);
+ #elif defined (__NR_renameat)
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/renameat.c work/sysdeps/unix/sysv/linux/renameat.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/renameat.c	2026-10-08 07:51:04.592680319 +0000
++++ work/sysdeps/unix/sysv/linux/renameat.c	2026-10-08 08:54:24.734284525 +0000
+@@ -19,11 +19,19 @@
+ #include <stdio.h>
+ #include <fcntl.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ #include <errno.h>
+ 
+ int
+ __renameat (int oldfd, const char *old, int newfd, const char *new)
+ {
++#if !IS_IN (rtld)
++  char dn_old[DN_PREFIX_MAX], dn_new[DN_PREFIX_MAX];
++  if (old != NULL && old[0] == '/')
++    old = dn_policy_redirect_nofollow (dn_old, sizeof dn_old, old);
++  if (new != NULL && new[0] == '/')
++    new = dn_policy_redirect_nofollow (dn_new, sizeof dn_new, new);
++#endif
+ #ifdef __NR_renameat
+   return INLINE_SYSCALL_CALL (renameat, oldfd, old, newfd, new);
+ #else
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/renameat2.c work/sysdeps/unix/sysv/linux/renameat2.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/renameat2.c	2026-10-08 07:51:04.596680319 +0000
++++ work/sysdeps/unix/sysv/linux/renameat2.c	2026-10-08 08:54:24.738284525 +0000
+@@ -19,11 +19,19 @@
+ #include <errno.h>
+ #include <stdio.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ 
+ int
+ __renameat2 (int oldfd, const char *old, int newfd, const char *new,
+            unsigned int flags)
+ {
++#if !IS_IN (rtld)
++  char dn_old[DN_PREFIX_MAX], dn_new[DN_PREFIX_MAX];
++  if (old != NULL && old[0] == '/')
++    old = dn_policy_redirect_nofollow (dn_old, sizeof dn_old, old);
++  if (new != NULL && new[0] == '/')
++    new = dn_policy_redirect_nofollow (dn_new, sizeof dn_new, new);
++#endif
+ #if !defined (__NR_renameat) || defined (__ASSUME_RENAMEAT2)
+   return INLINE_SYSCALL_CALL (renameat2, oldfd, old, newfd, new, flags);
+ #else
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/rmdir.c work/sysdeps/unix/sysv/linux/rmdir.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/rmdir.c	2026-10-08 07:51:04.604680319 +0000
++++ work/sysdeps/unix/sysv/linux/rmdir.c	2026-10-08 08:54:08.890284531 +0000
+@@ -19,11 +19,17 @@
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ 
+ /* Remove the directory PATH.  */
+ int
+ __rmdir (const char *path)
+ {
++#if !IS_IN (rtld)
++  char dn_path[DN_PREFIX_MAX];
++  if (path != NULL && path[0] == '/')
++    path = dn_policy_redirect_nofollow (dn_path, sizeof dn_path, path);
++#endif
+ #ifdef __NR_rmdir
+   return INLINE_SYSCALL_CALL (rmdir, path);
+ #else
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/statfs64.c work/sysdeps/unix/sysv/linux/statfs64.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/statfs64.c	2026-10-08 07:51:04.628680319 +0000
++++ work/sysdeps/unix/sysv/linux/statfs64.c	2026-10-08 08:54:19.734284527 +0000
+@@ -20,6 +20,7 @@
+ #define statfs statfs_disable
+ #include <sys/statfs.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ #include <kernel_stat.h>
+ #undef __statfs
+ #undef statfs
+@@ -28,6 +29,11 @@
+ int
+ __statfs64 (const char *file, struct statfs64 *buf)
+ {
++#if !IS_IN (rtld)
++  char dn_path[DN_PREFIX_MAX];
++  if (file != NULL && file[0] == '/')
++    file = dn_policy_redirect_nofollow (dn_path, sizeof dn_path, file);
++#endif
+ #ifdef __NR_statfs64
+   return INLINE_SYSCALL_CALL (statfs64, file, sizeof (*buf), buf);
+ #else
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/statx.c work/sysdeps/unix/sysv/linux/statx.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/statx.c	2026-10-08 07:51:04.648680319 +0000
 +++ work/sysdeps/unix/sysv/linux/statx.c	2026-10-08 08:40:25.782284845 +0000
@@ -2507,3 +2642,72 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +#endif
    return syscall (__NR_statx, fd, path, flags, mask, buf);
  }
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/symlink.c work/sysdeps/unix/sysv/linux/symlink.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/symlink.c	2026-10-08 07:51:04.628680319 +0000
++++ work/sysdeps/unix/sysv/linux/symlink.c	2026-10-08 08:54:08.890284531 +0000
+@@ -19,11 +19,19 @@
+ #include <unistd.h>
+ #include <fcntl.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ 
+ /* Make a link to FROM called TO.  */
+ int
+ __symlink (const char *from, const char *to)
+ {
++#if !IS_IN (rtld)
++  /* Only the link's own path (TO) is translated; FROM is the target
++     text stored verbatim, already a guest path. */
++  char dn_path[DN_PREFIX_MAX];
++  if (to != NULL && to[0] == '/')
++    to = dn_policy_redirect_nofollow (dn_path, sizeof dn_path, to);
++#endif
+ #ifdef __NR_symlink
+   return INLINE_SYSCALL_CALL (symlink, from, to);
+ #else
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/truncate64.c work/sysdeps/unix/sysv/linux/truncate64.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/truncate64.c	2026-10-08 07:51:04.632680319 +0000
++++ work/sysdeps/unix/sysv/linux/truncate64.c	2026-10-08 08:54:19.734284527 +0000
+@@ -17,6 +17,7 @@
+ 
+ #include <unistd.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ 
+ #ifndef __NR_truncate64
+ # define __NR_truncate64 __NR_truncate
+@@ -26,6 +27,11 @@
+ int
+ __truncate64 (const char *path, off64_t length)
+ {
++#if !IS_IN (rtld)
++  char dn_path[DN_PREFIX_MAX];
++  if (path != NULL && path[0] == '/')
++    path = dn_policy_redirect_nofollow (dn_path, sizeof dn_path, path);
++#endif
+   return INLINE_SYSCALL_CALL (truncate64, path,
+ 			      __ALIGNMENT_ARG SYSCALL_LL64 (length));
+ }
+diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/utimensat.c work/sysdeps/unix/sysv/linux/utimensat.c
+--- work-after-official-patch/sysdeps/unix/sysv/linux/utimensat.c	2026-10-08 07:51:04.636680319 +0000
++++ work/sysdeps/unix/sysv/linux/utimensat.c	2026-10-08 08:54:24.738284525 +0000
+@@ -19,6 +19,7 @@
+ #include <errno.h>
+ #include <sys/stat.h>
+ #include <sysdep.h>
++#include <dn-prefix.h>
+ #include <time.h>
+ #include <kernel-features.h>
+ 
+@@ -28,6 +29,11 @@
+ __utimensat64_helper (int fd, const char *file,
+                       const struct __timespec64 tsp64[2], int flags)
+ {
++#if !IS_IN (rtld)
++  char dn_path[DN_PREFIX_MAX];
++  if (file != NULL && file[0] == '/')
++    file = dn_policy_redirect_nofollow (dn_path, sizeof dn_path, file);
++#endif
+ #ifndef __NR_utimensat_time64
+ # define __NR_utimensat_time64 __NR_utimensat
+ #endif

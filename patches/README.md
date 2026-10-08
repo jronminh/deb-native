@@ -271,18 +271,20 @@ path translation through `dn_policy_redirect()` (and its `_nofollow` variant),
 plus `dn_policy_stat_post()` rewriting a stat result's owner fields from the
 owner store (fake root) -- instead of `__dn_redirect`'s inline root
 heuristic. It also carries the reverse translation (`getcwd()` and the
-`/proc/<self>` magic links -- `runtime.md`'s "Reverse translation"). The
-rest of the wiring (the chown, xattr, symlink and rename families,
-`syscall()` interposition, the gate page, the `RT/lib` search order) is
-still ahead; what is here is what made the first full glibc build with
-dn-policy inside it succeed, extended through the stat/access group and
-reverse translation.
+`/proc/<self>` magic links) and path translation for the simple manipulation
+wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
+`truncate`, `utimensat`/`utimes`/`utime`, `statfs`). The rest of the wiring
+(the chown/chmod/xattr families, `link`/`unlink`'s hardlink bookkeeping,
+`chdir`, the `syscall()` interposition, the gate page, the `RT/lib` search
+order) is still ahead; what is here is what made the first full glibc build
+with dn-policy inside it succeed, extended through the stat/access group,
+reverse translation and the manipulation wrappers.
 
 ## What it is
 
 `diff -ruN` between `work-after-official-patch/` (glibc source with
 `dn-glibc-android.patch` already applied once, per the section above) and
-`work/` (that plus the wiring). Twenty-two files:
+`work/` (that plus the wiring). Thirty-one files:
 
 - New, byte-identical copies of `src/dn-policy/` under
   `sysdeps/unix/sysv/linux/`: `dn-policy.{h,c}`, `dn-policy-fakeroot.c`,
@@ -322,6 +324,15 @@ reverse translation.
   dn-policy's own `readlink()` calls (symlink resolution, hardlink
   bookkeeping) seeing the raw host target. `getcwd.c` rewrites the path the
   kernel returns, on both the syscall path and the generic fallback.
+- Path translation for the simple manipulation wrappers, each just the
+  translate-then-syscall the above do: `mkdir.c`, `rmdir.c`,
+  `rename.c`/`renameat.c`/`renameat2.c` (both paths), `symlink.c` (the
+  link's own path only -- the target text is stored verbatim), `truncate64.c`,
+  and `utimensat.c` (`__utimensat64_helper`, which `utimes`/`utime` reach
+  too). The `*at` variants that `syscalls.list` generates directly
+  (`mkdirat`/`unlinkat`/`symlinkat`/`linkat`/`readlinkat`,
+  `inotify_add_watch`) and `chdir`/`chroot` cannot be reached this way --
+  they fall to the `ptrace` tier until `syscall()` is interposed.
 - `elf/Makefile`: `dn_policy_fake_stat` joins `rtld-stubbed-symbols` -- see
   below.
 
@@ -409,8 +420,17 @@ translation: `getcwd()` inside the tree returns `/etc`; `readlink()` of
 `/usr/bin/dn-rt-rev` and `/etc/dn-runtime-marker`; and an ordinary in-tree
 symlink's stored target comes back unchanged.
 
+A third binary does the manipulation round trip: `mkdir`, `truncate`,
+`symlink`+`readlink`, `rename`, `utimes` and `statfs` all succeed, and the
+shell then finds the result exactly where it belongs --
+`TREE/etc/dn-path-work/data` (4 bytes, mtime 2001) and `sym2` as a symlink
+-- with no host `/etc/dn-path-work` created.
+
 Covers the public `open`/`openat` and `stat`/`fstatat`/`statx`/`faccessat`
-families plus reverse translation (`getcwd`, the `/proc/self` magic links);
-the chown, xattr, symlink and rename families, `readlinkat()` (only
-`readlink()` is wired so far), `syscall()` interposition, the gate page and
-the `RT/lib` search order are still open.
+families, reverse translation (`getcwd`, the `/proc/self` magic links), and
+the `mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/
+`statfs` wrappers. Still open: the chown/chmod/xattr families, `link`/
+`unlink`'s hardlink bookkeeping, `chdir`/`chroot` and the
+`syscalls.list`-generated `*at` variants (all of these until `syscall()`
+interposition or their own slice), the gate page and the `RT/lib` search
+order.

@@ -160,18 +160,20 @@ below.
   every kernel call through the gate page, map the gate page at loader
   startup, reorder library search (`RT/lib` first).
   - Slices done in `patches/dn-policy-glibc-wiring.patch`: the public
-    `open`/`openat` family (eight `open*.c` call sites) and the stat/access
-    family (`fstatat64.c`, `statx.c`, `faccessat.c`) call dn-policy for path
-    translation, a successful `stat` is post-processed by
-    `dn_policy_fake_stat()` (owner store), and reverse translation is wired
-    for `getcwd()` and `readlink()` of the `/proc/self` magic links. rtld is
+    `open`/`openat` family, the stat/access family (`fstatat64.c`,
+    `statx.c`, `faccessat.c`), path translation for the simple manipulation
+    wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
+    `truncate`, `utimensat`/`utimes`/`utime`, `statfs`), reverse translation
+    for `getcwd()` and `readlink()` of the `/proc/self` magic links, and
+    `dn_policy_fake_stat()` (owner store) on a successful `stat`. rtld is
     kept out entirely (`#if !IS_IN (rtld)`, plus `dn_policy_fake_stat` in
     `elf/Makefile`'s `rtld-stubbed-symbols`). A full `make -O -j8` of glibc
     `2.41-12+deb13u4` with it applied links clean, `ld.so` ends up with no
-    dn-policy symbol, and a minimal prefix run under the built loader shows
-    `open`/`stat`/`lstat`, the fake-root post-processing and the reverse
-    translation all working (verified 2026-10-08; see `patches/README.md`).
-    Not yet in the build workflow — applied by hand in the scratch build.
+    dn-policy symbol, and the minimal prefix run under the built loader
+    shows `open`/`stat`/`lstat`, the fake-root post-processing, the reverse
+    translation and the manipulation wrappers all working (verified
+    2026-10-08; see `patches/README.md`). Not yet in the build workflow —
+    applied by hand in the scratch build.
 - Pick `P_GATE`: inspect a few real on-device process memory maps for free
   39-bit space (open item in `runtime.md`).
 - Turn on exec-gate rules 3/4 (rewrite to `RT/ld.so ...`). Drop the shim.
