@@ -1,0 +1,87 @@
+# deb-native syscall catalog -- the exact, categorized list of the syscalls
+# the runtime overlay handles (docs/spec/runtime.md, "The shared filter's
+# rules").  One source of truth: dn-trace builds its seccomp filter from it,
+# dn-glibc wires the rows marked glibc=yes, and tools/check-syscalls.py keeps
+# the two in step (principle 1: one place the rules live).
+#
+# PROVENANCE / SCOPE -- this list is NOT universal; it follows the Android
+# kernel and Android policy, so read it with its version:
+#   arch:     aarch64 (arm64) only
+#   android:  12 (kernel string "android12-9"; recheck per device/API level)
+#   kernel:   5.10.240-android12-9-33405034-abS7110ZHS8GZH6 (observed on the
+#             author's device; see ~/.claude/claude-native/doctor.sh output)
+#   sources:  docs/spec/runtime.md ("The shared filter's rules" -- the
+#             group lists); patches/dn-glibc-android.patch's fakesyscall.json
+#             (Android kernel/ABI buckets) and docs/reference/android-platform.md
+#             (per-file verdict); Termux termux-pacman/glibc-packages
+#             gpkg/glibc/fakesyscall.json (upstream of those buckets).
+#   updated:  2026-10-08
+# Android-specific syscall faking (statx/close_range/mq_open -> ENOSYS,
+# epoll_pwait2 and SysV IPC -> real substitutes, the setuid/... "0" bucket)
+# is a dn-glibc-android.patch concern, not an overlay one; it lives in that
+# patch's fakesyscall.json, which is the companion to this file.
+#
+# Columns: syscall  group  handling  glibc  gate
+#   group    path | identity   (everything else is "other": always ALLOWed)
+#   handling what dn-policy must do, comma-separated:
+#            map | resolve | fake-stat | fake-ids | fake-owner | link2symlink |
+#            fake-xattr | reverse | map-sockaddr | none
+#   glibc    yes = dn-glibc translates/rewrites it in-process
+#   gate     yes = dn-glibc issues its kernel call from the gate page, so the
+#            filter may ALLOW it; no = it is TRACEd and ptrace handles it
+#            (a `no` row is still correct, just slower).  The filter's rule:
+#            TRACE every path/identity call, except ALLOW one with gate=yes
+#            that really came from the gate page.
+# syscall	group	handling	glibc	gate
+openat	path	map,resolve	yes	no
+openat2	path	map	no	no
+faccessat	path	map	yes	yes
+faccessat2	path	map	no	no
+newfstatat	path	map,resolve,fake-stat	yes	yes
+statx	path	map	yes	yes
+readlinkat	path	map,resolve,reverse	yes	yes
+mkdirat	path	map	yes	yes
+mknodat	path	map,fake-owner	no	no
+unlinkat	path	map,link2symlink	yes	yes
+renameat	path	map	yes	yes
+renameat2	path	map	yes	yes
+linkat	path	map,link2symlink	no	no
+symlinkat	path	map	yes	yes
+chdir	path	map	no	no
+chroot	path	map	no	no
+fchmodat	path	map,fake-owner	yes	yes
+fchmodat2	path	map,fake-owner	no	no
+truncate	path	map	yes	yes
+utimensat	path	map	yes	yes
+statfs	path	map	yes	yes
+setxattr	path	map,fake-xattr	no	no
+lsetxattr	path	map,fake-xattr	no	no
+getxattr	path	map,fake-xattr	no	no
+lgetxattr	path	map,fake-xattr	no	no
+listxattr	path	map,fake-xattr	no	no
+llistxattr	path	map,fake-xattr	no	no
+removexattr	path	map,fake-xattr	no	no
+lremovexattr	path	map,fake-xattr	no	no
+inotify_add_watch	path	map	no	no
+getcwd	path	reverse	yes	yes
+bind	path	map-sockaddr	no	no
+connect	path	map-sockaddr	no	no
+getuid	identity	fake-ids	no	no
+geteuid	identity	fake-ids	no	no
+getgid	identity	fake-ids	no	no
+getegid	identity	fake-ids	no	no
+getresuid	identity	fake-ids	no	no
+getresgid	identity	fake-ids	no	no
+getgroups	identity	fake-ids	no	no
+setuid	identity	fake-ids	no	no
+setgid	identity	fake-ids	no	no
+setreuid	identity	fake-ids	no	no
+setregid	identity	fake-ids	no	no
+setresuid	identity	fake-ids	no	no
+setresgid	identity	fake-ids	no	no
+setgroups	identity	fake-ids	no	no
+setfsuid	identity	fake-ids	no	no
+setfsgid	identity	fake-ids	no	no
+fchown	identity	fake-owner	no	no
+fchownat	identity	map,fake-owner	no	no
+fstat	identity	fake-stat	no	no

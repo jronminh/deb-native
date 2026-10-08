@@ -224,6 +224,13 @@ x86_64 later needs its own additions.
   `fchownat`, `fstat`. `fstat` is here because fake root must rewrite the
   owner fields in its result.
 
+The exact, categorized list — each syscall's dn-policy handling, whether
+dn-glibc handles it in-process, and whether its kernel call is issued from
+the gate page — is [`src/syscalls.tsv`](../../src/syscalls.tsv). It is the one
+place `dn-trace` builds its filter from and the `dn-glibc` wiring is checked
+against, and it carries its own kernel/Android scope because both the list
+and the handling follow the Android kernel and policy.
+
 ### Processing tiers, cheapest first
 
 | Tier | Where it's handled | Applies to | Phase |
