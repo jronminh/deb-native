@@ -34,6 +34,7 @@
 #include "path/binding.h"
 #include "path/canon.h"
 #include "path/path.h"
+#include "dn-policy.h"
 
 #define USAGE "usage: dn-trace [-v LEVEL] [-u] [-b HOST[:GUEST]]... TREE LOADER [-- PROGRAM [ARG...]]\n"
 
@@ -189,6 +190,22 @@ int main(int argc, char *const argv[])
 	if (access(global_rt_loader, X_OK) < 0) {
 		note(tracee, ERROR, SYSTEM, "loader '%s'", global_rt_loader);
 		goto error;
+	}
+
+	/* dn-policy, the rules the traced path shares with dn-glibc; RT is
+	 * TREE/usr/lib/deb-native, as dn-glibc derives it.  */
+	{
+		char rt[PATH_MAX];
+
+		if ((size_t) snprintf(rt, sizeof(rt), "%s/usr/lib/deb-native", tree) >= sizeof(rt)) {
+			note(tracee, ERROR, USER, "TREE '%s' is too long", tree);
+			goto error;
+		}
+		status = dn_policy_init(tree, rt);
+		if (status < 0) {
+			note(tracee, ERROR, INTERNAL, "dn-policy: %s", strerror(-status));
+			goto error;
+		}
 	}
 
 	/* [-- PROGRAM [ARG...]], else the prefix's init.  */

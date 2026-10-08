@@ -140,14 +140,31 @@ int dn_policy_translate_path_nofollow(const char *guest_path, char *host_path_ou
  * free() on it directly. */
 typedef struct DnIdentity DnIdentity;
 
+/* A fresh root login: every id 0, groups {0}.  _dup() is fork()'s copy.  */
 DnIdentity *dn_policy_identity_new(void);
+DnIdentity *dn_policy_identity_dup(const DnIdentity *id);
 void dn_policy_identity_free(DnIdentity *id);
 
 uid_t dn_policy_fake_getuid(const DnIdentity *id);
 gid_t dn_policy_fake_getgid(const DnIdentity *id);
-/* set*id(): records the value and always succeeds. */
-void dn_policy_fake_setuid(DnIdentity *id, uid_t uid);
-void dn_policy_fake_setgid(DnIdentity *id, gid_t gid);
+void dn_policy_fake_getresuid(const DnIdentity *id, uid_t *r, uid_t *e, uid_t *s);
+void dn_policy_fake_getresgid(const DnIdentity *id, gid_t *r, gid_t *e, gid_t *s);
+/* set*id(): Linux's rules, "privileged" meaning a fake euid of 0 -- a
+ * program that dropped root cannot take it back.  (uid_t) -1 leaves an id
+ * unchanged.  0, or -EPERM / -EINVAL as the kernel would answer; nothing
+ * real changes.  setfs*id() return the previous fs id, as the kernel does. */
+int dn_policy_fake_setuid(DnIdentity *id, uid_t uid);
+int dn_policy_fake_setgid(DnIdentity *id, gid_t gid);
+int dn_policy_fake_setreuid(DnIdentity *id, uid_t r, uid_t e);
+int dn_policy_fake_setregid(DnIdentity *id, gid_t r, gid_t e);
+int dn_policy_fake_setresuid(DnIdentity *id, uid_t r, uid_t e, uid_t s);
+int dn_policy_fake_setresgid(DnIdentity *id, gid_t r, gid_t e, gid_t s);
+uid_t dn_policy_fake_setfsuid(DnIdentity *id, uid_t uid);
+gid_t dn_policy_fake_setfsgid(DnIdentity *id, gid_t gid);
+/* getgroups(2)/setgroups(2): the count (size 0 asks for it), or -EINVAL
+ * when @size is too small; setgroups needs privilege.  */
+int dn_policy_fake_getgroups(const DnIdentity *id, size_t size, gid_t *list);
+int dn_policy_fake_setgroups(DnIdentity *id, size_t n, const gid_t *list);
 
 /* The owner-store record for one file, identified by (st_dev, st_ino) so
  * it survives a rename. All fields are what runtime.md's "Fake root"

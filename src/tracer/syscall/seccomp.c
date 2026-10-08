@@ -551,8 +551,12 @@ static FilteredSysnum fakeroot_sysnums[] = {
 	{ PR_setfsuid,		FILTER_SYSEXIT },
 	{ PR_setfsgid,		FILTER_SYSEXIT },
 	{ PR_fchownat,		FILTER_SYSEXIT },
+	{ PR_fchmod,		FILTER_SYSEXIT },
+	{ PR_fchmodat,		FILTER_SYSEXIT },
+	{ PR_linkat,		FILTER_SYSEXIT },
 	{ PR_newfstatat,	FILTER_SYSEXIT },
 	{ PR_fstatat64,		FILTER_SYSEXIT },
+	{ PR_statx,		FILTER_SYSEXIT },
 	FILTERED_SYSNUM_END,
 };
 

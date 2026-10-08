@@ -46,9 +46,9 @@ find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-trace -o -name dn-catalog.c 
 # by Android's seccomp at startup, so link the patched libc.a in
 # (docs/reference/android-platform.md, "Gate A").
 if [ -n "${DN_GLIBC_LIBC_DIR:-}" ]; then
-  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" LDFLAGS="-static -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
+  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" LDFLAGS="-static -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
 else
-  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv"
+  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy"
 fi
 cp -f "$T/dn-trace" "$OUT/dn-trace"
 

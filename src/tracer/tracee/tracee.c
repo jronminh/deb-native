@@ -92,6 +92,11 @@ static int remove_tracee(Tracee *tracee)
 
 	LIST_REMOVE(tracee, link);
 
+	if (tracee->dn_identity != NULL) {
+		dn_policy_identity_free(tracee->dn_identity);
+		tracee->dn_identity = NULL;
+	}
+
 	/* Clean objects that are linked to this tracee's life
 	 * span.  */
 	talloc_report_depth_cb(tracee->life_context, 0, 100, clean_life_span_object, tracee);
@@ -657,6 +662,13 @@ static int attach_child(Tracee *parent, word_t clone_flags, pid_t pid)
 	child->auxv_fd = parent->auxv_fd;
 	child->no_new_privs = parent->no_new_privs;
 	child->seen_execve = parent->seen_execve;
+	if (parent->dn_identity != NULL) {
+		if (child->dn_identity != NULL)
+			dn_policy_identity_free(child->dn_identity);
+		child->dn_identity = dn_policy_identity_dup(parent->dn_identity);
+		if (child->dn_identity == NULL)
+			return -ENOMEM;
+	}
 #ifdef HAS_POKEDATA_WORKAROUND
 	child->pokedata_workaround_stub_addr = parent->pokedata_workaround_stub_addr;
 #endif

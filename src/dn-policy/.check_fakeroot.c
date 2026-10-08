@@ -46,10 +46,32 @@ int main(void)
 	id2 = dn_policy_identity_new();
 	CHECK(id1 != NULL && id2 != NULL, "identity_new");
 	CHECK(dn_policy_fake_getuid(id1) == 0, "fresh identity starts at uid 0");
-	dn_policy_fake_setuid(id1, 105); /* e.g. "_apt" */
+	CHECK(dn_policy_fake_setuid(id1, 105) == 0, "root may setuid"); /* e.g. "_apt" */
 	CHECK(dn_policy_fake_getuid(id1) == 105, "setuid sticks on id1");
 	CHECK(dn_policy_fake_getuid(id2) == 0, "id2 untouched by id1's setuid");
+	CHECK(dn_policy_fake_setuid(id1, 0) == -EPERM, "a dropped id cannot take root back");
+	CHECK(dn_policy_fake_setresuid(id1, -1, 0, -1) == -EPERM, "nor through setresuid");
 	dn_policy_identity_free(id1);
+
+	/* apt's drop: setgroups, setresgid, setresuid; then it checks.  */
+	{
+		gid_t g = 65534, groups[4];
+		uid_t r, e, s;
+		DnIdentity *child;
+
+		CHECK(dn_policy_fake_setgroups(id2, 1, &g) == 0, "root may setgroups");
+		CHECK(dn_policy_fake_setresgid(id2, 65534, 65534, 65534) == 0, "setresgid");
+		CHECK(dn_policy_fake_setresuid(id2, 42, 42, 42) == 0, "setresuid");
+		dn_policy_fake_getresuid(id2, &r, &e, &s);
+		CHECK(r == 42 && e == 42 && s == 42, "getresuid reads the drop back");
+		CHECK(dn_policy_fake_getgroups(id2, 4, groups) == 1 && groups[0] == 65534,
+		      "getgroups reads the drop back");
+		CHECK(dn_policy_fake_getgroups(id2, 0, NULL) == 1, "getgroups(0) counts");
+		CHECK(dn_policy_fake_setgroups(id2, 1, &g) == -EPERM, "no setgroups once dropped");
+		child = dn_policy_identity_dup(id2);
+		CHECK(child != NULL && dn_policy_fake_getuid(child) == 42, "fork inherits the ids");
+		dn_policy_identity_free(child);
+	}
 	dn_policy_identity_free(id2);
 
 	/* Owner store: a real file, no record yet -> fake_stat reports 0/0.  */
@@ -157,6 +179,29 @@ int main(void)
 	status = dn_policy_fake_getxattr(path, st.st_dev, st.st_ino,
 					  "security.capability", xattr_out, sizeof(xattr_out));
 	CHECK(status == -ENOENT, "fake_getxattr -ENOENT after fake_removexattr");
+
+	/* An unwritable file (dpkg unpacks before it sets the mode): its
+	 * owner is still recorded, and its mode left as it was.  */
+	{
+		char locked[PATH_MAX];
+		struct stat ls;
+		int fd;
+
+		snprintf(locked, sizeof(locked), "%s/locked", tree);
+		fd = open(locked, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		CHECK(fd >= 0, "create the locked file");
+		close(fd);
+		CHECK(chmod(locked, 0) == 0, "chmod 000");
+		CHECK(stat(locked, &ls) == 0, "stat the locked file");
+		status = dn_policy_owner_merge(locked, ls.st_dev, ls.st_ino, 1, 0, 42, 0, 0);
+		if (status != 0) printf("     owner_merge status=%d\n", status);
+		CHECK(status == 0, "owner_merge on a mode-000 file");
+		CHECK(stat(locked, &ls) == 0 && (ls.st_mode & 07777) == 0, "its mode is restored");
+		dn_policy_fake_stat(locked, &ls);
+		CHECK(ls.st_gid == 42, "its record reads back");
+		chmod(locked, 0600);
+		unlink(locked);
+	}
 
 	if (n_fail == 0)
 		printf("all checks passed\n");

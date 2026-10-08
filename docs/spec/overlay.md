@@ -465,7 +465,16 @@ Implemented and exercised on-device:
   [What the wiring covers](#what-the-wiring-covers)).
 - **dn-trace** — the tree's root; the shared filter with the gate-IP rule built
   from the embedded catalog; the exec gate rule 3 (through `LOADER`); one
-  static binary, `dn-trace TREE LOADER [-- PROGRAM ARGS...]`.
+  static binary, `dn-trace TREE LOADER [-- PROGRAM ARGS...]`. dn-policy is
+  compiled in (P3, the traced path): the identity group is answered from a
+  per-tracee identity with Linux's rules (`set*id` recorded, a dropped id
+  cannot take root back, a child inherits; Android's SIGSYS-trapped `set*id`
+  too), so apt drops to `_apt`; `fchown`/`fchownat`/`fchmod`/`fchmodat`
+  reach the owner store and `fstat`/`fstatat`/`statx` report it; a refused
+  `linkat` becomes a link2symlink and `unlinkat` keeps its count; `chdir`
+  moves the real cwd with the guest's; a directory a program makes keeps
+  `rwx` for its owner (root's DAC override, until its `chmod`). `-u` runs
+  with the real ids.
 - **`src/syscalls.tsv`** — the catalog, checked by `tools/check-syscalls.py`.
 
 Still open (P2/P3):
@@ -474,14 +483,16 @@ Still open (P2/P3):
 - Issue **every** glibc syscall from the gate page: the cancelable path
   (`syscall_cancel.S`) is the delicate one — its `_arch_start`/`_end`
   cancellation markers assume the svc is inline.
-- Turn on the path and identity groups in the shared filter (P3): `dn-trace`
-  handles them via `ptrace` through dn-policy, replacing the old `ptrace`
-  mechanism. Until then `dn-trace`'s own fake root reports 0 and lets a
-  refused `set*id`/`chown` succeed but records nothing: an owner set by
-  `fchownat`/`fchown` (coreutils `chown`, `tar`, dpkg's regular files) or
-  an id set by `set*id` does not read back (only dn-glibc's absolute-path
-  `chown`/`lchown`/`chmod` reach the owner store), and `linkat` (coreutils
-  `ln`) has no link2symlink, so SELinux refuses it.
+- The rest of P3:
+  - root's DAC override for `open`: dpkg reopens each file it unpacked
+    `O_WRONLY` to fsync it, and one it made unwritable (mode 0, or 0440 like
+    `/etc/sudoers`) gets `EACCES` -- installing `sudo` fails there;
+  - path translation on the traced path is still PRoot's (bindings), not
+    `dn_policy_translate_path()`; the two agree on the tree's layout;
+  - the filter's TRACE list is still PRoot's `proot_sysnums`, not the
+    catalog's path/identity rows;
+  - a symlink's own owner is not recorded (a `user.*` xattr cannot sit on
+    a symlink; it reads as root's).
 - A program run through the runtime loader reports the loader as its
   `comm` (`/proc/self/status` `Name:`, `ps`, `pkill`).
 - The `bind`/`connect` UNIX-socket path (sockaddr, 108-byte cap).

@@ -31,6 +31,7 @@
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/xattr.h>
+#include <sys/syscall.h> /* __NR_fchmodat, */
 #include <stdlib.h>
 #include <pthread.h>
 
@@ -44,19 +45,38 @@ static int state_ready;
 
 /* ---- DnIdentity (per traced program, never a dn-policy global) ---- */
 
+/* Linux's credential rules, with "privileged" meaning a fake euid of 0
+ * (capabilities are not modelled): a program that dropped to another user
+ * cannot take root back, and apt checks exactly that after it drops to
+ * _apt.  A new identity is a fresh root login: every id 0, groups {0}. */
+#define DN_IDENTITY_NGROUPS 64
+
 struct DnIdentity {
-	uid_t uid;
-	gid_t gid;
+	uid_t ruid, euid, suid, fsuid;
+	gid_t rgid, egid, sgid, fsgid;
+	size_t ngroups;
+	gid_t groups[DN_IDENTITY_NGROUPS];
 };
+
+#define DN_UNCHANGED ((uid_t) -1)
 
 DnIdentity *dn_policy_identity_new(void)
 {
 	DnIdentity *id = malloc(sizeof(*id));
 	if (id == NULL)
 		return NULL;
-	id->uid = 0;
-	id->gid = 0;
+	memset(id, 0, sizeof(*id));
+	id->ngroups = 1;
 	return id;
+}
+
+DnIdentity *dn_policy_identity_dup(const DnIdentity *id)
+{
+	DnIdentity *copy = malloc(sizeof(*copy));
+	if (copy == NULL)
+		return NULL;
+	*copy = *id;
+	return copy;
 }
 
 void dn_policy_identity_free(DnIdentity *id)
@@ -66,22 +86,172 @@ void dn_policy_identity_free(DnIdentity *id)
 
 uid_t dn_policy_fake_getuid(const DnIdentity *id)
 {
-	return id->uid;
+	return id->ruid;
 }
 
 gid_t dn_policy_fake_getgid(const DnIdentity *id)
 {
-	return id->gid;
+	return id->rgid;
 }
 
-void dn_policy_fake_setuid(DnIdentity *id, uid_t uid)
+void dn_policy_fake_getresuid(const DnIdentity *id, uid_t *r, uid_t *e, uid_t *s)
 {
-	id->uid = uid;
+	*r = id->ruid;
+	*e = id->euid;
+	*s = id->suid;
 }
 
-void dn_policy_fake_setgid(DnIdentity *id, gid_t gid)
+void dn_policy_fake_getresgid(const DnIdentity *id, gid_t *r, gid_t *e, gid_t *s)
 {
-	id->gid = gid;
+	*r = id->rgid;
+	*e = id->egid;
+	*s = id->sgid;
+}
+
+static int privileged(const DnIdentity *id)
+{
+	return id->euid == 0;
+}
+
+/* @v is one of @a, @b, @c (the ids an unprivileged caller may pick). */
+static int one_of(uint32_t v, uint32_t a, uint32_t b, uint32_t c)
+{
+	return v == a || v == b || v == c;
+}
+
+int dn_policy_fake_setresuid(DnIdentity *id, uid_t r, uid_t e, uid_t s)
+{
+	if (!privileged(id)
+	    && ((r != DN_UNCHANGED && !one_of(r, id->ruid, id->euid, id->suid))
+		|| (e != DN_UNCHANGED && !one_of(e, id->ruid, id->euid, id->suid))
+		|| (s != DN_UNCHANGED && !one_of(s, id->ruid, id->euid, id->suid))))
+		return -EPERM;
+	if (r != DN_UNCHANGED)
+		id->ruid = r;
+	if (e != DN_UNCHANGED)
+		id->euid = e;
+	if (s != DN_UNCHANGED)
+		id->suid = s;
+	id->fsuid = id->euid;
+	return 0;
+}
+
+int dn_policy_fake_setresgid(DnIdentity *id, gid_t r, gid_t e, gid_t s)
+{
+	if (!privileged(id)
+	    && ((r != (gid_t) DN_UNCHANGED && !one_of(r, id->rgid, id->egid, id->sgid))
+		|| (e != (gid_t) DN_UNCHANGED && !one_of(e, id->rgid, id->egid, id->sgid))
+		|| (s != (gid_t) DN_UNCHANGED && !one_of(s, id->rgid, id->egid, id->sgid))))
+		return -EPERM;
+	if (r != (gid_t) DN_UNCHANGED)
+		id->rgid = r;
+	if (e != (gid_t) DN_UNCHANGED)
+		id->egid = e;
+	if (s != (gid_t) DN_UNCHANGED)
+		id->sgid = s;
+	id->fsgid = id->egid;
+	return 0;
+}
+
+int dn_policy_fake_setreuid(DnIdentity *id, uid_t r, uid_t e)
+{
+	uid_t old_ruid = id->ruid;
+	uid_t s = DN_UNCHANGED;
+
+	if (!privileged(id)
+	    && ((r != DN_UNCHANGED && r != id->ruid && r != id->euid)
+		|| (e != DN_UNCHANGED && !one_of(e, id->ruid, id->euid, id->suid))))
+		return -EPERM;
+	/* The saved id follows the new effective one when the real id is set
+	 * or the effective one moves off the old real id.  */
+	if (r != DN_UNCHANGED || (e != DN_UNCHANGED && e != old_ruid))
+		s = (e != DN_UNCHANGED) ? e : id->euid;
+	id->suid = (s != DN_UNCHANGED) ? s : id->suid;
+	if (r != DN_UNCHANGED)
+		id->ruid = r;
+	if (e != DN_UNCHANGED)
+		id->euid = e;
+	id->fsuid = id->euid;
+	return 0;
+}
+
+int dn_policy_fake_setregid(DnIdentity *id, gid_t r, gid_t e)
+{
+	gid_t old_rgid = id->rgid;
+	gid_t s = (gid_t) DN_UNCHANGED;
+
+	if (!privileged(id)
+	    && ((r != (gid_t) DN_UNCHANGED && r != id->rgid && r != id->egid)
+		|| (e != (gid_t) DN_UNCHANGED && !one_of(e, id->rgid, id->egid, id->sgid))))
+		return -EPERM;
+	if (r != (gid_t) DN_UNCHANGED || (e != (gid_t) DN_UNCHANGED && e != old_rgid))
+		s = (e != (gid_t) DN_UNCHANGED) ? e : id->egid;
+	id->sgid = (s != (gid_t) DN_UNCHANGED) ? s : id->sgid;
+	if (r != (gid_t) DN_UNCHANGED)
+		id->rgid = r;
+	if (e != (gid_t) DN_UNCHANGED)
+		id->egid = e;
+	id->fsgid = id->egid;
+	return 0;
+}
+
+int dn_policy_fake_setuid(DnIdentity *id, uid_t uid)
+{
+	if (privileged(id))
+		return dn_policy_fake_setresuid(id, uid, uid, uid);
+	if (uid != id->ruid && uid != id->suid)
+		return -EPERM;
+	return dn_policy_fake_setresuid(id, DN_UNCHANGED, uid, DN_UNCHANGED);
+}
+
+int dn_policy_fake_setgid(DnIdentity *id, gid_t gid)
+{
+	if (privileged(id))
+		return dn_policy_fake_setresgid(id, gid, gid, gid);
+	if (gid != id->rgid && gid != id->sgid)
+		return -EPERM;
+	return dn_policy_fake_setresgid(id, (gid_t) DN_UNCHANGED, gid, (gid_t) DN_UNCHANGED);
+}
+
+uid_t dn_policy_fake_setfsuid(DnIdentity *id, uid_t uid)
+{
+	uid_t old = id->fsuid;
+
+	if (uid != DN_UNCHANGED
+	    && (privileged(id) || one_of(uid, id->ruid, id->euid, id->suid) || uid == id->fsuid))
+		id->fsuid = uid;
+	return old;
+}
+
+gid_t dn_policy_fake_setfsgid(DnIdentity *id, gid_t gid)
+{
+	gid_t old = id->fsgid;
+
+	if (gid != (gid_t) DN_UNCHANGED
+	    && (privileged(id) || one_of(gid, id->rgid, id->egid, id->sgid) || gid == id->fsgid))
+		id->fsgid = gid;
+	return old;
+}
+
+int dn_policy_fake_getgroups(const DnIdentity *id, size_t size, gid_t *list)
+{
+	if (size == 0)
+		return (int) id->ngroups;
+	if (size < id->ngroups)
+		return -EINVAL;
+	memcpy(list, id->groups, id->ngroups * sizeof(gid_t));
+	return (int) id->ngroups;
+}
+
+int dn_policy_fake_setgroups(DnIdentity *id, size_t n, const gid_t *list)
+{
+	if (!privileged(id))
+		return -EPERM;
+	if (n > DN_IDENTITY_NGROUPS)
+		return -EINVAL;
+	memcpy(id->groups, list, n * sizeof(gid_t));
+	id->ngroups = n;
+	return 0;
 }
 
 /* ---- Setup: probe once, from dn_policy_init() ---------------------- */
@@ -377,9 +547,35 @@ static void disk_to_record(const DbRecord *in, DnOwnerRecord *out)
 	out->rdev = in->rdev;
 }
 
+/* stat(2) without dn-glibc's stat wrapper: that one asks the owner store
+ * (dn_policy_fake_stat), which is what calls this -- the raw syscall keeps
+ * the store from recursing into itself.  arm64's kernel struct stat is
+ * glibc's.  */
+static int raw_stat(const char *host_path, struct stat *st)
+{
+	return (int) syscall(__NR_newfstatat, AT_FDCWD, host_path, st, 0);
+}
+
 static int owner_get_xattr(const char *host_path, DnOwnerRecord *out)
 {
 	ssize_t n = getxattr(host_path, DN_OWNER_XATTR, out, sizeof(*out));
+
+	/* Reading a user.* xattr needs read access: lend the owner read bit
+	 * to a file it made unreadable, as owner_set_xattr() lends the write
+	 * bit.  */
+	if (n < 0 && errno == EACCES) {
+		struct stat st;
+		int err;
+
+		if (raw_stat(host_path, &st) < 0)
+			return -errno;
+		if (syscall(__NR_fchmodat, AT_FDCWD, host_path, (st.st_mode & 07777) | S_IRUSR) < 0)
+			return -errno;
+		n = getxattr(host_path, DN_OWNER_XATTR, out, sizeof(*out));
+		err = errno;
+		(void) syscall(__NR_fchmodat, AT_FDCWD, host_path, st.st_mode & 07777);
+		errno = err;
+	}
 	if (n < 0)
 		return (errno == ENODATA) ? -ENOENT : -errno; /* Linux has no ENOATTR */
 	if (n != (ssize_t) sizeof(*out))
@@ -389,9 +585,25 @@ static int owner_get_xattr(const char *host_path, DnOwnerRecord *out)
 
 static int owner_set_xattr(const char *host_path, const DnOwnerRecord *record)
 {
-	if (setxattr(host_path, DN_OWNER_XATTR, record, sizeof(*record), 0) < 0)
+	struct stat st;
+	int status;
+
+	if (setxattr(host_path, DN_OWNER_XATTR, record, sizeof(*record), 0) == 0)
+		return 0;
+	if (errno != EACCES)
 		return -errno;
-	return 0;
+
+	/* A user.* xattr needs write access to the inode, which a file its
+	 * owner made unwritable lacks (dpkg unpacks before it sets the mode):
+	 * lend the owner write bit for the call.  The raw syscall, so that
+	 * dn-glibc's own chmod() wrapper does not come back here.  */
+	if (raw_stat(host_path, &st) < 0)
+		return -errno;
+	if (syscall(__NR_fchmodat, AT_FDCWD, host_path, (st.st_mode & 07777) | S_IWUSR) < 0)
+		return -errno;
+	status = setxattr(host_path, DN_OWNER_XATTR, record, sizeof(*record), 0) < 0 ? -errno : 0;
+	(void) syscall(__NR_fchmodat, AT_FDCWD, host_path, st.st_mode & 07777);
+	return status;
 }
 
 static int owner_get_db(dev_t dev, ino_t ino, DnOwnerRecord *out)
@@ -502,6 +714,14 @@ void dn_policy_fake_stat(const char *host_path, struct stat *st)
 	 * lstat already gave us. */
 	(void) dn_policy_hardlink_fixup_stat(host_path, st);
 
+	/* A symlink (lstat) carries no record of its own, and the xattr
+	 * lookup would follow it to its target's: it reads as root's.  */
+	if (S_ISLNK(st->st_mode)) {
+		st->st_uid = 0;
+		st->st_gid = 0;
+		return;
+	}
+
 	if (dn_policy_owner_get(host_path, st->st_dev, st->st_ino, &record) < 0) {
 		/* No record: "an ordinary Debian install" (runtime.md). */
 		st->st_uid = 0;
@@ -533,9 +753,12 @@ dn_policy_owner_merge(const char *host_path, uint64_t dev, uint64_t ino,
 		record.rdev = 0;
 	}
 
+	/* chown()'s -1 leaves that id as it is.  */
 	if (set_ids) {
-		record.uid = (uid_t) uid;
-		record.gid = (gid_t) gid;
+		if (uid != (uint32_t) -1)
+			record.uid = (uid_t) uid;
+		if (gid != (uint32_t) -1)
+			record.gid = (gid_t) gid;
 	}
 	if (set_mode)
 		record.mode_bits = (mode_t) (mode_bits & 07000);

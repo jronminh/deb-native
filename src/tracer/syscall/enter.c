@@ -46,6 +46,8 @@
 #include <sys/ioctl.h>   /* ioctl(2): SIOCGIFMTU / SIOCGIFHWADDR */
 #include <sys/time.h>    /* struct timeval, for SO_RCVTIMEO */
 #include "syscall/pipe_shadow.h"
+#include "syscall/dn-identity.h"
+#include "syscall/dn-owner.h"
 
 /* ABI-stable rtnetlink constants we synthesise for the loopback reply.
  * Defined locally so we needn't pull in <linux/if.h> / <linux/if_arp.h>,
@@ -1863,6 +1865,12 @@ int translate_syscall_enter(Tracee *tracee)
 
 	/* Translate input arguments. */
 	syscall_number = get_sysnum(tracee, ORIGINAL);
+
+	/* deb-native fake root: the identity group is answered here.  */
+	status = dn_identity_enter(tracee, syscall_number);
+	if (status <= 0)
+		goto end;
+
 	switch (syscall_number) {
 	default:
 		/* Nothing to do. */
@@ -1905,6 +1913,7 @@ int translate_syscall_enter(Tracee *tracee)
 	case PR_fchdir:
 	case PR_chdir: {
 		struct stat statl;
+		char host_dir[PATH_MAX];
 		char *tmp;
 
 		/* The ending "." ensures an error will be reported if
@@ -1928,6 +1937,7 @@ int translate_syscall_enter(Tracee *tracee)
 		status = translate_path(tracee, path, dirfd, oldpath, true);
 		if (status < 0)
 			break;
+		strcpy(host_dir, path);
 
 		status = lstat(path, &statl);
 		if (status < 0)
@@ -1968,9 +1978,15 @@ int translate_syscall_enter(Tracee *tracee)
 		tracee->fs->cwd = tmp;
 		talloc_set_name_const(tracee->fs->cwd, "$cwd");
 
-		poke_reg(tracee, SYSARG_RESULT, 0);
-		set_sysnum(tracee, PR_void);
-		status = 0;
+		/* deb-native: the kernel's cwd follows the guest's -- dn-glibc
+		 * leaves a relative path to the kernel (docs/spec/overlay.md,
+		 * "Path rewriting"), and a call let through from the gate page
+		 * is resolved against it.  chdir() goes to the translated
+		 * directory; fchdir()'s descriptor is already a real one.  */
+		if (syscall_number == PR_chdir)
+			status = set_sysarg_path(tracee, host_dir, SYSARG_1);
+		else
+			status = 0;
 		break;
 	}
 
@@ -2891,6 +2907,11 @@ int translate_syscall_enter(Tracee *tracee)
 
 
 end:
+	/* deb-native fake root: what needs the translated paths
+	 * (syscall/dn-owner.c).  */
+	if (status >= 0)
+		(void) dn_owner_enter(tracee, syscall_number);
+
 	status2 = notify_extensions(tracee, SYSCALL_ENTER_END, status, 0);
 	if (status2 < 0)
 		status = status2;

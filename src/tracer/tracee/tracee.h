@@ -32,6 +32,7 @@
 #include <stdint.h>    /* *int*_t, */
 
 #include "arch.h" /* word_t, user_regs_struct, HAS_POKEDATA_WORKAROUND */
+#include "dn-policy.h" /* DnIdentity, */
 #include "compat.h"
 
 typedef enum {
@@ -340,6 +341,11 @@ typedef struct tracee {
 	 * PR_SET_NO_NEW_PRIVS that PRoot performs itself in the launch child
 	 * (before that execve) when tracking @no_new_privs. */
 	bool seen_execve;
+
+	/* deb-native fake root: this tracee's ids (dn-policy keeps the rules;
+	 * syscall/enter.c answers the identity group from it).  A child gets
+	 * a copy; created on first use.  */
+	DnIdentity *dn_identity;
 
 	/**********************************************************************
 	 * Shared or private resources, depending on the CLONE_FS/VM flags.   *

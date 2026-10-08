@@ -13,6 +13,7 @@
 #include "syscall/chain.h"
 #include "syscall/syscall.h"
 #include "tracee/seccomp.h"
+#include "syscall/dn-identity.h"
 #include "tracee/mem.h"
 #include "tracee/statx.h"
 #include "path/path.h"
@@ -152,6 +153,19 @@ static int handle_seccomp_event_common(Tracee *tracee)
 	if (status == 2) {
 		VERBOSE(tracee, 4, "SIGSYS fully handled by an extension with result set");
 		return 0;
+	}
+
+	/* deb-native fake root: Android traps the set*id calls; answer them
+	 * from the tracee's ids, as the enter stage does for the rest of the
+	 * identity group.  */
+	{
+		long result;
+
+		status = dn_identity_result(tracee, sysnum, &result);
+		if (status <= 0) {
+			set_result_after_seccomp(tracee, status < 0 ? status : result);
+			return 0;
+		}
 	}
 
 	switch (sysnum) {

@@ -41,6 +41,8 @@ OBJECTS += \
 	syscall/seccomp.o	\
 	syscall/dn-syscalls.o	\
 	syscall/dn-catalog.o	\
+	syscall/dn-identity.o	\
+	syscall/dn-owner.o	\
 	syscall/syscall.o	\
 	syscall/chain.o		\
 	syscall/enter.o		\
@@ -59,6 +61,16 @@ OBJECTS += \
 	ptrace/user.o		\
 	ptrace/wait.o		\
 	extension/extension.o
+
+# deb-native: dn-policy (src/dn-policy), the one policy dn-glibc also runs
+# in-process, is compiled in: the traced path applies the same rules.  A
+# build from a copy of this directory passes DNPOLICY=<repo>/src/dn-policy.
+DNPOLICY ?= $(SRC)../dn-policy
+CPPFLAGS += -I$(DNPOLICY)
+OBJECTS += \
+	dnpolicy/dn-policy.o		\
+	dnpolicy/dn-policy-fakeroot.o	\
+	dnpolicy/dn-policy-hardlink.o
 
 .DEFAULT_GOAL = dn-trace
 all: dn-trace
@@ -151,6 +163,10 @@ $(USE_BUILD_H): build.h
 %.o: %.c
 	@mkdir -p $(dir $@)
 	$(COMPILE)
+
+dnpolicy/%.o: $(DNPOLICY)/%.c
+	@mkdir -p $(dir $@)
+	$($(quiet)CC) $(CPPFLAGS) $(CFLAGS) -MD -c $< -o $@
 
 ######################################################################
 # Dependencies

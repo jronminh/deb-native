@@ -50,6 +50,7 @@
 #include "ptrace/wait.h"
 #include "extension/extension.h"
 #include "arch.h"
+#include "syscall/dn-owner.h"
 
 /* deb-native fake root (docs/spec/overlay.md, "Fake root"): a traced
  * program sees itself as root: the identity calls report 0, files owned
@@ -60,19 +61,6 @@
 bool dn_fake_root(void)
 {
 	return !global_real_ids;
-}
-
-/* Rewrite the owner fields at @uid_addr/@gid_addr of a stat buffer in the
- * tracee from the real ids to 0.  */
-static void fake_owner(Tracee *tracee, word_t uid_addr, word_t gid_addr)
-{
-	uint32_t id;
-	const uint32_t zero = 0;
-
-	if (read_data(tracee, &id, uid_addr, sizeof(id)) == 0 && id == (uint32_t) getuid())
-		(void) write_data(tracee, uid_addr, &zero, sizeof(zero));
-	if (read_data(tracee, &id, gid_addr, sizeof(id)) == 0 && id == (uint32_t) getgid())
-		(void) write_data(tracee, gid_addr, &zero, sizeof(zero));
 }
 
 /**
@@ -752,85 +740,25 @@ void translate_syscall_exit(Tracee *tracee)
 
 	case PR_statx:
 		status = handle_statx_syscall(tracee, false);
-		/* struct statx: stx_uid at 20, stx_gid at 24.  */
-		if (status >= 0 && dn_fake_root()) {
-			word_t buf = peek_reg(tracee, ORIGINAL, SYSARG_5);
-			fake_owner(tracee, buf + 20, buf + 24);
-		}
+		if (status >= 0)
+			(void) dn_owner_exit(tracee, PR_statx, (word_t) status);
 		break;
 
-	/* deb-native fake root (see dn_fake_root()).  */
-	case PR_getuid:
-	case PR_geteuid:
-	case PR_getgid:
-	case PR_getegid:
-		if (dn_fake_root())
-			poke_reg(tracee, SYSARG_RESULT, 0);
-		goto end;
+	/* deb-native fake root: the identity group (get*id, set*id, the
+	 * groups, setfs*id) is answered at the enter stage, from the
+	 * tracee's DnIdentity (syscall/dn-identity.c).  */
 
-	case PR_getresuid:
-	case PR_getresgid: {
-		const uint32_t zero = 0;
-		int i;
-
-		if (!dn_fake_root() || (int) syscall_result < 0)
-			goto end;
-		for (i = 0; i < 3; i++) {
-			word_t addr = peek_reg(tracee, ORIGINAL, i == 0 ? SYSARG_1 : i == 1 ? SYSARG_2 : SYSARG_3);
-			if (addr != 0)
-				(void) write_data(tracee, addr, &zero, sizeof(zero));
-		}
-		goto end;
-	}
-
-	case PR_getgroups: {
-		const uint32_t zero = 0;
-
-		/* The answer is one group, 0, whatever the kernel said: a
-		 * buffer sized for that one group gets EINVAL from the kernel
-		 * (the real list is longer), so its result is not trusted.  */
-		if (!dn_fake_root())
-			goto end;
-		if ((int) peek_reg(tracee, ORIGINAL, SYSARG_1) > 0
-		    && write_data(tracee, peek_reg(tracee, ORIGINAL, SYSARG_2), &zero, sizeof(zero)) < 0) {
-			poke_reg(tracee, SYSARG_RESULT, (word_t) -EFAULT);
-			goto end;
-		}
-		poke_reg(tracee, SYSARG_RESULT, 1);
-		goto end;
-	}
-
+	/* deb-native fake root: ownership by the owner store
+	 * (syscall/dn-owner.c).  */
 	case PR_fstat:
 	case PR_fstatat64:	/* arm64's newfstatat (sysnums-arm64.h) */
-	case PR_newfstatat: {
-		/* arm64 struct stat: st_uid at 24, st_gid at 28.  */
-		word_t buf;
-
-		if (!dn_fake_root() || (int) syscall_result < 0)
-			goto end;
-		buf = peek_reg(tracee, ORIGINAL, syscall_number == PR_fstat ? SYSARG_2 : SYSARG_3);
-		fake_owner(tracee, buf + 24, buf + 28);
-		goto end;
-	}
-
+	case PR_newfstatat:
 	case PR_fchown:
 	case PR_fchownat:
-	case PR_setuid:
-	case PR_setgid:
-	case PR_setreuid:
-	case PR_setregid:
-	case PR_setresuid:
-	case PR_setresgid:
-	case PR_setgroups:
-		if (dn_fake_root() && (int) syscall_result == -EPERM)
-			poke_reg(tracee, SYSARG_RESULT, 0);
-		goto end;
-
-	case PR_setfsuid:
-	case PR_setfsgid:
-		/* They return the previous fs id, never an error.  */
-		if (dn_fake_root())
-			poke_reg(tracee, SYSARG_RESULT, 0);
+	case PR_fchmod:
+	case PR_fchmodat:
+	case PR_linkat:
+		(void) dn_owner_exit(tracee, syscall_number, syscall_result);
 		goto end;
 
 	case PR_ioctl:
