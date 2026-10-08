@@ -275,19 +275,19 @@ heuristic. It also carries the reverse translation (`getcwd()` and the
 wrappers (`mkdir`, `rmdir`, `rename`/`renameat`/`renameat2`, `symlink`,
 `truncate`, `utimensat`/`utimes`/`utime`, `statfs`), the `syscall(2)`
 interposition for the path group, fake root's writes (`chown`/`lchown`/
-`chmod`/`fchmodat` record into the owner store), and the loader's mapping of
-the fixed gate page (`P_GATE`) -- the page, though glibc does not yet issue
-its syscalls from it. The rest of the wiring (the xattr family, `link`/
-`unlink`'s hardlink bookkeeping, `chdir`/`chroot`, routing every syscall
-through the gate page, the `RT/lib` search order) is still ahead; what is
-here is what made the first full glibc build with dn-policy inside it
-succeed, extended through every group above.
+`chmod`/`fchmodat` record into the owner store), hardlinks (`link`/`unlink`
+are link2symlink), and the loader's mapping of the fixed gate page
+(`P_GATE`) -- the page, though glibc does not yet issue its syscalls from
+it. The rest of the wiring (the xattr family, `chdir`/`chroot`, routing
+every syscall through the gate page, the `RT/lib` search order) is still
+ahead; what is here is what made the first full glibc build with dn-policy
+inside it succeed, extended through every group above.
 
 ## What it is
 
 `diff -ruN` between `work-after-official-patch/` (glibc source with
 `dn-glibc-android.patch` already applied once, per the section above) and
-`work/` (that plus the wiring). Thirty-seven files:
+`work/` (that plus the wiring). Thirty-nine files:
 
 - New, byte-identical copies of `src/dn-policy/` under
   `sysdeps/unix/sysv/linux/`: `dn-policy.{h,c}`, `dn-policy-fakeroot.c`,
@@ -356,6 +356,13 @@ succeed, extended through every group above.
   wipe a `chmod`'s bits and vice versa. The `*xattr` family and the public
   `fchownat()` are `syscalls.list`-generated and have no wrapper to edit:
   a `syscall(2)` caller is covered, the wrapper functions fall to `ptrace`.
+- Hardlinks: `link.c` calls `dn_policy_link()` (link2symlink -- the content
+  moves into a hidden file under `RT/state/links/` and both names become
+  symlinks to it with a shared count); `unlink.c` drops that count (removing
+  the hidden file at zero) *before* the real unlink. `fstatat`'s
+  post-processing (`dn_policy_stat_post()` -> `dn_policy_hardlink_fixup_stat()`)
+  makes the managed names report as ordinary regular files with the right
+  `st_nlink`, which the runtime check confirms.
 - `elf/rtld.c`: the loader maps the fixed gate page -- 4 KB at `P_GATE`
   (`0x100000000`, chosen by scanning real on-device process maps for an
   address free in every one, inside the 39-bit range) with
@@ -383,9 +390,10 @@ in, and any duplicate symbol is a hard error. Two consequences:
 - Any glibc object the loader needs (it already needs `openat64.os`, and now
   also `fstatat64.os`/`faccessat.os`) must not, from the map's point of view,
   reach a dn-policy object that uses `malloc`/`flock`. The stat wrapper's
-  `dn_policy_stat_post()` and the `chown`/`chmod` fakes reach
-  `dn-policy-fakeroot.o`, so `dn_policy_fake_stat` and
-  `dn_policy_owner_merge` are added to `rtld-stubbed-symbols` in
+  `dn_policy_stat_post()`, the `chown`/`chmod` fakes and the hardlink
+  wrappers reach `dn-policy-fakeroot.o`/`dn-policy-hardlink.o`, so
+  `dn_policy_fake_stat`, `dn_policy_owner_merge`, `dn_policy_link` and
+  `dn_policy_unlink` are added to `rtld-stubbed-symbols` in
   `elf/Makefile` -- the sanctioned mechanism for exactly this case ("symbol
   discovery is not compatible with the libc implementation"). The
   path-mapping objects (`dn-policy.o`, `dn-policy-glue.o`) need no stub:
@@ -475,13 +483,18 @@ then `stat()` shows `1234:5678`; `chmod("/etc/...", 04755)` then `stat()`
 shows mode `04755` (real bits `0755`, setuid recorded) with the owner still
 `1234:5678` -- the merge holds both.
 
+A seventh binary covers hardlinks: `link()` makes `/etc/dn-link-b` for
+`/etc/dn-link-a`, both report as regular files with the same inode and
+`st_nlink == 2` (on disk both are symlinks into `RT/state/links/`), reading
+either works, and `unlink()` on one leaves the other with `st_nlink == 1`.
+
 Covers the public `open`/`openat` and `stat`/`fstatat`/`statx`/`faccessat`
 families, reverse translation (`getcwd`, the `/proc/self` magic links), the
 `mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/`statfs`
 wrappers, the `syscall(2)` interposition for the path group, fake root's
-writes (`chown`/`lchown`/`chmod`/`fchmodat`), and the loader's gate-page
-mapping. Still open: the xattr family and the public `fchownat()`
-(`syscalls.list`-generated), `link`/`unlink`'s hardlink bookkeeping,
-`chdir`/`chroot`, issuing every glibc syscall from the gate page
-(`INTERNAL_SYSCALL_RAW` and the cancellation asm), the seccomp filter's
-gate-IP rule in `dn-trace`, and the `RT/lib` search order.
+writes (`chown`/`lchown`/`chmod`/`fchmodat`), hardlinks (`link`/`unlink`),
+and the loader's gate-page mapping. Still open: the xattr family and the
+public `fchownat()` (`syscalls.list`-generated), `chdir`/`chroot`, issuing
+every glibc syscall from the gate page (`INTERNAL_SYSCALL_RAW` and the
+cancellation asm), the seccomp filter's gate-IP rule in `dn-trace`, and the
+`RT/lib` search order.
