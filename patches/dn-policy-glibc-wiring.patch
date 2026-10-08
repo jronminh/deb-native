@@ -152,7 +152,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/elf/rtld.
    call_init_paths (&state);
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/generic/dn-prefix.h work/sysdeps/generic/dn-prefix.h
 --- work-after-official-patch/sysdeps/generic/dn-prefix.h	2026-10-08 07:51:03.964680319 +0000
-+++ work/sysdeps/generic/dn-prefix.h	2026-10-08 10:16:34.911711837 +0000
++++ work/sysdeps/generic/dn-prefix.h	2026-10-08 12:26:51.127045342 +0000
 @@ -16,6 +16,7 @@
  #define _DN_PREFIX_H 1
  
@@ -191,7 +191,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/g
  #endif
  
  /* strstr-alike, rtld-safe.  */
-@@ -149,4 +163,56 @@
+@@ -149,4 +163,59 @@
    return path;
  }
  
@@ -207,6 +207,9 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/g
 +   stat()/fstatat()/statx()/faccessat() families so far (runtime.md's
 +   "path group"), called long after the dynamic linker has finished. */
 +#if !IS_IN (rtld)
++/* Nonzero when dn-policy runs in this process (a live prefix); zero for a
++   program outside any prefix, which then gets plain glibc. */
++extern int dn_policy_active (void);
 +extern const char *dn_policy_redirect (char *buf, size_t bufsz, const char *path);
 +/* Same, but never resolving the final component -- O_NOFOLLOW /
 +   AT_SYMLINK_NOFOLLOW (dn_policy_translate_path_nofollow()). */
@@ -334,7 +337,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
  # define INTERNAL_SYSCALL(name, nr, args...)			\
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/chmod.c work/sysdeps/unix/sysv/linux/chmod.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/chmod.c	2026-10-08 07:51:04.432680319 +0000
-+++ work/sysdeps/unix/sysv/linux/chmod.c	2026-10-08 09:08:49.750556851 +0000
++++ work/sysdeps/unix/sysv/linux/chmod.c	2026-10-08 12:27:06.355045337 +0000
 @@ -18,11 +18,38 @@
  
  #include <fcntl.h>
@@ -351,7 +354,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +  /* Fake root (runtime.md): the ordinary permission bits go on the real
 +     file, the setuid/setgid bits are recorded in the store (Android would
 +     drop them, and a real chmod() with them would not stick). */
-+  if (file != NULL && file[0] == '/')
++  if (file != NULL && file[0] == '/' && dn_policy_active ())
 +    {
 +      char dn_path[DN_PREFIX_MAX];
 +      struct __stat64_t64 st;
@@ -376,7 +379,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
  #else
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/chown.c work/sysdeps/unix/sysv/linux/chown.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/chown.c	2026-10-08 07:51:04.432680319 +0000
-+++ work/sysdeps/unix/sysv/linux/chown.c	2026-10-08 09:08:49.750556851 +0000
++++ work/sysdeps/unix/sysv/linux/chown.c	2026-10-08 12:27:06.355045337 +0000
 @@ -18,12 +18,37 @@
  
  #include <unistd.h>
@@ -394,7 +397,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +  /* Fake root (runtime.md): never touch the real file.  chown() follows a
 +     final symlink, so stat() the translated host path and record the new
 +     owner in the store instead. */
-+  if (file != NULL && file[0] == '/')
++  if (file != NULL && file[0] == '/' && dn_policy_active ())
 +    {
 +      char dn_path[DN_PREFIX_MAX];
 +      struct __stat64_t64 st;
@@ -417,8 +420,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
  #else
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c work/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c	1970-01-01 00:00:00.000000000 +0000
-+++ work/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c	2026-10-08 09:07:35.686556879 +0000
-@@ -0,0 +1,707 @@
++++ work/sysdeps/unix/sysv/linux/dn-policy-fakeroot.c	2026-10-08 12:38:26.571045077 +0000
+@@ -0,0 +1,716 @@
 +/* dn-policy -- fake root. See dn-policy.h for the calling convention
 + * and docs/spec/runtime.md, "dn-policy" > "Fake root" for the rules
 + * implemented here.
@@ -622,8 +625,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +	if (status < 0)
 +		return status;
 +
-+	/* Escape hatch for testing/diagnosis, same convention as DN_ID
-+	 * (syscall/exit.c): skips the probe entirely when set. "db" is
++	/* Escape hatch for testing/diagnosis: skips the probe entirely
++	 * when set. "db" is
 +	 * also how to exercise the DB backend's code path on a device
 +	 * whose app-data partition does support user.* xattrs (every
 +	 * such partition seen so far does) -- there is otherwise no way
@@ -961,6 +964,15 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +	if (set_mode)
 +		record.mode_bits = (mode_t) (mode_bits & 07000);
 +
++	/* No record already reads as root:root without setuid/setgid, so
++	 * recording exactly that is a no-op -- and skipping it keeps the
++	 * common case (dpkg chown()s nearly everything to 0:0) off the
++	 * store, which cannot always be written: a user.* xattr needs write
++	 * access to the inode, and dpkg creates "*.dpkg-new" with mode 0. */
++	if (status < 0 && record.uid == 0 && record.gid == 0
++	    && record.mode_bits == 0 && record.rdev == 0)
++		return 0;
++
 +	return dn_policy_owner_set(host_path, (dev_t) dev, (ino_t) ino,
 +				   &record);
 +}
@@ -1128,8 +1140,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +}
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c work/sysdeps/unix/sysv/linux/dn-policy-glue.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/dn-policy-glue.c	1970-01-01 00:00:00.000000000 +0000
-+++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 10:16:47.119711833 +0000
-@@ -0,0 +1,338 @@
++++ work/sysdeps/unix/sysv/linux/dn-policy-glue.c	2026-10-08 12:27:28.451045328 +0000
+@@ -0,0 +1,385 @@
 +/* dn-policy glue for glibc itself: wires the already-shipped prefix
 +   self-derivation (__dn_prefix_get, elf/rtld.c) into dn_policy_init(),
 +   and gives open.c and the stat/faccessat family a drop-in replacement
@@ -1188,7 +1200,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +  if (dn_policy_ready || dn_policy_broken)
 +    goto out;
 +
-+  tree = __dn_prefix_get ();
++  /* Weak: NULL in a static link (no loader, so no prefix to derive).  */
++  tree = __dn_prefix_get != NULL ? __dn_prefix_get () : NULL;
 +  if (tree == NULL)
 +    {
 +      /* No live prefix yet (e.g. the loader's own path didn't match --
@@ -1225,6 +1238,18 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +  __libc_lock_unlock (dn_policy_lock);
 +}
 +
++/* Whether dn-policy runs in this process: a live prefix was derived and
++   the policy initialized.  A program outside any prefix (a static link,
++   dn-trace itself) gets plain glibc: the fake-root and hardlink wrappers
++   (chmod, chown, link, unlink, ...) then make the real kernel call.  */
++int
++dn_policy_active (void)
++{
++  if (!dn_policy_ready && !dn_policy_broken)
++    dn_policy_try_init ();
++  return dn_policy_ready;
++}
++
 +/* Shared body of the two redirect entry points below: translate @path
 +   into @buf (capacity @bufsz) and return @buf, or return @path
 +   unchanged if dn-policy isn't ready or declines to translate it (not
@@ -1242,6 +1267,40 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +
 +  if (!dn_policy_ready)
 +    return path;
++
++  /* A path glibc baked in at configure time (sysconfdir, localedir:
++     /etc/nsswitch.conf, /etc/resolv.conf, the locale archive, ...) carries
++     the build prefix; it names a file of the prefix this libc lives in,
++     so it is rebased onto the live one first.  */
++  {
++    static const char built[] = DN_BUILT_PREFIX;
++    const size_t bl = sizeof (built) - 1;
++    const char *pfx = __dn_pfx ();
++    char rebased[PATH_MAX];
++
++    if (bl > 0 && pfx != NULL && path != NULL && __dn_starts (path, built)
++	&& (path[bl] == '\0' || path[bl] == '/'))
++      {
++	size_t pl = strlen (pfx);
++	size_t rest = strlen (path + bl);
++
++	if (pl + rest + 1 > sizeof (rebased))
++	  return path;
++	memcpy (rebased, pfx, pl);
++	memcpy (rebased + pl, path + bl, rest + 1);
++	status = follow
++	  ? dn_policy_translate_path (rebased, buf, bufsz)
++	  : dn_policy_translate_path_nofollow (rebased, buf, bufsz);
++	if (status < 0)
++	  {
++	    /* Still hand back the rebased path, never the build one.  */
++	    if (pl + rest + 1 > bufsz)
++	      return path;
++	    memcpy (buf, rebased, pl + rest + 1);
++	  }
++	return buf;
++      }
++  }
 +
 +  status = follow
 +    ? dn_policy_translate_path (path, buf, bufsz)
@@ -2742,7 +2801,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
  
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/fchmodat.c work/sysdeps/unix/sysv/linux/fchmodat.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/fchmodat.c	2026-10-08 07:51:04.648680319 +0000
-+++ work/sysdeps/unix/sysv/linux/fchmodat.c	2026-10-08 09:08:49.730556851 +0000
++++ work/sysdeps/unix/sysv/linux/fchmodat.c	2026-10-08 12:27:06.355045337 +0000
 @@ -24,6 +24,7 @@
  #include <sys/stat.h>
  #include <sys/types.h>
@@ -2761,7 +2820,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +      /* Fake root: ordinary bits real, setuid/setgid recorded.  An absolute
 +	 path is translated; a relative one is relative to @fd, already a
 +	 real host descriptor. */
-+      if (file != NULL && file[0] == '/')
++      if (file != NULL && file[0] == '/' && dn_policy_active ())
 +	{
 +	  char dn_path[DN_PREFIX_MAX];
 +	  struct __stat64_t64 st;
@@ -2865,7 +2924,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
  
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/lchown.c work/sysdeps/unix/sysv/linux/lchown.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/lchown.c	2026-10-08 07:51:04.444680319 +0000
-+++ work/sysdeps/unix/sysv/linux/lchown.c	2026-10-08 09:08:49.750556851 +0000
++++ work/sysdeps/unix/sysv/linux/lchown.c	2026-10-08 12:27:06.355045337 +0000
 @@ -19,11 +19,36 @@
  #include <unistd.h>
  #include <fcntl.h>
@@ -2881,7 +2940,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +#if !IS_IN (rtld)
 +  /* Fake root: record the owner, never touch the real file.  lchown()
 +     does not follow a final symlink. */
-+  if (file != NULL && file[0] == '/')
++  if (file != NULL && file[0] == '/' && dn_policy_active ())
 +    {
 +      char dn_path[DN_PREFIX_MAX];
 +      struct __stat64_t64 st;
@@ -2905,8 +2964,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
  #else
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/link.c work/sysdeps/unix/sysv/linux/link.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/link.c	2026-10-08 07:51:04.444680319 +0000
-+++ work/sysdeps/unix/sysv/linux/link.c	2026-10-08 09:44:11.675712579 +0000
-@@ -18,12 +18,35 @@
++++ work/sysdeps/unix/sysv/linux/link.c	2026-10-08 12:27:06.359045337 +0000
+@@ -18,12 +18,36 @@
  
  #include <unistd.h>
  #include <fcntl.h>
@@ -2922,7 +2981,8 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +  /* Android blocks hard links in app data (SELinux), so this becomes
 +     link2symlink (runtime.md, "Hardlinks"): dn-policy moves the content
 +     into a hidden file and makes both names symlinks to it. */
-+  if (from != NULL && from[0] == '/' && to != NULL && to[0] == '/')
++  if (from != NULL && from[0] == '/' && to != NULL && to[0] == '/'
++      && dn_policy_active ())
 +    {
 +      char dn_from[DN_PREFIX_MAX], dn_to[DN_PREFIX_MAX];
 +      const char *host_from
@@ -3392,7 +3452,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
  }
 diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/unix/sysv/linux/unlink.c work/sysdeps/unix/sysv/linux/unlink.c
 --- work-after-official-patch/sysdeps/unix/sysv/linux/unlink.c	2026-10-08 07:51:04.636680319 +0000
-+++ work/sysdeps/unix/sysv/linux/unlink.c	2026-10-08 09:44:11.675712579 +0000
++++ work/sysdeps/unix/sysv/linux/unlink.c	2026-10-08 12:27:06.359045337 +0000
 @@ -19,11 +19,27 @@
  #include <unistd.h>
  #include <fcntl.h>
@@ -3408,7 +3468,7 @@ diff -ruN '--exclude=.pc' '--exclude=debian' work-after-official-patch/sysdeps/u
 +     link2symlink's managed names, drop its link count (and remove the
 +     hidden file at zero) before the real unlink.  Not an error if it
 +     is an ordinary file. */
-+  if (name != NULL && name[0] == '/')
++  if (name != NULL && name[0] == '/' && dn_policy_active ())
 +    {
 +      char dn_path[DN_PREFIX_MAX];
 +      const char *host

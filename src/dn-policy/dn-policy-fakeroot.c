@@ -201,8 +201,8 @@ int dn_policy_fakeroot_init(const char *rt_root)
 	if (status < 0)
 		return status;
 
-	/* Escape hatch for testing/diagnosis, same convention as DN_ID
-	 * (syscall/exit.c): skips the probe entirely when set. "db" is
+	/* Escape hatch for testing/diagnosis: skips the probe entirely
+	 * when set. "db" is
 	 * also how to exercise the DB backend's code path on a device
 	 * whose app-data partition does support user.* xattrs (every
 	 * such partition seen so far does) -- there is otherwise no way
@@ -539,6 +539,15 @@ dn_policy_owner_merge(const char *host_path, uint64_t dev, uint64_t ino,
 	}
 	if (set_mode)
 		record.mode_bits = (mode_t) (mode_bits & 07000);
+
+	/* No record already reads as root:root without setuid/setgid, so
+	 * recording exactly that is a no-op -- and skipping it keeps the
+	 * common case (dpkg chown()s nearly everything to 0:0) off the
+	 * store, which cannot always be written: a user.* xattr needs write
+	 * access to the inode, and dpkg creates "*.dpkg-new" with mode 0. */
+	if (status < 0 && record.uid == 0 && record.gid == 0
+	    && record.mode_bits == 0 && record.rdev == 0)
+		return 0;
 
 	return dn_policy_owner_set(host_path, (dev_t) dev, (ino_t) ino,
 				   &record);
