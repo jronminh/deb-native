@@ -76,23 +76,27 @@ deb-native's fixed prefix (`/data/data/com.termux/files/home/.dn`).
     after a clean-room replay (fresh `pristine` + this patch alone, no
     other hand-fixes) confirmed it was still missing.
 
-## Explicitly not included yet (parked, not forgotten)
+## Explicitly excluded, permanently (not "parked" anymore)
 
-**Fake-root-entangled, waiting on that decision** (`docs/reference/android-platform.md`,
-"Per-file verdict, everything in `gpkg/glibc/`"): the `"0"`-bucket entries in
-`fakesyscall.json` (`setuid`/`setgid`/`setreuid`/`setregid`/`setresuid`/
-`setresgid`/`setfsuid`/`setfsgid`), `setfsuid.c`, `setfsgid.c`, and the
+**Fake-root-entangled — decided against, not waiting on anything**
+(`docs/reference/android-platform.md`, "Per-file verdict, everything in
+`gpkg/glibc/`"): the `"0"`-bucket entries in `fakesyscall.json`
+(`setuid`/`setgid`/`setreuid`/`setregid`/`setresuid`/`setresgid`/
+`setfsuid`/`setfsgid`), `setfsuid.c`, `setfsgid.c`, and the
 `set-fakesyscalls.patch` hunks touching `setegid.c`/`seteuid.c`/`setgid.c`/
 `setregid.c`/`setresgid.c`/`setresuid.c`/`setreuid.c`/`setuid.c`/
-`local-setxid.h` — these unconditionally fake `set*id` success, the same
-shape as `native/dn-shim.c`'s own fake-root mechanism, so forking
-them now would reinstate that behavior at the glibc layer independent of
-whatever this project decides fake-root's future is. Split out of
-`gpkg/glibc/set-fakesyscalls.patch` and kept here, unapplied, as
-[`set-fakesyscalls-parked.patch`](set-fakesyscalls-parked.patch) — apply it
-on top of `dn-glibc-android.patch` (and add the `"0"`-bucket entries back
-into the `jq 'del(.["0"])'` filter below) once fake-root's fate is decided,
-rather than re-deriving the split from upstream again.
+`local-setxid.h` — these unconditionally fake `set*id` success at the
+glibc-patch layer. This doc used to say "waiting on fake-root's fate";
+that fate is now decided (`docs/spec/runtime.md` principle 3): `dn-policy`
+is the single source of truth for fake root, called from both the glibc
+fast path and the tracer fallback, specifically so the two can never
+disagree. A second, independent fake-root at the glibc-patch layer would
+reintroduce exactly that disagreement risk, so this bucket is excluded
+**permanently**, not pending a decision. Kept split out, unapplied, as
+[`set-fakesyscalls-parked.patch`](set-fakesyscalls-parked.patch) for
+reference only (the split itself was real work); do not apply it on top
+of `dn-glibc-android.patch`, and do not add the `"0"`-bucket entries back
+into the `jq 'del(.["0"])'` filter below.
 
 **Needs its own read before deciding, not a simple fork/skip**:
 `set-ld-variables.patch` (a parallel `GLIBC_LD_*` env-var namespace,

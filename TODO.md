@@ -170,8 +170,14 @@ below.
 
 **P3 — the fallback path**: turn on the path/identity syscall groups in the
 shared filter; `dn-trace` handles them via `ptrace` through dn-policy,
-replacing the current ptrace mechanism. Done when `busybox-static`, a
-static Go program, and a Go-with-cgo program all run correctly.
+replacing the current ptrace mechanism. **Must actually remove**
+`src/tracer/syscall/exit.c`'s own `dn_fake_root()` (and the
+`fakeroot_sysnums` list in `syscall/seccomp.c`) once dn-policy's fake root
+is wired in — not leave both running side by side indefinitely, or
+principle 3 ("one policy, two enforcement points, so they can never
+disagree") is violated by the very code meant to honor it. Done when
+`busybox-static`, a static Go program, and a Go-with-cgo program all run
+correctly.
 
 **P4 — measure and optimize**: per-program/per-syscall counters in
 `dn-trace`; `process_vm_readv`/`writev`; path-resolution and exec-gate

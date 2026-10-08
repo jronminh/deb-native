@@ -27,6 +27,9 @@ their own docs (listed below).
   cannot see.
 - [`android-platform.md`](../reference/android-platform.md) — the platform's
   enforcement gates, which bound what the runtime can do.
+- [`runtime.md`](runtime.md) — the planned replacement for this doc's "Fake
+  root" mechanism (and for the shim/tracer more broadly): `dn-policy` as the
+  one source of truth, called from both the glibc fast path and the tracer.
 
 ## Scope and design philosophy
 
@@ -115,12 +118,19 @@ files show as owned by root, `chown`/`setuid` succeed, `USER`/`LOGNAME` are
 `root`. Only the identity is faked: nothing gains a right it did not have, and
 the host's own programs still see the real user.
 
-**Status: released, no further investment planned.** It is a stand-in, not a
-destination — the real fix for packages that need an actual second identity is
-a services/sudo layer, not a stronger fake. The parked
-`patches/set-fakesyscalls-parked.patch` (the `setuid`/`setgid`/... "0"
-bucket, [`android-platform.md`](../reference/android-platform.md)) stays
-unapplied for the same reason.
+**Status: released, no further investment planned in *this* mechanism.** It is
+a stand-in, not a destination — the real fix for packages that need an actual
+second identity is a services/sudo layer, not a stronger fake. Planned:
+[`runtime.md`](runtime.md)'s `dn-policy` becomes the single source of truth
+for fake root instead (principle 3: one policy, called from both the glibc
+fast path and the tracer fallback, so the two can never disagree), replacing
+both this shim/`dn-trace` mechanism and the parked
+`patches/set-fakesyscalls-parked.patch` (the `setuid`/`setgid`/... "0" bucket,
+[`android-platform.md`](../reference/android-platform.md)) — that patch bucket
+is excluded *permanently* now, not pending a decision, since a second
+independent fake-root at the glibc-patch layer would reintroduce the exact
+disagreement risk principle 3 exists to prevent. Until `runtime.md` is
+implemented, the mechanism below is what ships.
 
 **Mechanism:** the shim (`src/dn-shim.c`) fakes
 `get[e]uid`/`get[e]gid`/`getres[ug]id`/`getgroups` → `0`, `stat` ownership,

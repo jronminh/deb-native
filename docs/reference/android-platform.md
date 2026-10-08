@@ -28,8 +28,10 @@ of how it was found.
   sandbox limits, by direct probe"), moved here in full rather than
   split out separately when the log was later split into
   `docs/log/findings/`.
-- [`design.md`](../spec/design.md) — "Fake root", whose `set-fakesyscalls-parked.patch`
-  decision depends on this doc's per-file fork verdict.
+- [`design.md`](../spec/design.md) — "Fake root", whose
+  `set-fakesyscalls-parked.patch` exclusion is permanent (decided, not
+  pending), per this doc's per-file fork verdict and
+  [`runtime.md`](../spec/runtime.md) principle 3.
 - `../../patches/README.md` —
   the actual patch this doc's catalog describes.
 
