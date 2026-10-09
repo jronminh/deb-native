@@ -54,6 +54,13 @@ runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
   so stock Debian tools plus timezone/i18n work
   ([`known-issues.md`](docs/reference/known-issues.md), "Gaps toward a
   complete Debian").
+- **Ship the glibc dev set at `+dnN`**: `core-deb` carries patched
+  `libc6`/`libc-bin` but not `libc6-dev`/`libc-dev-bin`, so `apt install gcc`
+  (the alpha demo) fails — `libc6-dev` pins `libc6 (= <base>)`, which the
+  `+dn1` version does not satisfy. Repackage the stock dev packages at `+dnN`
+  (version and `Depends` retargeted) into the local repo, the same
+  template-repackage `scripts/glibc/dn-package-glibc.sh` does for `libc6`;
+  they are version-pinned only, so no rebuild is needed.
 - **Bootstrap on a poor host**: where the first artifact comes from, and how
   one artifact yields the next (core-ultra, core-deb, specialized).
 - The `claude` specialized prefix: core-ultra recipe + the Claude binary as a
