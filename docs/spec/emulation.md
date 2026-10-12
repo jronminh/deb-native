@@ -7,8 +7,14 @@ obtainable from the app uid unlocks them (see
 [`android-platform.md`](../reference/android-platform.md)). Rather than fight
 the platform, the runtime reimplements the refused subsystem in userspace and
 answers every interface that reads it from one shared model, so a program sees
-a coherent result. This doc is the design for that layer: what is faked, by
-what, and what must agree. Status: design; only the pieces under
+a coherent result.
+
+**This doc is the *content* of that layer — what is faked, its trick surface,
+and what must agree.** The *architecture* (who decides, who enforces, and where
+the models live) is [`monitor.md`](monitor.md): `dn-emu` is the second
+authority and **owns these models**; `dn-policy` keeps the mapping law and the
+routing truth and does not absorb them. Where the two docs disagree,
+`monitor.md` wins. Status: design; only the pieces under
 [Already emulated](#already-emulated) exist today.
 
 ## Contents
@@ -27,6 +33,8 @@ what, and what must agree. Status: design; only the pieces under
 
 ## Related docs
 
+- [`monitor.md`](monitor.md) — the architecture: `dn-emu` is the second
+  authority and owns the models in this doc. **Authoritative over this one.**
 - [`runtime.md`](runtime.md) — the runtime (`dn-policy`, `dn-interp`, `dn-shim`,
   `dn-trace`) this layer is part of.
 - [`native.md`](native.md) — the execution model this layer serves (near-full
@@ -43,15 +51,17 @@ what, and what must agree. Status: design; only the pieces under
 
 The rule is *answer in place of the kernel*, never *make the kernel do it*.
 A refused call (`mount`, `unshare`, a raw socket, a low-port bind, a capability
-change) is intercepted, recorded in a model that lives in dn-policy, and
+change) is intercepted, recorded in a model that lives in **`dn-emu`**, and
 answered with the result a permitted system would give. The program never
 learns the operation did not reach the kernel.
 
 Two properties make it hold:
 
-- **One model, two enforcement points** ([`runtime.md`](runtime.md) principle
-  3): dn-shim answers the same question as dn-trace, from the same state, so
-  the fast and traced paths cannot disagree.
+- **One model, two enforcement points** ([`monitor.md`](monitor.md)): the model
+  is `dn-emu`'s, and both executors — `dn-shim` (in the program) and `dn-trace`
+  (in the monitor) — link it and read the same **state**, which lives in the
+  tree's store (`RT`, like the owner store's `user.dn.*` xattrs), since the two
+  are different processes. They cannot disagree.
 - **Every reader is covered.** A model is only as good as its
   least-covered reader: if `bind()` is translated but `/proc/net/tcp` still
   shows the raw port, a program that checks finds the lie. Each operation's
@@ -87,21 +97,24 @@ package assume, and how do we make the observation match it?". The second is
 the more dangerous one precisely because it is silent, which is why
 [Consistency](#consistency-the-real-work) is the bulk of the work.
 
-Whichever class, the tier that handles it is chosen by how the call reaches
-the kernel, not by the class itself:
+Whichever class, **who acts is a partition, not a class**: `dn-policy`
+classifies the operation (provided / refused / divergent) and the dispatcher
+routes it ([`monitor.md`](monitor.md), "The cascade, stated precisely"):
 
 | | forbidden outright | restricted / divergent |
 | --- | --- | --- |
 | surfaces as | a syscall/probe failure, or `SIGSYS` | a libc accessor value (`uname`, `sysconf`, `stat` of `/proc`, `mprotect`) — no error |
-| primary tier | dn-trace (catches `SIGSYS`, fakes `mount`/`unshare`) | dn-shim (fast path, native speed) |
-| dn-trace's role | near-mandatory — only the tracer sees Gate A | backstop for what libc cannot see |
+| routes to | **`dn-emu`** (refused) | **`dn-emu`** (divergent) |
+| reached through | `dn-trace`, which catches `SIGSYS` — near-mandatory, only the tracer sees Gate A | `dn-shim` on the libc surface; `dn-trace` as backstop for what libc cannot see |
+| `dn-emu`'s decision | emulate, or refuse | normalize, or refuse |
 
-The direction: the model and the normalize-or-refuse decision live in
-dn-policy; dn-shim applies it to the ordinary libc surface, dn-trace to
-everything libc cannot reach (static, Go, raw `svc #0`, foreign loaders, and
-every Gate-A event). Neither tier alone is enough — normalizing only in
-dn-trace leaves fast-path dynamic binaries with the wrong answer; only in
-dn-shim lets static/Go programs through unnormalized.
+`dn-emu` owns both the model and the emulate-or-refuse decision (the second
+authority). Its *answer* is applied by whichever executor the call reached:
+`dn-shim` for the ordinary libc surface, `dn-trace` for everything libc cannot
+reach (static, Go, raw `svc #0`, foreign loaders, and every Gate-A event).
+Neither executor alone is enough — normalizing only in `dn-trace` leaves
+fast-path dynamic binaries with the wrong answer; only in `dn-shim` lets
+static/Go programs through unnormalized.
 
 ## Already emulated
 
@@ -114,8 +127,12 @@ dn-shim lets static/Go programs through unnormalized.
 | AF_NETLINK `NETLINK_ROUTE` | substituted with AF_UNIX/SOCK_DGRAM | `src/tracer/syscall/enter.c:2084` |
 | `chown` / `stat` owner | owner store (`user.dn.*` xattr) | `dn-policy-fakeroot.c` |
 
-These are the template: each fakes one interface and answers all its readers
-from one model.
+These are `dn-emu`'s first models. Today the code is split (the tracer's
+`tracee/seccomp.c`, and the owner store in
+`src/dn-policy/dn-policy-fakeroot.c`); under [`monitor.md`](monitor.md) the
+models are `dn-emu`'s, while the store's **state** stays shared, because both
+executors read it. Each fakes one interface and answers all its readers from
+one model — that is the template.
 
 ## Virtual filesystem
 
@@ -142,7 +159,7 @@ What SELinux refuses: reads of `/proc/sys/*`, `/proc/net/*`, `/proc/version`
 Debian").
 
 Treat a set of paths as **virtual files**: a `path -> generator` table in
-dn-policy, with `openat`/`stat`/`read` served from it. `/proc/self/*` derives
+`dn-emu`, with `openat`/`stat`/`read` served from it. `/proc/self/*` derives
 from the tracee's own state (pid, uid, capabilities, mounts, fds);
 `/proc/version`, `cpuinfo`, `meminfo`, `/proc/sys/*` return plausible
 constants. Precedents: `src/tracer/path/proc.c`, the `statfs` fake, and the
@@ -202,6 +219,10 @@ whose correctness a program relies on for safety.
 
 ## Priorities
 
+0. **The core, first** — the refusal answers a program needs to run at all
+   (`rseq`/`clone3`/`set*id`/`set_robust_list` → `ENOSYS` or faked success) and
+   the models already in the tree (owner store, hardlink). This is the A2
+   obligation, and the only part the branch needs now.
 1. Extend the existing precedents (mount table, netlink, `statfs`, owner
    store).
 2. Cheap and common: `capget`, `/proc` synthesis, privileged-port translation,
