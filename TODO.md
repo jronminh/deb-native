@@ -478,9 +478,17 @@ Survey (2026-10-12, `dn-stock`):
   It would not be tmpfs, so `statvfs` reports the data partition, not a small
   tmpfs — acceptable for basic POSIX shm, revisit if a program depends on tmpfs
   semantics.
-- PTY: `/dev/ptmx` opens and `posix_openpt` succeeds, but
-  `grantpt`/`unlockpt`/`ptsname` all fail, so a pty is not usable yet. This is
-  deeper than a binding (ioctl/devpts access) and needs its own investigation.
+- PTY: **works.** `/dev/ptmx` is passed through and the full glibc flow
+  (`posix_openpt` -> `grantpt` -> `unlockpt` -> `ptsname` -> open slave ->
+  write/read) succeeds in the prefix, both lanes. An earlier "fails" reading
+  was a probe bug (it closed the fd before `grantpt`). No `/dev/pts` row is
+  needed: it is passthrough, already present.
+- `/dev/tty`: open is `ENXIO` with no controlling terminal, which is the same
+  as on a real Debian shell until a program allocates a pty and sets it as the
+  controlling terminal (`setsid` + `TIOCSCTTY`). Not a defect.
+- `/dev/full`: absent; a program that writes to it for an `ENOSPC` test would
+  fail. Minor; a future `dn-emu` answer (read -> zeros, write -> `ENOSPC`) if
+  needed.
 - `/media`: `/storage` top level is denied; `/storage/emulated/0` is reachable,
   so `/media` maps to the same backing as `/mnt`.
 
@@ -491,8 +499,9 @@ still passthrough. The `already host` predicate now uses the **longest** host
 vs guest match, so `/dev/shm` is not mistaken for the `/dev` passthrough host
 side.
 
-**Still open in A:** `/dev/pts` (+ `/dev/ptmx` pty setup), `/dev/tty`,
-`/dev/full`.
+**Still open in A:** `/dev/full` (minor; `dn-emu` later). `/dev/pts` needed no
+work (passthrough already works), `/dev/tty` needs a controlling terminal that
+only a program's own `setsid`+`TIOCSCTTY` provides.
 
 **B. Kernel/Android-refused — emulation (`dn-emu`).**
 
