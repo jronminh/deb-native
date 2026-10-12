@@ -92,10 +92,13 @@ is now a usable host too.
 
 **Status**: P1 done — `dn-interp` recovered (`native/`, `build-interp.sh`) and the
 exec gate's rule 3 runs it; the `dn-glibc` → `dn-shim` naming and mechanism
-sweep is in.  P2a done — `dn-shim.so` builds (`native/dn-shim.c`,
-`build-shim.sh`): the open family, issued from `P_GATE`, with `dn-interp.conf`
-preloading it.  P2b next: drop `dn-policy-glibc-wiring.patch`, widen the
-surface, recompute the catalog's `glibc`/`gate` columns.
+sweep is in.  P2a + P2b-2 done — `dn-shim.so` (`native/dn-shim.c`,
+`build-shim.sh`) covers the whole interposed surface: open, stat, access,
+the fake-root writes and identity, path manipulation, hardlinks, xattr,
+reverse translation and `syscall(2)`, each issuing from `P_GATE`, mirroring
+`patches/dn-policy-glibc-wiring.patch`; `dn-interp.conf` preloads it.
+P2b-3 next: move `P_GATE` into `dn-interp`, drop `dn-policy-glibc-wiring.patch`
+from the pipeline, recompute the catalog's `glibc`/`gate` columns.
 
 ## Prefix artifacts: core-ultra / core-deb, one ship path
 
