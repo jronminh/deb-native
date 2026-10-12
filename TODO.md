@@ -32,6 +32,62 @@ unprivileged; `apt install gcc` compiles and runs end to end.
   place (keeps `/proc/self/exe`), announce on stderr, opt out
   `DN_NO_AUTO_ADOPT=1`.
 
+## Branch `ld-dn-surgical`: the loader-centric runtime
+
+Design: [`docs/spec/ld-dn-shim.md`](docs/spec/ld-dn-shim.md). A modification
+of `main`: `ld-dn` is the program's interpreter, `dn-shim.so` (linked with
+`dn-policy`) is the in-process fast path and owns `P_GATE`, and `dn-trace` is
+the fallback. `dn-policy` and `dn-trace` are reused unchanged; glibc is not
+wired. The shim's blind spots (NSS, gconv, loader internals, inline `svc`,
+static) fall to the tracer automatically through the filter's gate-IP rule, so
+there is no per-binary routing — see
+[`docs/reference/syscall-boundary.md`](docs/reference/syscall-boundary.md).
+
+**Build / run split** (the toolchain):
+
+- **Build on WSL (amd64).** The `aarch64-linux-gnu` cross toolchain (gcc 14.2,
+  `binutils`, `libc6-dev-arm64-cross`, static `/usr/aarch64-linux-gnu/lib/libc.a`)
+  builds `ld-dn`, `dn-trace` (vendored `talloc`) and `dn-shim.so`. Native
+  amd64 runs `tools/check-*.py`. Good for compile-verify and static/ELF checks;
+  it cannot **run** the aarch64 runtime.
+- **Run on the device over `adb`**, inside the debuggable `dn-shell` app
+  (`run-as`), which supplies the app-uid / SELinux environment. Not under
+  `qemu-user`: its ptrace/seccomp emulation is not faithful for `dn-trace`.
+
+**Test harness** (verified 2026-10-12): device SM-G970W (`beyond0q`), Android 12
+/ SDK 31, arm64-v8a. App `org.dn.shell` is debuggable; `run-as org.dn.shell`
+gives uid `u0_a291`, context `u:r:runas_app:s0` (no seccomp filter —
+`Seccomp: 0`, so this route does not exercise Gate A). Prefixes live under
+`files/prefixes/`: `core-deb` (the runtime, entry
+`usr/lib/deb-native/dn-trace -- /usr/bin/bash …/init.sh`) and `dn-gcc` (an
+on-device aarch64 toolchain, `aarch64-linux-gnu-gcc-14`). The loop: cross-build
+on WSL → `adb push` to `/data/local/tmp` → `run-as org.dn.shell sh …`. A boot
+through `core-deb`'s `dn-trace` reports `uname=aarch64` and `id` = `root`
+(fake root works).
+
+**Priority: build on WSL.** The device is **blocked** for now — the `dn-shell`
+app ships a wrong `targetSdk`, so a prefix launched through the app does not
+run. Do not depend on the device for the branch's live tests until that is
+fixed; the WSL cross-build is the working half.
+
+**Phases** (each leaves the tree runnable):
+
+- **P1 — loader plumbing (no behaviour change).** Recover
+  `native/ld-dn.c`/`ld-dn.conf` from `d18b187`; add the build step; derive
+  `LD-DN` in `cli/dn-trace.c`; exec-gate rule 3 targets `ld-dn`. Verify:
+  `.deb` bytes unchanged, `/proc/self/exe` correct, a dynamic program runs.
+- **P2 — shim + gate page.** Rewrite the old `path-redirect.c` as
+  `dn-shim.c` (call `dn-policy`, issue syscalls from `P_GATE`); remove the gate
+  page from `elf/rtld.c`; drop `dn-policy-glibc-wiring.patch` from the
+  pipeline; recompute `src/syscalls.tsv`'s `glibc`/`gate` columns.
+- **P3 — trim glibc to the Android baseline.** Reduce
+  `dn-glibc-android.patch`; confirm a stock `libc6` starts, or name the exact
+  syscall that kills it.
+- **P4 — measure.** Reuse the per-tier counters; per-tier call distribution.
+
+**Status**: branch pushed (`ld-dn-surgical`, design doc only). No code changes
+yet.
+
 ## Prefix artifacts: core-ultra / core-deb, one ship path
 
 Design: [`docs/spec/prefix.md`](docs/spec/prefix.md),
