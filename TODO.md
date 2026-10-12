@@ -90,8 +90,12 @@ is now a usable host too.
   syscall that kills it.
 - **P4 — measure.** Reuse the per-tier counters; per-tier call distribution.
 
-**Status**: branch pushed (`ld-dn-surgical`, design doc only). No code changes
-yet.
+**Status**: P1 done — `ld-dn` recovered (`native/`, `build-interp.sh`) and the
+exec gate's rule 3 runs it; the `dn-glibc` → `dn-shim` naming and mechanism
+sweep is in.  P2a done — `dn-shim.so` builds (`native/dn-shim.c`,
+`build-shim.sh`): the open family, issued from `P_GATE`, with `ld-dn.conf`
+preloading it.  P2b next: drop `dn-policy-glibc-wiring.patch`, widen the
+surface, recompute the catalog's `glibc`/`gate` columns.
 
 ## Prefix artifacts: core-ultra / core-deb, one ship path
 
