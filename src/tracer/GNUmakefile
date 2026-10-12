@@ -19,9 +19,13 @@ CFLAGS   += -Wall -Wextra -O2
 LDFLAGS  += -Wl,-z,noexecstack
 # deb-native: dn-monitor is the tree's root (nothing traces it), so its own
 # startup must survive Android's seccomp unaided.  dn-start.c installs a
-# SIGSYS handler before glibc initializes; --wrap routes crt1's own
-# __libc_start_main call through it.  See dn-start.c.
-LDFLAGS  += -Wl,--wrap=__libc_start_main
+# SIGSYS handler before glibc initializes; the --wrap below (applied only to
+# the dn-monitor link, not to the feature-check probes) routes crt1's own
+# __libc_start_main call through it.  Keeping it off the global LDFLAGS is
+# load-bearing: --wrap on the .check_* probes makes their link fail, which
+# silently drops HAVE_SECCOMP_FILTER and leaves the tree with no seccomp
+# filter (every syscall then goes through ptrace).  See dn-start.c.
+DN_WRAP := -Wl,--wrap=__libc_start_main
 ifdef PROOT_WITH_LIBANDROID_SHMEM
   CFLAGS += -DWITH_LIBANDROID_SHMEM
   LDFLAGS += -landroid-shmem
@@ -157,7 +161,7 @@ LINK    = $($(quiet)LD) -o $@ $^ $(LDFLAGS)
 # (the catch/route filter, the ptrace core) with the policy applier (dn-trace)
 # linked in.  One binary, one root.
 dn-monitor: $(OBJECTS)
-	$(LINK)
+	$($(quiet)LD) -o $@ $^ $(LDFLAGS) $(DN_WRAP)
 
 # deb-native: the syscall catalog (src/syscalls.tsv, the one source of truth)
 # is embedded verbatim as a C string, so dn-monitor reads no file at run time.

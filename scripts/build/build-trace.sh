@@ -49,7 +49,7 @@ find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-monitor -o -name dn-catalog.
 # contexts seen since (e.g. Termux's untrusted_app).  Link with that build's
 # own start files (crt1.o ...), not the build host's glibc's.
 if [ -n "${DN_GLIBC_LIBC_DIR:-}" ]; then
-  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" DNEMU="$SRC/dn-emu" LDFLAGS="-static -B$DN_GLIBC_LIBC_DIR -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack -Wl,--wrap=__libc_start_main"
+  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" DNEMU="$SRC/dn-emu" LDFLAGS="-static -B$DN_GLIBC_LIBC_DIR -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
 else
   make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" DNEMU="$SRC/dn-emu"
 fi
