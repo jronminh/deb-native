@@ -54,16 +54,19 @@ them.
 
 ```
 HOST runs the contract entry
-  └─ TREE/usr/lib/deb-native/dn-monitor        ← the tree's root process
-       │  derive_prefix(): /proc/self/exe → TREE
-       │  DN-INTERP        = TREE/usr/lib/deb-native/dn-interp
-       │  TREE-LD.SO   = TREE/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
-       │  dn_policy_init(TREE, RT); bindings(TREE→/, /dev /proc /sys); cwd; exe
-       └─ launch_process([" /usr/bin/bash", "…/init.sh"])
-             │ fork
-             └─ CON  ptrace(TRACEME); SIGSTOP
-                     dn_monitor_install()         ← one seccomp BPF, inherited
-                     execvp(/usr/bin/bash)
+  └─ TREE/usr/lib/deb-native/boot.sh
+       │  GLIBC_TUNABLES=glibc.pthread.rseq=0   ← dn-monitor's own startup
+       │  exec dn-monitor
+       └─ dn-monitor                            ← the tree's root process
+            │  derive_prefix(): /proc/self/exe → TREE
+            │  DN-INTERP        = TREE/usr/lib/deb-native/dn-interp
+            │  TREE-LD.SO   = TREE/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
+            │  dn_policy_init(TREE, RT); bindings(TREE→/, /dev /proc /sys); cwd; exe
+            └─ launch_process([" /usr/bin/bash", "…/init.sh"])
+                  │ fork
+                  └─ CON  ptrace(TRACEME); SIGSTOP
+                          dn_monitor_install()     ← one seccomp BPF, inherited
+                          execvp(/usr/bin/bash)
 ```
 
 The filter is installed once at the root and inherited across every

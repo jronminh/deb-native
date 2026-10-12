@@ -390,11 +390,12 @@ and the syscalls Android denies are answered at the syscall boundary by
 [`../reference/android-platform.md`](../reference/android-platform.md),
 "Stock `libc6` re-tested": a stock Debian `ld.so`/`libc.so.6` runs whole
 programs under the tracer, with only `rseq`→`ENOSYS` (glibc startup) and
-`clone3`→`ENOSYS` (a thread) intervening. `dn-trace` itself is the one binary
-that needs care — it is the outermost process, nothing traces it — so it is
-built **static**, and started with the supported glibc tunable
-`GLIBC_TUNABLES=glibc.pthread.rseq=0` so its own startup does not trip Android's
-seccomp. No `patches/`, no `+dn` version, no local repo for glibc.
+`clone3`→`ENOSYS` (a thread) intervening. `dn-monitor` — the tree's root — is
+the one binary that needs care: it is the outermost process, nothing traces it,
+so it is built **static**, and the tree's `boot.sh` starts it with the supported
+glibc tunable `GLIBC_TUNABLES=glibc.pthread.rseq=0`, so its own startup does not
+trip Android's seccomp. No `patches/`, no `+dn` version, no local repo for
+glibc.
 
 The same rule covers the runtime's *own* programs (`dn-trace`, `dn-interp`,
 `dn-shim`): nothing may sit between them and the kernel except the kernel's

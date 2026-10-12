@@ -42,11 +42,11 @@ every exec goes through [`runtime.md`](runtime.md)'s exec gate, which runs a
 glibc-dynamic program through `RT/ld.so` itself. A package is therefore
 installed intact, and **nothing repoints a `PT_INTERP` after the build**.
 
-The prefix root (`TREE`) is **not baked**: `dn-trace` derives it from its own
+The prefix root (`TREE`) is **not baked**: `dn-monitor` derives it from its own
 location (`TREE/usr/lib/deb-native/dn-monitor`), the loader self-derives it from
 its path too, and the tree's config files (`usr/etc/ld.so.conf`,
 `etc/apt/apt.conf.d/`) name **guest** paths, which dn-policy maps into whatever
-tree dn-trace booted. The build still passes a `PREFIX_ROOT` — to *assert*
+tree dn-monitor booted. The build still passes a `PREFIX_ROOT` — to *assert*
 nothing names it — but the artifact is relocatable: the host extracts it at any
 `DEST` and installs there.
 
@@ -130,7 +130,7 @@ version=0.7.1-dev
 arch=aarch64
 loader=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 install=.dn/install.sh
-entry=usr/lib/deb-native/dn-monitor -- /usr/bin/bash /usr/lib/deb-native/init.sh
+entry=usr/lib/deb-native/boot.sh
 size=200
 ```
 
@@ -208,8 +208,9 @@ run on the host's own shell with only POSIX sh and toybox:
 3. **Activate**: `DN_INSTDIR=DEST sh DEST/.dn/install.sh`. It wires the host's
    session entry (`DN_SESSION_SHELL`), if set, to the contract's `entry`. No
    tree program runs here.
-4. **Check the tree runs**: start it through `dn-trace` for a trivial command
-   (`DEST/usr/lib/deb-native/dn-monitor -- /usr/bin/bash -c 'exit 0'`). This is
+4. **Check the tree runs**: start it through `boot.sh` for a trivial command
+   (`DEST/usr/lib/deb-native/boot.sh /usr/bin/bash -c 'exit 0'`, or the same
+   `entry` line the contract carries). This is
    the acceptance test.
 5. On any failure, remove `DEST` and report.
 
@@ -218,14 +219,18 @@ the prefix's own scripts.
 
 ## Boot
 
-The host boots the tree by running the contract's `entry` from the prefix
-root. `dn-trace` **derives** the tree from its own location
+The host boots the tree by running the contract's `entry`, `boot.sh`, from the
+prefix root. `boot.sh` is the one place the boot environment is decided: it sets
+`GLIBC_TUNABLES=glibc.pthread.rseq=0` — `dn-monitor` is the outermost process,
+nothing traces it, and a stock static glibc's startup would otherwise be killed
+by Android's seccomp on `rseq` — and execs `dn-monitor`, which **derives** the
+tree from its own location
 (`TREE/usr/lib/deb-native/dn-monitor`) and takes its runtime loader from the
 fixed path `TREE/<loader>`, so it never parses the contract and names no root;
 an optional `-- PROGRAM ARGS...` is in guest paths and defaults to the init:
 
 ```
-dn-trace [TREE LOADER] [-- PROGRAM ARGS...]
+dn-monitor [TREE LOADER] [-- PROGRAM ARGS...]
 ```
 
 (Two absolute `TREE LOADER` arguments still override the derivation, for
@@ -245,8 +250,8 @@ root. Then it restores `.dn/profile` from the mirror — `apt-get update`,
 `bootstrapped` marker; a later boot skips straight to the command. It ends by exec'ing the command it was given, or an interactive
 shell.
 
-The glibc packages are held and pinned, so `apt` never replaces the patched
-files ([`runtime.md`](runtime.md), "the glibc rule").
+glibc is Debian's own stock package, installed from the mirror and never held
+([`runtime.md`](runtime.md), "the glibc rule").
 
 ## Host updates
 

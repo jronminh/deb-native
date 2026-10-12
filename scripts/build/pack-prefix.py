@@ -26,12 +26,13 @@ import sys
 
 LOADER = "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 PT_INTERP = 3
-# The command the host runs to open a session: dn-trace derives the tree from
-# its own location, uses its runtime loader and execs the prefix's init, a
-# guest path (docs/spec/prefix.md, "Boot").  It is a full command line, run
-# with the prefix root as the working directory, and it names no root.
-ENTRY = ("usr/lib/deb-native/dn-monitor -- "
-         "/usr/bin/bash /usr/lib/deb-native/init.sh")
+# The command the host runs to open a session: the tree's boot script, a guest
+# path.  It sets the environment dn-monitor's own startup needs and execs
+# dn-monitor, which derives the tree from its own location, uses the tree's
+# runtime loader and execs the prefix's init (docs/spec/prefix.md, "Boot").  It
+# is a full command line, run with the prefix root as the working directory,
+# and it names no root.
+ENTRY = ("usr/lib/deb-native/boot.sh")
 
 
 def elf_interp(path):

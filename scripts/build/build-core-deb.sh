@@ -220,6 +220,11 @@ cp -f "$DN_RUNTIME/dn-interp.conf" "$STAGE/etc/deb-native/dn-interp.conf"
 # "Boot").
 cp -f "$ROOT/scripts/prefix/init.sh" "$STAGE/usr/lib/deb-native/init.sh"
 chmod 755 "$STAGE/usr/lib/deb-native/init.sh"
+# The boot script: the contract's entry.  It sets the one environment variable
+# dn-monitor's own startup needs (glibc.pthread.rseq=0, docs/spec/prefix.md,
+# "Boot") and execs dn-monitor.  The host runs it, not dn-monitor directly.
+cp -f "$ROOT/scripts/prefix/boot.sh" "$STAGE/usr/lib/deb-native/boot.sh"
+chmod 755 "$STAGE/usr/lib/deb-native/boot.sh"
 # dn-monitor IS the root, so it must run OUTSIDE the tree: it is built static
 # (self-contained -- libc and the vendored talloc are linked in), so a poor host
 # starts it with a bare exec and no loader at all, and dn-policy never

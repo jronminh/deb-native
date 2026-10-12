@@ -12,6 +12,7 @@
 
 # --- entry points: callable by the build / host / prefix -------------------
 entry	scripts/prefix/init.sh
+entry	scripts/prefix/boot.sh
 entry	scripts/prefix/apt-install.sh
 entry	scripts/host/install-prefix.sh
 entry	scripts/host/bootstrap-prefix.sh
