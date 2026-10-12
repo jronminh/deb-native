@@ -682,6 +682,19 @@ static int handle_seccomp_event_common(Tracee *tracee)
 	}
 
 	case PR_set_robust_list:
+		/* Android seccomp TRAPs this and glibc tolerates ENOSYS, so answer
+		 * it quietly: it fires on nearly every program start. */
+		set_result_after_seccomp(tracee, -ENOSYS);
+		break;
+
+	case PR_rseq:
+	case PR_clone3:
+		/* glibc probes these and falls back on ENOSYS (rseq: disable it;
+		 * clone3: use clone).  Android TRAPs them, so answer ENOSYS, as
+		 * quietly as set_robust_list -- otherwise every program start and
+		 * every thread (e.g. a maintainer script during an apt install)
+		 * prints a warning.  Genuinely unknown blocked syscalls still hit
+		 * `default:` below and are logged there. */
 		set_result_after_seccomp(tracee, -ENOSYS);
 		break;
 
