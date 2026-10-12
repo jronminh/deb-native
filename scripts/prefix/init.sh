@@ -13,7 +13,7 @@
 set -eu
 PATH=/usr/lib/deb-native/priv:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
-# The host's environment reaches the tree through dn-trace: drop the host's
+# The host's environment reaches the tree through dn-monitor: drop the host's
 # deb-native knobs and its locale (the tree ships no locales but C.UTF-8).
 for v in $(env | sed -n 's/^\(DN_[A-Za-z0-9_]*\)=.*/\1/p'); do
   unset "$v"
