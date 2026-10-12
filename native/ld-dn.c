@@ -1,5 +1,5 @@
-/* ld-dn -- deb-native's program loader stub (docs/spec/design.md,
- * docs/spec/ld-dn-config.md).
+/* ld-dn -- deb-native's program interpreter (trampoline)
+ * (docs/spec/ld-dn-shim.md).
  *
  * Every Debian program in the prefix names this file as its ELF interpreter
  * (PT_INTERP), so the kernel runs it first, however the program was started:
@@ -78,14 +78,14 @@ typedef struct {
 #define MAP_FIXED 0x10
 #define MAP_ANONYMOUS 0x20
 
-/* The version this loader reports under DN_REDIRECT_DEBUG. */
+/* The version this interpreter reports under DN_REDIRECT_DEBUG. */
 #define DN_VERSION "0.5.4"
 
 /* Space _start reserves between this function's frame and the original
  * stack, for the rebuilt argc/argv/envp/auxv. */
 #define RESERVE 0x10000
 
-/* Policy table caps. Bounded on purpose: a freestanding loader has no
+/* Policy table caps. Bounded on purpose: a freestanding interpreter has no
  * allocation, and a silently-unbounded config would be a footgun. Hitting a
  * cap warns and keeps what fit (fail-open), never truncates a live string. */
 #define DN_PATH_MAX 4096

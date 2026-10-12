@@ -151,16 +151,16 @@ static int classify_exec(const char *host_path, char interp[PATH_MAX])
 	return DN_RULE_FOREIGN;
 }
 
-/* deb-native, exec-gate rule 3: run @host_path through @loader (the
- * program loader, native/ld-dn.c) as
+/* deb-native, exec-gate rule 3: run @host_path through @interp (the
+ * program interpreter, native/ld-dn.c) as
  *
- *     loader --argv0 <original argv0> <host_path> <args...>
+ *     interp --argv0 <original argv0> <host_path> <args...>
  *
  * The kernel cannot find a guest PT_INTERP itself (it looks on Android's
  * real filesystem, not in the tree).  The new argv is built in the
  * tracee's memory; argv[0] is preserved through ld.so's --argv0.  Returns
  * -errno on failure.  */
-static int dn_exec_via_loader(Tracee *tracee, const char *loader, const char *host_path)
+static int dn_exec_via_interp(Tracee *tracee, const char *interp, const char *host_path)
 {
 	ArrayOfXPointers *argv = NULL;
 	char *orig0 = NULL;
@@ -177,7 +177,7 @@ static int dn_exec_via_loader(Tracee *tracee, const char *loader, const char *ho
 			return -ENOMEM;
 	}
 
-	/* New argv is [loader, "--argv0", orig0, host_path, orig1, ...]:
+	/* New argv is [interp, "--argv0", orig0, host_path, orig1, ...]:
 	   insert four front entries, then drop the old argv[0] (which moved
 	   to index 4).  */
 	status = resize_array_of_xpointers(argv, 0, 4);
@@ -186,14 +186,14 @@ static int dn_exec_via_loader(Tracee *tracee, const char *loader, const char *ho
 	status = resize_array_of_xpointers(argv, 4, -1);
 	if (status < 0)
 		return status;
-	status = write_xpointees(argv, 0, 4, loader, "--argv0", orig0, host_path);
+	status = write_xpointees(argv, 0, 4, interp, "--argv0", orig0, host_path);
 	if (status < 0)
 		return status;
 	status = push_array_of_xpointers(argv, SYSARG_2);
 	if (status < 0)
 		return status;
 
-	return set_sysarg_path(tracee, loader, SYSARG_1);
+	return set_sysarg_path(tracee, interp, SYSARG_1);
 }
 
 /**
@@ -235,7 +235,7 @@ int translate_execve_enter(Tracee *tracee)
 	/* Remember the new value for "/proc/self/exe", committed by
 	 * translate_execve_exit() once the execve succeeded.  It is
 	 * a guest path, hence detranslate_path().  This stays the program
-	 * even under rule 3, where the loader is what actually runs.  */
+	 * even under rule 3, where the interpreter is what actually runs.  */
 	talloc_unlink(tracee, tracee->host_exe);
 	tracee->host_exe = talloc_strdup(tracee, host_path);
 
@@ -246,13 +246,13 @@ int translate_execve_enter(Tracee *tracee)
 	if (status >= 0)
 		tracee->new_exe = talloc_strdup(tracee, new_exe);
 
-	/* Rule 3: run it through the program loader (ld-dn), which sets up
+	/* Rule 3: run it through the interpreter (ld-dn), which sets up
 	 * the environment and jumps into the tree's glibc loader.  Only when
 	 * it is executable -- otherwise the program is exec'd directly.  */
 	if (rule == DN_RULE_GLIBC
 	    && global_ld_dn != NULL
 	    && access(global_ld_dn, X_OK) == 0) {
-		status = dn_exec_via_loader(tracee, global_ld_dn, host_path);
+		status = dn_exec_via_interp(tracee, global_ld_dn, host_path);
 		if (status < 0)
 			return status;
 		return 0;

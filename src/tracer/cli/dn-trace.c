@@ -8,8 +8,8 @@
  *
  * dn-trace lives at TREE/usr/lib/deb-native/dn-trace, so TREE -- the prefix
  * root, the guest root -- is whatever contains it: dn-trace derives it from
- * its own path (/proc/self/exe), and LOADER is the fixed runtime loader
- * (dn-glibc's ld.so) inside that tree.  Nothing names the root ahead of time:
+ * its own path (/proc/self/exe), and LOADER is the tree's fixed glibc loader
+ * inside that tree.  Nothing names the root ahead of time:
  * the artifact is relocatable, and the host takes neither path from the
  * contract.  Two absolute TREE LOADER arguments still override the
  * derivation (starting a tree by absolute path, tests).  PROGRAM and its
@@ -47,20 +47,20 @@ static char *const DN_INIT[] = {
 	"/usr/bin/bash", "/usr/lib/deb-native/init.sh", NULL,
 };
 
-/* dn-trace's own place in the tree, and the loader beside it, both fixed:
+/* dn-trace's own place in the tree, and the glibc loader beside it, both fixed:
  * the prefix root is dn-trace's directory with this suffix removed.  */
 #define DN_TRACE_SUFFIX "/usr/lib/deb-native/dn-trace"
-#define DN_LOADER_REL   "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
-/* The exec gate's rule-3 target: the program loader (native/ld-dn.c).  */
+#define DN_GLIBC_LOADER_REL   "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+/* The exec gate's rule-3 target: the program interpreter (native/ld-dn.c).  */
 #define DN_LD_DN_REL    "usr/lib/deb-native/ld-dn"
 
 static char derived_tree[PATH_MAX];
-static char derived_loader[PATH_MAX];
+static char derived_glibc_loader[PATH_MAX];
 static char derived_ld_dn[PATH_MAX];
 
 /* TREE from dn-trace's own location: /proc/self/exe is
  * TREE/usr/lib/deb-native/dn-trace, so TREE is that prefix.  */
-static int derive_prefix(const char **tree, const char **loader)
+static int derive_prefix(const char **tree, const char **glibc_loader)
 {
 	char exe[PATH_MAX];
 	ssize_t n;
@@ -77,24 +77,24 @@ static int derive_prefix(const char **tree, const char **loader)
 		return -EINVAL;
 	exe[elen - slen] = '\0';
 
-	if (strlen(exe) + 1 + strlen(DN_LOADER_REL) + 1 > sizeof(derived_loader))
+	if (strlen(exe) + 1 + strlen(DN_GLIBC_LOADER_REL) + 1 > sizeof(derived_glibc_loader))
 		return -ENAMETOOLONG;
 	strcpy(derived_tree, exe);
-	strcpy(derived_loader, exe);
-	strcat(derived_loader, "/");
-	strcat(derived_loader, DN_LOADER_REL);
+	strcpy(derived_glibc_loader, exe);
+	strcat(derived_glibc_loader, "/");
+	strcat(derived_glibc_loader, DN_GLIBC_LOADER_REL);
 
 	*tree = derived_tree;
-	*loader = derived_loader;
+	*glibc_loader = derived_glibc_loader;
 	return 0;
 }
 
 /* deb-native, LOADER: the tree's glibc loader, the [TREE LOADER] argument,
    kept for the CLI contract.  The exec gate's rule 3 no longer names it --
    it runs ld-dn, which finds the loader itself.  See cli/note.h. */
-const char *global_rt_loader = NULL;
+const char *global_glibc_loader = NULL;
 
-/* deb-native, the program loader (native/ld-dn.c): the exec gate's rule-3
+/* deb-native, the program interpreter (native/ld-dn.c): the exec gate's rule-3
    target, derived from TREE.  See cli/note.h. */
 const char *global_ld_dn = NULL;
 
@@ -235,9 +235,9 @@ int main(int argc, char *const argv[])
 	 * absolute paths are given explicitly.  */
 	if (argc - i >= 2 && argv[i][0] == '/' && argv[i + 1][0] == '/') {
 		global_tree = tree = argv[i++];
-		global_rt_loader = argv[i++];
+		global_glibc_loader = argv[i++];
 	} else {
-		status = derive_prefix(&tree, &global_rt_loader);
+		status = derive_prefix(&tree, &global_glibc_loader);
 		if (status < 0) {
 			note(tracee, ERROR, USER,
 				"cannot derive the prefix from /proc/self/exe: %s",
@@ -255,8 +255,8 @@ int main(int argc, char *const argv[])
 	}
 	global_ld_dn = derived_ld_dn;
 
-	if (access(global_rt_loader, X_OK) < 0) {
-		note(tracee, ERROR, SYSTEM, "loader '%s'", global_rt_loader);
+	if (access(global_glibc_loader, X_OK) < 0) {
+		note(tracee, ERROR, SYSTEM, "glibc loader '%s'", global_glibc_loader);
 		goto error;
 	}
 

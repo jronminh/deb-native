@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the program loader (native/ld-dn.c) -- the exec gate's rule-3 target.
+# Build the program interpreter (native/ld-dn.c) -- the exec gate's rule-3 target.
 #
 # ld-dn is a freestanding aarch64 static-PIE: no libc, no PT_INTERP, no NEEDED.
 # It runs as a program's interpreter, derives the prefix from its own path,
