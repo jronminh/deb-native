@@ -382,21 +382,31 @@ are gone: the runtime is the only thing between a package and the kernel.
 
 On `main` a fully patched glibc ships as **real Debian packages** (`libc6`,
 `libc-bin`) at version `<Debian version>+dn<n>`. On branch `dn-interp-surgical`
-glibc carries only the **Android baseline** (`patches/dn-glibc-android.patch`);
-the `dn-policy` wiring is dropped, so the runtime no longer lives inside glibc
-(P3 decides whether any baseline patch is still needed at all). If a patched
-`libc6`/`libc-bin` is shipped it goes through the **local repo** (below), whose
-origin pin (1001) beats the mirror (500) so `apt` never replaces it; the runtime
-pair is the only glibc built, and the version-pinned dev packages (`libc6-dev`,
-`libc-dev-bin`, `locales`) are out of scope.
+there is **no glibc fork at all**: the tree takes Debian's own **stock**
+`libc6`/`libc-bin` from the mirror (pinned in `scripts/build/packages.tsv`),
+and the syscalls Android denies are answered at the syscall boundary by
+`dn-trace`. The device evidence is in
+[`../reference/android-platform.md`](../reference/android-platform.md),
+"Stock `libc6` re-tested": a stock Debian `ld.so`/`libc.so.6` runs whole
+programs under the tracer, with only `rseq`→`ENOSYS` (glibc startup) and
+`clone3`→`ENOSYS` (a thread) intervening. `dn-trace` itself is the one binary
+that needs care — it is the outermost process, nothing traces it — so it is
+built **static**, and started with the supported glibc tunable
+`GLIBC_TUNABLES=glibc.pthread.rseq=0` so its own startup does not trip Android's
+seccomp. No `patches/`, no `+dn` version, no local repo for glibc.
+
+The same rule covers the runtime's *own* programs (`dn-trace`, `dn-interp`,
+`dn-shim`): nothing may sit between them and the kernel except the kernel's
+kernel, so each is static or freestanding, and each must survive the app
+domain's seccomp while it is still the outermost process.
 
 ### The local repo
 
 The local repo is shipped inside `RT` (`RT/repo`, outside the dpkg-managed
 tree) and always wins over the mirror:
 
-- The glibc packages (`libc6`, `libc-bin`) at `+dn<n>`, if the Android baseline
-  is shipped.
+- Nothing today — glibc is Debian's own stock package from the mirror. The
+  mechanism stays for a package the runtime cannot cover alone.
 - Dynamic builds standing in for a static or Go program in everyday use.
 - `equivs`-built dummy packages, to satisfy a dependency the tree can't use.
 - Packages patched to run on Android, where the runtime can't cover it alone.
@@ -411,13 +421,12 @@ Pin: release o=deb-native
 Pin-Priority: 1001
 ```
 
-The repo's `Release` carries `Origin: deb-native`; the pin recognizes it. The
-mirror's own `libc6`/`libc-bin` are simply shadowed — the tree's `libc6` at
-`+dn<n>` is the candidate apt picks, at priority 1001. Rules: the pin only
-applies to a package the repo carries; a whole source package's binary set
-goes in together; a rebuilt package's version is `<Debian version>+dn<n>` (the
-glibc pair included); a check script lists local-repo packages the mirror has
-a newer version of.
+The repo's `Release` carries `Origin: deb-native`; the pin recognizes it. With
+the repo empty the pin has no effect, and `libc6`/`libc-bin` come from the
+mirror at the pinned version. Rules: the pin only applies to a package the
+repo carries; a whole source package's binary set goes in together; a rebuilt
+package's version is `<Debian version>+dn<n>`; a check script lists
+local-repo packages the mirror has a newer version of.
 
 ## Init, services, and hard limits
 
@@ -482,6 +491,8 @@ Still open:
 - A program run through the interpreter reports the interpreter as its `comm`
   (`/proc/self/status` `Name:`, `ps`, `pkill`).
 - The `bind`/`connect` UNIX-socket path (sockaddr, 108-byte cap).
-- P3 — trim glibc to the Android baseline; confirm a stock `libc6` starts.
+- P3 — **done**: glibc is stock; a stock `libc6` starts and runs under the
+  tracer in the app domain. The Android-baseline patch was retired
+  (`patches/README.md`); see "The glibc rule" above.
 - The traced path's own open items from `main` still stand (PRoot bindings as
   the translation, the filter's TRACE list, a symlink's own owner).

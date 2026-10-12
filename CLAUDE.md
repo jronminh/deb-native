@@ -16,11 +16,10 @@ status `ii` and its program runs by name, unprivileged.
 
 There is **no build on the host**.
 
-- **Build** (a build host, `scripts/build/` + `scripts/glibc/`): the runtime
+- **Build** (a build host, `scripts/build/`): the runtime
   runtime (`scripts/build/build-trace.sh` — `dn-trace`, one static
-  binary with the syscall catalog embedded, plain-gcc), the glibc bundle (the two patches in
-  `patches/`, applied by `scripts/glibc/dn-apply-glibc-patch.sh`), and the
-  prefix artifact
+  binary with the syscall catalog embedded, plain-gcc, linked against stock
+  `libc6-dev`), and the prefix artifact
   (`build-core-deb.sh` + `package-prefix.sh`, which writes `.dn/` —
   `docs/spec/prefix.md`).
 - **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
@@ -46,9 +45,9 @@ program through the runtime loader. No per-package `PT_INTERP` patching, no
 
 - `src/` — `dn-policy/` (the shared policy library), `tracer/` (dn-trace, a
   pruned PRoot fork), `syscalls.tsv` (the syscall catalog).
-- `scripts/build/`, `scripts/glibc/` — a build host.
+- `scripts/build/` — a build host.
 - `scripts/host/`, `scripts/prefix/` — the host / the prefix.
-- `patches/` — the glibc patches (Android base + dn-policy wiring).
+- `patches/` — the retired glibc patches, not applied (`patches/README.md`).
   `tests/` `tools/` `docs/`.
 
 ## Priority: ship the idea fast, don't study every failure

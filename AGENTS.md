@@ -13,11 +13,10 @@ unprivileged. "Install and run, not emulate" — no isolation.
 
 There is **no build on the host**.
 
-- **Build** (a build host: `scripts/build/`, `scripts/glibc/`): the runtime
+- **Build** (a build host: `scripts/build/`): the runtime
   runtime (`scripts/build/build-trace.sh` — `dn-trace`, one static
-  binary with the syscall catalog embedded, plain-gcc), the glibc bundle (the two patches in
-  `patches/`, applied by `scripts/glibc/dn-apply-glibc-patch.sh`), and the
-  prefix artifact
+  binary with the syscall catalog embedded, plain-gcc, linked against stock
+  `libc6-dev`), and the prefix artifact
   (`build-core-deb.sh` + `package-prefix.sh`, which writes `.dn/` —
   `docs/spec/prefix.md`).
 - **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
@@ -39,8 +38,6 @@ are gone; a `.deb` installs intact (`docs/spec/runtime.md`).
 - `src/` — `dn-policy/` (the shared policy library), `tracer/` (dn-trace, a
   pruned PRoot fork), `syscalls.tsv` (the syscall catalog).
 - `scripts/build/` — build host: runtime, artifact assembly, packaging.
-- `scripts/glibc/` — build host: apply the glibc patch, package `libc6` /
-  `libc-bin`.
 - `scripts/host/` — the host's own shell (poor host): ship,
   install (activation), update.
 - `scripts/prefix/` — run by the prefix (its own glibc); `interface.tsv` is

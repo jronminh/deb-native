@@ -226,6 +226,25 @@ process dies (`Bad system call`). Reproduced directly: in `runas_app`
 That is the whole difference — a `SIGSYS` the tracer converts to `ENOSYS`,
 via `set_result_after_seccomp`.
 
+**The outermost process.** `dn-trace` itself is the one program nothing traces,
+so *its own* startup must survive unaided. It is built **static**, and a static
+stock-glibc binary's only Android-denied startup syscall here is `rseq`;
+`GLIBC_TUNABLES=glibc.pthread.rseq=0` (a supported glibc tunable) removes even
+that — measured: with the tunable the `rseq` warning disappears, without it the
+static binary hits it. `set_robust_list` was **allowed** on this device (the
+static binary's startup showed no warning for it), unlike the older note about
+the audit device. So no patched `libc.a` is needed to start the runtime either;
+a launch environment with that one tunable is enough.
+
+**What this does *not* say.** The measurement used `main`'s heavily forked
+`dn-trace`, which already carries the seccomp-denial emulation, the exec gate and
+the libc-internal path routing. The branch's `dn-monitor`/`dn-trace` is a trimmed
+ptrace rebuild and does **not** have those pieces yet: the finding is the
+*behaviour the branch must reproduce*, not something it inherits. Dropping the
+glibc patch moves the obligation from "patch glibc" to "carry the emulation in
+the runtime" — `main`'s `src/tracer/tracee/seccomp.c` (`set_result_after_seccomp`)
+is the reference.
+
 **Consequence for the glibc patch.** `dn-glibc-android.patch` is not
 load-bearing for loader startup. Its startup-adjacent hunks are already
 covered by the tracer (`set_robust_list`, `clone3`, `rseq` → the SIGSYS

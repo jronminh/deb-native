@@ -12,11 +12,6 @@
 # Inputs:
 #   BASE          a core-ultra tree in build form (cut-core-ultra.py output,
 #                 before pack-prefix.py), with its .dn/packages list.
-#   DN_GLIBC_PREFIX a directory holding the patched `libc6.deb` and
-#                 `libc-bin.deb` (built by scripts/glibc/dn-package-glibc.sh
-#                 and dn-package-libc-bin.sh; version `<Debian>+dn1`, loader
-#                 says "GNU libc"). They replace Debian's in step 2, are
-#                 installed in the tree, and ship in the local repo (step 6b).
 #   DN_RUNTIME    the runtime runtime (build-trace.sh output):
 #                 dn-trace, one self-contained binary (the syscall catalog is
 #                 embedded in it).
@@ -38,12 +33,11 @@
 #                 caller can cut core-ultra from it (cut-core-ultra.py)
 #   OUT           output tarball
 #
-# Usage: DN_GLIBC_PREFIX=... DN_RUNTIME=... PREFIX_ROOT=... DEB_LIST=... \
+# Usage: DN_RUNTIME=... PREFIX_ROOT=... DEB_LIST=... \
 #        build-core-deb.sh BASE OUT.tar.gz
 set -eu
 BASE=${1:?usage: build-core-deb.sh BASE OUT.tar.gz}
 OUT=${2:?usage: build-core-deb.sh BASE OUT.tar.gz}
-: "${DN_GLIBC_PREFIX:?set DN_GLIBC_PREFIX to the dir holding the patched libc6.deb and libc-bin.deb}"
 : "${DN_RUNTIME:?set DN_RUNTIME to the build-trace.sh output dir}"
 : "${PREFIX_ROOT:?set PREFIX_ROOT to the absolute build path of the artifact}"
 : "${DEB_LIST:?set DEB_LIST to the pinned package list (.dn/packages format)}"
@@ -112,32 +106,10 @@ while read -r name ver _arch; do
 done < "$DEB_LIST" > "$W/debs.list"
 echo "build-core-deb: $(wc -l < "$W/debs.list") packages verified"
 
-# 2. Glibc is shipped as real packages, not swapped files (docs/spec/prefix.md):
-#    `libc6` and `libc-bin`, built from the tree's libc6 source with the
-#    Android + dn-policy patches, at version `<Debian version>+dn1` so they are
-#    visibly not upgradeable from the mirror. They are delivered through the
-#    local repo (step 6b); DN_GLIBC_PREFIX is the directory holding the two
-#    .debs. Replace the mirror's libc6/libc-bin entries with ours, and check
-#    the loader in libc6 says "GNU libc".
-for p in libc6 libc-bin; do
-  [ -f "$DN_GLIBC_PREFIX/$p.deb" ] || die "missing $DN_GLIBC_PREFIX/$p.deb"
-  [ "$(dpkg-deb -f "$DN_GLIBC_PREFIX/$p.deb" Package)" = "$p" ] \
-    || die "$DN_GLIBC_PREFIX/$p.deb is not the $p package"
-done
-while read -r name ver deb; do
-  case $name in
-    libc6|libc-bin)
-      p=$DN_GLIBC_PREFIX/$name.deb
-      printf '%s %s %s\n' "$name" "$(dpkg-deb -f "$p" Version)" "$p" ;;
-    *) printf '%s %s %s\n' "$name" "$ver" "$deb" ;;
-  esac
-done < "$W/debs.list" > "$W/debs.list.new"
-mv "$W/debs.list.new" "$W/debs.list"
-tmpld=$(mktemp -d "$W/ld.XXXXXX")
-dpkg-deb -x "$DN_GLIBC_PREFIX/libc6.deb" "$tmpld"
-"$tmpld/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1" --version 2>/dev/null | head -1 | grep -q "GNU libc" \
-  || die "libc6.deb's loader is not the patched build (it must say GNU libc)"
-rm -rf "$tmpld"
+# 2. Glibc is Debian's own stock `libc6`/`libc-bin`, straight from the pinned
+#    list (step 1) -- this project patches no glibc. The syscalls Android
+#    denies are answered at the syscall boundary by dn-trace, not by a patched
+#    glibc (docs/reference/android-platform.md, "Stock `libc6` re-tested").
 
 # 3. Every package: extract the files into the stage (glibc included -- ours).
 while read -r name ver deb; do
@@ -193,10 +165,9 @@ while read -r name ver deb; do
 done < "$W/debs.list"
 rm -rf "$W/ctl"
 
-# 5b. Library search. The patched glibc is built for a flat libdir (usr/lib, as
-#     its path.prefix=/usr implies); the packages put libraries in the Debian
-#     multiarch directory. Relative links in usr/lib make both work without an
-#     ld.so.cache (prefix-contract.md, build invariants).
+# 5b. Library search. Debian's packages put libraries in the Debian multiarch
+#     directory; a relative link in usr/lib lets a tree with no ld.so.cache
+#     still find them (prefix-contract.md, build invariants).
 for d in "$STAGE/usr/lib/aarch64-linux-gnu"/*.so*; do
   [ -e "$d" ] || [ -L "$d" ] || continue
   n=$(basename "$d")
@@ -243,24 +214,16 @@ chmod 755 "$STAGE/usr/lib/deb-native/init.sh"
 # translates the tracer's own path operations.  Nothing to ship for it beyond
 # the binary itself.
 
-# 6b. The local repo (docs/spec/runtime.md, "The local repo"): the patched
-#     glibc packages, so apt sees them and the origin pin (below) keeps the
-#     mirror from ever replacing them. It lives in RT, outside the
-#     dpkg-managed tree. Packages and Release are written by hand, so the
-#     build host needs neither dpkg-dev nor apt-utils.
+# 6b. The local repo (docs/spec/runtime.md, "The local repo"): reserved for the
+#     packages the runtime cannot cover alone (equivs dummies, a dynamic build
+#     standing in for a static program, a package patched to run on Android).
+#     It ships empty today -- glibc is Debian's own stock package from the
+#     mirror -- so `Packages` is empty and apt finds nothing extra. It lives in
+#     RT, outside the dpkg-managed tree. Packages and Release are written by
+#     hand, so the build host needs neither dpkg-dev nor apt-utils.
 REPO=$STAGE/usr/lib/deb-native/repo
 mkdir -p "$REPO"
-cp -f "$DN_GLIBC_PREFIX/libc6.deb" "$DN_GLIBC_PREFIX/libc-bin.deb" "$REPO/"
 : > "$REPO/Packages"
-for d in libc6 libc-bin; do
-  {
-    dpkg-deb -f "$REPO/$d.deb"
-    printf 'Filename: ./%s.deb\n' "$d"
-    printf 'Size: %s\n' "$(wc -c < "$REPO/$d.deb")"
-    printf 'SHA256: %s\n' "$(sha256sum "$REPO/$d.deb" | cut -d' ' -f1)"
-    echo
-  } >> "$REPO/Packages"
-done
 gzip -kf "$REPO/Packages"
 # Date and the index hashes: without them apt warns ("No Hash entry",
 # "Invalid 'Date' entry") and cannot check the indexes it reads.
@@ -321,9 +284,9 @@ Suites: $SUITE-security
 Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 SRC
-# The local repo: the patched glibc, and the origin pin that keeps the mirror
-# from replacing it (docs/spec/runtime.md, "The local repo"). The path is a
-# guest path: the runtime translates it into the tree.
+# The local repo: the origin pin that keeps the mirror from replacing a
+# package the repo carries (none today), docs/spec/runtime.md, "The local
+# repo". The path is a guest path: the runtime translates it into the tree.
 cat > "$STAGE/etc/apt/sources.list.d/dn-local.list" <<SRC
 deb [trusted=yes] file:/usr/lib/deb-native/repo ./
 SRC

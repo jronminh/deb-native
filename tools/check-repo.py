@@ -134,8 +134,7 @@ def check_reachability(root: str) -> list[str]:
         "ship-prefix.sh", "install-from-release.sh", "bootstrap-prefix.sh",
         "install-prefix.sh",
         "package-prefix.sh", "build-core-deb.sh", "build-trace.sh",
-        "cut-core-ultra.py", "dn-package-glibc.sh", "dn-package-libc-bin.sh",
-        "dn-apply-glibc-patch.sh", "dn-doctor.sh",
+        "cut-core-ultra.py", "dn-doctor.sh",
     }
     entrypoints = {path for base, path in basenames.items() if base in entries}
 

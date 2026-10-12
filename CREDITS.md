@@ -21,17 +21,15 @@ builds on, and the license each part is under.
 
 - <https://github.com/termux/termux-packages> — the Bionic host.
 - <https://github.com/termux-pacman/glibc-packages> — the glibc side-install
-  (`glibc-runner`, the loader and libraries) that built this project's own
-  glibc, and the fallback before it is wired in.
-- Used for: this project's own-glibc patch,
-  [`patches/dn-glibc-android.patch`](patches/dn-glibc-android.patch),
-  is a **direct fork of this repo's own Android compatibility patch series
-  for glibc** (`gpkg/glibc/`, GPL-2.0-or-later, same license as glibc
-  itself) — not written from scratch. The patch carries every file the
-  fork needed, retargeted from Termux's dual-prefix layout to this
-  project's single fixed prefix. See
-  [`patches/README.md`](patches/README.md)
-  for the exact provenance and what was changed vs. kept as-is.
+  (`glibc-runner`, the loader and libraries) whose Android compatibility patch
+  series this project's own-glibc patch was forked from.
+- Used for: this project's own-glibc patch was a **direct fork of that repo's
+  Android compatibility patch series for glibc** (`gpkg/glibc/`,
+  GPL-2.0-or-later, same license as glibc itself) — not written from scratch.
+  On branch `dn-interp-surgical` that fork is **retired**: the tree takes
+  Debian's stock `libc6`/`libc-bin`, and the runtime answers the syscalls
+  Android denies ([`patches/README.md`](patches/README.md)). The credit stands
+  for the work the fork drew on.
 - Without Termux there is no project: the approach is "reuse Termux, fake only
   the Debian layout".
 
@@ -42,11 +40,10 @@ builds on, and the license each part is under.
   (`scripts/prefix/dn-translate-deb.sh`) this project adds.
 - Used for: `libc6` is Debian's real `glibc` source package
   (`glibc_2.41-12+deb13u4`, including Debian's own ~80-patch
-  `debian/patches/series`), with the Termux-derived Android patch above
-  applied on top and repackaged as a `.deb`
-  (`scripts/glibc/dn-package-glibc.sh`) — Debian's own maintainer
-  scripts/triggers/symbols/doc are reused as-is, only the payload is
-  this project's build. `glibc` itself is
+  `debian/patches/series`). On branch `dn-interp-surgical` the tree takes
+  Debian's own stock `libc6` `.deb`, unmodified; the earlier Android-patched
+  rebuild (the Termux-derived patch on top, repackaged by
+  `scripts/glibc/dn-package-glibc.sh`) is retired. `glibc` itself is
   **LGPL-2.1-or-later** (with GPL-licensed pieces Debian's own packaging
   already carries).
 

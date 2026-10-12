@@ -16,12 +16,12 @@
 # dn-trace is built in a scratch copy of src/tracer, so its objects never mix
 # with the in-tree build.
 #
-# Usage: build-trace.sh [OUTDIR]   (default: src/.build-glibc)
+# Usage: build-trace.sh [OUTDIR]   (default: src/.build-runtime)
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd)
 SRC="$ROOT/src"
-OUT=${1:-$SRC/.build-glibc}
+OUT=${1:-$SRC/.build-runtime}
 CC=${CC:-gcc}
 mkdir -p "$OUT"
 case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
@@ -41,13 +41,17 @@ T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 cp -R "$ROOT/src/tracer/." "$T/"
 find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-trace -o -name dn-catalog.c \) -type f -exec rm -f {} +
-# Self-contained/static when an Android-patched glibc's lib dir is given: a
-# poor host must start dn-trace with a bare exec, and a stock glibc is killed
-# by Android's seccomp at startup, so link the patched libc.a in
-# (docs/reference/android-platform.md, "Gate A") -- with that build's own
-# start files (csu/crt1.o ...), not the build host's glibc's.
+# Self-contained/static when a stock glibc's lib dir is given (the arm64
+# `libc6-dev` payload, extracted from Debian's own .deb): dn-trace is the
+# outermost process -- nothing traces it -- and a poor host must start it
+# with a bare exec and no loader at all.  A *stock* glibc's own startup is
+# survivable here: its only Android-denied syscall at startup is `rseq`,
+# and `GLIBC_TUNABLES=glibc.pthread.rseq=0` (a supported glibc tunable) turns
+# that registration off (docs/reference/android-platform.md, "Stock libc6
+# re-tested").  Link with that build's own start files (crt1.o ...), not the
+# build host's glibc's.
 if [ -n "${DN_GLIBC_LIBC_DIR:-}" ]; then
-  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" LDFLAGS="-static -B$DN_GLIBC_LIBC_DIR/csu -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
+  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" LDFLAGS="-static -B$DN_GLIBC_LIBC_DIR -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
 else
   make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy"
 fi

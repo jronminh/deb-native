@@ -13,15 +13,17 @@
 #   kernel:   5.10.240-android12-9-33405034-abS7110ZHS8GZH6 (observed on the
 #             author's device; see ~/.claude/claude-native/doctor.sh output)
 #   sources:  docs/spec/runtime.md ("The shared filter's rules" -- the
-#             group lists); patches/dn-glibc-android.patch's fakesyscall.json
+#             group lists); the retired glibc patch's fakesyscall.json
 #             (Android kernel/ABI buckets) and docs/reference/android-platform.md
 #             (per-file verdict); Termux termux-pacman/shim-packages
 #             gpkg/shim/fakesyscall.json (upstream of those buckets).
 #   updated:  2026-10-08
 # Android-specific syscall faking (statx/close_range/mq_open -> ENOSYS,
 # epoll_pwait2 and SysV IPC -> real substitutes, the setuid/... "0" bucket)
-# is a dn-glibc-android.patch concern, not an runtime one; it lives in that
-# patch's fakesyscall.json, which is the companion to this file.
+# lives in the runtime now, not in a patched glibc: the tree takes Debian's
+# stock libc6/libc-bin, and the syscalls Android denies are answered at the
+# syscall boundary by dn-trace (patches/README.md; the retired patch's
+# fakesyscall.json is the historical companion to this file).
 #
 # Columns: syscall  group  handling  shim  gate
 #   group    path | identity   (everything else is "other": always ALLOWed)

@@ -182,9 +182,13 @@ answers with `ENOSYS`. Hunk-by-hunk:
 | `misc/syscallS` + `syscall.c` + `Versions` | Termux's renamed raw-`syscall()` | **drop** — the tracer sees raw `svc` anyway, and the shim's `syscall()` interposer covers the dynamic call |
 | `elf/static-stubs.c` (unwind glue), `dl-execstack`, `mprotect.c`, socket-syscall variants | real build/ABI fixes, nothing to do with the loader | **evaluate separately** — not needed to start; keep out of the startup trim |
 
-Net: the **startup-critical part of the patch is empty** on this branch.
-What remains to build-verify is only whether glibc compiles without
-`static-stubs`' unwind glue — a build question, not a runtime one.
+Net: the **startup-critical part of the patch is empty** on this branch, and the
+whole patch is now gone from the tree (`patches/README.md`). The tree takes
+stock `libc6`/`libc-bin` from the mirror, and `build-trace.sh` links `dn-trace`
+static against stock `libc6-dev`. What this moves onto the branch is named in
+Track B: the trimmed `dn-monitor`/`dn-trace` must carry the seccomp-denial
+emulation, the exec gate and the libc-internal path routing that `main`'s fork
+has — the measurement that justifies dropping the patch assumed exactly those.
 
 ## Non-goals
 

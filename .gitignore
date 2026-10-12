@@ -1,7 +1,7 @@
 # Build artifacts of the runtime (see scripts/prefix/interface.tsv).
 src/*.so
 src/.build/
-src/.build-glibc/
+src/.build-runtime/
 src/tracer/**/*.o
 src/tracer/**/*.d
 src/tracer/dn-trace

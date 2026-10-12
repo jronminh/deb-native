@@ -85,9 +85,15 @@ is now a usable host too.
   `dn-shim.c` (call `dn-policy`, issue syscalls from `P_GATE`); remove the gate
   page from `elf/rtld.c`; drop `dn-policy-glibc-wiring.patch` from the
   pipeline; recompute `src/syscalls.tsv`'s `glibc`/`gate` columns.
-- **P3 — trim glibc to the Android baseline.** Reduce
-  `dn-glibc-android.patch`; confirm a stock `libc6` starts, or name the exact
-  syscall that kills it.
+- **P3 — glibc needs no patch.** Done: the failure the Android patch existed
+  for is a seccomp `SIGSYS` on `rseq`/`clone3` at the syscall boundary, answered
+  by the tracer's emulation — not a loader-startup fault. Stock Debian
+  `libc6` starts and runs under the tracer
+  (`docs/reference/android-platform.md`, "Stock `libc6` re-tested"). The patch,
+  `scripts/glibc/` and `build-glibc.yml` are retired; the tree takes stock
+  `libc6`/`libc-bin` from the mirror, and `build-trace.sh` links `dn-trace`
+  static against stock `libc6-dev` with `GLIBC_TUNABLES=glibc.pthread.rseq=0`
+  for its own startup.
 - **P4 — measure.** Reuse the per-tier counters; per-tier call distribution.
 
 **Status**: P1 done — `dn-interp` recovered (`native/`, `build-interp.sh`) and the
@@ -105,8 +111,9 @@ from the pipeline, recompute the catalog's `glibc`/`gate` columns.
 Design: [`docs/spec/prefix.md`](docs/spec/prefix.md),
 [`docs/spec/prefix.md`](docs/spec/prefix.md).
 
-**Status**: shipped. `build-glibc.yml` builds the patched glibc from Debian's
-own source; `build-prefix.yml` builds `core-ultra` and `core-deb` from it (an
+**Status**: shipped. `build-runtime.yml` builds the runtime (`dn-trace`, static
+against stock `libc6-dev`); `build-prefix.yml` builds `core-ultra` and
+`core-deb` from the mirror's own stock `libc6`/`libc-bin` (an
 empty base + pinned `scripts/build/packages.tsv` + `profile.txt`) and publishes
 both to the single rolling `prefix` release. On device `ship-prefix.sh`
 extracts, `.dn/install.sh` relocates (the artifact's loader runs its `dn-elf`),
@@ -122,13 +129,9 @@ runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
   so stock Debian tools plus timezone/i18n work
   ([`known-issues.md`](docs/reference/known-issues.md), "Gaps toward a
   complete Debian").
-- **Ship the glibc dev set at `+dnN`**: `core-deb` carries patched
-  `libc6`/`libc-bin` but not `libc6-dev`/`libc-dev-bin`, so `apt install gcc`
-  (the alpha demo) fails — `libc6-dev` pins `libc6 (= <base>)`, which the
-  `+dn1` version does not satisfy. Repackage the stock dev packages at `+dnN`
-  (version and `Depends` retargeted) into the local repo, the same
-  template-repackage `scripts/glibc/dn-package-glibc.sh` does for `libc6`;
-  they are version-pinned only, so no rebuild is needed.
+- ~~**Ship the glibc dev set at `+dnN`**~~ **moot on this branch**: `libc6` is
+  Debian's own stock package now, so `libc6-dev`'s `Depends: libc6 (= <base>)`
+  is already satisfied and `apt install gcc` needs no repackage.
 - **Bootstrap on a poor host**: where the first artifact comes from, and how
   one artifact yields the next (core-ultra, core-deb, specialized).
 - The `claude` specialized prefix: core-ultra recipe + the Claude binary as a
@@ -243,9 +246,9 @@ below.
     dn-policy symbol, and the minimal prefix run under the built loader
     shows `open`/`stat`/`lstat`, the fake-root post-processing, the reverse
     translation and the manipulation wrappers all working (verified
-    2026-10-08; see `patches/README.md`). Now applied by the build workflow
-    too — `scripts/glibc/dn-apply-glibc-patch.sh` applies this patch right
-    after `dn-glibc-android.patch`.
+    2026-10-08; see `patches/README.md`). Not applied by the build on branch
+    `dn-interp-surgical`: the fast path is the shim, and the pipeline applies
+    no glibc patch at all.
     - **Known issue (accepted):** the `syscalls.list`-generated wrappers
       (`mkdirat`/`unlinkat`/`symlinkat`/`linkat`/`readlinkat`/`fchownat`/
       `chdir`/`chroot`/`*xattr`) and any path-group call a static/foreign

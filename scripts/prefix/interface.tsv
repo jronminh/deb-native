@@ -18,15 +18,12 @@ entry	scripts/host/bootstrap-prefix.sh
 entry	scripts/host/ship-prefix.sh
 entry	scripts/host/install-from-release.sh
 
-# --- build / glibc leaves a build host or tool may call --------------------
+# --- build leaves a build host or tool may call ----------------------------
 entry	scripts/build/build-trace.sh
 entry	scripts/build/build-core-deb.sh
 entry	scripts/build/package-prefix.sh
 entry	scripts/build/cut-core-ultra.py
 entry	scripts/build/pack-prefix.py
-entry	scripts/glibc/dn-apply-glibc-patch.sh
-entry	scripts/glibc/dn-package-glibc.sh
-entry	scripts/glibc/dn-package-libc-bin.sh
 
 # --- sources the build compiles --------------------------------------------
 source	src/dn-policy
@@ -34,4 +31,4 @@ source	src/syscalls.tsv
 source	src/tracer
 
 # --- artifacts build produces, and where install places them ---------------
-artifact	dn-trace	src/.build-glibc/dn-trace	usr/lib/deb-native/dn-trace
+artifact	dn-trace	src/.build-runtime/dn-trace	usr/lib/deb-native/dn-trace

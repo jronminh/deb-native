@@ -168,10 +168,21 @@ its own commit, build-verified, and leaves the tree usable.
   tree's `ld.so` (`--argv0 …`), so the kernel does the load. `P_GATE` stays in
   the **shim** (an exec wipes any mapping, so the launcher cannot map it, and
   the loader stays unpatched). Drop `dn-policy-glibc-wiring.patch` from the
-  pipeline (`scripts/glibc/`, `.github/workflows/build-glibc.yml`); recompute
-  `src/syscalls.tsv`'s `glibc`/`gate` columns.
-- **A2 (P3)** — trim `dn-glibc-android.patch` to the Android baseline;
-  confirm a stock `libc6` boots.
+  pipeline; recompute `src/syscalls.tsv`'s `glibc`/`gate` columns.
+- **A2 (P3) — done: glibc is stock, and the pipeline says so.** A device
+  re-test (SM-G970W, `untrusted_app_27`, Seccomp 2) shows the failure the
+  Android patch existed for is a seccomp `SIGSYS` on `rseq`/`clone3`, not a
+  loader-startup fault: the tracer's existing emulation answers both with
+  `ENOSYS`, and stock Debian `ld.so`/`libc.so.6` runs whole programs
+  ([`../reference/android-platform.md`](../reference/android-platform.md),
+  "Stock `libc6` re-tested"). `patches/dn-glibc-android.patch`, `scripts/glibc/`
+  and `build-glibc.yml` are gone; the tree takes stock `libc6`/`libc-bin` from
+  the mirror; `build-trace.sh` links `dn-trace` static against stock `libc6-dev`,
+  and its own startup uses `GLIBC_TUNABLES=glibc.pthread.rseq=0`. The one
+  obligation this moves onto the branch is explicit: the trimmed
+  `dn-monitor`/`dn-trace` must carry the seccomp-denial emulation — plus the
+  exec gate and the libc-internal path routing — that `main`'s fork has and
+  this rebuild does not yet (Track B).
 
 ### Track B — rebuild the tracer
 

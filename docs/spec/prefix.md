@@ -141,34 +141,35 @@ A build host: an `arm64` Linux machine with `gcc`, `make`, `python3`,
 the target.
 
 1. **The runtime.** `scripts/build/build-trace.sh` builds `dn-trace`
-   from `src/tracer/` into `src/.build-glibc/` — the whole runtime, one file:
+   from `src/tracer/` into `src/.build-runtime/` — the whole runtime, one file:
    the syscall catalog `src/syscalls.tsv` is embedded in it at build time.
-   dn-trace is **static and self-contained** (its talloc
-   is vendored in `src/tracer/talloc/`), linked against the Android-patched
-   glibc's `libc.a` (`DN_GLIBC_LIBC_DIR`): Android's zygote seccomp kills a
-   stock-glibc program at startup, so the patched libc is required. A poor
-   host then starts dn-trace with a bare exec, outside the runtime. See
-   [`runtime.md`](runtime.md).
-2. **The patched glibc.** The same host builds glibc from Debian's source at
-   the tree's `libc6` version, applying the two patches (Android base +
-   dn-policy wiring), then packages the result as two real Debian packages —
-   `libc6` and `libc-bin`, at `<Debian version>+dn1`
-   (`scripts/glibc/dn-package-glibc.sh`, `dn-package-libc-bin.sh`). This is the
-   **glibc bundle**: `libc6.deb` + `libc-bin.deb`. See
-   [`runtime.md`](runtime.md), "dn-shim".
+   dn-trace is **static and self-contained** (its talloc is vendored in
+   `src/tracer/talloc/`), linked against **stock** glibc's `libc.a`
+   (`DN_GLIBC_LIBC_DIR`, extracted from Debian's own `libc6-dev` .deb):
+   dn-trace is the **outermost** process — nothing traces it — so a poor host
+   must start it with a bare exec. Its own startup only needs Android's denied
+   `rseq` off, which the supported glibc tunable
+   `GLIBC_TUNABLES=glibc.pthread.rseq=0` does (see
+   [`../reference/android-platform.md`](../reference/android-platform.md),
+   "Stock `libc6` re-tested") and [`runtime.md`](runtime.md).
+2. **Glibc.** Nothing to build: the tree takes Debian's own **stock**
+   `libc6`/`libc-bin` from the mirror, pinned in `scripts/build/packages.tsv`.
+   The syscalls Android denies are answered at the syscall boundary by
+   dn-trace, not by a patched glibc — see [`runtime.md`](runtime.md), "The
+   glibc rule".
 3. **The tree.** `scripts/build/build-core-deb.sh BASE OUT.tar.gz` assembles
    one from an **empty base**: it indexes the mirror, downloads and
-   sha256-verifies every package in the pinned list (using our `libc6`/
-   `libc-bin` instead of the mirror's), extracts them, builds the `dpkg`
-   database as `dpkg --unpack` would leave it (status `unpacked`, with each package's
+   sha256-verifies every package in the pinned list, extracts them, builds the
+   `dpkg` database as `dpkg --unpack` would leave it (status `unpacked`, with each package's
    `Conffiles`, file lists, and every control file: `md5sums`, `conffiles`,
    maintainer scripts, triggers; `<pkg>:<arch>` for a `Multi-Arch: same`
    package), prunes files no shipped package owns, installs the runtime into
-   `RT`, builds the **local repo** (`RT/repo`, its `Release` dated and
-   carrying the index hashes) with the patched glibc packages, ships the
-   prefix's init and the loader, and writes the apt configuration and
-   `etc/ca-certificates.conf` (every certificate enabled: the tree has no
-   debconf to ask). The bootstrap then builds the CA bundle.
+   `RT`, writes the **local repo** (`RT/repo`, its `Release` dated and
+   carrying the index hashes; the repo is empty today — reserved for a package
+   the runtime cannot cover), ships the prefix's init and the loader, and
+   writes the apt configuration and `etc/ca-certificates.conf` (every
+   certificate enabled: the tree has no debconf to ask). The bootstrap then
+   builds the CA bundle.
 4. **The tarball.** `scripts/build/package-prefix.sh TREE --root PREFIX_ROOT
    --name NAME --out OUT.tar.gz` writes `.dn/` and tars the tree.
 5. **core-ultra**, optionally, from the core-deb tree
@@ -180,7 +181,6 @@ The build inputs to step 3:
 | --- | --- |
 | `BASE` (arg) | the tree to build on; the canonical build uses an **empty** dir |
 | `DEB_LIST` | the pinned `name<TAB>version<TAB>arch` list (packages.tsv) |
-| `DN_GLIBC_PREFIX` | the glibc bundle: a dir with `libc6.deb` + `libc-bin.deb` |
 | `DN_RUNTIME` | `build-trace.sh`'s output |
 | `PREFIX_ROOT` | the path the build assumes; asserted not to be named (the artifact is relocatable) |
 | `DN_PROFILE` | optional; written as `.dn/profile` |
