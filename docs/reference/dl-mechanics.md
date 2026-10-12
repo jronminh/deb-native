@@ -9,6 +9,13 @@ which surfaces already exist is what lets that patch stay small instead of
 re-implementing environment and search-path logic. Reference doc, tracks
 glibc 2.41 as fetched for the amd64 development tree.
 
+> **Legacy / background.** This was written to design the fused glibc loader
+> (then named "`dn-glibc`") on `main`, where the runtime lives inside glibc.
+> The `dn-interp-surgical` branch does **not** fuse into glibc: it keeps glibc
+> stock and uses `dn-interp` (the program interpreter) + `dn-shim.so` (the
+> fast-path shim) + `dn-trace` ([`../spec/runtime.md`](../spec/runtime.md)).
+> Kept as reference; the `dn-glibc` name here is historical.
+
 ## Contents
 
 - [Invocation modes](#invocation-modes)
