@@ -206,3 +206,7 @@ its own commit, build-verified, and leaves the tree usable.
   level, build); consumed by the routing and by `dn-emu`.
 - **B6 — cut the PRoot baggage.** `extension/`, `syscall/pipe_shadow.c`,
   `syscall/rlimit.c`, `path/{canon,temp,f2fs-bug}`.
+- **B7 — `PTRACE_O_EXITKILL`.** One option bit (`tracee/event.c`), so a monitor
+  that dies takes the tree with it instead of leaving it stuck on `ENOSYS`
+  ([`monitor.md`](monitor.md), "Where the model leaks"). PRoot does not set it;
+  a runtime should.
