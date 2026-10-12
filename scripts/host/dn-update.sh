@@ -36,7 +36,10 @@ target() {
     ldconfig)       echo "$INST/usr/sbin/ldconfig" ;;
     localedef)      echo "$INST/usr/bin/localedef" ;;
     iconv)          echo "$INST/usr/bin/iconv" ;;
-    trace)          echo "$INST/usr/lib/deb-native/dn-monitor" ;;
+    trace|monitor)  echo "$INST/usr/lib/deb-native/dn-monitor" ;;
+    interp)         echo "$INST/usr/lib/deb-native/dn-interp" ;;
+    shim)           echo "$INST/usr/lib/deb-native/dn-shim.so" ;;
+    boot)           echo "$INST/boot" ;;
     shell)          echo "$INST/usr/bin/bash" ;;
     hooks)          echo "$INST/usr/lib/deb-native/scripts" ;;
     priv)           echo "$INST/usr/lib/deb-native/priv" ;;
@@ -50,8 +53,8 @@ case "${1:-}" in
   ""|-h|--help) usage; exit 2 ;;
   list)
     echo "files: loader libc libresolv libnsl libnss-compat libnss-hesiod librt"
-    echo "       ldconfig localedef iconv shim run trace shell"
-    echo "dirs:  hooks priv launchers custom"
+    echo "       ldconfig localedef iconv monitor interp shim shell"
+    echo "dirs:  hooks boot priv launchers custom"
     exit 0 ;;
 esac
 

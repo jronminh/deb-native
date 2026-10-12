@@ -13,7 +13,7 @@
 # copied alone onto a poor host.
 #
 # Usage: install-from-release.sh [core-deb|core-ultra] [DEST]   (default core-deb)
-#        DEST default: the contract's root= (a fixed-root artifact), else ./<name>
+#        DEST default: boot/version's root= (a fixed-root artifact), else ./<name>
 #
 # Host environment:
 #   DN_REPO           owner/repo        (default jronminh/deb-native)
