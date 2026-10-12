@@ -90,15 +90,14 @@ tracee's memory, so a package's files on disk are byte-identical to the `.deb`.
 kernel:  DN-INTERP --argv0 orig0 host_path args…
             │
             │  dn-interp (freestanding, no libc)
-            ├─ derive $DN from itself (/proc/self/exe)
+            ├─ derive $DN from its own path — argv[0], which the gate sets to
+            │      this launcher's host path (/proc/self/exe is the *program*)
             ├─ read $DN/etc/deb-native/dn-interp.conf   (policy-as-data, [program] blocks)
             ├─ build env from scratch:               ← survives an empty envp
             │      LD_PRELOAD     = $DN/usr/lib/deb-native/dn-shim.so
             │      LD_LIBRARY_PATH = tree libdirs (+ caller merge)
-            │      DN_INSTDIR, COMPILER_PATH, …
-            ├─ map  P_GATE (0x100000000, "svc #0; ret", r-x)   ← moved out of rtld
-            ├─ map  TREE-LD.SO, fix AT_BASE, br x16
-            └─ no re-exec → /proc/self/exe stays the program
+            │      DN_PROG        = the program, for /proc/self/exe
+            └─ execve  TREE-LD.SO  --argv0 orig0 host_path args…   ← the kernel loads
             │
             ▼  ld.so = the tree's real glibc loader (UNPATCHED) loads the program
             │

@@ -184,8 +184,9 @@ takes the native path.
 The filter recognizes a shim call by instruction address. The shim's address
 changes every run, so a fixed gate page is used instead:
 
-- `dn-interp` maps a 4 KB page holding the kernel-call instruction at a fixed
-  address, `P_GATE`, using `MAP_FIXED_NOREPLACE`.
+- The **shim** maps a 4 KB page holding the kernel-call instruction at a fixed
+  address, `P_GATE`, using `MAP_FIXED_NOREPLACE`. (Not the launcher: `dn-interp`
+  `execve`s the tree's loader, and an exec wipes the address space.)
 - The shim issues its syscalls from this page; it never calls the kernel
   directly elsewhere.
 - `P_GATE` must sit in 39-bit address space, since many Android arm64 kernels

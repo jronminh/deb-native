@@ -444,16 +444,25 @@ void dn_launch(u64 *sp) {
   const char *orig0 = argv[2];
   const char *prog = argv[3];
 
-  /* 1. The prefix, from this launcher's own path. */
-  char exe[DN_PATH_MAX];
-  i64 n = sys6(SYS_readlinkat, AT_FDCWD, (i64)"/proc/self/exe", (i64)exe, DN_PATH_MAX - 1, 0, 0);
-  if (n <= 0) die("cannot read /proc/self/exe", 0);
-  exe[n] = 0;
+  /* 1. The prefix, from this launcher's own path.  The exec gate runs
+   *    `dn-interp --argv0 <name> <program> <args...>`, so it sets argv[0] to
+   *    this launcher's host path.  /proc/self/exe is NOT usable from inside
+   *    the tree -- the runtime rewrites it to the program, which is the whole
+   *    point -- so it is only the fallback for a hand run. */
   const char *suffix = "/usr/lib/deb-native/dn-interp";
-  u64 le = slen(exe), lsu = slen(suffix);
-  if (le <= lsu || !ends_with(exe, suffix))
-    die("not installed as $PREFIX/usr/lib/deb-native/dn-interp", exe);
-  memcpy(g_dn, exe, le - lsu); g_dn[le - lsu] = 0;
+  u64 lsu = slen(suffix);
+  char exe[DN_PATH_MAX];
+  const char *self = argv[0];
+  if (self == 0 || self[0] != '/' || slen(self) <= lsu || !ends_with(self, suffix)) {
+    i64 n = sys6(SYS_readlinkat, AT_FDCWD, (i64)"/proc/self/exe", (i64)exe, DN_PATH_MAX - 1, 0, 0);
+    if (n <= 0) die("cannot read /proc/self/exe", 0);
+    exe[n] = 0;
+    self = exe;
+  }
+  u64 le = slen(self);
+  if (le <= lsu || !ends_with(self, suffix))
+    die("not installed as $PREFIX/usr/lib/deb-native/dn-interp", self);
+  memcpy(g_dn, self, le - lsu); g_dn[le - lsu] = 0;
 
   /* 2. Policy: compiled defaults, config file, then one-shot overrides. */
   const char *inherited = findenv(envp, nenv, "LD_PRELOAD");
