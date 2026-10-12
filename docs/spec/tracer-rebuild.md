@@ -51,7 +51,7 @@ files".
 | `tracee/tracee.c` | 928 |
 | `tracee/mem.c` | 691 |
 | `tracee/reg.c` | 399 |
-| `syscall/seccomp.c` (filter + gate rule) | 720 |
+| `monitor/monitor.c` (filter + gate rule) | 720 |
 | `syscall/{syscall,sysnum,chain,pipe_shadow,rlimit}.c`, `sysnums-arm64.h` | ~1400 |
 | `cli/`, `arch.h`, `compat.h`, `attribute.h` | ~800 |
 

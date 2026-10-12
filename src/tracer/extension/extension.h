@@ -27,7 +27,7 @@
 #include <stdint.h>    /* intptr_t, */
 
 #include "tracee/tracee.h"
-#include "syscall/seccomp.h"
+#include "monitor/monitor.h"
 
 /* List of possible events.  */
 typedef enum {

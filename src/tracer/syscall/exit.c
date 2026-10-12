@@ -612,7 +612,7 @@ void translate_syscall_exit(Tracee *tracee)
 		 * reports the guest's intent rather than the flag PRoot set
 		 * itself.  A successful call implies arg2 == 1, the only value
 		 * the kernel accepts.  PRoot sets the real flag in the launch
-		 * child before the initial execve (see enable_syscall_filtering),
+		 * child before the initial execve (see dn_monitor_install),
 		 * so only count calls made once the guest program is running
 		 * (tracee->seen_execve); the flag is a one-way latch and is
 		 * never cleared, matching the kernel's fork/execve semantics. */

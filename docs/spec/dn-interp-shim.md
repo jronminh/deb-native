@@ -58,7 +58,7 @@ HOST runs the contract entry
        └─ launch_process([" /usr/bin/bash", "…/init.sh"])
              │ fork
              └─ CON  ptrace(TRACEME); SIGSTOP
-                     enable_syscall_filtering()   ← one seccomp BPF, inherited
+                     dn_monitor_install()         ← one seccomp BPF, inherited
                      execvp(/usr/bin/bash)
 ```
 

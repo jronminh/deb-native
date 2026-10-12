@@ -114,7 +114,11 @@ It is a bootstrap step, never on the hot path.
   catch/route) and `dn-emu` (the emulation suite) are named.
 - **`dn-policy`**: keeps the mapping law and publishes the routing
   classification as the catalog. It does not absorb `dn-emu`'s models.
-- **Code**: none is required to adopt the names. `dn-monitor` is the current
-  filter subsystem; `dn-emu` is the current emulation code
+- **Code**: adopting the names needs no behaviour change. `dn-monitor` now
+  lives in `src/tracer/monitor/` — `monitor.c`/`monitor.h`, the filter + gate
+  rule, `dn_monitor_install()` / `dn_monitor_sysnum_flags()` (moved out of
+  `syscall/seccomp.c`, which is gone); `dn-emu` is the current emulation code
   (`src/tracer/tracee/seccomp.c` and friends); the mapping executor is the
-  rest of the tracer.
+  rest of the tracer. What is *not* adopted yet is tap 2: the dispatcher
+  (`dn-trace` vs `dn-emu`) and the catalog as the filter's TRACE source
+  instead of PRoot's hand-maintained `proot_sysnums`.

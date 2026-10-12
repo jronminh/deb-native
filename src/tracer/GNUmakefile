@@ -38,7 +38,7 @@ OBJECTS += \
 	path/path.o		\
 	path/proc.o		\
 	path/temp.o		\
-	syscall/seccomp.o	\
+	monitor/monitor.o	\
 	syscall/dn-syscalls.o	\
 	syscall/dn-catalog.o	\
 	syscall/dn-identity.o	\

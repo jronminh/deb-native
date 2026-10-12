@@ -43,7 +43,7 @@
 #include "path/path.h"
 #include "path/binding.h"
 #include "syscall/syscall.h"
-#include "syscall/seccomp.h"
+#include "monitor/monitor.h"
 #include "syscall/pipe_shadow.h"
 #include "ptrace/wait.h"
 #include "extension/extension.h"
@@ -136,7 +136,7 @@ int launch_process(Tracee *tracee, char *const argv[])
 		/* Improve performance by using seccomp mode 2, unless
 		 * this support is explicitly disabled.  */
 		if (getenv("PROOT_NO_SECCOMP") == NULL)
-			(void) enable_syscall_filtering(tracee);
+			(void) dn_monitor_install(tracee);
 
 		/* Now process is ptraced, so the current rootfs is already the
 		 * guest rootfs.  Note: Valgrind can't handle execve(2) on
@@ -717,7 +717,7 @@ int handle_tracee_event(Tracee *tracee, int tracee_status)
 			 * ones then rely on the lists, which costs one more
 			 * ptrace request per stop on those kernels only.  */
 			if (eventmsg_state != EVENTMSG_RELIABLE && fetch_regs(tracee) >= 0) {
-				int expected = filtered_sysnum_flags(tracee, get_sysnum(tracee, CURRENT));
+				int expected = dn_monitor_sysnum_flags(tracee, get_sysnum(tracee, CURRENT));
 
 				if (eventmsg_state == EVENTMSG_UNKNOWN && (expected & FILTER_SYSEXIT) != 0) {
 					if ((flags & FILTER_SYSEXIT) != 0)

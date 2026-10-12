@@ -173,7 +173,7 @@ below.
   foreign loader, and a plain non-ELF file each land in the rule their
   header says they should.
 - **Not strictly minimal**: the filter installed today (`proot_sysnums` +
-  `fakeroot_sysnums` in `syscall/seccomp.c`) already traces the path and
+  `fakeroot_sysnums` in `monitor/monitor.c`) already traces the path and
   identity groups too, not just `execve`/`execveat` — wider than P1's "exec
   rule only." Left as is rather than adding a toggle to shrink it, since
   nothing depends on it being minimal and it'll be superseded for real once
@@ -280,7 +280,7 @@ below.
 shared filter; `dn-trace` handles them via `ptrace` through dn-policy,
 replacing the current ptrace mechanism. **Must actually remove**
 `src/tracer/syscall/exit.c`'s own `dn_fake_root()` (and the
-`fakeroot_sysnums` list in `syscall/seccomp.c`) once dn-policy's fake root
+`fakeroot_sysnums` list in `monitor/monitor.c`) once dn-policy's fake root
 is wired in — not leave both running side by side indefinitely, or
 principle 3 ("one policy, two enforcement points, so they can never
 disagree") is violated by the very code meant to honor it. Done when

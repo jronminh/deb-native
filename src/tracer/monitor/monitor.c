@@ -39,7 +39,7 @@
 #include <stdint.h>        /* uint*_t, UINT*_MAX, */
 #include <assert.h>        /* assert(3), */
 
-#include "syscall/seccomp.h"
+#include "monitor/monitor.h"
 #include "syscall/dn-syscalls.h"
 #include "tracee/tracee.h"
 #include "syscall/syscall.h"
@@ -609,12 +609,11 @@ static int merge_filtered_sysnums(TALLOC_CTX *context, FilteredSysnum **sysnums,
 }
 
 /**
- * Tell the kernel to trace only syscalls handled by PRoot and its
- * extensions.  This filter will be enabled for the given @tracee and
- * all of its future children.  This function returns -errno if an
- * error occurred, otherwise 0.
+ * Tell the kernel to trace the syscalls dn-monitor routes.  This filter is
+ * enabled for @tracee and all of its future children.  It returns -errno if
+ * an error occurred, otherwise 0.
  */
-int enable_syscall_filtering(const Tracee *tracee)
+int dn_monitor_install(const Tracee *tracee)
 {
 	FilteredSysnum *filtered_sysnums = NULL;
 	Sysnum *gate_sysnums = NULL;
@@ -665,11 +664,11 @@ int enable_syscall_filtering(const Tracee *tracee)
 }
 
 /**
- * Return the flags the filter of enable_syscall_filtering() associates
+ * Return the flags the filter installed by dn_monitor_install() associates
  * with @sysnum for @tracee, ie. the data PTRACE_EVENT_SECCOMP stops of
  * that syscall report: the filter was built from the very same lists.
  */
-int filtered_sysnum_flags(const Tracee *tracee, Sysnum sysnum)
+int dn_monitor_sysnum_flags(const Tracee *tracee, Sysnum sysnum)
 {
 	Extension *extension;
 	int flags = 0;
@@ -703,16 +702,16 @@ int filtered_sysnum_flags(const Tracee *tracee, Sysnum sysnum)
 
 #else
 
-#include "syscall/seccomp.h"
+#include "monitor/monitor.h"
 #include "tracee/tracee.h"
 #include "attribute.h"
 
-int enable_syscall_filtering(const Tracee *tracee UNUSED)
+int dn_monitor_install(const Tracee *tracee UNUSED)
 {
 	return 0;
 }
 
-int filtered_sysnum_flags(const Tracee *tracee UNUSED, Sysnum sysnum UNUSED)
+int dn_monitor_sysnum_flags(const Tracee *tracee UNUSED, Sysnum sysnum UNUSED)
 {
 	return 0;
 }
