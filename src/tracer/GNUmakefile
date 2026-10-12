@@ -81,8 +81,8 @@ CPPFLAGS += -I$(DNEMU)
 OBJECTS += \
 	dnemu/dn-emu.o
 
-.DEFAULT_GOAL = dn-trace
-all: dn-trace
+.DEFAULT_GOAL = dn-monitor
+all: dn-monitor
 
 ######################################################################
 # Beautified output
@@ -147,11 +147,14 @@ ROSEGMENT := $(shell printf 'int main(void){return 0;}\n' | $(LD) -xc - -Wl,--ro
 COMPILE = $($(quiet)CC) $(CPPFLAGS) $(CFLAGS) -MD -c $(SRC)$< -o $@
 LINK    = $($(quiet)LD) -o $@ $^ $(LDFLAGS)
 
-dn-trace: $(OBJECTS)
+# dn-monitor -- the tree's root process (docs/spec/monitor.md): the mechanism
+# (the catch/route filter, the ptrace core) with the policy applier (dn-trace)
+# linked in.  One binary, one root.
+dn-monitor: $(OBJECTS)
 	$(LINK)
 
 # deb-native: the syscall catalog (src/syscalls.tsv, the one source of truth)
-# is embedded verbatim as a C string, so dn-trace reads no file at run time.
+# is embedded verbatim as a C string, so dn-monitor reads no file at run time.
 # A build from a copy of this directory passes CATALOG=<repo>/src/syscalls.tsv.
 CATALOG ?= $(SRC)../syscalls.tsv
 
@@ -198,10 +201,10 @@ BINDIR ?= $(PREFIX)/bin
 
 .PHONY: clean distclean install uninstall
 clean distclean:
-	-$(RM) -f $(CHECK_OBJECTS) $(CHECK_PROGRAMS) $(CHECK_RESULTS) $(OBJECTS) dn-trace $(DEPS) build.h licenses
+	-$(RM) -f $(CHECK_OBJECTS) $(CHECK_PROGRAMS) $(CHECK_RESULTS) $(OBJECTS) dn-monitor $(DEPS) build.h licenses
 
-install: dn-trace
+install: dn-monitor
 	$($(quiet)INSTALL) -D $< $(DESTDIR)$(BINDIR)/$<
 
 uninstall:
-	-$(RM) -f $(DESTDIR)$(BINDIR)/dn-trace
+	-$(RM) -f $(DESTDIR)$(BINDIR)/dn-monitor

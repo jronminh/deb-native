@@ -30,7 +30,7 @@ PT_INTERP = 3
 # its own location, uses its runtime loader and execs the prefix's init, a
 # guest path (docs/spec/prefix.md, "Boot").  It is a full command line, run
 # with the prefix root as the working directory, and it names no root.
-ENTRY = ("usr/lib/deb-native/dn-trace -- "
+ENTRY = ("usr/lib/deb-native/dn-monitor -- "
          "/usr/bin/bash /usr/lib/deb-native/init.sh")
 
 

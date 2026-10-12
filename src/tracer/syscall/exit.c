@@ -55,7 +55,7 @@
 /* deb-native fake root (docs/spec/runtime.md, "Fake root"): a traced
  * program sees itself as root: the identity calls report 0, files owned
  * by the real uid/gid show as root's, and set*id()/chown() refused only
- * for lack of rights succeed.  No right is gained.  On unless dn-trace
+ * for lack of rights succeed.  No right is gained.  On unless dn-monitor
  * runs with -u (the real ids, for diagnosis); never read from the
  * environment, which is the host's.  */
 bool dn_fake_root(void)

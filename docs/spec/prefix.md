@@ -43,7 +43,7 @@ glibc-dynamic program through `RT/ld.so` itself. A package is therefore
 installed intact, and **nothing repoints a `PT_INTERP` after the build**.
 
 The prefix root (`TREE`) is **not baked**: `dn-trace` derives it from its own
-location (`TREE/usr/lib/deb-native/dn-trace`), the loader self-derives it from
+location (`TREE/usr/lib/deb-native/dn-monitor`), the loader self-derives it from
 its path too, and the tree's config files (`usr/etc/ld.so.conf`,
 `etc/apt/apt.conf.d/`) name **guest** paths, which dn-policy maps into whatever
 tree dn-trace booted. The build still passes a `PREFIX_ROOT` — to *assert*
@@ -130,7 +130,7 @@ version=0.7.1-dev
 arch=aarch64
 loader=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
 install=.dn/install.sh
-entry=usr/lib/deb-native/dn-trace -- /usr/bin/bash /usr/lib/deb-native/init.sh
+entry=usr/lib/deb-native/dn-monitor -- /usr/bin/bash /usr/lib/deb-native/init.sh
 size=200
 ```
 
@@ -141,16 +141,16 @@ A build host: an `arm64` Linux machine with `gcc`, `make`, `python3`,
 the target.
 
 1. **The runtime — three files.** `scripts/build/build-trace.sh` builds
-   `dn-trace` (the monitor's root; the catalog `src/syscalls.tsv` is embedded in
+   `dn-monitor` (the tree's root; the catalog `src/syscalls.tsv` is embedded in
    it) into `src/.build-runtime/` — static and self-contained, linked against
    **stock** glibc's `libc.a` (`DN_GLIBC_LIBC_DIR`, extracted from Debian's own
    `libc6-dev` .deb). `build-interp.sh` adds `dn-interp` (+ `dn-interp.conf`),
    the **loader launcher** the exec gate's rule 3 runs; `build-shim.sh` adds
-   `dn-shim.so`, the in-process fast path the launcher delivers. dn-trace is the
-   **outermost** process — nothing traces it — so a poor host must start it with
-   a bare exec; its own startup only needs Android's denied `rseq` off, which
-   the supported glibc tunable `GLIBC_TUNABLES=glibc.pthread.rseq=0` does (see
-   [`../reference/android-platform.md`](../reference/android-platform.md),
+   `dn-shim.so`, the in-process fast path the launcher delivers. `dn-monitor` is
+   the **outermost** process — nothing traces it — so a poor host must start it
+   with a bare exec; its own startup only needs Android's denied `rseq` off,
+   which the supported glibc tunable `GLIBC_TUNABLES=glibc.pthread.rseq=0` does
+   (see [`../reference/android-platform.md`](../reference/android-platform.md),
    "Stock `libc6` re-tested"). See [dn-interp-shim.md](dn-interp-shim.md).
 2. **Glibc.** Nothing to build: the tree takes Debian's own **stock**
    `libc6`/`libc-bin` from the mirror, pinned in `scripts/build/packages.tsv`.
@@ -209,7 +209,7 @@ run on the host's own shell with only POSIX sh and toybox:
    session entry (`DN_SESSION_SHELL`), if set, to the contract's `entry`. No
    tree program runs here.
 4. **Check the tree runs**: start it through `dn-trace` for a trivial command
-   (`DEST/usr/lib/deb-native/dn-trace -- /usr/bin/bash -c 'exit 0'`). This is
+   (`DEST/usr/lib/deb-native/dn-monitor -- /usr/bin/bash -c 'exit 0'`). This is
    the acceptance test.
 5. On any failure, remove `DEST` and report.
 
@@ -220,7 +220,7 @@ the prefix's own scripts.
 
 The host boots the tree by running the contract's `entry` from the prefix
 root. `dn-trace` **derives** the tree from its own location
-(`TREE/usr/lib/deb-native/dn-trace`) and takes its runtime loader from the
+(`TREE/usr/lib/deb-native/dn-monitor`) and takes its runtime loader from the
 fixed path `TREE/<loader>`, so it never parses the contract and names no root;
 an optional `-- PROGRAM ARGS...` is in guest paths and defaults to the init:
 

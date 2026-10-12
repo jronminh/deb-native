@@ -1,13 +1,13 @@
 /* -*- c-set-style: "K&R"; c-basic-offset: 8 -*-
  *
- * dn-trace: deb-native's front end for the fork-lite tracer, replacing
+ * dn-monitor: deb-native's front end for the fork-lite tracer, replacing
  * PRoot's cli/cli.c + cli/proot.c (option tables, usage, extensions'
  * options, qemu, -r/-w/-0/...).  It keeps only what the runtime passes:
  *
- *   dn-trace [-v LEVEL] [-u] [-b HOST[:GUEST]]... [TREE LOADER] [-- PROGRAM [ARG...]]
+ *   dn-monitor [-v LEVEL] [-u] [-b HOST[:GUEST]]... [TREE LOADER] [-- PROGRAM [ARG...]]
  *
- * dn-trace lives at TREE/usr/lib/deb-native/dn-trace, so TREE -- the prefix
- * root, the guest root -- is whatever contains it: dn-trace derives it from
+ * dn-monitor lives at TREE/usr/lib/deb-native/dn-monitor, so TREE -- the prefix
+ * root, the guest root -- is whatever contains it: dn-monitor derives it from
  * its own path (/proc/self/exe), and LOADER is the tree's fixed glibc loader
  * inside that tree.  Nothing names the root ahead of time:
  * the artifact is relocatable, and the host takes neither path from the
@@ -40,26 +40,26 @@
 #include "path/path.h"
 #include "dn-policy.h"
 
-#define USAGE "usage: dn-trace [-v LEVEL] [-u] [-b HOST[:GUEST]]... [TREE LOADER] [-- PROGRAM [ARG...]]\n"
+#define USAGE "usage: dn-monitor [-v LEVEL] [-u] [-b HOST[:GUEST]]... [TREE LOADER] [-- PROGRAM [ARG...]]\n"
 
 /* The prefix's init, run when no PROGRAM is given (docs/spec/prefix.md).  */
 static char *const DN_INIT[] = {
 	"/usr/bin/bash", "/usr/lib/deb-native/init.sh", NULL,
 };
 
-/* dn-trace's own place in the tree, and the glibc loader beside it, both fixed:
- * the prefix root is dn-trace's directory with this suffix removed.  */
-#define DN_TRACE_SUFFIX "/usr/lib/deb-native/dn-trace"
+/* dn-monitor's own place in the tree, and the glibc loader beside it, both
+ * fixed: the prefix root is dn-monitor's directory with this suffix removed.  */
+#define DN_MONITOR_SUFFIX "/usr/lib/deb-native/dn-monitor"
 #define DN_GLIBC_LOADER_REL   "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
-/* The exec gate's rule-3 target: the program interpreter (native/dn-interp.c).  */
+/* The exec gate's rule-3 target: the loader launcher (native/dn-interp.c).  */
 #define DN_INTERP_REL    "usr/lib/deb-native/dn-interp"
 
 static char derived_tree[PATH_MAX];
 static char derived_glibc_loader[PATH_MAX];
 static char derived_dn_interp[PATH_MAX];
 
-/* TREE from dn-trace's own location: /proc/self/exe is
- * TREE/usr/lib/deb-native/dn-trace, so TREE is that prefix.  */
+/* TREE from dn-monitor's own location: /proc/self/exe is
+ * TREE/usr/lib/deb-native/dn-monitor, so TREE is that prefix.  */
 static int derive_prefix(const char **tree, const char **glibc_loader)
 {
 	char exe[PATH_MAX];
@@ -71,9 +71,9 @@ static int derive_prefix(const char **tree, const char **glibc_loader)
 		return -errno;
 	exe[n] = '\0';
 
-	slen = strlen(DN_TRACE_SUFFIX);
+	slen = strlen(DN_MONITOR_SUFFIX);
 	elen = strlen(exe);
-	if (elen <= slen || strcmp(exe + elen - slen, DN_TRACE_SUFFIX) != 0)
+	if (elen <= slen || strcmp(exe + elen - slen, DN_MONITOR_SUFFIX) != 0)
 		return -EINVAL;
 	exe[elen - slen] = '\0';
 
@@ -198,7 +198,7 @@ int main(int argc, char *const argv[])
 	int status;
 	int i;
 
-	global_tool_name = "dn-trace";
+	global_tool_name = "dn-monitor";
 
 	/* The first tracee (pid == 0) holds the configuration.  */
 	tracee = get_tracee(NULL, 0, true);
@@ -223,7 +223,7 @@ int main(int argc, char *const argv[])
 			status = 0;
 		}
 		else {
-			fprintf(stderr, "dn-trace: unknown option '%s'\n" USAGE, argv[i]);
+			fprintf(stderr, "dn-monitor: unknown option '%s'\n" USAGE, argv[i]);
 			return EXIT_FAILURE;
 		}
 		if (status < 0)
@@ -231,7 +231,7 @@ int main(int argc, char *const argv[])
 	}
 	global_verbose_level = tracee->verbose;
 
-	/* TREE LOADER: derived from dn-trace's own location, unless two
+	/* TREE LOADER: derived from dn-monitor's own location, unless two
 	 * absolute paths are given explicitly.  */
 	if (argc - i >= 2 && argv[i][0] == '/' && argv[i + 1][0] == '/') {
 		global_tree = tree = argv[i++];

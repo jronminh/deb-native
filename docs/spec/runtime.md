@@ -123,7 +123,7 @@ it) ships as one tarball ([`prefix.md`](prefix.md)).
 1. The host runs the contract's `entry` from the prefix root
    ([`prefix.md`](prefix.md), "Boot"): `dn-trace -- /usr/bin/bash
    /usr/lib/deb-native/init.sh`. `dn-trace` derives TREE from its own location
-   (it lives at `TREE/usr/lib/deb-native/dn-trace`) and LOADER from
+   (it lives at `TREE/usr/lib/deb-native/dn-monitor`) and LOADER from
    `TREE/<loader>`, so the entry names no root.
 2. `dn-trace` forks a child, marked traced (fork, vfork, clone and exec all
    tracked). The child installs the shared filter itself, then execs the
@@ -477,11 +477,14 @@ On branch `dn-interp-surgical` (this branch):
   symlink resolution, reverse translation, fake root and hardlinks.
 - **dn-interp** — recovered from the pre-0.6 history, cross-built by
   `scripts/build/build-interp.sh`; it is the exec-gate rule-3 target (P1).
-- **dn-trace** — unchanged from `main`: the tree's root; the shared filter with
-  the gate-IP rule built from the embedded catalog; the exec gate. Rule 3 now
-  runs `dn-interp` (P1). dn-policy is compiled in for the traced path.
+- **dn-monitor** — the tree's **root process** (`src/tracer/`, built into
+  `src/.build-runtime/dn-monitor`): the mechanism — the catch/route filter (the
+  gate-IP rule built from the embedded catalog) + the ptrace core — with
+  `dn-trace` (the policy applier) linked in. Rule 3 runs `dn-interp` (P1);
+  dn-policy is compiled in for the traced path.
 - **`src/syscalls.tsv`** — the catalog, checked by `tools/check-syscalls.py`.
-- **dn-shim** — not built yet (P2).
+- **dn-shim** — `native/dn-shim.c`, built by `scripts/build/build-shim.sh`; the
+  loader launcher delivers it as `LD_PRELOAD` (P2).
 
 Still open:
 

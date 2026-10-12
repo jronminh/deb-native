@@ -1,19 +1,16 @@
 #!/bin/sh
-# Build the runtime runtime with a plain glibc toolchain (the repo layout):
-# dn-trace, one self-contained binary.  Needs gcc and make (talloc is
+# Build the runtime's root with a plain glibc toolchain (the repo layout):
+# dn-monitor, one self-contained binary.  Needs gcc and make (talloc is
 # vendored) -- an arm64 Debian userland: a deb-native prefix with the
 # toolchain installed, or a Debian arm64 host such as CI.  No Bionic
 # toolchain, no Termux.
 #
-# Runtime v1 (docs/spec/runtime.md): the runtime is dn-trace, the tree's root
-# process; the syscall catalog (src/syscalls.tsv) is embedded in it at build
-# time, so it reads no file at run time.  The old LD_PRELOAD
-# shim (dn-shim.so), the adopt-on-first-run launcher (dn-run) and the ELF
-# editor (dn-elf) are gone: dn-policy wired into dn-shim replaces the shim,
-# the exec gate replaces dn-run, and TREE/RT are fixed at build time so no
-# interpreter is relocated.
+# dn-monitor is the tree's root process (docs/spec/monitor.md): the mechanism
+# (the catch/route filter, the ptrace core) with the policy applier, dn-trace,
+# linked in.  The syscall catalog (src/syscalls.tsv) is embedded at build time,
+# so it reads no file at run time.
 #
-# dn-trace is built in a scratch copy of src/tracer, so its objects never mix
+# dn-monitor is built in a scratch copy of src/tracer, so its objects never mix
 # with the in-tree build.
 #
 # Usage: build-trace.sh [OUTDIR]   (default: src/.build-runtime)
@@ -40,7 +37,7 @@ echo "Building dn-trace ..."
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 cp -R "$ROOT/src/tracer/." "$T/"
-find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-trace -o -name dn-catalog.c \) -type f -exec rm -f {} +
+find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-monitor -o -name dn-catalog.c \) -type f -exec rm -f {} +
 # Self-contained/static when a stock glibc's lib dir is given (the arm64
 # `libc6-dev` payload, extracted from Debian's own .deb): dn-trace is the
 # outermost process -- nothing traces it -- and a poor host must start it
@@ -55,7 +52,7 @@ if [ -n "${DN_GLIBC_LIBC_DIR:-}" ]; then
 else
   make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" DNEMU="$SRC/dn-emu"
 fi
-cp -f "$T/dn-trace" "$OUT/dn-trace"
+cp -f "$T/dn-monitor" "$OUT/dn-monitor"
 
 echo "runtime (glibc) in $OUT:"
 ls -l "$OUT"

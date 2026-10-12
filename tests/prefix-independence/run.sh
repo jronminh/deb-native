@@ -90,7 +90,7 @@ fi
 ok "resolv.conf is the prefix's own"
 
 # 9. the runtime pieces are present
-for f in "$P/usr/bin/dn-sh" "$P/usr/lib/deb-native/dn-trace"; do
+for f in "$P/usr/bin/dn-sh" "$P/usr/lib/deb-native/dn-monitor"; do
   [ -e "$f" ] || fail "missing runtime piece: $f"
 done
 ok "runtime pieces present (dn-sh, dn-trace)"
@@ -103,7 +103,7 @@ ok "runtime pieces present (dn-sh, dn-trace)"
 #     $tp. (setup-runtime.sh does the vendoring + patchelf.)
 HOST="$P/usr/lib/deb-native/host"
 if in_ul 'command -v readelf >/dev/null 2>&1'; then
-  for b in "$P/usr/lib/deb-native/dn-run" "$P/usr/lib/deb-native/dn-trace" \
+  for b in "$P/usr/lib/deb-native/dn-run" "$P/usr/lib/deb-native/dn-monitor" \
            "$P/usr/bin/dn-sh" "$P/usr/bin/dn-perl"; do
     [ -e "$b" ] || continue
     rp=$(in_ul "readelf -d '$b' 2>/dev/null | grep -Ei '(RPATH|RUNPATH)'" || true)
@@ -116,7 +116,7 @@ else
   note "no readelf in the prefix; skipping the static rpath check"
 fi
 # 9d. Exercise the tracer for real: dn-trace runs with Termux's tree masked.
-if [ -x "$P/usr/lib/deb-native/dn-run" ] && [ -x "$P/usr/lib/deb-native/dn-trace" ]; then
+if [ -x "$P/usr/lib/deb-native/dn-run" ] && [ -x "$P/usr/lib/deb-native/dn-monitor" ]; then
   in_ul "'$P/usr/lib/deb-native/dn-run' --trace /bin/true" \
     || fail "the tracer route did not run (dn-trace missing)"
   ok "tracer route runs with Termux's tree masked"

@@ -54,7 +54,7 @@ at any path:
 
 ```sh
 cd DEST
-usr/lib/deb-native/dn-trace
+usr/lib/deb-native/dn-monitor
 ```
 
 With no program, `dn-trace` execs the prefix's init, which sets the environment
@@ -63,7 +63,7 @@ and, on a first boot, completes the prefix itself (`dpkg --configure -a`, then
 Pass a program instead of the default shell:
 
 ```sh
-usr/lib/deb-native/dn-trace -- /usr/bin/bash /usr/lib/deb-native/init.sh \
+usr/lib/deb-native/dn-monitor -- /usr/bin/bash /usr/lib/deb-native/init.sh \
     /usr/bin/dpkg -l
 ```
 

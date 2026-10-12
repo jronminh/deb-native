@@ -197,31 +197,33 @@ while IFS= read -r f; do
 done < "$W/orphans.txt"
 echo "build-core-deb: pruned $pruned files of packages not shipped"
 
-# 6. Runtime: the branch's runtime is three files (docs/spec/dn-interp-shim.md):
-#    dn-trace, the tree's root (the syscall catalog, src/syscalls.tsv, is
-#    embedded in it); dn-interp, the *loader launcher* the exec gate's rule 3
+# 6. Runtime: the branch's runtime is three files (docs/spec/monitor.md):
+#    dn-monitor, the tree's root process -- the mechanism (the catch/route
+#    filter, the ptrace core) with the syscall catalog (src/syscalls.tsv)
+#    embedded in it; dn-interp, the *loader launcher* the exec gate's rule 3
 #    runs (it builds the environment and execve()s the tree's stock ld.so); and
 #    dn-shim.so, the in-process fast path the launcher delivers.
 mkdir -p "$STAGE/usr/lib/deb-native" "$STAGE/etc/deb-native"
-[ -f "$DN_RUNTIME/dn-trace" ] || die "missing $DN_RUNTIME/dn-trace"
+[ -f "$DN_RUNTIME/dn-monitor" ] || die "missing $DN_RUNTIME/dn-monitor"
 [ -f "$DN_RUNTIME/dn-interp" ] || die "missing $DN_RUNTIME/dn-interp"
 [ -f "$DN_RUNTIME/dn-interp.conf" ] || die "missing $DN_RUNTIME/dn-interp.conf"
 [ -f "$DN_RUNTIME/dn-shim.so" ] || die "missing $DN_RUNTIME/dn-shim.so"
-cp -f "$DN_RUNTIME/dn-trace" "$STAGE/usr/lib/deb-native/dn-trace"
+cp -f "$DN_RUNTIME/dn-monitor" "$STAGE/usr/lib/deb-native/dn-monitor"
 cp -f "$DN_RUNTIME/dn-interp" "$STAGE/usr/lib/deb-native/dn-interp"
 cp -f "$DN_RUNTIME/dn-shim.so" "$STAGE/usr/lib/deb-native/dn-shim.so"
-chmod 755 "$STAGE/usr/lib/deb-native/dn-trace" "$STAGE/usr/lib/deb-native/dn-interp"
+chmod 755 "$STAGE/usr/lib/deb-native/dn-monitor" "$STAGE/usr/lib/deb-native/dn-interp"
 # The launcher reads its policy from $DN/etc/deb-native/dn-interp.conf (a
 # compiled default stands in when the file is absent).
 cp -f "$DN_RUNTIME/dn-interp.conf" "$STAGE/etc/deb-native/dn-interp.conf"
-# The prefix's init: the host boots the tree through dn-trace into this, and it
-# completes the prefix by itself on a first boot (docs/spec/prefix.md, "Boot").
+# The prefix's init: the host boots the tree through dn-monitor into this, and
+# it completes the prefix by itself on a first boot (docs/spec/prefix.md,
+# "Boot").
 cp -f "$ROOT/scripts/prefix/init.sh" "$STAGE/usr/lib/deb-native/init.sh"
 chmod 755 "$STAGE/usr/lib/deb-native/init.sh"
-# dn-trace IS the monitor's root, so it must run OUTSIDE the tree: it is built
-# static (self-contained -- libc and the vendored talloc are linked in), so a
-# poor host starts it with a bare exec and no loader at all, and dn-policy never
-# translates the tracer's own path operations.
+# dn-monitor IS the root, so it must run OUTSIDE the tree: it is built static
+# (self-contained -- libc and the vendored talloc are linked in), so a poor host
+# starts it with a bare exec and no loader at all, and dn-policy never
+# translates the root's own path operations.
 
 # 6b. The local repo (docs/spec/runtime.md, "The local repo"): reserved for the
 #     packages the runtime cannot cover alone (equivs dummies, a dynamic build

@@ -59,7 +59,7 @@ there is no per-binary routing — see
 gives uid `u0_a291`, context `u:r:runas_app:s0` (no seccomp filter —
 `Seccomp: 0`, so this route does not exercise Gate A). Prefixes live under
 `files/prefixes/`: `core-deb` (the runtime, entry
-`usr/lib/deb-native/dn-trace -- /usr/bin/bash …/init.sh`) and `dn-gcc` (an
+`usr/lib/deb-native/dn-monitor -- /usr/bin/bash …/init.sh`) and `dn-gcc` (an
 on-device aarch64 toolchain, `aarch64-linux-gnu-gcc-14`). The loop: cross-build
 on WSL → `adb push` to `/data/local/tmp` → `run-as org.dn.shell sh …`. A boot
 through `core-deb`'s `dn-trace` reports `uname=aarch64` and `id` = `root`

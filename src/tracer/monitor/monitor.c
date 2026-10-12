@@ -531,7 +531,7 @@ static FilteredSysnum proot_sysnums[] = {
 
 /* deb-native fake root (syscall/exit.c): these stop at exit so their
  * results can be rewritten. Filtered only while fake root is on
- * (dn-trace -u turns it off), since stopping every stat() costs time.  */
+ * (dn-monitor -u turns it off), since stopping every stat() costs time.  */
 static FilteredSysnum fakeroot_sysnums[] = {
 	{ PR_getuid,		FILTER_SYSEXIT },
 	{ PR_geteuid,		FILTER_SYSEXIT },

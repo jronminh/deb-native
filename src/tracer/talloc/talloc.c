@@ -1,6 +1,6 @@
 /*
    Vendored from Samba talloc 2.4.3 (https://download.samba.org/pub/talloc/),
-   so dn-trace can be built self-contained; see VENDOR.md in this directory
+   so dn-monitor can be built self-contained; see VENDOR.md in this directory
    for provenance and licensing.  Upstream copyright and license follow.
  */
 /*

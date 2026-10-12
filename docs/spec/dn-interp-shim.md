@@ -36,21 +36,25 @@ there is no `dn-policy` wiring inside it.
 
 | component | what it is | its job |
 | --- | --- | --- |
-| `dn-interp` | freestanding aarch64 static-PIE (revived from the pre-0.6 history) | the program's interpreter: derive `$DN`, read `dn-interp.conf`, rebuild the environment, map `P_GATE`, map the tree's `ld.so`, fix `AT_BASE`, jump. No re-exec. |
-| `dn-shim.so` | `LD_PRELOAD` shared object (the old `path-redirect`, rewired) | the in-process router: `dn-policy` path/identity translation, its syscalls issued from `P_GATE` |
+| `dn-interp` | freestanding aarch64 static-PIE (revived from the pre-0.6 history) | the **loader launcher**: derive `$DN`, read `dn-interp.conf`, rebuild the environment (`LD_PRELOAD=dn-shim.so`, `DN_PROG`, the library path), then `execve` the tree's stock `ld.so`. It does not load the program, and it does not map `P_GATE` (an exec wipes the address space) |
+| `dn-shim.so` | `LD_PRELOAD` shared object (the old `path-redirect`, rewired) | the in-process **executor** (front-run): `dn-policy` path/identity translation, its syscalls issued from `P_GATE` |
 | `dn-policy` | static C library (unchanged) | the one place path-mapping, fake-root and hardlink rules live |
-| `dn-trace` | the tracer (unchanged) | the root process: the shared seccomp filter, the exec gate, the emulation of refused operations, the catalog |
+| `dn-monitor` | the tree's **root process** ([`monitor.md`](monitor.md)) | **catches every syscall and routes it**: the seccomp filter (tap 1, built from the catalog) + the dispatcher (tap 2, per `dn-policy`), the ptrace core, the exec gate |
+| `dn-trace` | a `ptrace` **executor** inside `dn-monitor` | does what the monitor assigns: applies the mapping law to the residual the shim cannot see |
+| `dn-emu` | the emulation suite inside `dn-monitor` | does what the monitor assigns: performs a refused/divergent operation from its models, or the refusal |
 | tree glibc | stock Debian glibc (+ Android baseline) | normal execution; no in-process policy |
 
 "One policy, two enforcement points" holds: `dn-policy` is linked into both
 `dn-shim.so` (in-process) and `dn-trace` (ptrace), so the two can never
-disagree.
+disagree.  **One decision point**: the routing and the assignment are
+`dn-monitor`'s alone; `dn-trace` and `dn-emu` only carry out what it gives
+them.
 
 ## Boot
 
 ```
 HOST runs the contract entry
-  └─ TREE/usr/lib/deb-native/dn-trace
+  └─ TREE/usr/lib/deb-native/dn-monitor        ← the tree's root process
        │  derive_prefix(): /proc/self/exe → TREE
        │  DN-INTERP        = TREE/usr/lib/deb-native/dn-interp
        │  TREE-LD.SO   = TREE/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1

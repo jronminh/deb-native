@@ -32,7 +32,7 @@ gives each a name.
 | --- | --- | --- |
 | `dn-policy` | a static C library | **routing truth** (does the platform provide the operation?) and the **mapping law** (guest↔host, fake root, hardlink) + the shared state |
 | the catalog ([`src/syscalls.tsv`](../../src/syscalls.tsv)) | data, **published from `dn-policy`** | per syscall: group, handling, gate-exempt — the routing table the monitor reads |
-| `dn-monitor` | the monitor: catalog + a seccomp filter + the gate contract | **catches every syscall** and routes it |
+| `dn-monitor` | the monitor — the tree's **root process**: the catalog + a seccomp filter + the gate contract + the ptrace core | **catches every syscall** and routes it; the single decision point |
 | `dn-shim` | an in-process `LD_PRELOAD` executor | applies the mapping law to the calls a dynamic program makes through libc (fast) |
 | `dn-trace` | a `ptrace` executor | applies the mapping law to the residual (what the shim cannot see) |
 | `dn-emu` | the emulation suite | **the second authority**: for each refused/divergent operation it decides *emulate or refuse*, and owns its models |
@@ -53,8 +53,10 @@ Deciding is not one thing:
   [`emulation.md`](emulation.md), "Refuse, don't fake".
 
 Everything else executes. `dn-shim` and `dn-trace` are **pure executors** of
-the one mapping law; `dn-emu` is a decider because emulation is a *suite of
-distinct subsystems*, not one law.
+the one mapping law. `dn-emu` **owns yet another set of models** (emulation is a
+*suite of distinct subsystems*, not one law), but it is no router either:
+`dn-monitor` is the **single decision point** — it catches, routes and assigns;
+`dn-trace` and `dn-emu` carry out exactly what they are given.
 
 ## Routing, in two taps
 

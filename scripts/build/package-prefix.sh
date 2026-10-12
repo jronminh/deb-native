@@ -40,7 +40,7 @@ mkdir -p "$(dirname "$MAN")"
 for f in \
   usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 \
   usr/lib/aarch64-linux-gnu/libc.so.6 \
-  usr/lib/deb-native/dn-trace \
+  usr/lib/deb-native/dn-monitor \
   ; do
   [ -e "$PREFIX/$f" ] || continue
   printf '%s\t%s\n' "$f" "$(sha256sum "$PREFIX/$f" | awk '{print $1}')" >> "$MAN"
