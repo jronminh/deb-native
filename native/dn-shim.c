@@ -29,8 +29,12 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/time.h>
 #include <sys/types.h>
+#include <sys/vfs.h>
+#include <time.h>
 #include <unistd.h>
+#include <utime.h>
 
 #include "dn-policy.h"
 
@@ -453,4 +457,190 @@ int setgroups(size_t n, const gid_t *list)
 {
 	return dn_ret(dn_id ? dn_policy_fake_setgroups(dn_id, n, list)
 			     : syscall(SYS_setgroups, n, list));
+}
+
+/* ---- path manipulation (P2b-2c) ------------------------------------ *
+ * The wiring's mkdir/rmdir/rename{,at,at2}/symlink/truncate/utimensat/
+ * statfs helpers, all redirect_nofollow.  rename translates both paths;
+ * symlink only the link path (the target text is stored verbatim).  An
+ * absolute path goes to AT_FDCWD with its host form; a relative one keeps
+ * its dirfd (dn_redirect leaves it untouched).  chdir stays on the tracer so
+ * the traced path and the shim agree on the real cwd.  */
+
+int mkdirat(int dirfd, const char *path, mode_t mode)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+
+	return dn_ret(dn_do_syscall(SYS_mkdirat, h != path ? AT_FDCWD : dirfd, (long)h, mode, 0, 0));
+}
+
+int mkdir(const char *path, mode_t mode)
+{
+	return mkdirat(AT_FDCWD, path, mode);
+}
+
+int unlinkat(int dirfd, const char *path, int flags)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+
+	if (dn_active)
+		(void)dn_policy_unlink(h);
+	return dn_ret(dn_do_syscall(SYS_unlinkat, h != path ? AT_FDCWD : dirfd, (long)h, flags, 0, 0));
+}
+
+int unlink(const char *path)
+{
+	return unlinkat(AT_FDCWD, path, 0);
+}
+
+int rmdir(const char *path)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+
+	return dn_ret(dn_do_syscall(SYS_unlinkat, AT_FDCWD, (long)h, AT_REMOVEDIR, 0, 0));
+}
+
+int renameat(int olddirfd, const char *old, int newdirfd, const char *new)
+{
+	char b1[PATH_MAX], b2[PATH_MAX];
+	const char *ho = dn_redirect(b1, sizeof(b1), old, 0);
+	const char *hn = dn_redirect(b2, sizeof(b2), new, 0);
+
+	return dn_ret(dn_do_syscall(SYS_renameat, ho != old ? AT_FDCWD : olddirfd, (long)ho,
+				    hn != new ? AT_FDCWD : newdirfd, (long)hn, 0));
+}
+
+int rename(const char *old, const char *new)
+{
+	return renameat(AT_FDCWD, old, AT_FDCWD, new);
+}
+
+int renameat2(int olddirfd, const char *old, int newdirfd, const char *new, unsigned int flags)
+{
+	char b1[PATH_MAX], b2[PATH_MAX];
+	const char *ho = dn_redirect(b1, sizeof(b1), old, 0);
+	const char *hn = dn_redirect(b2, sizeof(b2), new, 0);
+
+	return dn_ret(dn_do_syscall(SYS_renameat2, ho != old ? AT_FDCWD : olddirfd, (long)ho,
+				    hn != new ? AT_FDCWD : newdirfd, (long)hn, flags));
+}
+
+int symlinkat(const char *target, int newdirfd, const char *linkpath)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), linkpath, 0);
+
+	return dn_ret(dn_do_syscall(SYS_symlinkat, (long)target,
+				    h != linkpath ? AT_FDCWD : newdirfd, (long)h, 0, 0));
+}
+
+int symlink(const char *target, const char *linkpath)
+{
+	return symlinkat(target, AT_FDCWD, linkpath);
+}
+
+int truncate(const char *path, off_t length)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+
+	return dn_ret(dn_do_syscall(SYS_truncate, (long)h, length, 0, 0, 0));
+}
+
+int truncate64(const char *path, off64_t length)
+{
+	return truncate(path, (off_t)length);
+}
+
+int utimensat(int dirfd, const char *path, const struct timespec times[2], int flags)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+
+	return dn_ret(dn_do_syscall(SYS_utimensat, h != path ? AT_FDCWD : dirfd,
+				    (long)h, (long)times, flags, 0));
+}
+
+int utimes(const char *path, const struct timeval tv[2])
+{
+	struct timespec ts[2];
+
+	if (tv != NULL) {
+		ts[0].tv_sec = tv[0].tv_sec;
+		ts[0].tv_nsec = tv[0].tv_usec * 1000;
+		ts[1].tv_sec = tv[1].tv_sec;
+		ts[1].tv_nsec = tv[1].tv_usec * 1000;
+	}
+	return utimensat(AT_FDCWD, path, tv != NULL ? ts : NULL, 0);
+}
+
+int utime(const char *path, const struct utimbuf *t)
+{
+	struct timespec ts[2];
+
+	if (t != NULL) {
+		ts[0].tv_sec = t->actime;
+		ts[0].tv_nsec = 0;
+		ts[1].tv_sec = t->modtime;
+		ts[1].tv_nsec = 0;
+	}
+	return utimensat(AT_FDCWD, path, t != NULL ? ts : NULL, 0);
+}
+
+int statfs(const char *path, struct statfs *buf)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+
+	return dn_ret(dn_do_syscall(SYS_statfs, (long)h, (long)buf, 0, 0, 0));
+}
+
+int statfs64(const char *path, struct statfs64 *buf)
+{
+	return statfs(path, (struct statfs *)buf);
+}
+
+/* ---- hardlinks (P2b-2d) -------------------------------------------- *
+ * Android blocks link() in app data (SELinux), so this is link2symlink:
+ * dn-policy moves the content into a hidden file and both names become
+ * symlinks to it.  unlink's bookkeeping runs before the real unlink (see
+ * unlinkat() above).  */
+
+int link(const char *from, const char *to)
+{
+	char b1[PATH_MAX], b2[PATH_MAX];
+
+	if (dn_active) {
+		const char *hf = dn_redirect(b1, sizeof(b1), from, 0);
+		const char *ht = dn_redirect(b2, sizeof(b2), to, 0);
+		int s = dn_policy_link(hf, ht);
+
+		if (s < 0) {
+			errno = -s;
+			return -1;
+		}
+		return 0;
+	}
+	return dn_ret(dn_do_syscall(SYS_linkat, AT_FDCWD, (long)from, AT_FDCWD, (long)to, 0));
+}
+
+int linkat(int olddirfd, const char *old, int newdirfd, const char *new, int flags)
+{
+	char b1[PATH_MAX], b2[PATH_MAX];
+
+	if (dn_active) {
+		const char *ho = dn_redirect(b1, sizeof(b1), old, 0);
+		const char *hn = dn_redirect(b2, sizeof(b2), new, 0);
+		int s = dn_policy_link(ho, hn);
+
+		if (s < 0) {
+			errno = -s;
+			return -1;
+		}
+		return 0;
+	}
+	return dn_ret(dn_do_syscall(SYS_linkat, olddirfd, (long)old, newdirfd, (long)new, flags));
 }
