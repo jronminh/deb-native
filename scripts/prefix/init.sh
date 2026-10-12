@@ -21,6 +21,10 @@ done
 unset LC_ALL LANGUAGE
 LANG=C.UTF-8
 export LANG
+# No tty and no dialog/hterm here: debconf would otherwise probe Dialog,
+# Readline and Teletype first and print a warning for each before falling back.
+DEBIAN_FRONTEND=noninteractive
+export DEBIAN_FRONTEND
 HOME=/root
 export HOME
 TMPDIR=/tmp
@@ -50,4 +54,6 @@ fi
 if [ $# -gt 0 ]; then
   exec "$@"
 fi
+# An interactive shell starts in the home directory, as on Debian (~).
+cd "$HOME" 2>/dev/null || true
 exec /usr/bin/bash -i
