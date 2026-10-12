@@ -65,10 +65,15 @@ on WSL → `adb push` to `/data/local/tmp` → `run-as org.dn.shell sh …`. A b
 through `core-deb`'s `dn-trace` reports `uname=aarch64` and `id` = `root`
 (fake root works).
 
-**Priority: build on WSL.** The device is **blocked** for now — the `dn-shell`
-app ships a wrong `targetSdk`, so a prefix launched through the app does not
-run. Do not depend on the device for the branch's live tests until that is
-fixed; the WSL cross-build is the working half.
+**Device unblocked (2026-10-12).** The `dn-shell` app shipped `targetSdk=34`,
+so Android's W^X (no `execve` from a writable data dir) stopped a prefix
+launched through the app. The source (`/root/dn-shell-src`) already set
+`targetSdk=28`; rebuilt it on WSL (`build.sh`, signed with
+`~/.android/dn-shell.keystore` — the same key as the installed app, so
+`adb install -r` kept the prefixes) and reinstalled: `targetSdk=28`,
+`core-deb`/`dn-gcc` intact, `run-as` boot still works, storage permissions
+re-granted. WSL cross-build stays the working half for the runtime; the device
+is now a usable host too.
 
 **Phases** (each leaves the tree runnable):
 
