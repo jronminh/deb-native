@@ -19,6 +19,8 @@ tools	^tools/
 
 src	^src/
 
+native	^native/
+
 scripts	^scripts/
 
 patches	^patches/

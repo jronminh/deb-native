@@ -137,7 +137,7 @@ static int initialize_cwd(Tracee *tracee)
 
 	/* Outside every binding: start at "/", and move the real cwd there
 	 * too -- the kernel resolves a relative path against it, and so does
-	 * dn-glibc (relative paths are left to the kernel).  */
+	 * dn-shim (relative paths are left to the kernel).  */
 	status = detranslate_path(tracee, path, NULL);
 	if (status < 0) {
 		if (chdir(global_tree) < 0)
@@ -260,8 +260,8 @@ int main(int argc, char *const argv[])
 		goto error;
 	}
 
-	/* dn-policy, the rules the traced path shares with dn-glibc; RT is
-	 * TREE/usr/lib/deb-native, as dn-glibc derives it.  */
+	/* dn-policy, the rules the traced path shares with the shim
+	 * (dn-shim.so); RT is TREE/usr/lib/deb-native.  */
 	{
 		char rt[PATH_MAX];
 
@@ -285,7 +285,7 @@ int main(int argc, char *const argv[])
 
 	/* The guest root is TREE; -b entries sit on top.  TREE is also bound
 	 * to itself, so a host path into the tree stays valid in the guest:
-	 * LOADER, a path dn-glibc already mapped in-process, a TREE/... argument.
+	 * LOADER, a path dn-shim already mapped in-process, a TREE/... argument.
 	 * Host-to-guest still answers "/..." (the root binding owns the guestfs).  */
 	if (new_binding(tracee, tree, "/", true) == NULL)
 		goto error;

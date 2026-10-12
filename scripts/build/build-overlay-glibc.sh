@@ -9,7 +9,7 @@
 # process; the syscall catalog (src/syscalls.tsv) is embedded in it at build
 # time, so it reads no file at run time.  The old LD_PRELOAD
 # shim (dn-shim.so), the adopt-on-first-run launcher (dn-run) and the ELF
-# editor (dn-elf) are gone: dn-policy wired into dn-glibc replaces the shim,
+# editor (dn-elf) are gone: dn-policy wired into dn-shim replaces the shim,
 # the exec gate replaces dn-run, and TREE/RT are fixed at build time so no
 # interpreter is relocated.
 #

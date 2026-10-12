@@ -33,7 +33,7 @@ There is **no build on the host**.
   completes `.dn/profile` itself on a first boot.
 
 Run time is one policy in two places: dn-policy, called in-process by
-dn-glibc (the fast path) and via `dn-trace`'s ptrace fallback
+dn-shim (the fast path) and via `dn-trace`'s ptrace fallback
 (`src/tracer/`). The old shim, maintainer-script rewriting and ELF editor
 are gone; a `.deb` installs intact (`docs/spec/overlay.md`).
 

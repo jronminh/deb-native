@@ -1,6 +1,6 @@
 /* dn-policy -- the one place path-remapping, fake-root and hardlink rules
  * live (docs/spec/runtime.md, "dn-policy"). A static C library, linked
- * into both dn-glibc (the fast path, in-process) and dn-trace (the
+ * into both dn-shim (the fast path, in-process) and dn-trace (the
  * fallback path, via ptrace) so the two can never disagree -- principle 3
  * in runtime.md.
  *
@@ -13,14 +13,14 @@
  *
  * - No library-owned heap crosses the API. Every out-param is a
  *   caller-supplied buffer with a caller-supplied capacity (PATH_MAX is
- *   enough for every path here). dn-glibc uses glibc's own allocator;
+ *   enough for every path here). dn-shim uses glibc's own allocator;
  *   dn-trace's codebase uses talloc; dn-policy must not hand either side
  *   a pointer it has to free with the other's allocator. Internally,
  *   dn-policy may allocate (e.g. for the symlink-resolution cache) but
  *   never returns that memory to the caller.
  *
  * - Two different invocation contexts, same function bodies:
- *     - dn-glibc calls these directly, in-process: the path it has is
+ *     - dn-shim calls these directly, in-process: the path it has is
  *       already in its own address space.
  *     - dn-trace calls these in *its own* process, on *its own* copy of
  *       the tracee's data (read out with process_vm_readv() before the
@@ -29,11 +29,11 @@
  *       never touches another process's memory -- that marshalling is
  *       dn-trace's wrapper, not dn-policy's job. This is also why path
  *       resolution issues real syscalls (stat, readlink) directly rather
- *       than taking them as parameters: both dn-glibc and dn-trace are
+ *       than taking them as parameters: both dn-shim and dn-trace are
  *       ordinary processes with real filesystem access, so dn-policy can
  *       just call the kernel itself instead of asking the caller to.
  *
- * - Thread safety: dn-glibc is multi-threaded, so every function here
+ * - Thread safety: dn-shim is multi-threaded, so every function here
  *   must tolerate concurrent calls from multiple threads of the *same*
  *   process. The symlink-resolution cache and the owner-store's on-disk
  *   fallback need their own internal locking (per runtime.md: a file lock
@@ -46,10 +46,9 @@
  *   Safe to call more than once on the same input.
  *
  * - Nothing here is prefix-specific (principle 5, runtime.md): dn_policy_init()
- *   takes TREE/RT as plain strings the *caller* already derived (dn-glibc
- *   from its own loader path, as the shipped self-derivation already
- *   does; dn-trace from wherever it gets its own equivalent, still
- *   open -- see below). dn-policy itself never hardcodes a path.
+ *   takes TREE/RT as plain strings the *caller* already derived (dn-trace
+ *   from its own location; dn-shim from the environment ld-dn sets).
+ *   dn-policy itself never hardcodes a path.
  */
 
 #ifndef DN_POLICY_H
@@ -126,7 +125,7 @@ int dn_policy_translate_path_nofollow(const char *guest_path, char *host_path_ou
 
 /* get*id()/set*id() family: trivial, no real privilege involved -- but
  * the current fake uid/gid is state *per traced program*, not a global
- * inside dn-policy. dn-glibc runs in-process, so it only ever has one
+ * inside dn-policy. dn-shim runs in-process, so it only ever has one
  * program to track and can keep a single static DnIdentity of its own.
  * dn-trace tracks many tracees at once (runtime.md : "apt hạ quyền xuống
  * _apt" while another tracee stays root), so it must keep one DnIdentity

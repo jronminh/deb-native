@@ -408,7 +408,7 @@ static pthread_mutex_t ready_lock = PTHREAD_MUTEX_INITIALIZER;
  * function. Cheap once ready (one branch, no lock) -- the lock only
  * matters for the first call(s), possibly racing from multiple
  * threads. Plain pthread, not glibc's __libc_lock: this file is built
- * standalone (dn-trace) as well as folded into dn-glibc. */
+ * standalone (dn-trace) as well as folded into dn-shim. */
 static int ensure_ready(void)
 {
 	const char *rt_root;
@@ -547,7 +547,7 @@ static void disk_to_record(const DbRecord *in, DnOwnerRecord *out)
 	out->rdev = in->rdev;
 }
 
-/* stat(2) without dn-glibc's stat wrapper: that one asks the owner store
+/* stat(2) without dn-shim's stat wrapper: that one asks the owner store
  * (dn_policy_fake_stat), which is what calls this -- the raw syscall keeps
  * the store from recursing into itself.  arm64's kernel struct stat is
  * glibc's.  */
@@ -596,7 +596,7 @@ static int owner_set_xattr(const char *host_path, const DnOwnerRecord *record)
 	/* A user.* xattr needs write access to the inode, which a file its
 	 * owner made unwritable lacks (dpkg unpacks before it sets the mode):
 	 * lend the owner write bit for the call.  The raw syscall, so that
-	 * dn-glibc's own chmod() wrapper does not come back here.  */
+	 * dn-shim's own chmod() wrapper does not come back here.  */
 	if (raw_stat(host_path, &st) < 0)
 		return -errno;
 	if (syscall(__NR_fchmodat, AT_FDCWD, host_path, (st.st_mode & 07777) | S_IWUSR) < 0)

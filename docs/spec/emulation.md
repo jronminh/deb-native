@@ -27,7 +27,7 @@ what, and what must agree. Status: design; only the pieces under
 
 ## Related docs
 
-- [`overlay.md`](overlay.md) — the runtime (`dn-policy`, `dn-glibc`,
+- [`overlay.md`](overlay.md) — the runtime (`dn-policy`, `ld-dn`, `dn-shim`,
   `dn-trace`) this layer is part of.
 - [`native.md`](native.md) — the execution model this layer serves (near-full
   behaviour, near-native speed).
@@ -50,7 +50,7 @@ learns the operation did not reach the kernel.
 Two properties make it hold:
 
 - **One model, two enforcement points** ([`overlay.md`](overlay.md) principle
-  3): dn-glibc answers the same question as dn-trace, from the same state, so
+  3): dn-shim answers the same question as dn-trace, from the same state, so
   the fast and traced paths cannot disagree.
 - **Every reader is covered.** A model is only as good as its
   least-covered reader: if `bind()` is translated but `/proc/net/tcp` still
@@ -93,15 +93,15 @@ the kernel, not by the class itself:
 | | forbidden outright | restricted / divergent |
 | --- | --- | --- |
 | surfaces as | a syscall/probe failure, or `SIGSYS` | a libc accessor value (`uname`, `sysconf`, `stat` of `/proc`, `mprotect`) — no error |
-| primary tier | dn-trace (catches `SIGSYS`, fakes `mount`/`unshare`) | dn-glibc (fast path, native speed) |
+| primary tier | dn-trace (catches `SIGSYS`, fakes `mount`/`unshare`) | dn-shim (fast path, native speed) |
 | dn-trace's role | near-mandatory — only the tracer sees Gate A | backstop for what libc cannot see |
 
 The direction: the model and the normalize-or-refuse decision live in
-dn-policy; dn-glibc applies it to the ordinary libc surface, dn-trace to
+dn-policy; dn-shim applies it to the ordinary libc surface, dn-trace to
 everything libc cannot reach (static, Go, raw `svc #0`, foreign loaders, and
 every Gate-A event). Neither tier alone is enough — normalizing only in
 dn-trace leaves fast-path dynamic binaries with the wrong answer; only in
-dn-glibc lets static/Go programs through unnormalized.
+dn-shim lets static/Go programs through unnormalized.
 
 ## Already emulated
 

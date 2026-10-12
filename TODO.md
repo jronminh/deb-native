@@ -135,7 +135,7 @@ runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
 - **One build entry**: wrap the build steps in a single command (a `Makefile`
   or `scripts/build.sh`), so the README's build section is one line.
 
-## Runtime v1: new overlay (dn-policy / dn-glibc / dn-trace)
+## Runtime v1: new overlay (dn-policy / dn-shim / dn-trace)
 
 Design: [`docs/spec/overlay.md`](docs/spec/overlay.md). Replaces the whole
 current overlay (`dn-shim.c`, `dn-run`'s adopt-on-first-run, `dn-elf` at run
@@ -260,7 +260,7 @@ below.
   - Rule 3 done: `dn-trace TREE LOADER` rewrites a glibc-dynamic exec to
     `LOADER --argv0 <orig argv0> <real path> <args>`. Rule 4 (a foreign
     loader) still to do.
-  Switch glibc-family packages to version pinning (`/etc/apt/preferences.d/dn-glibc`,
+  Switch glibc-family packages to version pinning (`/etc/apt/preferences.d/dn-shim`,
   auto-generated from `Source: glibc`), drop the hand-written resolver.
 - Done when: packages in use, reinstalled from stock `.deb`s, run correctly;
   `apt update`/`install`/`upgrade` run end to end with no install-script
@@ -314,7 +314,7 @@ kernel*, and cover every reader so the two enforcement points cannot disagree).
   `/proc` values, `rlimit`/cgroup, W^X `mprotect`) reports Android and raises
   no error — make the observation match what a package expects, not just
   answer the call. Do it in dn-policy and apply it at **both** tiers
-  (dn-glibc for the fast path, dn-trace for static/raw syscalls), not in
+  (dn-shim for the fast path, dn-trace for static/raw syscalls), not in
   dn-trace alone ([`emulation.md`](docs/spec/emulation.md), "Two kinds of
   hard limit").
 - **Refuse, don't fake**: real isolation, TUN and LSM-observable state get a
@@ -412,7 +412,7 @@ mechanism (`dn-run`'s "launch classifier", ...).
 - **Launcher/icon/desktop-DB integration**: only what the host needs.
 - **State + `explain` + `doctor`**: record per package its scope, mechanism
   and wrappers, so decisions are explainable/removable.
-- **Docs overlap**: `dn-glibc-prefix.md` and `dl-mechanics.md` both cover
+- **Docs overlap**: `dn-shim-prefix.md` and `dl-mechanics.md` both cover
   run-time prefix self-derivation; consider folding into one.
 
 ## Known unsafe, not yet fixed

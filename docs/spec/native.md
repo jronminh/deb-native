@@ -25,7 +25,7 @@ replacement for them. Status: the target, with what is built and what is open.
 
 ## Related docs
 
-- [`overlay.md`](overlay.md) — the runtime (`dn-policy`, `dn-glibc`,
+- [`overlay.md`](overlay.md) — the runtime (`dn-policy`, `ld-dn`, `dn-shim`,
   `dn-trace`) this model is enforced by.
 - [`emulation.md`](emulation.md) — the backend that answers operations the
   platform refuses.
@@ -118,7 +118,7 @@ Performance is a property of **where each call is handled**
 
 | tier | what it covers | cost |
 | --- | --- | --- |
-| **dn-glibc** (fast path) | dynamic glibc binaries; path/identity rewritten in-process | a few instructions per path call; zero for non-path calls |
+| **dn-shim** (fast path) | dynamic glibc binaries; path/identity rewritten in-process | a few instructions per path call; zero for non-path calls |
 | **dn-trace** (fallback) | static, Go, raw `svc #0`, foreign loaders, Gate-A `SIGSYS` | `ptrace`: two context switches per trapped syscall |
 
 Rules that keep the design near-native:
@@ -141,13 +141,13 @@ Three regimes, with different expectations:
 
 - **CPU-bound** (compress, compile): no layer over the instructions, so
   **≈ native**.
-- **path/syscall-bound**: dn-glibc's cost is per path call and small; dn-trace
+- **path/syscall-bound**: dn-shim's cost is per path call and small; dn-trace
   is where it degrades, so the goal is to keep this class on the fast path.
 - **I/O**: the same page cache and block layer as the host — no second VFS.
 
 Decision metric: **the fraction of syscalls served by each tier**, and the
 per-trapped-syscall cost. Measurement plan: microbenchmarks per regime,
-compared native (a Linux phone on the same hardware) vs dn-glibc vs dn-trace,
+compared native (a Linux phone on the same hardware) vs dn-shim vs dn-trace,
 driven by the per-tier counters of [`../../TODO.md`](../../TODO.md) P4.
 
 ## Hard limits and refusals

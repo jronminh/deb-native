@@ -112,7 +112,7 @@ int dn_policy_hardlink_init(const char *rt_root)
 
 /* Lazy init, same reasoning and pattern as dn-policy-fakeroot.c's
  * ensure_ready(). Plain pthread, not glibc's __libc_lock: this file is
- * built standalone (dn-trace) as well as folded into dn-glibc. */
+ * built standalone (dn-trace) as well as folded into dn-shim. */
 static pthread_mutex_t ready_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static int ensure_ready(void)

@@ -1,4 +1,4 @@
-# The overlay: dn-policy, dn-glibc, dn-trace
+# The overlay: dn-policy, dn-shim, dn-trace
 
 <!-- template: templates/docs.template.md -->
 
@@ -8,13 +8,16 @@ binaries take a native-speed fast path, everything else (static, Go, foreign
 loaders such as AppImage/conda/Electron/musl) falls back to a traced path with
 identical results. Runtime speed is the priority; install time may be slow.
 This is the **overlay**: the runtime pieces that sit in the tree's `RT`
-directory and are built once per (CPU architecture, `libc6` ABI version). It
-replaces the whole older overlay — an `LD_PRELOAD` path shim, an
-adopt-on-first-run launcher, a run-time `PT_INTERP` rewriter, and a per-script
-maintainer-script `sed` rewrite — rather than running alongside it.
+directory and are built once per (CPU architecture, `libc6` ABI version). On
+branch `ld-dn-surgical` the fast path is the program interpreter (`ld-dn`)
+plus a shim (`dn-shim.so`), with glibc left stock — the design is
+[`ld-dn-shim.md`](ld-dn-shim.md). The older `PT_INTERP` rewriting and the
+adopt-on-first-run launcher stay gone; the `LD_PRELOAD` shim returns as the
+fast path, not as the old separate mechanism.
 
-Status: the fast-path wiring (dn-glibc) and the tracer (dn-trace) exist and
-are exercised on-device; see [Status](#status).
+Status: on branch `ld-dn-surgical` the interpreter (`ld-dn`) and exec-gate
+rule 3 exist; the shim is P2. `dn-trace` is unchanged. See [Status](#status)
+and [`ld-dn-shim.md`](ld-dn-shim.md).
 
 ## Contents
 
@@ -24,7 +27,7 @@ are exercised on-device; see [Status](#status).
 - [The exec gate](#the-exec-gate)
 - [The seccomp filter and its tiers](#the-seccomp-filter-and-its-tiers)
 - [dn-policy](#dn-policy)
-- [dn-glibc](#dn-glibc)
+- [dn-shim](#dn-shim)
 - [The syscall catalog](#the-syscall-catalog)
 - [apt and dpkg under the runtime](#apt-and-dpkg-under-the-runtime)
 - [Init, services, and hard limits](#init-services-and-hard-limits)
@@ -41,7 +44,8 @@ are exercised on-device; see [Status](#status).
 - [`../../src/dn-policy/`](../../src/dn-policy) — the policy library itself.
 - [`../../src/tracer/`](../../src/tracer) — `dn-trace`, the tracer.
 - [`../../src/syscalls.tsv`](../../src/syscalls.tsv) — the syscall catalog.
-- [`../../patches/README.md`](../../patches/README.md) — the two glibc patches.
+- [`../../patches/README.md`](../../patches/README.md) — the glibc patches
+  (this branch keeps only the Android baseline).
 
 ## Goal and principles
 
@@ -57,50 +61,53 @@ Five principles, everything below follows them:
 2. **The unit of decision is the individual syscall.** Classifying a program
    only picks the initial filter.
 3. **One policy, enforced in two places.** The rules for path rewriting, fake
-   root, and hardlinks live in one shared library (dn-policy). The glibc
-   runtime (fast path) and the tracer (fallback path) both call it, so the two
-   paths can never disagree.
+   root, and hardlinks live in one shared library (dn-policy). The shim (fast
+   path) and the tracer (fallback path) both call it, so the two paths can
+   never disagree.
 4. **Push each call to the cheapest tier that can handle it.** Optimize the
    distribution of calls across tiers, not each tier in isolation.
 5. **dn-policy hardcodes nothing prefix-specific.** Every difference between
    prefixes (core-ultra, core-deb, specialized) is data read at run time, not
-   something rebuilt. `TREE`/`RT` self-derive from the loader's own path (as
-   glibc's prefix self-derivation already does); the path-exception list and
-   the owner-store backend choice live in a config file or are probed at
-   startup; `P_GATE` is a device/kernel property (probed once, stored), not a
-   prefix property. Consequence: dn-policy, dn-glibc, dn-trace and the seccomp
-   filter need only one build per (CPU architecture, `libc6` ABI version),
-   reused unmodified across every tarball on that version — never rebuilt per
-   prefix. The one thing legitimately hardcoded is the architecture's
-   syscall-number list (see [the catalog](#the-syscall-catalog)), since it is
-   an ABI property identical across every prefix on one architecture.
+   something rebuilt. `TREE`/`RT` derive from the runtime's own location
+   (`dn-trace` from its own path; `ld-dn` from its own path, and the shim from
+   the environment `ld-dn` sets); the path-exception list and the owner-store
+   backend choice live in a config file or are probed at startup; `P_GATE` is
+   a device/kernel property (probed once, stored), not a prefix property.
+   Consequence: dn-policy, `ld-dn`, dn-shim, dn-trace and the seccomp filter
+   need only one build per (CPU architecture, `libc6` ABI version), reused
+   unmodified across every tarball on that version — never rebuilt per prefix,
+   and never rebuilt per glibc bump (the shim is version-independent). The one
+   thing legitimately hardcoded is the architecture's syscall-number list (see
+   [the catalog](#the-syscall-catalog)), since it is an ABI property identical
+   across every prefix on one architecture.
 
 ## What this replaces
 
 | Prior approach | This design | Why |
 | --- | --- | --- |
-| Patch `PT_INTERP` and rpath per package | Dropped. The exec gate switches the loader at exec time | No per-package patching; foreign programs are covered too |
-| `LD_PRELOAD` path-redirect shim | Dropped. Path rewriting lives in dn-glibc | Survives a program clearing its environment; reaches glibc's own internal calls and `dlopen` |
+| Patch `PT_INTERP` and rpath per package | Dropped. The exec gate picks the interpreter at exec time (rule 3 runs `ld-dn`) | No per-package patching; foreign programs are covered too |
+| `LD_PRELOAD` path-redirect shim | Kept and reworked: the shim (`dn-shim.so`) *is* the fast path, consulting dn-policy | In-process and version-independent; `ld-dn` delivers it, so a program that clears its environment still gets it |
 | First-run trial ("adopt everything") to classify a program | Dropped. Classification is static, at exec time | One run never proves later runs; the filter catches a mismatch the moment it happens |
-| A per-process filter keyed to glibc's address | Dropped. One shared filter, installed once at the root, recognizes dn-glibc via a fixed gate page | The filter survives `exec`; one per process stacks up and misapplies addresses to children |
+| A per-process filter keyed to glibc's address | Dropped. One shared filter, installed once at the root, recognizes the shim by a fixed gate page (`ld-dn` maps it) | The filter survives `exec`; one per process stacks up and misapplies addresses to children |
 | Trap `SIGSYS` inside the process | Dropped | A static program exec'd afterward would receive `SIGSYS` and die |
 | A hand-written resolver in place of `apt` | Kept temporarily through P2, then dropped | `apt` has signature verification, a full dependency resolver, and the right `dpkg` order |
-| Pin `libc6` with a local repo | Not for glibc: glibc uses version pinning instead | dn-glibc sits outside `dpkg`; no glibc package needs distributing through a repo |
+| A patched glibc pinned through a local repo | Not needed: glibc stays stock; `ld-dn` and `dn-shim.so` live in `RT`, outside `dpkg` | No glibc package to distribute or pin |
 | A dedicated `ld.so.cache` for the runtime | Dropped. Uses the tree's own `/etc/ld.so.cache` | The cache `ldconfig` builds in the tree already holds in-tree paths |
 | `init.sh` as the first process | `dn-trace` is the first process; `init.sh` is its child | A filter returning `TRACE` needs the tracer present from the start |
 
 ## Components and boot flow
 
-Four components. `dn-*` names are provisional. `TREE` is the Debian tree's
-root directory; `RT` is the overlay's own directory inside `TREE` that `dpkg`
-does not manage (outside its package database and control, not outside the
-filesystem). `TREE` (with `RT` inside it) ships as one tarball
-([`prefix.md`](prefix.md)).
+Five components, all in `RT` unless noted. `dn-*` names are provisional.
+`TREE` is the Debian tree's root directory; `RT` is the overlay's own
+directory inside `TREE` that `dpkg` does not manage (outside its package
+database and control, not outside the filesystem). `TREE` (with `RT` inside
+it) ships as one tarball ([`prefix.md`](prefix.md)).
 
 | Component | What it is | Its job |
 | --- | --- | --- |
-| dn-policy | A static C library | The path-mapping table, in-tree symlink resolution, reverse translation, fake root, hardlinks. Never runs on its own; linked into both dn-glibc and dn-trace |
-| dn-glibc | glibc and `ld.so`, built from Debian source, placed in `RT` | The fast path: calls dn-policy before every path-taking syscall, then calls the kernel through the fixed gate page |
+| dn-policy | A static C library | The path-mapping table, in-tree symlink resolution, reverse translation, fake root, hardlinks. Never runs on its own; linked into both dn-shim and dn-trace |
+| ld-dn | The program interpreter: a freestanding aarch64 static-PIE | The exec gate's rule-3 target: derive `$DN`, read `ld-dn.conf`, build the environment (delivering the shim), map `P_GATE` and the tree's `ld.so`, then jump. No re-exec |
+| dn-shim | An `LD_PRELOAD` shared object, linked with dn-policy | The fast path: translates each path/identity call in-process and issues the syscall from `P_GATE` |
 | dn-trace | The tracer, the tree's root process | Installs the shared filter for the first child; runs the exec gate; handles every caught call via `ptrace`, through dn-policy |
 | init.sh | The tree's shell script | Sets up the environment, completes the prefix on a first boot, then runs the command |
 
@@ -117,8 +124,9 @@ filesystem). `TREE` (with `RT` inside it) ships as one tarball
 2. `dn-trace` forks a child, marked traced (fork, vfork, clone and exec all
    tracked). The child installs the shared filter itself, then execs the
    prefix's init. The filter propagates to every later process.
-3. That `exec` already passes through the exec gate. The init runs under the
-   tree's own shell, so from this step on it runs through dn-glibc.
+3. That `exec` already passes through the exec gate: rule 3 runs the shell
+   through `ld-dn`, which delivers the shim and the tree's `ld.so`, so from
+   this step on every process runs through the interpreter and the shim.
 4. init sets the environment (env vars, `TREE/tmp`, `resolv.conf`,
    `policy-rc.d`) and, on a first boot, completes the prefix from
    `.dn/profile` itself; then it execs the command it was given, or an
@@ -138,19 +146,20 @@ Classification is purely from the file header — no trial run.
 | --- | --- | --- | --- |
 | 1 | Starts with `#!` | Script | The interpreter path, translated through dn-policy, then put through the gate again from rule 2 |
 | 2 | ELF with no `PT_INTERP` | Static, including static Go | Left as is, only its own path translated. Its calls fall to `ptrace` on their own |
-| 3 | `PT_INTERP` is the standard glibc loader (`/lib/ld-linux-aarch64.so.1`) | Dynamic glibc, including Go with cgo | `RT/ld.so --argv0 <original argv0> <real path> <args>` |
+| 3 | `PT_INTERP` is the standard glibc loader (`/lib/ld-linux-aarch64.so.1`) | Dynamic glibc, including Go with cgo | `ld-dn --argv0 <original argv0> <real path> <args>` |
 | 4 | `PT_INTERP` names another loader (AppImage, conda, Electron, musl) | Foreign | `<its own loader, translated> <real path> <args>`. Its calls fall to `ptrace` on their own |
 | 5 | Not an ELF, not a script | Not runnable | Returns `ENOEXEC`, as the kernel would |
 
 Rules that go with this:
 
-- Every `PT_INTERP`-bearing ELF must be exec'd through the loader explicitly.
-  The kernel looks for the path in `PT_INTERP` on Android's real filesystem,
-  not in the tree, so a plain exec would fail `ENOENT`. This is why a package
-  keeps its stock Debian `PT_INTERP`: the gate, not the file, picks the loader.
+- Every `PT_INTERP`-bearing ELF must be exec'd through the interpreter
+  explicitly. The kernel looks for the path in `PT_INTERP` on Android's real
+  filesystem, not in the tree, so a plain exec would fail `ENOENT`. This is why
+  a package keeps its stock Debian `PT_INTERP`: the gate, not the file, picks
+  the interpreter.
 - No Go detection. Go-with-cgo's C side runs natively; Go's own runtime makes
   its own syscalls, outside the gate page, so it falls to `ptrace` on its own.
-- Running through `RT/ld.so` makes `/proc/self/exe` point at the loader.
+- Running through `ld-dn` makes `/proc/self/exe` point at the interpreter.
   dn-policy answers `readlink("/proc/self/exe")` with the real program's path.
 - Packages in the tree no longer need `PT_INTERP` patched. A foreign program
   loaded from outside takes the same path, no exception.
@@ -168,13 +177,13 @@ takes the native path.
 
 ### The fixed gate page
 
-The filter recognizes a dn-glibc call by instruction address. glibc's address
+The filter recognizes a shim call by instruction address. The shim's address
 changes every run, so a fixed gate page is used instead:
 
-- On first run, dn-glibc's loader maps a 4 KB page holding the kernel-call
-  instruction at a fixed address, `P_GATE`, using `MAP_FIXED_NOREPLACE`.
-- Every syscall dn-glibc and its loader make goes through this page; never
-  calls the kernel directly elsewhere.
+- `ld-dn` maps a 4 KB page holding the kernel-call instruction at a fixed
+  address, `P_GATE`, using `MAP_FIXED_NOREPLACE`.
+- The shim issues its syscalls from this page; it never calls the kernel
+  directly elsewhere.
 - `P_GATE` must sit in 39-bit address space, since many Android arm64 kernels
   only have 39 bits. It is `0x100000000` (4 GiB), where `svc #0; ret` is
   written and the page made `r-x`.
@@ -199,7 +208,7 @@ categorized list is [`src/syscalls.tsv`](../../src/syscalls.tsv)
 
 | Tier | Where it's handled | Applies to | Phase |
 | --- | --- | --- | --- |
-| 0 | dn-glibc: dn-policy translates, then the call goes through the gate page | Calls a dynamic glibc program makes through glibc | P2 |
+| 0 | dn-shim: dn-policy translates, then the call goes through the gate page | Calls a dynamic glibc program makes through the shim | P2 |
 | 1 | In-kernel BPF returns ALLOW | Everything outside the two groups; any call from the gate page | P1 |
 | 2 (optional) | Seccomp user notification, `dn-trace` holds the listener | Hot calls outside the gate: `openat` via `ADDFD` (kernel ≥ 5.9), the stat group | P5 |
 | 3 | `ptrace` in `dn-trace`, via dn-policy | Every exec; every other call outside the gate: static, Go, foreign, or a dynamic program's own stray call | P1 (exec), P3 (the rest) |
@@ -208,10 +217,10 @@ Rules that go with this:
 
 - **No per-process `SIGSYS` trap.** The filter survives `exec`: a dynamic
   program exec'ing a static one would hand it `SIGSYS` and kill it.
-- **glibc's own `syscall()` function** also goes through dn-policy for numbers
-  in the two groups, since it calls through the gate page and would otherwise
-  be let through unchecked.
-- **Translation must not repeat.** A call dn-glibc already translated can
+- **A program that calls `syscall(2)` directly** bypasses the shim's wrappers;
+  either the shim interposes `syscall()` (planned) or those calls fall to
+  `ptrace`, which translates them anyway.
+- **Translation must not repeat.** A call the shim already translated can
   still reach `ptrace` (for example, if mapping the gate page failed).
   dn-policy leaves a path already under `TREE` or `RT` unchanged.
 - **A program installing its own extra seccomp filter** (a browser sandbox):
@@ -221,7 +230,7 @@ Rules that go with this:
 
 ## dn-policy
 
-dn-policy is the only place rules live. dn-glibc and dn-trace only call it;
+dn-policy is the only place rules live. dn-shim and dn-trace only call it;
 neither has rules of its own. It lives in `src/dn-policy/` and is a static
 library linked into both.
 
@@ -245,7 +254,7 @@ library linked into both.
   `readlink` on an in-tree symlink needs no reverse translation, since its
   target is already stored as an in-tree path.
 - **`/proc/self/exe`** returns the real program's path, not the loader's.
-  dn-glibc records this path when the loader starts.
+  dn-shim records this path when the loader starts.
 - **UNIX sockets:** a sockaddr path is capped at 108 bytes, and the real path
   is long. Keep `TREE` as short as possible. Past 108 bytes, bind or connect
   with a relative path from the parent directory, through `/proc/self/fd/N`.
@@ -287,52 +296,38 @@ approach:
 - The stat group must report these names as regular files with the right link
   count, not as symlinks.
 
-## dn-glibc
+## dn-shim
 
-dn-glibc always matches the version of `libc6` installed in the tree. That is
-the only coupling between the runtime and the package set.
+The shim (`dn-shim.so`) is the fast path: an `LD_PRELOAD` shared object linked
+with dn-policy. `ld-dn` puts it in the program's environment when it starts, so
+it is present at every dynamic glibc program however the program was launched —
+including a program that clears its own environment, because the interpreter
+builds the environment from scratch (`ld-dn.conf`'s `preload`).
 
-### Building dn-glibc
+It is **version-independent**. The shim sits *above* libc: it interposes the
+public symbols (the PLT surface) and, for each path/identity call, translates
+through dn-policy and issues the syscall from `P_GATE` itself. It needs no glibc
+source and is not rebuilt when glibc is upgraded — unlike the patched-glibc
+wiring it replaces on `main` (`dn-policy-glibc-wiring.patch`, dropped here).
 
-- Source: Debian's own `glibc` source package, at the exact version of the
-  tree's `libc6`. Two patches apply, in order: the Android base
-  (`patches/dn-glibc-android.patch`) and the dn-policy wiring
-  (`patches/dn-policy-glibc-wiring.patch`), applied by
-  `scripts/glibc/dn-apply-glibc-patch.sh`. Never hand-edited.
-- The wiring does four things:
-  1. Wires dn-policy into every path-taking function — the public version, the
-     internal version, and `syscall()`.
-  2. Routes every kernel call glibc makes through the gate page
-     (`INTERNAL_SYSCALL_RAW`, `syscallS.S`).
-  3. Has the loader map the gate page at startup, before opening any file.
-  4. Has the loader search libraries in `RT/lib` first, then the tree's own
-     library directories, using the tree's own `ld.so.cache`.
-- The patched libraries ship as the `libc6` package and land at the tree's
-  normal multiarch path, so the whole glibc-source runtime set is the patched
-  build. (`RT/lib` — the wiring's first search dir — is a reserved slot; the
-  shipped packages leave it empty.)
-- Data files (gconv, locale) come from the tree. Both sides share a version, so
-  they are compatible.
-- The package's `+dn<n>` version is the version marker; a new glibc version
-  means a new build of the package. It is keyed only to (CPU architecture,
-  `libc6` ABI version), so the same `.deb` is reused across every tarball
-  pinned to that version.
+`dn-shim.so` lives in `RT` (`usr/lib/deb-native/dn-shim.so`) and is built from
+`native/` (P2). No package is edited to deliver it.
 
-### What the wiring covers
+### What the shim covers
 
-The wiring is per syscall, in `src/syscalls.tsv`'s terms. Currently wired
-in-process: the open/openat family; stat/fstatat/statx/faccessat/`access`
-plus the owner rewrite; `getcwd` and `readlink(/proc/self/...)` reverse translation;
-`mkdir`/`rmdir`/`rename{,at,at2}`/`symlink`/`truncate`/`utimensat`/`statfs`;
-`syscall(2)` for the path group; `chown`/`lchown`/`chmod`/`fchmodat`;
-`link`/`unlink` (link2symlink); paths baked at configure time (the build
-prefix) are rebased onto the live tree. Outside a prefix (no live tree, e.g.
-a static link) the wrappers are plain glibc. The loader maps the gate page and
-searches `RT/lib` first.
+The shim is per syscall, in [`src/syscalls.tsv`](../../src/syscalls.tsv)'s
+terms. To wire one, the shim interposes every libc entry point that issues it,
+translates the path through dn-policy, and issues the call from `P_GATE`. A
+`gate=yes` row needs *every* issuing entry point wired: a call the shim did not
+translate does not come from the gate page, so the filter TRACEs it.
 
-A row may be `gate=yes` only when every libc function issuing that syscall is
-wired: libc issues it from the gate page, so an unwired one (as `access()` was,
-beside a wired `faccessat()`) reaches the host's tree untranslated.
+Because the shim interposes the *exported* functions, it cannot reach libc's
+internal, statically-bound calls (NSS `__open_nocancel`, `gconv`, `ld.so`
+internals). Those, plus inline `svc #0` and fully static programs, fall to
+`dn-trace` — the five cases of
+[`../reference/syscall-boundary.md`](../reference/syscall-boundary.md). That is
+not a shim gap; the filter's gate-IP rule routes them to the tracer with no
+per-binary decision.
 
 Still on the `ptrace` tier (correct, just slower): the `syscalls.list`-generated
 wrappers (`mkdirat`/`unlinkat`/`symlinkat`/`linkat`/`readlinkat`/`fchownat`/
@@ -343,7 +338,7 @@ from the gate page.
 ## The syscall catalog
 
 [`src/syscalls.tsv`](../../src/syscalls.tsv) is the single source of truth: one
-row per syscall, with its group, handling, whether dn-glibc handles it
+row per syscall, with its group, handling, whether dn-shim handles it
 in-process, and whether its kernel call is issued from the gate page. It
 carries its own provenance (architecture, Android/kernel scope, sources,
 updated), because both the list and the handling follow the Android kernel and
@@ -352,10 +347,10 @@ policy and drift over time.
 The build embeds it in `dn-trace` verbatim (`src/tracer/GNUmakefile` generates
 `syscall/dn-catalog.c`), and `dn-trace` builds the filter's gate-IP exemption
 from it, so it never maintains a list of its own and reads no file at run
-time; `tools/check-syscalls.py` checks it. A row is `gate=yes` only when every
-libc entry point issuing that syscall translates its path: the
-`syscalls.list`-generated wrappers above do not, so `mkdirat`, `unlinkat`,
-`symlinkat` and `readlinkat` stay `gate=no`.
+time; `tools/check-syscalls.py` checks it. A row is `gate=yes` only when the
+shim interposes every libc entry point that issues it and translates its path;
+an entry point the shim does not interpose reaches the kernel directly and is
+TRACEd, so its row stays `gate=no`.
 
 ## apt and dpkg under the runtime
 
@@ -381,23 +376,23 @@ are gone: the runtime is the only thing between a package and the kernel.
 
 ### The glibc rule
 
-The patched glibc ships as **real Debian packages** — `libc6` and `libc-bin`,
-built from the tree's `libc6` source with the two patches, at version
-`<Debian version>+dn<n>` (`2.41-12+deb13u4+dn1`) so it is plain they are not
-upgradeable from the mirror. They are delivered through the **local repo**
-(below): its origin pin (priority 1001) beats the mirror (500), so `apt` can
-never replace them. There is no separate version-pin file, and `apt-mark hold`
-is not used. The tree ships only the runtime pair; Debian's version-pinned dev
-packages (`libc6-dev`, `libc-dev-bin`, `locales`) are out of scope, and if one
-is ever shipped the whole glibc source binary set is rebuilt at the same
-`+dn<n>` together.
+On `main` a fully patched glibc ships as **real Debian packages** (`libc6`,
+`libc-bin`) at version `<Debian version>+dn<n>`. On branch `ld-dn-surgical`
+glibc carries only the **Android baseline** (`patches/dn-glibc-android.patch`);
+the `dn-policy` wiring is dropped, so the runtime no longer lives inside glibc
+(P3 decides whether any baseline patch is still needed at all). If a patched
+`libc6`/`libc-bin` is shipped it goes through the **local repo** (below), whose
+origin pin (1001) beats the mirror (500) so `apt` never replaces it; the runtime
+pair is the only glibc built, and the version-pinned dev packages (`libc6-dev`,
+`libc-dev-bin`, `locales`) are out of scope.
 
 ### The local repo
 
 The local repo is shipped inside `RT` (`RT/repo`, outside the dpkg-managed
 tree) and always wins over the mirror:
 
-- The patched glibc packages (`libc6`, `libc-bin`), at `+dn<n>`.
+- The glibc packages (`libc6`, `libc-bin`) at `+dn<n>`, if the Android baseline
+  is shipped.
 - Dynamic builds standing in for a static or Go program in everyday use.
 - `equivs`-built dummy packages, to satisfy a dependency the tree can't use.
 - Packages patched to run on Android, where the runtime can't cover it alone.
@@ -462,47 +457,27 @@ a newer version of.
 
 ## Status
 
-Implemented and exercised on-device:
+On branch `ld-dn-surgical` (this branch):
 
-- **dn-policy** (`src/dn-policy/`) — the mapping, symlink resolution, reverse
-  translation, fake root and hardlinks.
-- **dn-glibc** — the two patches build; the gate page is mapped; `RT/lib`
-  search order; the path group wired in-process (see
-  [What the wiring covers](#what-the-wiring-covers)).
-- **dn-trace** — the tree's root; the shared filter with the gate-IP rule built
-  from the embedded catalog; the exec gate rule 3 (through `LOADER`); one
-  static binary, `dn-trace [TREE LOADER] [-- PROGRAM ARGS...]` (TREE derived
-  from its own location unless two absolute paths override it). dn-policy is
-  compiled in (P3, the traced path): the identity group is answered from a
-  per-tracee identity with Linux's rules (`set*id` recorded, a dropped id
-  cannot take root back, a child inherits; Android's SIGSYS-trapped `set*id`
-  too), so apt drops to `_apt`; `fchown`/`fchownat`/`fchmod`/`fchmodat`
-  reach the owner store and `fstat`/`fstatat`/`statx` report it; a refused
-  `linkat` becomes a link2symlink and `unlinkat` keeps its count; `chdir`
-  moves the real cwd with the guest's; a directory a program makes keeps
-  `rwx` for its owner (root's DAC override, until its `chmod`). `-u` runs
-  with the real ids.
+- **dn-policy** (`src/dn-policy/`) — unchanged from `main`: the mapping,
+  symlink resolution, reverse translation, fake root and hardlinks.
+- **ld-dn** — recovered from the pre-0.6 history, cross-built by
+  `scripts/build/build-interp.sh`; it is the exec-gate rule-3 target (P1).
+- **dn-trace** — unchanged from `main`: the tree's root; the shared filter with
+  the gate-IP rule built from the embedded catalog; the exec gate. Rule 3 now
+  runs `ld-dn` (P1). dn-policy is compiled in for the traced path.
 - **`src/syscalls.tsv`** — the catalog, checked by `tools/check-syscalls.py`.
+- **dn-shim** — not built yet (P2).
 
-Still open (P2/P3):
+Still open:
 
+- **P2 — the shim** (`dn-shim.so`): write it; move `P_GATE` from `elf/rtld.c`
+  into `ld-dn`/the shim; drop `dn-policy-glibc-wiring.patch` from the pipeline;
+  recompute the catalog's `glibc`/`gate` columns.
 - Exec-gate rule 4 (a foreign loader) and its argv semantics.
-- Issue **every** glibc syscall from the gate page: the cancelable path
-  (`syscall_cancel.S`) is the delicate one — its `_arch_start`/`_end`
-  cancellation markers assume the svc is inline.
-- The rest of P3:
-  - root's DAC override for `open`: dpkg reopens each file it unpacked
-    `O_WRONLY` to fsync it, and one it made unwritable (mode 0, or 0440 like
-    `/etc/sudoers`) gets `EACCES` -- installing `sudo` fails there;
-  - path translation on the traced path is still PRoot's (bindings), not
-    `dn_policy_translate_path()`; the two agree on the tree's layout;
-  - the filter's TRACE list is still PRoot's `proot_sysnums`, not the
-    catalog's path/identity rows;
-  - a symlink's own owner is not recorded (a `user.*` xattr cannot sit on
-    a symlink; it reads as root's).
-- A program run through the runtime loader reports the loader as its
-  `comm` (`/proc/self/status` `Name:`, `ps`, `pkill`).
+- A program run through the interpreter reports the interpreter as its `comm`
+  (`/proc/self/status` `Name:`, `ps`, `pkill`).
 - The `bind`/`connect` UNIX-socket path (sockaddr, 108-byte cap).
-- Route the `syscalls.list`-generated wrappers through dn-policy.
-- Version pinning generated by the build (see
-  [The glibc rule](#the-glibc-rule)).
+- P3 — trim glibc to the Android baseline; confirm a stock `libc6` starts.
+- The traced path's own open items from `main` still stand (PRoot bindings as
+  the translation, the filter's TRACE list, a symlink's own owner).

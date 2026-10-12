@@ -194,7 +194,7 @@ static void stat_exit(Tracee *tracee, Sysnum sysnum, word_t result)
 }
 
 /* linkat: SELinux refuses a real hardlink in app data -- link2symlink
- * instead (dn-policy, the same as dn-glibc's link()).  */
+ * instead (dn-policy, the same as dn-shim's link()).  */
 static void link_exit(Tracee *tracee, word_t result)
 {
 	char from[PATH_MAX];

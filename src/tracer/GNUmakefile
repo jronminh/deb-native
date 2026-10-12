@@ -62,7 +62,7 @@ OBJECTS += \
 	ptrace/wait.o		\
 	extension/extension.o
 
-# deb-native: dn-policy (src/dn-policy), the one policy dn-glibc also runs
+# deb-native: dn-policy (src/dn-policy), the one policy dn-shim also runs
 # in-process, is compiled in: the traced path applies the same rules.  A
 # build from a copy of this directory passes DNPOLICY=<repo>/src/dn-policy.
 DNPOLICY ?= $(SRC)../dn-policy

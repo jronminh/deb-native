@@ -61,7 +61,7 @@ static int copy_out(const char *src, char *out, size_t cap)
 }
 
 /* "<a>/<b>" into @out, bounded by @cap. memcpy/strlen only, deliberately
- * not snprintf: this file is also compiled into dn-glibc
+ * not snprintf: this file is also compiled into dn-shim
  * (sysdeps/unix/sysv/linux/), and snprintf pulls in glibc's full
  * vfprintf machinery (which touches malloc, locking, more) -- fine in
  * an ordinary program, but fatal here, because glibc's own

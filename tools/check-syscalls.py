@@ -3,7 +3,7 @@
 
 It is the single source of truth the overlay is built from: the build embeds
 it in dn-trace verbatim (src/tracer/GNUmakefile -> syscall/dn-catalog.c), which
-builds the seccomp filter's gate-IP exemption from it, and dn-glibc is meant
+builds the seccomp filter's gate-IP exemption from it, and dn-shim is meant
 to wire the rows marked glibc=yes.  This checks the catalog is well-formed and
 internally consistent, and that it still carries its kernel/Android
 provenance -- the list follows the Android kernel and policy, so a missing or
@@ -15,10 +15,10 @@ What it checks:
   2. Every data row has the five columns, and each column's value is one it
      is allowed to be.
   3. Invariants: gate=yes implies glibc=yes (a call may be ALLOWed from the
-     gate only if dn-glibc already handles it in-process), and implies the
+     gate only if dn-shim already handles it in-process), and implies the
      row is in the path or identity group (nothing else is treated specially).
   4. No syscall is listed twice.
-  5. gate=no for every syscall whose dn-glibc wrapper is generated from
+  5. gate=no for every syscall whose dn-shim wrapper is generated from
      syscalls.list and so does not translate (UNTRANSLATED_WRAPPERS): libc
      issues it from the gate page, so gate=yes would let the untranslated
      call through to the host.
@@ -40,9 +40,9 @@ HANDLING = {
     "fake-xattr", "reverse", "map-sockaddr",
 }
 PROVENANCE_KEYS = ["arch", "android", "kernel", "sources", "updated"]
-# dn-glibc wrappers generated from syscalls.list: no .c to wire, so the
+# dn-shim wrappers generated from syscalls.list: no .c to wire, so the
 # function (e.g. unlinkat()) passes its path through untranslated even when a
-# sibling (unlink()) is wired.  Drop a name once dn-glibc overrides it.
+# sibling (unlink()) is wired.  Drop a name once dn-shim overrides it.
 UNTRANSLATED_WRAPPERS = {
     "mkdirat", "unlinkat", "symlinkat", "linkat", "readlinkat", "fchownat",
     "chdir", "chroot", "inotify_add_watch",
@@ -133,7 +133,7 @@ def main():
             problems.append(f"line {lineno}: '{name}' is gate=yes but glibc=no "
                             "(a gate-issued call must already be handled in-process)")
         if row["gate"] == "yes" and name in UNTRANSLATED_WRAPPERS:
-            problems.append(f"line {lineno}: '{name}' is gate=yes but its dn-glibc wrapper "
+            problems.append(f"line {lineno}: '{name}' is gate=yes but its dn-shim wrapper "
                             "does not translate (syscalls.list-generated)")
         if row["gate"] == "yes" and row["group"] == "other":
             problems.append(f"line {lineno}: '{name}' is gate=yes but group 'other'")

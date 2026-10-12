@@ -190,7 +190,7 @@ By design, not bugs; see the linked specs.
 
 ## Gaps toward a complete Debian
 
-`dn-trace` (with dn-policy/dn-glibc) is the syscall-edge translator, not a
+`dn-trace` (with dn-policy/dn-shim) is the syscall-edge translator, not a
 kernel emulator: it rewrites paths/identity and *answers in place of* the
 kernel when Android blocks a call. "Complete" here means every in-scope
 package installs and its programs run — not a full Linux emulation. The

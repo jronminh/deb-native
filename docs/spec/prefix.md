@@ -25,7 +25,7 @@ stages below are what the scripts do.
 ## Related docs
 
 - [`overlay.md`](overlay.md) — the runtime the tree carries (`dn-policy`,
-  `dn-glibc`, `dn-trace`), and the glibc rule.
+  `dn-shim`, `dn-trace`), and the glibc rule.
 - [`../reference/`](../reference) — background on Android's syscall and
   filesystem behaviour.
 
@@ -155,7 +155,7 @@ the target.
    `libc6` and `libc-bin`, at `<Debian version>+dn1`
    (`scripts/glibc/dn-package-glibc.sh`, `dn-package-libc-bin.sh`). This is the
    **glibc bundle**: `libc6.deb` + `libc-bin.deb`. See
-   [`overlay.md`](overlay.md), "dn-glibc".
+   [`overlay.md`](overlay.md), "dn-shim".
 3. **The tree.** `scripts/build/build-core-deb.sh BASE OUT.tar.gz` assembles
    one from an **empty base**: it indexes the mirror, downloads and
    sha256-verifies every package in the pinned list (using our `libc6`/

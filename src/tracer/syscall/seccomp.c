@@ -52,8 +52,9 @@
 
 #define DEBUG_FILTER(...) /* fprintf(stderr, __VA_ARGS__) */
 
-/* deb-native: the fixed gate page address, mirrored from the dn-glibc build
-   (sysdeps/generic/dn-prefix.h, elf/rtld.c).  Chosen in 39-bit space.  */
+/* deb-native: the fixed gate page address, mirrored from where it is mapped
+   (the dn-policy wiring today: sysdeps/generic/dn-prefix.h, elf/rtld.c;
+   ld-dn after P2).  Chosen in 39-bit space.  */
 #define DN_GATE_ADDR 0x100000000UL
 
 /**
@@ -128,7 +129,7 @@ static int add_trace_syscall(struct sock_fprog *program, word_t syscall, int fla
 
 /**
  * Append to @program->filter the statements that ALLOW @syscall when it is
- * issued from the fixed gate page -- dn-glibc's P_GATE, where it has already
+ * issued from the fixed gate page -- dn-shim's P_GATE, where it has already
  * translated the call in-process (docs/spec/overlay.md, "The shared
  * filter's rules").  @syscall comes from the published catalog
  * (syscall/dn-syscalls.c, rows with gate=yes).  A call from anywhere else

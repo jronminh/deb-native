@@ -2,7 +2,7 @@
 # the runtime overlay handles (docs/spec/overlay.md, "The shared filter's
 # rules").  One source of truth: the build embeds it in dn-trace verbatim
 # (src/tracer/GNUmakefile -> syscall/dn-catalog.c), which builds the filter's
-# gate-IP exemption from the gate=yes rows; dn-glibc wires the glibc=yes rows,
+# gate-IP exemption from the gate=yes rows; dn-shim wires the glibc=yes rows,
 # and a repo check keeps the two in step (principle 1: one place the rules
 # live).
 #
@@ -28,8 +28,8 @@
 #   handling what dn-policy must do, comma-separated:
 #            map | resolve | fake-stat | fake-ids | fake-owner | link2symlink |
 #            fake-xattr | reverse | map-sockaddr | none
-#   glibc    yes = dn-glibc translates/rewrites it in-process
-#   gate     yes = dn-glibc issues its kernel call from the gate page, so the
+#   glibc    yes = dn-shim translates/rewrites it in-process
+#   gate     yes = dn-shim issues its kernel call from the gate page, so the
 #            filter may ALLOW it -- only when EVERY libc entry point issuing
 #            it translates (a syscalls.list-generated wrapper such as
 #            unlinkat() does not, so unlinkat is "no" even though unlink() is
