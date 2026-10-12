@@ -118,11 +118,41 @@ post applies, ...), then:
 
 This turns the trim into a *structure*, not just deleted files.
 
-## Plan (later, discussed first)
+## Code plan
 
-1. Adopt the names in docs (`dn-monitor`, `dn-trace`); this file + `monitor.md`.
-2. Make `dn-trace`'s path/identity handling call `dn-policy` (drop `path/`).
-3. Drive `dn-trace` from the catalog (shapes) instead of the hard switch.
-4. Move the emulable refused-operations into the shim for dynamic programs.
-5. Cut the PRoot baggage.
-6. Fold `dn-monitor`/`dn-trace` naming into the tree.
+Two tracks. A finishes the shim runtime; B rebuilds the tracer. Each step is
+its own commit, build-verified, and leaves the tree usable.
+
+### Track A — finish the shim runtime
+
+- **A1 (P2b-3)** — move the gate page into `dn-interp`: `dn-interp` maps
+  `P_GATE` and exports `DN_PROG` (the real program path) for
+  `/proc/self/exe`; the shim then only consumes the gate. Drop
+  `dn-policy-glibc-wiring.patch` from the pipeline (`scripts/glibc/`,
+  `.github/workflows/build-glibc.yml`); recompute `src/syscalls.tsv`'s
+  `glibc`/`gate` columns.
+- **A2 (P3)** — trim `dn-glibc-android.patch` to the Android baseline;
+  confirm a stock `libc6` boots.
+
+### Track B — rebuild the tracer
+
+- **B1 — the `dn-emu` hook (stub).** Introduce `dn-emu` as its own component
+  with one entry point the dispatcher calls for a refused/divergent syscall;
+  for now it answers "not handled", so the existing emulation keeps doing the
+  work. No behaviour change — it marks where the subsystems land. (`dn-emu`
+  is a dummy until a subsystem is designed.)
+- **B2 — `dn-trace` as a mapping executor.** Replace the tracer's own path and
+  identity handling with `dn-policy`: read the path from the tracee, call
+  `dn_policy_translate_path()`, write it back; take fake root and hardlink
+  from `dn-policy` too. Delete the tracer's `path/` translation and its
+  private fakeroot/hardlink.
+- **B3 — catalog shapes.** Extend [`src/syscalls.tsv`](../../src/syscalls.tsv)
+  with a shape column (which arguments are paths, follow/nofollow, whether a
+  stat post applies) and drive `dn-trace` from it instead of the hand-written
+  switch.
+- **B4 — split `dn-monitor`.** Separate the mechanism (filter + ptrace core)
+  from the policy limb; the dispatcher routes by `dn-policy`.
+- **B5 — the census.** A first-boot probe (forked child), keyed by (arch, API
+  level, build); consumed by the routing and by `dn-emu`.
+- **B6 — cut the PRoot baggage.** `extension/`, `syscall/pipe_shadow.c`,
+  `syscall/rlimit.c`, `path/{canon,temp,f2fs-bug}`.
