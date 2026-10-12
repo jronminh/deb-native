@@ -4,19 +4,27 @@
 # sh and what toybox and coreutils both have (tar -z/-O, uname, df -P, mkdir,
 # rm), so Android's mksh + toybox is enough.
 #
-#   1. read .dn/contract from the tarball without extracting it, and check it;
-#   2. extract into DEST -- which must be the path the artifact was built for;
-#   3. run the artifact's activation script (contract install=) with the host's
+#   1. read boot/version from the tarball without extracting it, and check it;
+#   2. extract into DEST;
+#   3. run the artifact's activation script, boot/install.sh, with the host's
 #      own shell: it checks the path and wires the session entry;
-#   4. check the tree runs: start it through dn-trace for a trivial command.
+#   4. check the tree runs: start it through boot/boot.sh for a trivial command.
 # Any failure after DEST is created removes DEST. The host never edits a file
 # inside the prefix; everything prefix-specific is the prefix's own scripts.
+#
+# The boot/ paths are the convention (docs/spec/prefix.md, "The boot/
+# directory"): boot/boot.sh is the entry, boot/install.sh the activation,
+# boot/version the manifest.  There is no contract: the same facts live in
+# boot/version, which -- like the contract did -- is readable from the tarball
+# before extracting it.
 #
 # Usage: ship-prefix.sh ARTIFACT.tar.gz DEST
 set -eu
 A=${1:?usage: ship-prefix.sh ARTIFACT.tar.gz DEST}
 D=${2:?usage: ship-prefix.sh ARTIFACT.tar.gz DEST}
-CONTRACT_VERSION=1
+FORMAT_VERSION=2
+ENTRY=boot/boot.sh
+INSTALL=boot/install.sh
 
 die() { echo "ship-prefix: $*" >&2; exit 1; }
 [ -f "$A" ] || die "no such artifact: $A"
@@ -28,9 +36,9 @@ esac
 parent=${D%/*}
 [ -d "$parent" ] || die "no such directory: $parent"
 
-# 1. The contract, read without extracting.
-C=$(tar -xzOf "$A" ./.dn/contract 2>/dev/null) || die "$A carries no .dn/contract"
-contract= name= arch= root= loader= install= entry= size=
+# 1. The manifest, read without extracting.
+C=$(tar -xzOf "$A" ./boot/version 2>/dev/null) || die "$A carries no boot/version"
+format= name= arch= root= size=
 # Line by line without a here-document: mksh writes those to a temporary
 # file, and an app may have no writable TMPDIR.
 oldifs=$IFS
@@ -40,24 +48,21 @@ set -f
 for l in $C; do
   case $l in
     '#'*) ;;
-    contract=*) contract=${l#*=} ;;
+    format=*) format=${l#*=} ;;
     name=*) name=${l#*=} ;;
     arch=*) arch=${l#*=} ;;
     root=*) root=${l#*=} ;;
-    loader=*) loader=${l#*=} ;;
-    install=*) install=${l#*=} ;;
-    entry=*) entry=${l#*=} ;;
     size=*) size=${l#*=} ;;
     desc=*|version=*) ;;
-    *=*) echo "ship-prefix: warning: unknown contract key ${l%%=*}" >&2 ;;
+    *=*) echo "ship-prefix: warning: unknown boot/version key ${l%%=*}" >&2 ;;
   esac
 done
 IFS=$oldifs
 set +f
-[ "$contract" = "$CONTRACT_VERSION" ] || die "contract version '${contract:-?}' not supported (this host knows $CONTRACT_VERSION)"
-[ -n "$name" ] && [ -n "$arch" ] && [ -n "$loader" ] && [ -n "$entry" ] || die "contract lacks name/arch/loader/entry"
+[ "$format" = "$FORMAT_VERSION" ] || die "artifact layout '${format:-?}' not supported (this host knows $FORMAT_VERSION)"
+[ -n "$name" ] && [ -n "$arch" ] || die "boot/version lacks name/arch"
 [ "$arch" = "$(uname -m)" ] || die "artifact is for $arch, this device is $(uname -m)"
-# A current artifact names no root and installs anywhere (dn-trace derives the
+# A current artifact names no root and installs anywhere (dn-monitor derives the
 # root from its own location).  One that still carries root= is the old fixed
 # form: it only works at that path.
 [ -z "$root" ] || [ "$root" = "$D" ] \
@@ -74,23 +79,14 @@ fi
 mkdir "$D"
 trap 'rm -rf "$D"' EXIT
 tar -xzf "$A" -C "$D" || die "extract failed"
-if [ -n "$install" ]; then
-  # Activation, the host's own shell (mksh + toybox on Android): it checks the
-  # path and wires the session entry.  No tree program runs here.
-  DN_INSTDIR=$D sh "$D/$install" || die "activation failed"
-fi
-# The acceptance test: the tree runs through dn-trace (a poor host starts
-# dn-trace; nothing in the tree runs directly).  A trivial command, so it does
-# not bootstrap or start a session.  A current dn-trace derives the root from
-# its own location; an old one (a fixed-root artifact) still needs it passed.
-RT=$D/usr/lib/deb-native
-if [ -n "$root" ]; then
-  "$RT/dn-trace" "$D" "$D/$loader" -- /usr/bin/bash -c 'exit 0' \
-    || die "the tree does not run under dn-trace"
-else
-  "$RT/dn-trace" -- /usr/bin/bash -c 'exit 0' \
-    || die "the tree does not run under dn-trace"
-fi
+# Activation, the host's own shell (mksh + toybox on Android): it checks the
+# path and wires the session entry.  No tree program runs here.
+DN_INSTDIR=$D sh "$D/$INSTALL" || die "activation failed"
+# The acceptance test: the tree runs through its entry, boot/boot.sh -- run with
+# the prefix root as the working directory, as any host runs it.  A trivial
+# command, so it does not bootstrap or start a session.
+( cd "$D" && sh "$ENTRY" /usr/bin/bash -c 'exit 0' ) \
+  || die "the tree does not run through $ENTRY"
 trap - EXIT
 echo "ship-prefix: $name installed in $D"
-echo "ship-prefix: boot with:  cd $D && $entry"
+echo "ship-prefix: boot with:  cd $D && $ENTRY"

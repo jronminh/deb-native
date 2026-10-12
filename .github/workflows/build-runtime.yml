@@ -40,7 +40,7 @@ jobs:
       # payload comes straight from Debian's own .deb.  dn-trace is the
       # outermost process -- nothing traces it -- so it is linked static.  Its
       # own startup only needs `rseq` off, which the supported glibc tunable
-      # `GLIBC_TUNABLES=glibc.pthread.rseq=0` does; the artifact's contract
+      # `GLIBC_TUNABLES=glibc.pthread.rseq=0` does; the tree's boot/boot.sh
       # entry sets it where it launches dn-trace.
       - name: Fetch Debian's stock libc6-dev
         run: |

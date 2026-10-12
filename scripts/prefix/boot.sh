@@ -1,8 +1,8 @@
 #!/bin/sh
-# The tree's boot (docs/spec/prefix.md, "Boot"): start dn-monitor, the tree's
-# root process, against this prefix and its init.
+# The tree's boot (docs/spec/prefix.md, "The boot/ directory"): start
+# dn-monitor, the tree's root process, against this prefix and its init.
 #
-# Why a script and not the bare command line.  dn-monitor is the *outermost*
+# Why a script and not a bare command line.  dn-monitor is the *outermost*
 # process -- nothing traces it -- so its own startup must survive Android's
 # seccomp unaided.  A stock static glibc registers `rseq` at startup, and the
 # app domain TRAPs it: SIGSYS, and with no tracer above to answer it, the
@@ -12,11 +12,12 @@
 # whoever launches it.  This script is that launcher, and it is the only place
 # the boot's environment is decided.
 #
-# The contract's `entry` is this path; the host runs it with the prefix root as
-# the working directory, directly (the shebang resolves on the host) or through
-# a shell.  Any arguments are passed on to the prefix's init, which takes
-# [COMMAND [ARG...]] (docs/spec/prefix.md).
+# This file is the entry by convention (`boot/boot.sh`): the host runs it with
+# the prefix root as the working directory, directly (the shebang resolves on
+# the host) or through a shell.  Any arguments are passed on to the prefix's
+# init, which takes [COMMAND [ARG...]] (docs/spec/prefix.md).
 GLIBC_TUNABLES=glibc.pthread.rseq=0
 export GLIBC_TUNABLES
 
-exec "${0%/*}/dn-monitor" -- /usr/bin/bash /usr/lib/deb-native/init.sh "$@"
+root=${0%/*}/..
+exec "$root/usr/lib/deb-native/dn-monitor" -- /usr/bin/bash /boot/init.sh "$@"

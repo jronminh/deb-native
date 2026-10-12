@@ -4,7 +4,7 @@
 # built elsewhere and writes a tarball; it never touches a target.
 #
 # The prefix is staged in a scratch copy, the build invariants are applied and
-# the .dn/ contract is written (build/pack-prefix.py), then the copy is tarred.
+# the boot/ and .dn/ directories are written (build/pack-prefix.py), then the copy is tarred.
 # A manifest of the runtime components (path -> sha256) is written into the
 # prefix for dn-update, as before.
 #

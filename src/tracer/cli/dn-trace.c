@@ -42,9 +42,10 @@
 
 #define USAGE "usage: dn-monitor [-v LEVEL] [-u] [-b HOST[:GUEST]]... [TREE LOADER] [-- PROGRAM [ARG...]]\n"
 
-/* The prefix's init, run when no PROGRAM is given (docs/spec/prefix.md).  */
+/* The prefix's init, run when no PROGRAM is given (docs/spec/prefix.md, "The
+ * boot/ directory": the boot/ paths are the convention).  */
 static char *const DN_INIT[] = {
-	"/usr/bin/bash", "/usr/lib/deb-native/init.sh", NULL,
+	"/usr/bin/bash", "/boot/init.sh", NULL,
 };
 
 /* dn-monitor's own place in the tree, and the glibc loader beside it, both

@@ -1,9 +1,9 @@
 #!/bin/sh
-# The prefix's init.  The host boots the tree by running this through dn-trace,
-# the tree's root process (docs/spec/prefix.md, "Boot"):
+# The prefix's init.  dn-monitor, the tree's root process, runs this -- reached
+# through boot/boot.sh, the host's entry (docs/spec/prefix.md, "The boot/
+# directory"):
 #
-#   dn-trace <TREE> <TREE>/<loader> -- \
-#       /usr/bin/bash /usr/lib/deb-native/init.sh [COMMAND [ARG...]]
+#   dn-monitor -- /usr/bin/bash /boot/init.sh [COMMAND [ARG...]]
 #
 # Everything here uses **guest paths**: to the runtime the tree is "/", and
 # dn-policy maps each guest path back into the tree.  It sets up the

@@ -215,16 +215,14 @@ chmod 755 "$STAGE/usr/lib/deb-native/dn-monitor" "$STAGE/usr/lib/deb-native/dn-i
 # The launcher reads its policy from $DN/etc/deb-native/dn-interp.conf (a
 # compiled default stands in when the file is absent).
 cp -f "$DN_RUNTIME/dn-interp.conf" "$STAGE/etc/deb-native/dn-interp.conf"
-# The prefix's init: the host boots the tree through dn-monitor into this, and
-# it completes the prefix by itself on a first boot (docs/spec/prefix.md,
-# "Boot").
-cp -f "$ROOT/scripts/prefix/init.sh" "$STAGE/usr/lib/deb-native/init.sh"
-chmod 755 "$STAGE/usr/lib/deb-native/init.sh"
-# The boot script: the contract's entry.  It sets the one environment variable
-# dn-monitor's own startup needs (glibc.pthread.rseq=0, docs/spec/prefix.md,
-# "Boot") and execs dn-monitor.  The host runs it, not dn-monitor directly.
-cp -f "$ROOT/scripts/prefix/boot.sh" "$STAGE/usr/lib/deb-native/boot.sh"
-chmod 755 "$STAGE/usr/lib/deb-native/boot.sh"
+# The prefix's init and the boot script live at the prefix root's boot/
+# (docs/spec/prefix.md, "The boot/ directory"): boot.sh is the host's entry by
+# convention, init.sh is what dn-monitor runs, install.sh (added by
+# pack-prefix) is the host's activation, version is the manifest.
+mkdir -p "$STAGE/boot"
+cp -f "$ROOT/scripts/prefix/init.sh" "$STAGE/boot/init.sh"
+cp -f "$ROOT/scripts/prefix/boot.sh" "$STAGE/boot/boot.sh"
+chmod 755 "$STAGE/boot/init.sh" "$STAGE/boot/boot.sh"
 # dn-monitor IS the root, so it must run OUTSIDE the tree: it is built static
 # (self-contained -- libc and the vendored talloc are linked in), so a poor host
 # starts it with a bare exec and no loader at all, and dn-policy never

@@ -115,10 +115,10 @@ Design: [`docs/spec/prefix.md`](docs/spec/prefix.md),
 against stock `libc6-dev`); `build-prefix.yml` builds `core-ultra` and
 `core-deb` from the mirror's own stock `libc6`/`libc-bin` (an
 empty base + pinned `scripts/build/packages.tsv` + `profile.txt`) and publishes
-both to the single rolling `prefix` release. On device `ship-prefix.sh`
-extracts, `.dn/install.sh` relocates (the artifact's loader runs its `dn-elf`),
-and `.dn/bootstrap.sh` finishes core-deb (76 packages; `apt install figlet`
-runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
+both to the single rolling `prefix` release. On device `ship-prefix.sh` reads
+`boot/version`, extracts, runs `boot/install.sh`; the host boots through
+`boot/boot.sh`, and the prefix's init completes core-deb on its first boot
+(76 packages; `apt install figlet` runs).
 
 **Open**:
 

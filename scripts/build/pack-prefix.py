@@ -5,7 +5,7 @@ docs/spec/prefix.md, "Build invariants". Run on a copy of a built
 prefix (package-prefix.sh stages one); the tree is changed in place:
 
   - PT_INTERP is left as the build wrote it: the exec gate runs a program
-    through the runtime loader, and dn-trace derives ROOT from its own
+    through the runtime loader, and dn-monitor derives ROOT from its own
     location, so the entry names no root;
   - an ELF that names ROOT anywhere but in its interpreter fails the build;
   - text files that name ROOT are listed (the artifact is relocatable, so
@@ -13,7 +13,8 @@ prefix (package-prefix.sh stages one); the tree is changed in place:
   - absolute symlinks into ROOT become relative; ld.so.cache is removed;
   - home/, root -> home, mnt -> ../mnt and
     etc/resolv.conf -> ../../app/etc/resolv.conf are made;
-  - .dn/contract, .dn/packages and .dn/baked-paths are written.
+  - boot/install.sh and boot/version are written; .dn/packages and
+    .dn/baked-paths are written.
 
 Usage: pack-prefix.py TREE --root ROOT --name NAME [--desc TEXT]
                       [--version V]
@@ -26,13 +27,13 @@ import sys
 
 LOADER = "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
 PT_INTERP = 3
-# The command the host runs to open a session: the tree's boot script, a guest
-# path.  It sets the environment dn-monitor's own startup needs and execs
+# The host's interface is the boot/ directory at the prefix root
+# (docs/spec/prefix.md, "The boot/ directory"): the entry is the fixed path
+# boot/boot.sh, the activation boot/install.sh, and the manifest boot/version.
+# boot/boot.sh sets the environment dn-monitor's own startup needs and execs
 # dn-monitor, which derives the tree from its own location, uses the tree's
-# runtime loader and execs the prefix's init (docs/spec/prefix.md, "Boot").  It
-# is a full command line, run with the prefix root as the working directory,
-# and it names no root.
-ENTRY = ("usr/lib/deb-native/boot.sh")
+# runtime loader and execs the prefix's init.  It names no root.
+ENTRY = "boot/boot.sh"
 
 
 def elf_interp(path):
@@ -76,17 +77,13 @@ def main():
     ap.add_argument("--version", default="")
     ap.add_argument("--install", default=os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts/host/install-prefix.sh"),
-        help="host-side activation script, copied to .dn/install.sh")
-    ap.add_argument("--entry", default=None,
-        help="the command that boots / opens a session, written as the contract's entry= "
-             "(default: dn-trace -- the init)")
+        help="host-side activation script, copied to boot/install.sh")
     a = ap.parse_args()
 
     T = os.path.abspath(a.tree)
     ROOT = a.root.rstrip("/")
     rootb = ROOT.encode()
     build_ld = ROOT + "/" + LOADER
-    entry = a.entry if a.entry is not None else ENTRY
     if not os.path.exists(os.path.join(T, LOADER)):
         sys.exit(f"pack-prefix: {T} has no {LOADER}")
 
@@ -174,11 +171,15 @@ def main():
                 if kv.get("Status", "").endswith(" installed") and "Package" in kv:
                     o.write(f"{kv['Package']}\t{kv.get('Version', '')}\t{kv.get('Architecture', '')}\n")
 
-    # The host-side activation script the contract names.  The prefix's
-    # completion is not a script here: the prefix's own init does it on its
-    # first boot (docs/spec/prefix.md, "Boot").
-    shutil.copyfile(a.install, os.path.join(dn, "install.sh"))
-    os.chmod(os.path.join(dn, "install.sh"), 0o755)
+    # The boot/ directory at the prefix root is the host's interface
+    # (docs/spec/prefix.md, "The boot/ directory"): boot.sh (the entry the host
+    # runs), init.sh (the prefix's init), install.sh (the host activation) and
+    # version (the manifest it reads).  boot.sh and init.sh are placed there by
+    # the build; pack-prefix writes the activation and the version file.
+    boot = os.path.join(T, "boot")
+    os.makedirs(boot, exist_ok=True)
+    shutil.copyfile(a.install, os.path.join(boot, "install.sh"))
+    os.chmod(os.path.join(boot, "install.sh"), 0o755)
     size_mib = 0
     for dp, dns, fns in os.walk(T):
         for n in fns:
@@ -186,15 +187,19 @@ def main():
             if not os.path.islink(p):
                 size_mib += os.path.getsize(p)
     size_mib = size_mib // (1024 * 1024) + 1
-    lines = ["# dn prefix contract (docs/spec/prefix.md)",
-             "contract=1", f"name={a.name}"]
+    # boot/version replaces the old .dn/contract: the same facts, in a plain
+    # file -- and, like the contract was, readable from the tarball *before*
+    # extracting it (tar -xzOf ART ./boot/version).  No entry= or install=: the
+    # boot/ paths are the convention.
+    lines = ["# dn prefix version (docs/spec/prefix.md)", "format=2",
+             f"name={a.name}"]
     if a.desc:
         lines.append(f"desc={a.desc}")
     if a.version:
         lines.append(f"version={a.version}")
-    lines += ["arch=aarch64", f"loader={LOADER}",
-              "install=.dn/install.sh", f"entry={entry}", f"size={size_mib}"]
-    with open(os.path.join(dn, "contract"), "w") as f:
+    lines.append("arch=aarch64")
+    lines.append(f"size={size_mib}")
+    with open(os.path.join(boot, "version"), "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"pack-prefix: {a.name}: {len(text)} text, "
           f"{relinked} links made relative, {size_mib} MiB")

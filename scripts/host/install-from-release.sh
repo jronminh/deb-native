@@ -68,9 +68,8 @@ echo "install-from-release: fetching $URL"
 fetch "$URL" "$ART" || die "download failed: $URL"
 
 # The install path: DEST (or DN_DEST); else a fixed-root artifact's root=
-# (read without extracting, as ship-prefix.sh does); else ./<name>.
-if [ -z "$DEST" ]; then
-  ROOT=$(tar -xzOf "$ART" ./.dn/contract 2>/dev/null | sed -n 's/^root=//p')
+# (read without extracting, as ship-prefix.sh does); else ./<name>.if [ -z "$DEST" ]; then
+  ROOT=$(tar -xzOf "$ART" ./boot/version 2>/dev/null | sed -n 's/^root=//p')
   DEST=${ROOT:-$PWD/$NAME}
 fi
 

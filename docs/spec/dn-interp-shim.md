@@ -53,7 +53,7 @@ them.
 ## Boot
 
 ```
-HOST runs the contract entry
+HOST runs the entry (boot/boot.sh)
   └─ TREE/usr/lib/deb-native/boot.sh
        │  GLIBC_TUNABLES=glibc.pthread.rseq=0   ← dn-monitor's own startup
        │  exec dn-monitor

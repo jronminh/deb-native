@@ -77,12 +77,13 @@ jobs:
             --desc "core-ultra: the minimal prefix -- stock glibc, shell, basic tools" \
             --out core-ultra.tar.gz
 
-      - name: Show the contracts
+      - name: Show the version manifest
         run: |
           for t in core-deb.tar.gz core-ultra.tar.gz; do
             echo "== $t =="
-            tar -xzOf "$t" ./.dn/contract
-            tar -tzf "$t" | grep -q '^\./\.dn/install\.sh$'
+            tar -xzOf "$t" ./boot/version
+            tar -tzf "$t" | grep -q '^\./boot/boot\.sh$'
+            tar -tzf "$t" | grep -q '^\./boot/install\.sh$'
           done
 
       - uses: actions/upload-artifact@v4

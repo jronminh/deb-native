@@ -6,16 +6,16 @@ A **prefix** is a self-contained Debian `arm64` userland in one tarball: its
 own glibc, `apt`, and files, with the runtime from [`runtime.md`](runtime.md)
 at `RT` inside it. This doc covers how a prefix is **built** (a build host with
 a toolchain and network) and **shipped** (a poor host: a POSIX shell and
-toybox). It is the artifact contract — what the build produces, what `.dn/`
-carries, and the steps a host runs. Status: living doc; the build and ship
-stages below are what the scripts do.
+toybox). It is the artifact contract — what the build produces, what `boot/`
+and `.dn/` carry, and the steps a host runs. Status: living doc; the build and
+ship stages below are what the scripts do.
 
 ## Contents
 
 - [The model](#the-model)
 - [Layers](#layers)
 - [The `.dn/` directory](#the-dn-directory)
-- [The contract file](#the-contract-file)
+- [The boot/ directory](#the-boot-directory)
 - [Build](#build)
 - [Ship](#ship)
 - [Completion](#boot)
@@ -76,17 +76,20 @@ record of what it contains.
 
 ## The `.dn/` directory
 
-Every artifact carries `.dn/` at its root — the prefix's interface to its host,
-outside the FHS tree:
+Every artifact carries `boot/` at its root — the prefix's interface to its host,
+outside the runtime's own directory:
 
 ```
 <prefix>/
+├── boot/                the host's interface (the convention)
+│   ├── boot.sh          /bin/sh, the entry: sets the boot env, execs dn-monitor
+│   ├── init.sh          the prefix's init, run by dn-monitor
+│   ├── install.sh       /system/bin/sh, run by the host's shell: activate
+│   └── version          data: key=value, read by the host without running code
 ├── .dn/
-│   ├── contract        data: key=value, read by the host without running code
 │   ├── packages        the Debian packages the prefix contains
 │   ├── profile         the packages a bootstrap restores from the mirror
-│   ├── baked-paths     files naming the build path (empty: relocatable)
-│   └── install.sh      /system/bin/sh, run by the host's shell: activate
+│   └── baked-paths     files naming the build path (empty: relocatable)
 ├── home/
 ├── root -> home
 ├── mnt -> ../mnt
@@ -101,36 +104,37 @@ relocatable artifact names its root nowhere, so the list is **empty**; a
 non-empty `text` list means some file still names the build path, and
 `pack-prefix.py` fails the build on an `elf` that does.
 
-## The contract file
+## The boot/ directory
 
-`.dn/contract` is plain text a POSIX shell parses with `while read`: one
+`boot/` holds the prefix's boot scripts; its paths are the host's **convention**
+— the entry is `boot/boot.sh`, the activation `boot/install.sh`, the manifest
+`boot/version`.  There is no contract file: everything a host needs to know
+before extracting is in `boot/version`, which is read from the tarball the same
+way (`tar -xzOf ART ./boot/version`).
+
+`boot/version` is plain text a POSIX shell parses with `while read`: one
 `key=value` per line, split at the first `=`; blank lines and `#` ignored; an
 unknown key warns but does not fail.
 
 | key | required | meaning |
 | --- | --- | --- |
-| `contract` | yes | the contract version (integer); this doc is version `1` |
+| `format` | yes | the layout version (integer); this doc is version `2` |
 | `name` | yes | the default directory name and the name the host shows |
 | `desc` | no | one line describing the prefix |
 | `version` | no | the prefix's own version (`VERSION` at the repo root) |
 | `arch` | yes | the CPU architecture (`uname -m`) |
-| `loader` | yes | the loader, relative to the root |
-| `install` | yes | the activation script, relative to the root |
-| `entry` | yes | the command that boots / opens a session; a full command line, run by the host with the prefix root as the working directory |
 | `size` | no | the extracted size in MiB, for a free-space check |
+| `root` | no | a fixed root: the path the artifact was built for |
 
 Example (core-deb):
 
 ```
-# dn prefix contract
-contract=1
+# dn prefix version
+format=2
 name=core-deb
 desc=core-deb: core-ultra plus apt and dpkg
 version=0.7.1-dev
 arch=aarch64
-loader=usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
-install=.dn/install.sh
-entry=usr/lib/deb-native/boot.sh
 size=200
 ```
 
@@ -188,30 +192,30 @@ The build inputs to step 3:
 | `STAGE_OUT` | optional; keep the built tree (for `cut-core-ultra.py`) |
 
 `package-prefix.sh` stages a copy, runs `pack-prefix.py` on it (the build
-invariants and `.dn/`), then `tar --hard-dereference -czf` it (a poor host's
-tar cannot recreate hard links). `pack-prefix.py` makes every symlink inside
-the tree relative, removes any `ld.so.cache`, creates `home/`, `root`,
+invariants, `boot/` and `.dn/`), then `tar --hard-dereference -czf` it (a poor
+host's tar cannot recreate hard links). `pack-prefix.py` makes every symlink
+inside the tree relative, removes any `ld.so.cache`, creates `home/`, `root`,
 `mnt` and `etc/resolv.conf`, records `.dn/baked-paths` and `.dn/packages`, and
-writes `.dn/contract`. It fails the build if any file names `PREFIX_ROOT`.
+writes `boot/install.sh` and `boot/version`. It fails the build if any file
+names `PREFIX_ROOT`.
 
 ## Ship
 
 `scripts/host/ship-prefix.sh ARTIFACT.tar.gz DEST` is the one install path,
 run on the host's own shell with only POSIX sh and toybox:
 
-1. **Read the contract without extracting** (`tar -xzOf ARTIFACT
-   ./.dn/contract`) and check it: a known contract version, `arch` matching
+1. **Read the manifest without extracting** (`tar -xzOf ARTIFACT
+   ./boot/version`) and check it: a known layout version, `arch` matching
    `uname -m`, a valid name, the target absent, and `size` fitting the free
    space. A current artifact names no root; one that still carries `root=` only
    installs at that path.
 2. **Extract**: `mkdir DEST && tar -xzf`.
-3. **Activate**: `DN_INSTDIR=DEST sh DEST/.dn/install.sh`. It wires the host's
-   session entry (`DN_SESSION_SHELL`), if set, to the contract's `entry`. No
+3. **Activate**: `DN_INSTDIR=DEST sh DEST/boot/install.sh`. It wires the host's
+   session entry (`DN_SESSION_SHELL`), if set, to the entry, `boot/boot.sh`. No
    tree program runs here.
-4. **Check the tree runs**: start it through `boot.sh` for a trivial command
-   (`DEST/usr/lib/deb-native/boot.sh /usr/bin/bash -c 'exit 0'`, or the same
-   `entry` line the contract carries). This is
-   the acceptance test.
+4. **Check the tree runs**: start it through the entry for a trivial command
+   (`cd DEST && sh boot/boot.sh /usr/bin/bash -c 'exit 0'`). This is the
+   acceptance test.
 5. On any failure, remove `DEST` and report.
 
 The host never edits a file inside the prefix; everything prefix-specific is
@@ -219,14 +223,14 @@ the prefix's own scripts.
 
 ## Boot
 
-The host boots the tree by running the contract's `entry`, `boot.sh`, from the
-prefix root. `boot.sh` is the one place the boot environment is decided: it sets
+The host boots the tree by running the entry, `boot/boot.sh`, from the prefix
+root. `boot.sh` is the one place the boot environment is decided: it sets
 `GLIBC_TUNABLES=glibc.pthread.rseq=0` — `dn-monitor` is the outermost process,
 nothing traces it, and a stock static glibc's startup would otherwise be killed
 by Android's seccomp on `rseq` — and execs `dn-monitor`, which **derives** the
 tree from its own location
 (`TREE/usr/lib/deb-native/dn-monitor`) and takes its runtime loader from the
-fixed path `TREE/<loader>`, so it never parses the contract and names no root;
+fixed path `TREE/<loader>`, so it never parses a manifest and names no root;
 an optional `-- PROGRAM ARGS...` is in guest paths and defaults to the init:
 
 ```

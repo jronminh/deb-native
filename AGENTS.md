@@ -17,16 +17,16 @@ There is **no build on the host**.
   runtime (`scripts/build/build-trace.sh` — `dn-trace`, one static
   binary with the syscall catalog embedded, plain-gcc, linked against stock
   `libc6-dev`), and the prefix artifact
-  (`build-core-deb.sh` + `package-prefix.sh`, which writes `.dn/` —
+  (`build-core-deb.sh` + `package-prefix.sh`, which writes `boot/` and `.dn/` —
   `docs/spec/prefix.md`).
 - **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
-  `.dn/contract` without extracting, extract, run `.dn/install.sh`. This is the
+  `boot/version` without extracting, extract, run `boot/install.sh`. This is the
   one install path, on a **poor host** (POSIX sh + toybox only).
-- **Activate / boot**: the artifact's own `.dn/install.sh` (host shell) wires
-  the session entry; the host then boots the tree by running the contract's
-  `entry`, which starts `dn-trace` and the prefix's init -- `dn-trace` derives
-  the prefix root from its own location, so the artifact is relocatable; init
-  completes `.dn/profile` itself on a first boot.
+- **Activate / boot**: the artifact's own `boot/install.sh` (host shell) wires
+  the session entry; the host then boots the tree by running the entry,
+  `boot/boot.sh`, which starts `dn-monitor` and the prefix's init -- `dn-monitor`
+  derives the prefix root from its own location, so the artifact is relocatable;
+  init completes `.dn/profile` itself on a first boot.
 
 Run time is one policy in two places: dn-policy, called in-process by
 dn-shim (the fast path) and via `dn-trace`'s ptrace fallback

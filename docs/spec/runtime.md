@@ -120,12 +120,12 @@ it) ships as one tarball ([`prefix.md`](prefix.md)).
 
 ### Boot order
 
-1. The host runs the contract's `entry` from the prefix root
-   ([`prefix.md`](prefix.md), "Boot"): `dn-trace -- /usr/bin/bash
-   /usr/lib/deb-native/init.sh`. `dn-trace` derives TREE from its own location
-   (it lives at `TREE/usr/lib/deb-native/dn-monitor`) and LOADER from
-   `TREE/<loader>`, so the entry names no root.
-2. `dn-trace` forks a child, marked traced (fork, vfork, clone and exec all
+1. The host runs the entry from the prefix root
+   ([`prefix.md`](prefix.md), "The boot/ directory"): `boot/boot.sh`, which sets
+   the boot environment and execs `dn-monitor`. `dn-monitor` derives TREE from
+   its own location (it lives at `TREE/usr/lib/deb-native/dn-monitor`) and LOADER
+   from `TREE/<loader>`, so the entry names no root.
+2. `dn-monitor` forks a child, marked traced (fork, vfork, clone and exec all
    tracked). The child installs the shared filter itself, then execs the
    prefix's init. The filter propagates to every later process.
 3. That `exec` already passes through the exec gate: rule 3 runs the shell
