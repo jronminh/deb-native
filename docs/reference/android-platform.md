@@ -168,7 +168,7 @@ assumed.
 
 | finding | where recorded | gate | own-glibc fixes? |
 |---|---|---|---|
-| Debian's stock `libc6` killed at startup | [`design.md`](../spec/runtime.md) | A — glibc's own dynamic-linker startup, confirmed by direct test (`../log/android-seccomp-audit.md`, "Closed... stock Debian `libc6` doesn't even reach a syscall question") | **partially** — own-glibc *is* "Termux's glibc" in this framing, i.e. the fix is patching glibc's startup path around whatever it trips, same as Termux already does |
+| Debian's stock `libc6` **starts and runs under the tracer** (re-tested 2026-10-12, `beyond0q`); the earlier "killed at startup" was the seccomp `TRAP` on `rseq`/`clone3` with **no tracer attached** | this doc, ["Stock libc6 re-tested"](#stock-libc6-re-tested-the-startup-crash-was-an-unhandled-seccomp-sigsys) | A — `rseq` (#293) / `clone3` (#435) `SECCOMP_RET_TRAP`, answered by the tracer's existing SIGSYS→ENOSYS emulation | **no** — the tracer already answers it (`src/tracer/tracee/seccomp.c`); glibc needs no startup patch |
 | `set_robust_list` SIGSYS on static binaries | [`tracer.md`](../spec/runtime.md) | A | no (tracer's SIGSYS emulation already answers it) |
 | NSS opens (`getpwnam`, ...) via `__open_nocancel` | [`shim-coverage.md`](../spec/runtime.md), [`syscall-boundary.md`](syscall-boundary.md) | neither — not a kernel block, a *libc-internal symbol binding* choice | **yes** — this is the case own-glibc already targets |
 | `gconv`/locale modules, `ld.so.cache`, `RUNPATH` | [`runtime-failures.md`](../spec/runtime.md) B | neither — same as NSS, loader-internal path choice | **yes**, same mechanism as NSS |
@@ -183,6 +183,58 @@ Everything but the NSS/loader-internal row is Gate A, B, or C,
 library-agnostic — own-glibc's scope should be understood as "fixes the
 NSS/loader-internal row and whatever startup syscall stock `libc6` trips,"
 not a general fix for "things Android breaks."
+
+### Stock `libc6` re-tested: the startup crash was an unhandled seccomp SIGSYS
+
+The row above used to read "Debian's stock `libc6` killed at startup …
+glibc's own dynamic-linker startup, before any syscall." That
+classification does not survive a re-test on the target device. What was
+observed was an **unhandled seccomp `SIGSYS` at the syscall boundary**, not
+a fault under it — so it sits in the lane the tracer already owns.
+
+**Setup.** SM-G970W (`beyond0q`), Android 12 / SDK 31, kernel
+`4.14.190-23725627-abG970WVLU9IXE1`, app domain `u:r:untrusted_app_27:s0`,
+`Seccomp: 2`, `NoNewPrivs: 1`. Test binaries: Debian's own
+`ld-linux-aarch64.so.1` and `libc.so.6` extracted from
+`libc6_2.41-12+deb13u4_arm64.deb`, byte-identical to the `.deb` (no patch,
+no `PT_INTERP` rewrite). Programs: a trivial `hello`, a `pthread` + NSS +
+`/etc/os-release` probe, and real prefix binaries (`bash`, `env`, `ls`,
+`cat`, `sed`, `grep`, `tar`, `gzip`).
+
+**Result.** All of them run, exit `0`, under `dn-trace` in the app domain.
+The only interventions are two warnings, both from the existing emulation
+in `src/tracer/tracee/seccomp.c`:
+
+```
+dn-trace warning: blocked syscall rseq (#293) denied by seccomp; returning ENOSYS
+dn-trace warning: blocked syscall clone3 (#435) denied by seccomp; returning ENOSYS
+```
+
+`rseq` appears on every program (glibc registers it at startup); `clone3`
+only when a thread is created — and `ENOSYS` is exactly the answer glibc
+wants (rseq: "not supported, disable it"; clone3: "fall back to `clone`").
+`LD_DEBUG=libs` confirms the stock object really is the one in play
+(`calling init: /tmp/stock/libc.so.6`; its md5 differs from the prefix's
+patched build).
+
+**Mechanism.** Android's app seccomp policy answers `rseq`/`clone3` with
+`SECCOMP_RET_TRAP`, which delivers `SIGSYS`; with no handler installed the
+process dies (`Bad system call`). Reproduced directly: in `runas_app`
+(`Seccomp: 0`, no Android filter) with a hand-installed filter that
+`TRAP`s only `rseq`/`clone3`, stock glibc run **untraced** prints
+`Bad system call` and dies, while the same program under `dn-trace` runs.
+That is the whole difference — a `SIGSYS` the tracer converts to `ENOSYS`,
+via `set_result_after_seccomp`.
+
+**Consequence for the glibc patch.** `dn-glibc-android.patch` is not
+load-bearing for loader startup. Its startup-adjacent hunks are already
+covered by the tracer (`set_robust_list`, `clone3`, `rseq` → the SIGSYS
+emulation above) and its path/NSS/`@DN_PREFIX@` hunks are covered by the
+tracer/shim path mapping. One hunk is actively *wrong* for the shim lane:
+the `elf/rtld.c` change that nulls `state.preloadlist` (it exists because
+`main`'s fused loader delivers its policy through `ld.so.preload`) would
+suppress the `LD_PRELOAD` that carries `dn-shim.so` on this branch, and
+must be dropped. See `../spec/dn-interp-shim.md` for the trim.
 
 ## Termux's Android glibc patch: catalog and fork verdict
 
