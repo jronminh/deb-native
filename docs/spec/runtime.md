@@ -41,6 +41,8 @@ and [`dn-interp-shim.md`](dn-interp-shim.md).
   platform refuses (mount, raw sockets, privileged ports, capabilities).
 - [`native.md`](native.md) — the execution model those pieces serve:
   near-full behaviour at near-native speed.
+- [`monitor.md`](monitor.md) — the runtime's roles (`dn-monitor`, `dn-shim`,
+  `dn-trace`) and how they coordinate.
 - [`../../src/dn-policy/`](../../src/dn-policy) — the policy library itself.
 - [`../../src/tracer/`](../../src/tracer) — `dn-trace`, the tracer.
 - [`../../src/syscalls.tsv`](../../src/syscalls.tsv) — the syscall catalog.
