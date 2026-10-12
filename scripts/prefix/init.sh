@@ -44,7 +44,7 @@ fi
 # First boot: complete the prefix (apt update + install /var/lib/deb-native/profile), then
 # mark it done.  A later boot skips straight to the command.
 if [ -f /var/lib/deb-native/profile ] && [ ! -f /var/lib/deb-native/bootstrapped ]; then
-  /usr/bin/bash /usr/lib/deb-native/scripts/runtime/bootstrap-prefix.sh
+  /usr/bin/bash /boot/bootstrap.sh
 fi
 
 if [ $# -gt 0 ]; then

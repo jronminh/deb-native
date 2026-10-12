@@ -84,6 +84,7 @@ and its own files under `var/lib/deb-native/`:
 ├── boot/                       the host's interface (the convention)
 │   ├── boot.sh                 /bin/sh, the entry: sets the boot env, execs dn-monitor
 │   ├── init.sh                 the prefix's init, run by dn-monitor
+│   ├── bootstrap.sh            the first-boot completion (configure + the profile)
 │   ├── install.sh              /system/bin/sh, run by the host's shell: activate
 │   └── version                 data: key=value, read by the host without running code
 ├── var/lib/deb-native/
@@ -113,9 +114,10 @@ non-empty `text` list means some file still names the build path, and
 
 `boot/` holds the prefix's boot scripts; its paths are the host's **convention**
 — the entry is `boot/boot.sh`, the activation `boot/install.sh`, the manifest
-`boot/version`.  There is no contract file: everything a host needs to know
-before extracting is in `boot/version`, which is read from the tarball the same
-way (`tar -xzOf ART ./boot/version`).
+`boot/version`.  `boot/init.sh` is the prefix's init (run by dn-monitor), and
+`boot/bootstrap.sh` the first-boot completion it calls.  There is no contract
+file: everything a host needs to know before extracting is in `boot/version`,
+which is read from the tarball the same way (`tar -xzOf ART ./boot/version`).
 
 `boot/version` is plain text a POSIX shell parses with `while read`: one
 `key=value` per line, split at the first `=`; blank lines and `#` ignored; an

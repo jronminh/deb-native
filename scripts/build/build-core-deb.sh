@@ -140,7 +140,7 @@ while read -r name ver deb; do
   {
     dpkg-deb -f "$deb"
     # Unpacked, not configured: the build cannot run a package's scripts,
-    # so the prefix's first boot runs them (bootstrap-prefix.sh: each
+    # so the prefix's first boot runs them (boot/bootstrap.sh: each
     # preinst, then dpkg --configure -a), as debootstrap's second stage
     # does.  The conffiles are left in place; dpkg takes them as installed.
     # glibc is Debian's own stock package now, so it gets no special status:
@@ -258,11 +258,12 @@ REL
 } > "$REPO/Release"
 
 
-# 7. deb-native's own layer: the bootstrap helper the prefix runs at login.
-#    Runtime v1 needs no apt hooks -- a .deb installs intact, and dn-policy
-#    rewrites paths and identities at run time (docs/spec/runtime.md).
-mkdir -p "$STAGE/usr/lib/deb-native/scripts/runtime"
-cp -f "$ROOT/scripts/host/bootstrap-prefix.sh" "$STAGE/usr/lib/deb-native/scripts/runtime/"
+# 7. deb-native's own layer: the bootstrap helper the prefix runs on its first
+#    boot (docs/spec/prefix.md, "Boot").  Runtime v1 needs no apt hooks -- a
+#    .deb installs intact, and dn-policy rewrites paths and identities at run
+#    time (docs/spec/runtime.md).
+cp -f "$ROOT/scripts/prefix/bootstrap.sh" "$STAGE/boot/bootstrap.sh"
+chmod 755 "$STAGE/boot/bootstrap.sh"
 # The alternatives that mawk's configure step would make: the package manager's
 # awk is the link, not the file (a shipped tree is not configured).
 [ -e "$STAGE/usr/bin/awk" ] || [ -L "$STAGE/usr/bin/awk" ] || ln -s mawk "$STAGE/usr/bin/awk"

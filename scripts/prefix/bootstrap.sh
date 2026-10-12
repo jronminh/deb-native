@@ -2,7 +2,7 @@
 # Complete a shipped core-deb: install the packages named in /var/lib/deb-native/profile from
 # the mirror, inside the prefix.  Run by the prefix's init on its first boot,
 # under dn-monitor -- so every path here is a **guest** path.
-#   bash /usr/lib/deb-native/scripts/runtime/bootstrap-prefix.sh
+#   bash /boot/bootstrap.sh
 # Re-running after a partial failure is safe (apt skips what is installed).
 set -eu
 PATH=/usr/lib/deb-native/priv:/usr/sbin:/usr/bin:/sbin:/bin
