@@ -189,6 +189,34 @@ const char *get_path_binding(const Tracee *tracee, Side side, const char path[PA
 	}
 }
 
+/* Longest-match test for "already a host path". get_binding() returns the
+ * first match in list order, not the longest, so walk both sides here. */
+bool binding_already_host(const Tracee *tracee, const char path[PATH_MAX])
+{
+	size_t path_length = strlen(path);
+	size_t host_best = 0;
+	size_t guest_best = 0;
+	const Binding *binding;
+
+	CIRCLEQ_FOREACH_(tracee, binding, HOST) {
+		Comparison comparison = compare_paths2(binding->host.path, binding->host.length,
+						       path, path_length);
+		if ((comparison == PATHS_ARE_EQUAL || comparison == PATH1_IS_PREFIX)
+		    && binding->host.length > host_best)
+			host_best = binding->host.length;
+	}
+
+	CIRCLEQ_FOREACH_(tracee, binding, GUEST) {
+		Comparison comparison = compare_paths2(binding->guest.path, binding->guest.length,
+						       path, path_length);
+		if ((comparison == PATHS_ARE_EQUAL || comparison == PATH1_IS_PREFIX)
+		    && binding->guest.length > guest_best)
+			guest_best = binding->guest.length;
+	}
+
+	return host_best >= guest_best && host_best > 0;
+}
+
 /**
  * Return the path to the guest rootfs for the given @tracee, from the
  * host point-of-view obviously.  Depending on whether

@@ -52,11 +52,64 @@ static DnBinding bindings[DN_MAX_BINDINGS];
 static size_t binding_count;
 
 static int path_join(char *out, size_t cap, const char *a, const char *b);
+static int has_path_prefix(const char *path, const char *prefix, size_t prefix_len);
 
 static int binding_prefix(const char *path, const char *prefix, size_t len)
 {
 	return strncmp(path, prefix, len) == 0
 		&& (path[len] == '\0' || path[len] == '/');
+}
+
+/* Longest host-side match: the tree root, or a row's android side. */
+static size_t longest_host_match(const char *path)
+{
+	size_t best = has_path_prefix(path, tree_root, tree_root_len) ? tree_root_len : 0;
+	size_t i;
+
+	for (i = 0; i < binding_count; i++)
+		if (bindings[i].host_len > best
+		    && binding_prefix(path, bindings[i].host, bindings[i].host_len))
+			best = bindings[i].host_len;
+	return best;
+}
+
+/* Longest tree-side (guest) match, and the winning row index (or (size_t)-1). */
+static size_t longest_guest_match(const char *path, size_t *index_out)
+{
+	size_t best = 0;
+	size_t i;
+
+	*index_out = (size_t)-1;
+	for (i = 0; i < binding_count; i++)
+		if (bindings[i].guest_len > best
+		    && binding_prefix(path, bindings[i].guest, bindings[i].guest_len)) {
+			best = bindings[i].guest_len;
+			*index_out = i;
+		}
+	return best;
+}
+
+/* A path is already a host path when its longest host-side match is at least
+ * as long as its longest tree-side match: a more specific guest row wins
+ * (e.g. /dev/shm over the /dev passthrough row). */
+static int already_host(const char *path, size_t *guest_index)
+{
+	size_t host_best = longest_host_match(path);
+	size_t guest_best = longest_guest_match(path, guest_index);
+
+	return host_best >= guest_best && host_best > 0;
+}
+
+/* Map @path through the row at @index into @out. Returns 0 or -errno. */
+static int map_via_binding(size_t index, const char *path, char *out, size_t cap)
+{
+	size_t rest = strlen(path + bindings[index].guest_len);
+
+	if (bindings[index].host_len + rest + 1 > cap)
+		return -ENAMETOOLONG;
+	memcpy(out, bindings[index].host, bindings[index].host_len);
+	memcpy(out + bindings[index].host_len, path + bindings[index].guest_len, rest + 1);
+	return 0;
 }
 
 static int add_binding(const char *host, const char *guest)
@@ -507,42 +560,22 @@ static int map_and_resolve(const char *guest_path, char *host_path_out, size_t c
 static int translate_path_common(const char *guest_path, char *host_path_out, size_t cap,
 				int follow_last)
 {
-	size_t i;
-
 	if (!initialized)
 		return -EINVAL;
 	if (guest_path == NULL || guest_path[0] != '/')
 		return -EINVAL;
 
-	/* Already a host path (TREE covers RT too, since RT sits inside
-	 * TREE) -- "Dịch không được lặp."  */
-	if (has_path_prefix(guest_path, tree_root, tree_root_len))
-		return copy_out(guest_path, host_path_out, cap);
-
-	/* The host side of a binding is also already a host path: the shim maps
-	 * /mnt -> /sdcard and the guarded call may still reach the tracer, which
-	 * must not translate /sdcard a second time into TREE/sdcard. */
-	for (i = 0; i < binding_count; i++)
-		if (binding_prefix(guest_path, bindings[i].host, bindings[i].host_len))
+	/* Already a host path (under TREE, or under a row's android side when
+	 * that match is at least as specific as any tree-side row) -- "Dịch
+	 * không được lặp."  A more specific guest row still wins, so /dev/shm
+	 * maps even though /dev is a passthrough row.  */
+	{
+		size_t gi;
+		if (already_host(guest_path, &gi))
 			return copy_out(guest_path, host_path_out, cap);
-
-	/* /proc, /sys, /dev: shared with the real system unchanged, no
-	 * in-tree symlink semantics apply.  */
-	for (i = 0; i < binding_count; i++)
-		if (binding_prefix(guest_path, bindings[i].guest, bindings[i].guest_len)) {
-			size_t best = i;
-			for (size_t j = i + 1; j < binding_count; j++)
-				if (bindings[j].guest_len > bindings[best].guest_len
-				    && binding_prefix(guest_path, bindings[j].guest, bindings[j].guest_len))
-					best = j;
-			if (bindings[best].host_len + strlen(guest_path + bindings[best].guest_len) + 1 > cap)
-				return -ENAMETOOLONG;
-			memcpy(host_path_out, bindings[best].host, bindings[best].host_len);
-			memcpy(host_path_out + bindings[best].host_len,
-			       guest_path + bindings[best].guest_len,
-			       strlen(guest_path + bindings[best].guest_len) + 1);
-			return 0;
-		}
+		if (gi != (size_t)-1)
+			return map_via_binding(gi, guest_path, host_path_out, cap);
+	}
 
 	/* guest_path == "/": tree_root itself, not "tree_root/" (which
 	 * has_path_prefix() would still match later, but a bare root is
@@ -557,36 +590,19 @@ static int translate_path_common(const char *guest_path, char *host_path_out, si
 int dn_policy_redirect_path(const char *guest_path, char *host_path_out, size_t cap)
 {
 	size_t len;
-	size_t i;
 
 	if (!initialized)
 		return -EINVAL;
 	if (guest_path == NULL || guest_path[0] != '/')
 		return -EINVAL;
 
-	if (has_path_prefix(guest_path, tree_root, tree_root_len))
-		return copy_out(guest_path, host_path_out, cap);
-
-	/* Host side of a binding: already translated (see translate_path_common). */
-	for (i = 0; i < binding_count; i++)
-		if (binding_prefix(guest_path, bindings[i].host, bindings[i].host_len))
+	{
+		size_t gi;
+		if (already_host(guest_path, &gi))
 			return copy_out(guest_path, host_path_out, cap);
-
-	for (i = 0; i < binding_count; i++)
-		if (binding_prefix(guest_path, bindings[i].guest, bindings[i].guest_len)) {
-			size_t best = i;
-			for (size_t j = i + 1; j < binding_count; j++)
-				if (bindings[j].guest_len > bindings[best].guest_len
-				    && binding_prefix(guest_path, bindings[j].guest, bindings[j].guest_len))
-					best = j;
-			if (bindings[best].host_len + strlen(guest_path + bindings[best].guest_len) + 1 > cap)
-				return -ENAMETOOLONG;
-			memcpy(host_path_out, bindings[best].host, bindings[best].host_len);
-			memcpy(host_path_out + bindings[best].host_len,
-			       guest_path + bindings[best].guest_len,
-			       strlen(guest_path + bindings[best].guest_len) + 1);
-			return 0;
-		}
+		if (gi != (size_t)-1)
+			return map_via_binding(gi, guest_path, host_path_out, cap);
+	}
 
 	/* TREE == "/" needs no prefix. Otherwise guest paths already begin with
 	 * '/', so concatenation needs no separator or normalization. */

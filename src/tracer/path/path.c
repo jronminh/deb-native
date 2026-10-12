@@ -454,10 +454,10 @@ int translate_path(Tracee *tracee, char result[PATH_MAX], int dir_fd,
 	strcpy(result, "/");
 
 	/* Translation must not repeat: a path already under a binding's host
-	 * side is a host path (the shim maps /mnt -> /sdcard and, when the
-	 * guarded call still reaches the tracer, /sdcard must not be mapped a
-	 * second time into the tree).  Leave it unchanged. */
-	if (guest_path[0] == '/' && get_path_binding(tracee, HOST, guest_path) != NULL) {
+	 * side (or the tree root) is a host path.  A more specific guest
+	 * binding still wins, so /dev/shm is not mistaken for the /dev
+	 * passthrough's host side. */
+	if (guest_path[0] == '/' && binding_already_host(tracee, guest_path)) {
 		strcpy(result, guest_path);
 		goto skip;
 	}

@@ -51,6 +51,10 @@ extern Binding *new_binding(Tracee *tracee, const char *host, const char *guest,
 extern int initialize_bindings(Tracee *tracee);
 extern const char *get_path_binding(const Tracee* tracee, Side side, const char path[PATH_MAX]);
 extern Binding *get_binding(const Tracee *tracee, Side side, const char path[PATH_MAX]);
+/* True when @path is already host-shaped: its longest host-side match (root or
+ * a binding host) is at least as long as its longest guest-side match. A more
+ * specific guest binding still wins (e.g. /dev/shm over a /dev passthrough). */
+extern bool binding_already_host(const Tracee *tracee, const char path[PATH_MAX]);
 extern const char *get_root(const Tracee* tracee);
 extern int substitute_binding(const Tracee* tracee, Side side, char path[PATH_MAX]);
 extern void remove_binding_from_all_lists(const Tracee *tracee, Binding *binding);

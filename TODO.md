@@ -450,8 +450,8 @@ lanes — dynamic, static/raw, and via a direct mapping like `/mnt/...` — with
   Debian userland (`/usr`, `/etc`, `/var`, `/home`, `/root`, `/run`, `/tmp`,
   `/opt`, `/srv`, the `/bin`,`/sbin`,`/lib` links) has no Android source and
   must stay in the tree. Only mount-point-only dirs become rows.
-- **Next rows:** `/media` -> Android storage (removable media), same shape as
-  `/mnt`. Deferred to the next iteration.
+- **Rows done:** `/mnt` and `/media` -> `/storage/emulated/0`, `/dev/shm` -> a
+  real directory under the app's `files/`.
 
 ### Remaining work (plan)
 
@@ -474,15 +474,25 @@ Survey (2026-10-12, `dn-stock`):
   open ok); `tty` exists but open is `ENXIO` (no controlling terminal);
   `full` is absent/denied; `shm` is absent.
 - No tmpfs for `shm` anywhere. App data lives on `/dev/block/sda31` (real fs,
-  ~227G, writable), so a real directory under `files/` can back `/dev/shm`
-  (a place for a future row). It would not be tmpfs, so `statvfs` would report
-  the data partition, not a small tmpfs — acceptable for basic POSIX shm,
-  revisit if a program depends on tmpfs semantics.
+  ~227G, writable), so a real directory under `files/` backs `/dev/shm`.
+  It would not be tmpfs, so `statvfs` reports the data partition, not a small
+  tmpfs — acceptable for basic POSIX shm, revisit if a program depends on tmpfs
+  semantics.
 - PTY: `/dev/ptmx` opens and `posix_openpt` succeeds, but
   `grantpt`/`unlockpt`/`ptsname` all fail, so a pty is not usable yet. This is
   deeper than a binding (ioctl/devpts access) and needs its own investigation.
 - `/media`: `/storage` top level is denied; `/storage/emulated/0` is reachable,
-  so `/media` would map to the same backing as `/mnt` (or a subtree).
+  so `/media` maps to the same backing as `/mnt`.
+
+**Done in A:** `/media` -> `/storage/emulated/0`, and `/dev/shm` -> a real
+directory under the app's `files/`. Verified on both lanes: `/dev/shm`
+write/read/`readdir`, `shm_open`/`mmap`, and `/media` all work; `/dev/null`
+still passthrough. The `already host` predicate now uses the **longest** host
+vs guest match, so `/dev/shm` is not mistaken for the `/dev` passthrough host
+side.
+
+**Still open in A:** `/dev/pts` (+ `/dev/ptmx` pty setup), `/dev/tty`,
+`/dev/full`.
 
 **B. Kernel/Android-refused — emulation (`dn-emu`).**
 
