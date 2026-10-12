@@ -143,10 +143,9 @@ while read -r name ver deb; do
     # so the prefix's first boot runs them (bootstrap-prefix.sh: each
     # preinst, then dpkg --configure -a), as debootstrap's second stage
     # does.  The conffiles are left in place; dpkg takes them as installed.
-    case " libc6 libc-bin " in
-      *" $name "*) echo 'Status: hold ok unpacked' ;;
-      *) echo 'Status: install ok unpacked' ;;
-    esac
+    # glibc is Debian's own stock package now, so it gets no special status:
+    # it configures and upgrades like every other package.
+    echo 'Status: install ok unpacked'
     if [ -s "$ctl/conffiles" ]; then
       echo 'Conffiles:'
       while read -r cf; do

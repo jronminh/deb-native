@@ -61,14 +61,6 @@ if command -v update-ca-certificates >/dev/null 2>&1; then
   update-ca-certificates
 fi
 
-for h in libc6 libc-bin; do
-  st=$(dpkg-query -W -f='${db:Status-Abbrev}' "$h" 2>/dev/null || true)
-  case $st in
-    hi*) ;;
-    *) echo "bootstrap: $h is not held (status '$st'); the patched glibc is at risk" >&2; exit 1 ;;
-  esac
-done
-
 n=$(dpkg-query -W -f='${db:Status-Abbrev}\n' | grep -c '^ii\|^hi')
 echo "$n installed" > "$DONE"
 echo "bootstrap: done, $n packages installed"
