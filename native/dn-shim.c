@@ -19,6 +19,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <grp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -42,6 +43,7 @@ static const uint32_t dn_gate_stub[2] = { 0xd4000001u, 0xd65f03c0u };
 
 static int dn_gate_ready;   /* gate page holds the stub (here, or dn-interp) */
 static int dn_active;       /* dn_policy_init() succeeded for this prefix    */
+static DnIdentity *dn_id;   /* the one identity this process fakes (P2b-2b)  */
 
 /* Issue a syscall @nr with up to six args, from the gate page.  Freestanding
  * aarch64: move the number to x8, shift the args down to x0..x5, and branch to
@@ -94,8 +96,10 @@ static void dn_shim_init(void)
 	if (inst != NULL) {
 		char rt[4096];
 		if ((size_t)snprintf(rt, sizeof(rt), "%s/usr/lib/deb-native", inst) < sizeof(rt)
-		    && dn_policy_init(inst, rt) == 0)
-			dn_active = 1;
+		    && dn_policy_init(inst, rt) == 0) {
+			dn_id = dn_policy_identity_new();
+			dn_active = (dn_id != NULL);
+		}
 	}
 }
 
@@ -331,7 +335,7 @@ int fchmodat(int dirfd, const char *path, mode_t mode, int flags)
 	const char *host;
 	struct stat st;
 
-	if (dn_active && path != NULL && (path[0] == '/' || dirfd == AT_FDCWD)) {
+	if (dn_active && (path[0] == '/' || dirfd == AT_FDCWD)) {
 		host = dn_redirect(buf, sizeof(buf), path, 1);
 		if (dn_stat_host(host, &st, 1) != 0)
 			return -1;
@@ -346,4 +350,107 @@ int fchmodat(int dirfd, const char *path, mode_t mode, int flags)
 		return 0;
 	}
 	return dn_ret(dn_do_syscall(SYS_fchmodat, dirfd, (long)path, mode, flags, 0));
+}
+
+/* ---- identity (P2b-2b) --------------------------------------------- *
+ * Fake root.  The get*id()/set*id() family answers from the one static
+ * DnIdentity (dn-policy.h: the shim runs in-process, so it tracks one
+ * program); the glibc wiring left this to the tracer, and the shim is where
+ * it belongs.  With dn-policy off, the real ids pass through.  */
+
+uid_t getuid(void)
+{
+	return dn_id ? dn_policy_fake_getuid(dn_id) : (uid_t)syscall(SYS_getuid);
+}
+
+uid_t geteuid(void)
+{
+	return dn_id ? dn_policy_fake_getuid(dn_id) : (uid_t)syscall(SYS_geteuid);
+}
+
+gid_t getgid(void)
+{
+	return dn_id ? dn_policy_fake_getgid(dn_id) : (gid_t)syscall(SYS_getgid);
+}
+
+gid_t getegid(void)
+{
+	return dn_id ? dn_policy_fake_getgid(dn_id) : (gid_t)syscall(SYS_getegid);
+}
+
+int getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
+{
+	if (dn_id) {
+		dn_policy_fake_getresuid(dn_id, ruid, euid, suid);
+		return 0;
+	}
+	return dn_ret(syscall(SYS_getresuid, ruid, euid, suid));
+}
+
+int getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid)
+{
+	if (dn_id) {
+		dn_policy_fake_getresgid(dn_id, rgid, egid, sgid);
+		return 0;
+	}
+	return dn_ret(syscall(SYS_getresgid, rgid, egid, sgid));
+}
+
+int getgroups(int size, gid_t list[])
+{
+	if (dn_id)
+		return dn_policy_fake_getgroups(dn_id, (size_t)size, list);
+	return dn_ret(syscall(SYS_getgroups, size, list));
+}
+
+int setuid(uid_t uid)
+{
+	return dn_ret(dn_id ? dn_policy_fake_setuid(dn_id, uid) : syscall(SYS_setuid, uid));
+}
+
+int setgid(gid_t gid)
+{
+	return dn_ret(dn_id ? dn_policy_fake_setgid(dn_id, gid) : syscall(SYS_setgid, gid));
+}
+
+int setreuid(uid_t r, uid_t e)
+{
+	return dn_ret(dn_id ? dn_policy_fake_setreuid(dn_id, r, e)
+			     : syscall(SYS_setreuid, r, e));
+}
+
+int setregid(gid_t r, gid_t e)
+{
+	return dn_ret(dn_id ? dn_policy_fake_setregid(dn_id, r, e)
+			     : syscall(SYS_setregid, r, e));
+}
+
+int setresuid(uid_t r, uid_t e, uid_t s)
+{
+	return dn_ret(dn_id ? dn_policy_fake_setresuid(dn_id, r, e, s)
+			     : syscall(SYS_setresuid, r, e, s));
+}
+
+int setresgid(gid_t r, gid_t e, gid_t s)
+{
+	return dn_ret(dn_id ? dn_policy_fake_setresgid(dn_id, r, e, s)
+			     : syscall(SYS_setresgid, r, e, s));
+}
+
+uid_t setfsuid(uid_t uid)
+{
+	return dn_id ? dn_policy_fake_setfsuid(dn_id, uid)
+		     : (uid_t)syscall(SYS_setfsuid, uid);
+}
+
+gid_t setfsgid(gid_t gid)
+{
+	return dn_id ? dn_policy_fake_setfsgid(dn_id, gid)
+		     : (gid_t)syscall(SYS_setfsgid, gid);
+}
+
+int setgroups(size_t n, const gid_t *list)
+{
+	return dn_ret(dn_id ? dn_policy_fake_setgroups(dn_id, n, list)
+			     : syscall(SYS_setgroups, n, list));
 }
