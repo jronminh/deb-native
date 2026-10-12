@@ -41,8 +41,8 @@ and [`dn-interp-shim.md`](dn-interp-shim.md).
   platform refuses (mount, raw sockets, privileged ports, capabilities).
 - [`native.md`](native.md) — the execution model those pieces serve:
   near-full behaviour at near-native speed.
-- [`monitor.md`](monitor.md) — the runtime's roles (`dn-monitor`, `dn-shim`,
-  `dn-trace`) and how they coordinate.
+- [`monitor.md`](monitor.md) — the runtime's parts (law, catalog, monitor,
+  executors, `dn-emu`) and how they coordinate.
 - [`tracer-rebuild.md`](tracer-rebuild.md) — rebuilding the tracer into
   `dn-monitor` (mechanism) + `dn-trace` (policy applier).
 - [`../../src/dn-policy/`](../../src/dn-policy) — the policy library itself.
