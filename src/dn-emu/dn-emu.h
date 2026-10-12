@@ -13,10 +13,11 @@
  * **state**, which lives in the tree's store (`RT`), because the two are
  * different processes.  One model, two enforcement points.
  *
- * B1: the unit and its entry points exist; every answer is `DN_EMU_PASS`, so
- * nothing changes yet and the existing emulation (`tracee/seccomp.c`, the
- * owner store) keeps doing the work.  The entry points are where the
- * subsystems land.
+ * B1: the unit and its entry points exist; every answer is `DN_EMU_PASS` --
+ * dn-emu **declines**, so the emulation that lives in the tracer
+ * (`tracee/seccomp.c`, the owner store) answers exactly as it did before.
+ * That is the state this branch ships: building out dn-emu is a separate
+ * session.  The entry points are where its subsystems will land.
  */
 #ifndef DN_EMU_H
 #define DN_EMU_H

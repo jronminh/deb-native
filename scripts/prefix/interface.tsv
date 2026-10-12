@@ -33,3 +33,5 @@ source	src/tracer
 
 # --- artifacts build produces, and where install places them ---------------
 artifact	dn-trace	src/.build-runtime/dn-trace	usr/lib/deb-native/dn-trace
+artifact	dn-interp	src/.build-runtime/dn-interp	usr/lib/deb-native/dn-interp
+artifact	dn-shim	src/.build-runtime/dn-shim.so	usr/lib/deb-native/dn-shim.so

@@ -1,9 +1,10 @@
 /* dn-emu -- the emulation suite.  See dn-emu.h.
  *
  * B1: the unit exists and the dispatcher calls it, but every answer is
- * `DN_EMU_PASS` — nothing changes yet, and the emulation that lives in the
- * tracer keeps doing the work.  Each subsystem (docs/spec/emulation.md) lands
- * here, with its whole trick surface.
+ * `DN_EMU_PASS` -- dn-emu declines for now, and the emulation that lives in the
+ * tracer (`tracee/seccomp.c`) answers exactly as before.  This is the state the
+ * branch ships; each subsystem (docs/spec/emulation.md) lands here later, with
+ * its whole trick surface.
  */
 #include <stddef.h>  /* NULL */
 

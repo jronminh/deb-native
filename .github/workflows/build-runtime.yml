@@ -56,6 +56,16 @@ jobs:
           DN_GLIBC_LIBC_DIR="$GITHUB_WORKSPACE/libcdev/usr/lib/aarch64-linux-gnu" \
             scripts/build/build-trace.sh
 
+      # The branch's runtime is three files, not one: dn-trace (the monitor's
+      # root), dn-interp (the *loader launcher* -- the exec gate's rule-3
+      # target, which builds the environment and execve()s the tree's stock
+      # ld.so) and dn-shim.so (the in-process fast path, delivered by
+      # dn-interp's conf).  All three land in the one artifact.
+      - name: Build the interpreter and the shim
+        run: |
+          scripts/build/build-interp.sh src/.build-runtime
+          scripts/build/build-shim.sh src/.build-runtime
+
       - uses: actions/upload-artifact@v4
         with:
           name: dn-runtime

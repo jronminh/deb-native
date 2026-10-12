@@ -140,18 +140,18 @@ A build host: an `arm64` Linux machine with `gcc`, `make`, `python3`,
 `dpkg-deb`, `wget` or `curl`, `xz`. Nothing here runs inside a prefix or on
 the target.
 
-1. **The runtime.** `scripts/build/build-trace.sh` builds `dn-trace`
-   from `src/tracer/` into `src/.build-runtime/` — the whole runtime, one file:
-   the syscall catalog `src/syscalls.tsv` is embedded in it at build time.
-   dn-trace is **static and self-contained** (its talloc is vendored in
-   `src/tracer/talloc/`), linked against **stock** glibc's `libc.a`
-   (`DN_GLIBC_LIBC_DIR`, extracted from Debian's own `libc6-dev` .deb):
-   dn-trace is the **outermost** process — nothing traces it — so a poor host
-   must start it with a bare exec. Its own startup only needs Android's denied
-   `rseq` off, which the supported glibc tunable
-   `GLIBC_TUNABLES=glibc.pthread.rseq=0` does (see
+1. **The runtime — three files.** `scripts/build/build-trace.sh` builds
+   `dn-trace` (the monitor's root; the catalog `src/syscalls.tsv` is embedded in
+   it) into `src/.build-runtime/` — static and self-contained, linked against
+   **stock** glibc's `libc.a` (`DN_GLIBC_LIBC_DIR`, extracted from Debian's own
+   `libc6-dev` .deb). `build-interp.sh` adds `dn-interp` (+ `dn-interp.conf`),
+   the **loader launcher** the exec gate's rule 3 runs; `build-shim.sh` adds
+   `dn-shim.so`, the in-process fast path the launcher delivers. dn-trace is the
+   **outermost** process — nothing traces it — so a poor host must start it with
+   a bare exec; its own startup only needs Android's denied `rseq` off, which
+   the supported glibc tunable `GLIBC_TUNABLES=glibc.pthread.rseq=0` does (see
    [`../reference/android-platform.md`](../reference/android-platform.md),
-   "Stock `libc6` re-tested") and [`runtime.md`](runtime.md).
+   "Stock `libc6` re-tested"). See [dn-interp-shim.md](dn-interp-shim.md).
 2. **Glibc.** Nothing to build: the tree takes Debian's own **stock**
    `libc6`/`libc-bin` from the mirror, pinned in `scripts/build/packages.tsv`.
    The syscalls Android denies are answered at the syscall boundary by
