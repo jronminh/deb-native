@@ -13,9 +13,8 @@
  * ../docs/reference/syscall-boundary.md, not a shim gap.
  *
  * The per-function behavior mirrors main's glibc wiring
- * (patches/dn-policy-glibc-wiring.patch): open/access -> redirect; the stat
- * family -> redirect + dn_policy_fake_stat(); and so on.  P2a/P2b-1 cover the
- * open, access and stat families; the rest is P2b-2.
+ * (patches/dn-policy-glibc-wiring.patch).  Covered so far: open, access, stat
+ * (P2a/P2b-1) and the fake-root writes (P2b-2a).
  */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -41,11 +40,8 @@
 /* The "svc #0; ret" body written at P_GATE.  */
 static const uint32_t dn_gate_stub[2] = { 0xd4000001u, 0xd65f03c0u };
 
-/* Set once the gate page holds the stub (mapped here, or already by dn-interp).  */
-static int dn_gate_ready;
-
-/* Set once dn_policy_init() succeeded for this process's prefix.  */
-static int dn_active;
+static int dn_gate_ready;   /* gate page holds the stub (here, or dn-interp) */
+static int dn_active;       /* dn_policy_init() succeeded for this prefix    */
 
 /* Issue a syscall @nr with up to six args, from the gate page.  Freestanding
  * aarch64: move the number to x8, shift the args down to x0..x5, and branch to
@@ -70,11 +66,11 @@ __asm__(
 ".size dn_gate_syscall, .-dn_gate_syscall\n"
 );
 
-static long dn_do_syscall(long nr, long a0, long a1, long a2, long a3)
+static long dn_do_syscall(long nr, long a0, long a1, long a2, long a3, long a4)
 {
 	if (dn_gate_ready)
-		return dn_gate_syscall(nr, a0, a1, a2, a3, 0, 0);
-	return syscall(nr, a0, a1, a2, a3);
+		return dn_gate_syscall(nr, a0, a1, a2, a3, a4, 0);
+	return syscall(nr, a0, a1, a2, a3, a4);
 }
 
 __attribute__((constructor))
@@ -136,6 +132,15 @@ static void dn_stat_post(const char *host, struct stat *st)
 		dn_policy_fake_stat(host, st);
 }
 
+/* stat @host into @st with a raw syscall (no fake-root post): @follow for the
+ * dev/ino the owner store keys on.  Returns 0 or -1.  */
+static int dn_stat_host(const char *host, struct stat *st, int follow)
+{
+	long r = dn_do_syscall(SYS_newfstatat, AT_FDCWD, (long)host, (long)st,
+			       follow ? 0 : AT_SYMLINK_NOFOLLOW, 0);
+	return dn_ret(r);
+}
+
 /* ---- open family (P2a) ---------------------------------------------- */
 
 int openat(int dirfd, const char *path, int flags, ...)
@@ -151,9 +156,8 @@ int openat(int dirfd, const char *path, int flags, ...)
 		mode = va_arg(ap, mode_t);
 		va_end(ap);
 	}
-
 	p = dn_redirect(buf, sizeof(buf), path, 1);
-	r = dn_do_syscall(SYS_openat, dirfd, (long)p, flags, mode);
+	r = dn_do_syscall(SYS_openat, dirfd, (long)p, flags, mode, 0);
 	return dn_ret(r);
 }
 
@@ -203,7 +207,7 @@ int access(const char *path, int mode)
 	char buf[PATH_MAX];
 	const char *p = dn_redirect(buf, sizeof(buf), path, 1);
 
-	return dn_ret(dn_do_syscall(SYS_faccessat, AT_FDCWD, (long)p, mode, 0));
+	return dn_ret(dn_do_syscall(SYS_faccessat, AT_FDCWD, (long)p, mode, 0, 0));
 }
 
 int faccessat(int dirfd, const char *path, int mode, int flags)
@@ -211,17 +215,17 @@ int faccessat(int dirfd, const char *path, int mode, int flags)
 	char buf[PATH_MAX];
 	const char *p = dn_redirect(buf, sizeof(buf), path, !(flags & AT_SYMLINK_NOFOLLOW));
 
-	return dn_ret(dn_do_syscall(SYS_faccessat, dirfd, (long)p, mode, flags));
+	return dn_ret(dn_do_syscall(SYS_faccessat, dirfd, (long)p, mode, flags, 0));
 }
 
-/* ---- stat family ---------------------------------------------------- */
+/* ---- stat family (P2b-1) -------------------------------------------- */
 
 int fstatat(int dirfd, const char *path, struct stat *buf, int flags)
 {
 	char pb[PATH_MAX];
 	int follow = !(flags & AT_SYMLINK_NOFOLLOW);
 	const char *p = dn_redirect(pb, sizeof(pb), path, follow);
-	long r = dn_do_syscall(SYS_newfstatat, dirfd, (long)p, (long)buf, flags);
+	long r = dn_do_syscall(SYS_newfstatat, dirfd, (long)p, (long)buf, flags, 0);
 
 	if (r == 0 && p != path)
 		dn_stat_post(p, buf);
@@ -238,7 +242,6 @@ int lstat(const char *path, struct stat *buf)
 	return fstatat(AT_FDCWD, path, buf, AT_SYMLINK_NOFOLLOW);
 }
 
-/* The 64-bit aliases (LP64: same layout as stat on aarch64).  */
 int fstatat64(int dirfd, const char *path, struct stat64 *buf, int flags)
 {
 	return fstatat(dirfd, path, (struct stat *)buf, flags);
@@ -252,4 +255,95 @@ int stat64(const char *path, struct stat64 *buf)
 int lstat64(const char *path, struct stat64 *buf)
 {
 	return fstatat(AT_FDCWD, path, (struct stat *)buf, AT_SYMLINK_NOFOLLOW);
+}
+
+/* ---- fake-root writes (P2b-2a) -------------------------------------- *
+ * chown/lchown never touch the real file: they record the requested owner in
+ * the store, keyed on (dev, ino).  chmod/fchmodat put the ordinary bits on
+ * the real file and record only the setuid/setgid bits (Android would drop
+ * them).  All mirror chown.c/lchown.c/chmod.c/fchmodat.c of the wiring.  */
+
+int chown(const char *path, uid_t owner, gid_t group)
+{
+	char buf[PATH_MAX];
+	const char *host;
+	struct stat st;
+
+	if (!dn_active)
+		return dn_ret(dn_do_syscall(SYS_fchownat, AT_FDCWD, (long)path,
+					    owner, group, 0));
+	host = dn_redirect(buf, sizeof(buf), path, 1);
+	if (dn_stat_host(host, &st, 1) != 0)
+		return -1;
+	if (dn_policy_owner_merge(host, (uint64_t)st.st_dev, (uint64_t)st.st_ino,
+				  1, (uint32_t)owner, (uint32_t)group, 0, 0) < 0) {
+		errno = EIO;
+		return -1;
+	}
+	return 0;
+}
+
+int lchown(const char *path, uid_t owner, gid_t group)
+{
+	char buf[PATH_MAX];
+	const char *host;
+	struct stat st;
+
+	if (!dn_active)
+		return dn_ret(dn_do_syscall(SYS_fchownat, AT_FDCWD, (long)path,
+					    owner, group, AT_SYMLINK_NOFOLLOW));
+	host = dn_redirect(buf, sizeof(buf), path, 0);
+	if (dn_stat_host(host, &st, 0) != 0)
+		return -1;
+	if (dn_policy_owner_merge(host, (uint64_t)st.st_dev, (uint64_t)st.st_ino,
+				  1, (uint32_t)owner, (uint32_t)group, 0, 0) < 0) {
+		errno = EIO;
+		return -1;
+	}
+	return 0;
+}
+
+int chmod(const char *path, mode_t mode)
+{
+	char buf[PATH_MAX];
+	const char *host;
+	struct stat st;
+
+	if (!dn_active)
+		return dn_ret(dn_do_syscall(SYS_fchmodat, AT_FDCWD, (long)path, mode, 0, 0));
+	host = dn_redirect(buf, sizeof(buf), path, 1);
+	if (dn_stat_host(host, &st, 1) != 0)
+		return -1;
+	if (dn_ret(dn_do_syscall(SYS_fchmodat, AT_FDCWD, (long)host,
+				 mode & ~(mode_t)07000, 0, 0)) != 0)
+		return -1;
+	if (dn_policy_owner_merge(host, (uint64_t)st.st_dev, (uint64_t)st.st_ino,
+				  0, 0, 0, 1, (uint32_t)mode) < 0) {
+		errno = EIO;
+		return -1;
+	}
+	return 0;
+}
+
+int fchmodat(int dirfd, const char *path, mode_t mode, int flags)
+{
+	char buf[PATH_MAX];
+	const char *host;
+	struct stat st;
+
+	if (dn_active && path != NULL && (path[0] == '/' || dirfd == AT_FDCWD)) {
+		host = dn_redirect(buf, sizeof(buf), path, 1);
+		if (dn_stat_host(host, &st, 1) != 0)
+			return -1;
+		if (dn_ret(dn_do_syscall(SYS_fchmodat, AT_FDCWD, (long)host,
+					 mode & ~(mode_t)07000, 0, 0)) != 0)
+			return -1;
+		if (dn_policy_owner_merge(host, (uint64_t)st.st_dev, (uint64_t)st.st_ino,
+					  0, 0, 0, 1, (uint32_t)mode) < 0) {
+			errno = EIO;
+			return -1;
+		}
+		return 0;
+	}
+	return dn_ret(dn_do_syscall(SYS_fchmodat, dirfd, (long)path, mode, flags, 0));
 }
