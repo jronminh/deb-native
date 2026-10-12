@@ -14,6 +14,7 @@
 #include "syscall/syscall.h"
 #include "tracee/seccomp.h"
 #include "syscall/dn-identity.h"
+#include "dn-emu.h"
 #include "tracee/mem.h"
 #include "tracee/statx.h"
 #include "path/path.h"
@@ -153,6 +154,32 @@ static int handle_seccomp_event_common(Tracee *tracee)
 	if (status == 2) {
 		VERBOSE(tracee, 4, "SIGSYS fully handled by an extension with result set");
 		return 0;
+	}
+
+	/* dn-emu, the second authority (docs/spec/monitor.md): a refused or
+	 * divergent operation belongs to dn-emu before the executor's own
+	 * handling.  B1: it answers PASS for everything, so the code below is
+	 * unchanged -- this is where the subsystems will land.  */
+	{
+		DnEmuCall call;
+		DnEmuDecision decision;
+
+		call.nr = (long) peek_reg(tracee, CURRENT, SYSARG_NUM);
+		call.args[0] = peek_reg(tracee, CURRENT, SYSARG_1);
+		call.args[1] = peek_reg(tracee, CURRENT, SYSARG_2);
+		call.args[2] = peek_reg(tracee, CURRENT, SYSARG_3);
+		call.args[3] = peek_reg(tracee, CURRENT, SYSARG_4);
+		call.args[4] = peek_reg(tracee, CURRENT, SYSARG_5);
+		call.args[5] = peek_reg(tracee, CURRENT, SYSARG_6);
+
+		decision = dn_emu_syscall(&call);
+		if (decision.outcome != DN_EMU_PASS) {
+			VERBOSE(tracee, 4, "dn-emu answers syscall %ld: outcome %d, ret %ld (%s)",
+				call.nr, (int) decision.outcome, decision.ret,
+				decision.reason != NULL ? decision.reason : "no reason");
+			set_result_after_seccomp(tracee, decision.ret);
+			return 0;
+		}
 	}
 
 	/* deb-native fake root: Android traps the set*id calls; answer them

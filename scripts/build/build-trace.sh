@@ -51,9 +51,9 @@ find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-trace -o -name dn-catalog.c 
 # re-tested").  Link with that build's own start files (crt1.o ...), not the
 # build host's glibc's.
 if [ -n "${DN_GLIBC_LIBC_DIR:-}" ]; then
-  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" LDFLAGS="-static -B$DN_GLIBC_LIBC_DIR -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
+  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" DNEMU="$SRC/dn-emu" LDFLAGS="-static -B$DN_GLIBC_LIBC_DIR -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
 else
-  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy"
+  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" DNEMU="$SRC/dn-emu"
 fi
 cp -f "$T/dn-trace" "$OUT/dn-trace"
 

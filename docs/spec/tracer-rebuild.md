@@ -186,11 +186,13 @@ its own commit, build-verified, and leaves the tree usable.
 
 ### Track B — rebuild the tracer
 
-- **B1 — the `dn-emu` hook (stub).** Introduce `dn-emu` as its own component
-  with one entry point the dispatcher calls for a refused/divergent syscall;
-  for now it answers "not handled", so the existing emulation keeps doing the
-  work. No behaviour change — it marks where the subsystems land. (`dn-emu`
-  is a dummy until a subsystem is designed.)
+- **B1 — the `dn-emu` unit (stub).** Done: `src/dn-emu/` (`dn-emu.h`/`dn-emu.c`)
+  is the emulation suite's home — `dn_emu_syscall()` (the dispatcher's face) and
+  `dn_emu_libc()` (the shim's), returning `DnEmuDecision` (`PASS` / `ANSWER` /
+  `REFUSE`). The tracer's dispatcher calls it before its own handling; every
+  answer is `DN_EMU_PASS`, so no behaviour changes — it marks where the
+  subsystems land. The library is built into the tracer (`GNUmakefile`, like
+  `dn-policy`) and will be linked by the shim too.
 - **B2 — `dn-trace` as a mapping executor.** Replace the tracer's own path and
   identity handling with `dn-policy`: read the path from the tracee, call
   `dn_policy_translate_path()`, write it back; take fake root and hardlink

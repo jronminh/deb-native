@@ -72,6 +72,15 @@ OBJECTS += \
 	dnpolicy/dn-policy-fakeroot.o	\
 	dnpolicy/dn-policy-hardlink.o
 
+# deb-native: dn-emu (src/dn-emu), the emulation suite -- the second authority
+# (docs/spec/monitor.md).  A shared library: dn-shim links it too, from a
+# different process.  A build from a copy of this directory passes
+# DNEMU=<repo>/src/dn-emu.
+DNEMU ?= $(SRC)../dn-emu
+CPPFLAGS += -I$(DNEMU)
+OBJECTS += \
+	dnemu/dn-emu.o
+
 .DEFAULT_GOAL = dn-trace
 all: dn-trace
 
@@ -165,6 +174,10 @@ $(USE_BUILD_H): build.h
 	$(COMPILE)
 
 dnpolicy/%.o: $(DNPOLICY)/%.c
+	@mkdir -p $(dir $@)
+	$($(quiet)CC) $(CPPFLAGS) $(CFLAGS) -MD -c $< -o $@
+
+dnemu/%.o: $(DNEMU)/%.c
 	@mkdir -p $(dir $@)
 	$($(quiet)CC) $(CPPFLAGS) $(CFLAGS) -MD -c $< -o $@
 

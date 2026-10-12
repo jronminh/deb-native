@@ -27,6 +27,7 @@ entry	scripts/build/pack-prefix.py
 
 # --- sources the build compiles --------------------------------------------
 source	src/dn-policy
+source	src/dn-emu
 source	src/syscalls.tsv
 source	src/tracer
 

@@ -216,8 +216,10 @@ monitor.
 - **Code**: adopting the names needs no behaviour change. `dn-monitor` now
   lives in `src/tracer/monitor/` — `monitor.c`/`monitor.h`, the filter + gate
   rule, `dn_monitor_install()` / `dn_monitor_sysnum_flags()` (moved out of
-  `syscall/seccomp.c`, which is gone); `dn-emu` is the current emulation code
-  (`src/tracer/tracee/seccomp.c` and friends); the mapping executor is the
-  rest of the tracer. What is *not* adopted yet is tap 2: the dispatcher
+  `syscall/seccomp.c`, which is gone); `dn-emu` has a home of its own
+  (`src/dn-emu/`, the dispatcher's `dn_emu_syscall()` — a stub for now) while
+  the emulation code it will *own* still runs inside the tracer
+  (`src/tracer/tracee/seccomp.c` and friends); the mapping executor is the rest
+  of the tracer. What is *not* adopted yet is tap 2: the dispatcher
   (`dn-trace` vs `dn-emu`) and the catalog as the filter's TRACE source
   instead of PRoot's hand-maintained `proot_sysnums`.
