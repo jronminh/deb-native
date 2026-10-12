@@ -152,13 +152,12 @@ static int classify_exec(const char *host_path, char interp[PATH_MAX])
 }
 
 /* deb-native, exec-gate rule 3: run @host_path through @loader (the
- * runtime's dn-glibc ld.so) as
+ * program loader, native/ld-dn.c) as
  *
  *     loader --argv0 <original argv0> <host_path> <args...>
  *
  * The kernel cannot find a guest PT_INTERP itself (it looks on Android's
- * real filesystem, not in the tree), and the tree's own loader has no
- * dn-policy wiring while this one does.  The new argv is built in the
+ * real filesystem, not in the tree).  The new argv is built in the
  * tracee's memory; argv[0] is preserved through ld.so's --argv0.  Returns
  * -errno on failure.  */
 static int dn_exec_via_loader(Tracee *tracee, const char *loader, const char *host_path)
@@ -247,14 +246,13 @@ int translate_execve_enter(Tracee *tracee)
 	if (status >= 0)
 		tracee->new_exe = talloc_strdup(tracee, new_exe);
 
-	/* Rule 3: run it through the runtime's loader (dn-glibc), which
-	 * carries the dn-policy wiring; the tree's own loader does not.
-	 * Only when LOADER (dn-trace's argument) is executable -- otherwise
-	 * the program is exec'd directly.  */
+	/* Rule 3: run it through the program loader (ld-dn), which sets up
+	 * the environment and jumps into the tree's glibc loader.  Only when
+	 * it is executable -- otherwise the program is exec'd directly.  */
 	if (rule == DN_RULE_GLIBC
-	    && global_rt_loader != NULL
-	    && access(global_rt_loader, X_OK) == 0) {
-		status = dn_exec_via_loader(tracee, global_rt_loader, host_path);
+	    && global_ld_dn != NULL
+	    && access(global_ld_dn, X_OK) == 0) {
+		status = dn_exec_via_loader(tracee, global_ld_dn, host_path);
 		if (status < 0)
 			return status;
 		return 0;

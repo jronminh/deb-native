@@ -53,9 +53,13 @@ extern const char *global_tool_name;
 
 /* deb-native: the runtime's loader (dn-glibc's ld.so), a host path derived
    from the tree: <TREE>/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1.
-   The exec gate runs a rule-3 (glibc dynamic) program through it instead of
-   exec'ing the program directly (docs/spec/overlay.md, "The exec gate"). */
+   Kept for the CLI contract; the exec gate's rule 3 no longer names it. */
 extern const char *global_rt_loader;
+
+/* deb-native: the program loader (native/ld-dn.c), <TREE>/usr/lib/deb-native/
+   ld-dn.  The exec gate runs a rule-3 (glibc dynamic) program through it
+   (docs/spec/ld-dn-shim.md). */
+extern const char *global_ld_dn;
 
 /* deb-native: the tree (TREE), an absolute host path: the guest root, and
    home of the tracer's own temp dir (<TREE>/tmp; the host's /tmp is not
