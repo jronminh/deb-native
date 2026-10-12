@@ -412,6 +412,38 @@ static int translate_path_common(const char *guest_path, char *host_path_out, si
 	return map_and_resolve(guest_path, host_path_out, cap, follow_last, 0);
 }
 
+int dn_policy_redirect_path(const char *guest_path, char *host_path_out, size_t cap)
+{
+	size_t len;
+	size_t i;
+
+	if (!initialized)
+		return -EINVAL;
+	if (guest_path == NULL || guest_path[0] != '/')
+		return -EINVAL;
+
+	if (has_path_prefix(guest_path, tree_root, tree_root_len))
+		return copy_out(guest_path, host_path_out, cap);
+
+	for (i = 0; i < N_PASSTHROUGH; i++) {
+		size_t plen = strlen(passthrough[i]);
+		if (has_path_prefix(guest_path, passthrough[i], plen))
+			return copy_out(guest_path, host_path_out, cap);
+	}
+
+	/* TREE == "/" needs no prefix. Otherwise guest paths already begin with
+	 * '/', so concatenation needs no separator or normalization. */
+	if (tree_root_len == 0)
+		return copy_out(guest_path, host_path_out, cap);
+
+	len = tree_root_len + strlen(guest_path);
+	if (len + 1 > cap)
+		return -ENAMETOOLONG;
+	memcpy(host_path_out, tree_root, tree_root_len);
+	memcpy(host_path_out + tree_root_len, guest_path, len - tree_root_len + 1);
+	return 0;
+}
+
 int dn_policy_translate_path(const char *guest_path, char *host_path_out, size_t cap)
 {
 	return translate_path_common(guest_path, host_path_out, cap, 1);

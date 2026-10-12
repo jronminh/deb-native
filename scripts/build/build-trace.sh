@@ -41,14 +41,15 @@ find "$T" \( -name '*.o' -o -name '*.d' -o -name dn-monitor -o -name dn-catalog.
 # Self-contained/static when a stock glibc's lib dir is given (the arm64
 # `libc6-dev` payload, extracted from Debian's own .deb): dn-trace is the
 # outermost process -- nothing traces it -- and a poor host must start it
-# with a bare exec and no loader at all.  A *stock* glibc's own startup is
-# survivable here: its only Android-denied syscall at startup is `rseq`,
-# and `GLIBC_TUNABLES=glibc.pthread.rseq=0` (a supported glibc tunable) turns
-# that registration off (docs/reference/android-platform.md, "Stock libc6
-# re-tested").  Link with that build's own start files (crt1.o ...), not the
-# build host's glibc's.
+# with a bare exec and no loader at all.  Its own startup survives Android's
+# seccomp through dn-start.c (linked here with --wrap=__libc_start_main),
+# which installs a SIGSYS handler before glibc initializes and so turns the
+# SECCOMP_RET_TRAP on set_robust_list / rseq into ENOSYS.  The rseq tunable
+# in boot.sh only covers rseq; set_robust_list is trapped too in the app
+# contexts seen since (e.g. Termux's untrusted_app).  Link with that build's
+# own start files (crt1.o ...), not the build host's glibc's.
 if [ -n "${DN_GLIBC_LIBC_DIR:-}" ]; then
-  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" DNEMU="$SRC/dn-emu" LDFLAGS="-static -B$DN_GLIBC_LIBC_DIR -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack"
+  make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" DNEMU="$SRC/dn-emu" LDFLAGS="-static -B$DN_GLIBC_LIBC_DIR -L$DN_GLIBC_LIBC_DIR -Wl,-z,noexecstack -Wl,--wrap=__libc_start_main"
 else
   make -s -C "$T" CC="$CC" CATALOG="$SRC/syscalls.tsv" DNPOLICY="$SRC/dn-policy" DNEMU="$SRC/dn-emu"
 fi

@@ -136,18 +136,16 @@ static void dn_shim_init(void)
 	}
 }
 
-/* dn_policy_redirect()'s semantics (dn-policy-glue.c): translate an absolute
- * guest path into @buf and return @buf, or return @path unchanged when the
- * policy is off or declines (relative, too long, ...).  @follow=0 for a call
- * that must not resolve the final component (lstat, AT_SYMLINK_NOFOLLOW).  */
+/* Common-case FHS redirect: no filesystem inspection, no symlink walk. The
+ * tracer retains the full resolver for edge cases outside this hot path. */
 static const char *dn_redirect(char *buf, size_t cap, const char *path, int follow)
 {
 	int status;
+	(void) follow;
 
 	if (!dn_active || path == NULL || path[0] != '/')
 		return path;
-	status = follow ? dn_policy_translate_path(path, buf, cap)
-			: dn_policy_translate_path_nofollow(path, buf, cap);
+	status = dn_policy_redirect_path(path, buf, cap);
 	return status < 0 ? path : buf;
 }
 
@@ -204,6 +202,13 @@ int openat(int dirfd, const char *path, int flags, ...)
 	}
 	p = dn_redirect(buf, sizeof(buf), path, 1);
 	r = dn_do_syscall(SYS_openat, dirfd, (long)p, flags, mode, 0);
+	if (r == -ENOENT && p != path && path[0] == '/') {
+		/* The cheap mapping deliberately does not inspect symlinks. Retry
+		 * through the full resolver only when the kernel indicates that an
+		 * absolute in-tree link escaped to the host root. */
+		if (dn_policy_translate_path(path, buf, sizeof(buf)) == 0)
+			r = dn_do_syscall(SYS_openat, dirfd, (long)buf, flags, mode, 0);
+	}
 	return dn_ret(r);
 }
 
@@ -253,7 +258,12 @@ int access(const char *path, int mode)
 	char buf[PATH_MAX];
 	const char *p = dn_redirect(buf, sizeof(buf), path, 1);
 
-	return dn_ret(dn_do_syscall(SYS_faccessat, AT_FDCWD, (long)p, mode, 0, 0));
+	long r = dn_do_syscall(SYS_faccessat, AT_FDCWD, (long)p, mode, 0, 0);
+	if (r == -ENOENT && p != path && path[0] == '/') {
+		if (dn_policy_translate_path(path, buf, sizeof(buf)) == 0)
+			r = dn_do_syscall(SYS_faccessat, AT_FDCWD, (long)buf, mode, 0, 0);
+	}
+	return dn_ret(r);
 }
 
 int faccessat(int dirfd, const char *path, int mode, int flags)
@@ -272,6 +282,10 @@ int fstatat(int dirfd, const char *path, struct stat *buf, int flags)
 	int follow = !(flags & AT_SYMLINK_NOFOLLOW);
 	const char *p = dn_redirect(pb, sizeof(pb), path, follow);
 	long r = dn_do_syscall(SYS_newfstatat, dirfd, (long)p, (long)buf, flags, 0);
+	if (r == -ENOENT && follow && p != path && path[0] == '/') {
+		if (dn_policy_translate_path(path, pb, sizeof(pb)) == 0)
+			r = dn_do_syscall(SYS_newfstatat, dirfd, (long)pb, (long)buf, flags, 0);
+	}
 
 	if (r == 0 && p != path)
 		dn_stat_post(p, buf);

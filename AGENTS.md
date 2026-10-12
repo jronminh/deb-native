@@ -53,6 +53,39 @@ are gone; a `.deb` installs intact (`docs/spec/runtime.md`).
   with the toolchain). It pushes to GitHub. A local copy may be stale: edit
   locally, `scp`/`tar` to `fe2`, build and test there, then commit and push
   there. `gh` is authed as `jronminh`.
+- **Current WSL workspace:** `/root/deb-native` is the current clone used for
+  editing and cross-building. `/root/deb-native-old` is an archived older
+  clone; do not use it for current runtime work.
+- **Device test workflow:** build the AArch64 runtime or prefix artifact in
+  WSL, push test files with `adb` to `/data/local/tmp`, then copy them into
+  the debuggable `org.dn.shell` sandbox with `run-as`. The active device is
+  the Samsung `SM-G970W` (Android 12, SDK 31, arm64-v8a); check the actual
+  connection with `adb devices -l` rather than assuming a port or IP.
+- **App test environment:** `org.dn.shell` has `targetSdk=28` and supports
+  `run-as`. The current runtime prefix is
+  `/data/user/0/org.dn.shell/files/prefixes/dn-stock`. It contains the
+  `0.7.1-dev` runtime with `dn-monitor`, `dn-interp`, and `dn-shim.so`.
+  `core-deb` and `dn-gcc` on the device are legacy prefixes using the older
+  runtime and must not be used for current runtime experiments.
+- **Direct device test:** use absolute paths and invoke the prefix entry
+  directly, for example:
+
+  ```sh
+  adb shell run-as org.dn.shell \
+    /data/user/0/org.dn.shell/files/prefixes/dn-stock/boot/boot.sh \
+    /usr/bin/id
+  ```
+
+  This should report fake `uid=0(root)`. For a pushed runtime component,
+  stage it under `/data/local/tmp`, then copy it with one quoted `run-as`
+  command so the whole command stays inside the app uid:
+
+  ```sh
+  adb push FILE /data/local/tmp/FILE
+  adb shell "run-as org.dn.shell sh -c 'cp -f /data/local/tmp/FILE /data/user/0/org.dn.shell/files/prefixes/dn-stock/DEST && chmod 755 /data/user/0/org.dn.shell/files/prefixes/dn-stock/DEST'"
+  ```
+
+  Do not uninstall the app or remove prefixes without explicit approval.
 - No `sudo`/root anywhere. Persisted files (code, docs, commits) are in
   **English**.
 - **Docs state only the current truth.** No history narrative; history lives

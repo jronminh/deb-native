@@ -85,6 +85,12 @@ int dn_policy_init(const char *tree_root, const char *rt_root);
 
 /* ---- Path rewriting ------------------------------------------------ */
 
+/* Cheap common-case redirect for dn-shim: map an absolute guest path into
+ * TREE without inspecting the filesystem. Relative paths stay with the
+ * kernel, and /proc, /sys and /dev remain host paths. The full resolver below
+ * remains available to the traced/edge path for symlink-sensitive cases. */
+int dn_policy_redirect_path(const char *guest_path, char *host_path_out, size_t cap);
+
 /* Translate @guest_path (as a program in the tree sees it) into
  * @host_path_out (the real, on-device path), up to @cap bytes including
  * the NUL. Longest-prefix mapping, /proc "/sys /dev passthrough, and

@@ -17,6 +17,11 @@ OBJDUMP  ?= $(CROSS_COMPILE)objdump
 CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -I. -Italloc -I$(VPATH)
 CFLAGS   += -Wall -Wextra -O2
 LDFLAGS  += -Wl,-z,noexecstack
+# deb-native: dn-monitor is the tree's root (nothing traces it), so its own
+# startup must survive Android's seccomp unaided.  dn-start.c installs a
+# SIGSYS handler before glibc initializes; --wrap routes crt1's own
+# __libc_start_main call through it.  See dn-start.c.
+LDFLAGS  += -Wl,--wrap=__libc_start_main
 ifdef PROOT_WITH_LIBANDROID_SHMEM
   CFLAGS += -DWITH_LIBANDROID_SHMEM
   LDFLAGS += -landroid-shmem
@@ -60,7 +65,8 @@ OBJECTS += \
 	ptrace/ptrace.o		\
 	ptrace/user.o		\
 	ptrace/wait.o		\
-	extension/extension.o
+	extension/extension.o	\
+	dn-start.o
 
 # deb-native: dn-policy (src/dn-policy), the one policy dn-shim also runs
 # in-process, is compiled in: the traced path applies the same rules.  A
@@ -175,6 +181,12 @@ $(USE_BUILD_H): build.h
 %.o: %.c
 	@mkdir -p $(dir $@)
 	$(COMPILE)
+
+# dn-start.o runs before glibc's TLS exists, so it must not read the stack
+# canary (fs:0x28); build it without the stack protector.
+dn-start.o: dn-start.c
+	@mkdir -p $(dir $@)
+	$($(quiet)CC) $(CPPFLAGS) $(CFLAGS) -fno-stack-protector -MD -c $(SRC)$< -o $@
 
 dnpolicy/%.o: $(DNPOLICY)/%.c
 	@mkdir -p $(dir $@)

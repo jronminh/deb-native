@@ -28,6 +28,7 @@
 #include <sys/utsname.h> /* uname(2), */
 #include <signal.h>     /* signal(2), SIG_DFL, */
 #include <unistd.h>     /* fork(2), chdir(2), getpid(2), */
+#include <sys/syscall.h> /* syscall(2), SYS_clone, */
 #include <string.h>     /* strcmp(3), */
 #include <errno.h>      /* errno(3), */
 #include <stdbool.h>    /* bool, true, false, */
@@ -85,6 +86,24 @@ static bool kernel_supports_ptrace_event_seccomp(void)
  * Start @tracee->exe with the given @argv[].  This function
  * returns -errno if an error occurred, otherwise 0.
  */
+#ifdef SYS_clone
+/*
+ * deb-native: glibc's fork(2) makes the child call set_robust_list as its
+ * very first syscall (reset the robust list).  Android's seccomp traps that
+ * with SECCOMP_RET_TRAP, i.e. SIGSYS, which kills the child *before* it can
+ * PTRACE_TRACEME -- so dn-monitor can never attach a tracee on such a device.
+ * A raw clone(SIGCHLD) skips glibc's fork machinery (and its set_robust_list),
+ * so the child's first syscall is ours.
+ */
+static pid_t dn_raw_fork(void)
+{
+	return (pid_t) syscall(SYS_clone, (unsigned long) SIGCHLD,
+			       0UL, 0UL, 0UL, 0UL);
+}
+#else
+#define dn_raw_fork() fork()
+#endif
+
 int launch_process(Tracee *tracee, char *const argv[])
 {
 	char *const default_argv[] = { "-sh", NULL };
@@ -99,7 +118,7 @@ int launch_process(Tracee *tracee, char *const argv[])
 	if (tracee->verbose > 0)
 		list_open_fd(tracee);
 
-	pid = fork();
+	pid = dn_raw_fork();
 	switch(pid) {
 	case -1:
 		note(tracee, ERROR, SYSTEM, "fork()");

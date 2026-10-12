@@ -3,6 +3,8 @@
 #include <string.h>        /* str*(3), */
 #include <linux/limits.h>  /* PATH_MAX, */
 #include <unistd.h>        /* access(2), rmdir(2), */
+#include <signal.h>        /* SIGCHLD, */
+#include <sys/syscall.h>   /* syscall(2), SYS_clone, */
 #include <fcntl.h>         /* O_WRONLY, open(2) */
 #include <sys/wait.h>      /* waitpid(2), */
 #include <errno.h>         /* errno, EEXIST,  */
@@ -70,7 +72,16 @@ static bool probe_f2fs_bug(const Tracee *tracee) {
 
 	/* Create third file from child process */
 	int wstatus = 0;
+#ifdef SYS_clone
+	/* deb-native: glibc's fork(2) makes its child call set_robust_list
+	 * (reset the robust list), which Android's seccomp kills with SIGSYS
+	 * before the child runs a line of its own.  A raw clone(SIGCHLD)
+	 * skips glibc's fork machinery; see event.c dn_raw_fork().  */
+	pid_t pid = (pid_t) syscall(SYS_clone, (unsigned long) SIGCHLD,
+				    0UL, 0UL, 0UL, 0UL);
+#else
 	pid_t pid = fork();
+#endif
 	if (pid == 0) {
 		errno = 0;
 		fd = open(file3, O_WRONLY|O_CREAT, 0600);
