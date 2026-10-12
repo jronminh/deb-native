@@ -20,7 +20,8 @@ There is **no build on the host**.
   runtime (`scripts/build/build-trace.sh` — `dn-trace`, one static
   binary with the syscall catalog embedded, plain-gcc, linked against stock
   `libc6-dev`), and the prefix artifact
-  (`build-core-deb.sh` + `package-prefix.sh`, which writes `boot/` and `.dn/` —
+  (`build-core-deb.sh` + `package-prefix.sh`, which writes `boot/` and
+  `var/lib/deb-native/` —
   `docs/spec/prefix.md`).
 - **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
   `boot/version` without extracting, check it, extract, run `boot/install.sh`.
