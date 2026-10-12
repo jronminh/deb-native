@@ -1,10 +1,10 @@
 #!/bin/sh
-# Build the program interpreter (native/ld-dn.c) -- the exec gate's rule-3 target.
+# Build the program interpreter (native/dn-interp.c) -- the exec gate's rule-3 target.
 #
-# ld-dn is a freestanding aarch64 static-PIE: no libc, no PT_INTERP, no NEEDED.
+# dn-interp is a freestanding aarch64 static-PIE: no libc, no PT_INTERP, no NEEDED.
 # It runs as a program's interpreter, derives the prefix from its own path,
 # builds the environment (delivering the shim once one exists) and jumps into
-# the tree's glibc loader.  docs/spec/ld-dn-shim.md.
+# the tree's glibc loader.  docs/spec/dn-interp-shim.md.
 #
 # Usage: build-loader.sh [OUTDIR]   (default: native/.build)
 # (CC must be an aarch64 glibc cross compiler, e.g. aarch64-linux-gnu-gcc.)
@@ -23,11 +23,11 @@ case "$("$CC" -dumpmachine)" in
   *) echo "E: $CC targets $("$CC" -dumpmachine), not glibc" >&2; exit 1 ;;
 esac
 
-echo "Building ld-dn ..."
+echo "Building dn-interp ..."
 "$CC" -O2 -static -nostdlib -ffreestanding -fno-builtin -fno-stack-protector \
       -fPIE -Wl,-pie -Wl,--no-dynamic-linker \
-      -o "$OUT/ld-dn" "$SRC/ld-dn.c"
-cp -f "$SRC/ld-dn.conf" "$OUT/ld-dn.conf"
+      -o "$OUT/dn-interp" "$SRC/dn-interp.c"
+cp -f "$SRC/dn-interp.conf" "$OUT/dn-interp.conf"
 
 echo "loader in $OUT:"
-ls -l "$OUT/ld-dn" "$OUT/ld-dn.conf"
+ls -l "$OUT/dn-interp" "$OUT/dn-interp.conf"

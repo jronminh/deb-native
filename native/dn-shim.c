@@ -1,6 +1,6 @@
-/* dn-shim.so -- the fast path (docs/spec/ld-dn-shim.md, docs/spec/overlay.md).
+/* dn-shim.so -- the fast path (docs/spec/dn-interp-shim.md, docs/spec/runtime.md).
  *
- * An LD_PRELOAD shared object linked with dn-policy.  ld-dn puts it in the
+ * An LD_PRELOAD shared object linked with dn-policy.  dn-interp puts it in the
  * program's environment, so it is present at every dynamic glibc program,
  * however the program was launched.  For each path/identity call it
  * interposes, it translates the path through dn-policy and issues the syscall
@@ -30,14 +30,14 @@
 
 #include "dn-policy.h"
 
-/* The fixed gate page (mirrors src/tracer/syscall/seccomp.c and ld-dn).  */
+/* The fixed gate page (mirrors src/tracer/syscall/seccomp.c and dn-interp).  */
 #define DN_GATE_ADDR 0x100000000UL
 #define DN_GATE_SIZE 4096
 
 /* The "svc #0; ret" body written at P_GATE.  */
 static const uint32_t dn_gate_stub[2] = { 0xd4000001u, 0xd65f03c0u };
 
-/* Set once the gate page holds the stub (mapped here, or already by ld-dn).  */
+/* Set once the gate page holds the stub (mapped here, or already by dn-interp).  */
 static int dn_gate_ready;
 
 /* Issue a syscall @nr with up to six args, from the gate page.  Freestanding
@@ -85,7 +85,7 @@ static void dn_shim_init(void)
 	} else if (p != MAP_FAILED) {
 		munmap(p, DN_GATE_SIZE);           /* never on NOREPLACE */
 	} else if (errno == EEXIST) {
-		dn_gate_ready = 1;                 /* ld-dn already mapped it */
+		dn_gate_ready = 1;                 /* dn-interp already mapped it */
 	}
 
 	if (inst != NULL) {

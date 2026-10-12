@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # dn-update -- install a prebuilt deb-native component into the prefix.
 #
-# deb-native's own overlay (fused glibc, the shim, the Bionic runtime, the
+# deb-native's own runtime (fused glibc, the shim, the Bionic runtime, the
 # hooks/priv/launchers) is not a Debian package, so `apt` cannot update it.
 # This is the constrained primitive that can: copy one already-built file (or
 # directory) over its fixed location, within an allowlist. Base packages are

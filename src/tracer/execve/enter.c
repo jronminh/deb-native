@@ -68,7 +68,7 @@ int translate_and_check_exec(Tracee *tracee, char host_path[PATH_MAX], const cha
 	return 0;
 }
 
-/* deb-native (docs/spec/overlay.md, "The exec gate"): classify the final
+/* deb-native (docs/spec/runtime.md, "The exec gate"): classify the final
  * @host_path by the 5 rules there, purely from its header -- no trial run.
  * Rule 1 (the "#!" script case) is already unwrapped by expand_shebang(),
  * so @host_path here is always the final ELF (or the final non-ELF, for
@@ -152,7 +152,7 @@ static int classify_exec(const char *host_path, char interp[PATH_MAX])
 }
 
 /* deb-native, exec-gate rule 3: run @host_path through @interp (the
- * program interpreter, native/ld-dn.c) as
+ * program interpreter, native/dn-interp.c) as
  *
  *     interp --argv0 <original argv0> <host_path> <args...>
  *
@@ -246,13 +246,13 @@ int translate_execve_enter(Tracee *tracee)
 	if (status >= 0)
 		tracee->new_exe = talloc_strdup(tracee, new_exe);
 
-	/* Rule 3: run it through the interpreter (ld-dn), which sets up
+	/* Rule 3: run it through the interpreter (dn-interp), which sets up
 	 * the environment and jumps into the tree's glibc loader.  Only when
 	 * it is executable -- otherwise the program is exec'd directly.  */
 	if (rule == DN_RULE_GLIBC
-	    && global_ld_dn != NULL
-	    && access(global_ld_dn, X_OK) == 0) {
-		status = dn_exec_via_interp(tracee, global_ld_dn, host_path);
+	    && global_dn_interp != NULL
+	    && access(global_dn_interp, X_OK) == 0) {
+		status = dn_exec_via_interp(tracee, global_dn_interp, host_path);
 		if (status < 0)
 			return status;
 		return 0;

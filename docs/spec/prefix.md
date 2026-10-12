@@ -3,7 +3,7 @@
 <!-- template: templates/docs.template.md -->
 
 A **prefix** is a self-contained Debian `arm64` userland in one tarball: its
-own glibc, `apt`, and files, with the overlay from [`overlay.md`](overlay.md)
+own glibc, `apt`, and files, with the runtime from [`runtime.md`](runtime.md)
 at `RT` inside it. This doc covers how a prefix is **built** (a build host with
 a toolchain and network) and **shipped** (a poor host: a POSIX shell and
 toybox). It is the artifact contract — what the build produces, what `.dn/`
@@ -24,7 +24,7 @@ stages below are what the scripts do.
 
 ## Related docs
 
-- [`overlay.md`](overlay.md) — the runtime the tree carries (`dn-policy`,
+- [`runtime.md`](runtime.md) — the runtime the tree carries (`dn-policy`,
   `dn-shim`, `dn-trace`), and the glibc rule.
 - [`../reference/`](../reference) — background on Android's syscall and
   filesystem behaviour.
@@ -38,7 +38,7 @@ runs as is; installing it is `tar x` plus two short scripts.
 
 Every glibc ELF keeps the interpreter Debian gave it
 (`/lib/ld-linux-aarch64.so.1`); the kernel never resolves that path, because
-every exec goes through [`overlay.md`](overlay.md)'s exec gate, which runs a
+every exec goes through [`runtime.md`](runtime.md)'s exec gate, which runs a
 glibc-dynamic program through `RT/ld.so` itself. A package is therefore
 installed intact, and **nothing repoints a `PT_INTERP` after the build**.
 
@@ -57,8 +57,8 @@ own; nothing is ever added into an installed prefix as a module:
 
 | artifact | built from | done when |
 | --- | --- | --- |
-| **core-deb** | an empty base + the pinned package list + the overlay | `apt install` works |
-| **core-ultra** | a cut of the core-deb tree: the minimal seed packages + the overlay | the prefix's shell runs |
+| **core-deb** | an empty base + the pinned package list + the runtime | `apt install` works |
+| **core-ultra** | a cut of the core-deb tree: the minimal seed packages + the runtime | the prefix's shell runs |
 | **specialized** | the core-ultra recipe + a payload (e.g. the Claude binary) | its payload runs |
 
 **core-deb** ships minimal (the pinned list is
@@ -69,7 +69,7 @@ names in `.dn/profile` (21 names); a full bootstrap ends at **76 packages**.
 
 **core-ultra** is cut *from* the core-deb tree by
 [`../../scripts/build/cut-core-ultra.py`](../../scripts/build/cut-core-ultra.py):
-the files of the seed packages, the overlay, the small `etc` files a shell and
+the files of the seed packages, the runtime, the small `etc` files a shell and
 a resolver read, and every library their ELFs need, added until the set is
 closed. core-ultra has no `dpkg` database, so its `.dn/packages` is the only
 record of what it contains.
@@ -140,22 +140,22 @@ A build host: an `arm64` Linux machine with `gcc`, `make`, `python3`,
 `dpkg-deb`, `wget` or `curl`, `xz`. Nothing here runs inside a prefix or on
 the target.
 
-1. **The overlay.** `scripts/build/build-overlay-glibc.sh` builds `dn-trace`
-   from `src/tracer/` into `src/.build-glibc/` — the whole overlay, one file:
+1. **The runtime.** `scripts/build/build-trace.sh` builds `dn-trace`
+   from `src/tracer/` into `src/.build-glibc/` — the whole runtime, one file:
    the syscall catalog `src/syscalls.tsv` is embedded in it at build time.
    dn-trace is **static and self-contained** (its talloc
    is vendored in `src/tracer/talloc/`), linked against the Android-patched
    glibc's `libc.a` (`DN_GLIBC_LIBC_DIR`): Android's zygote seccomp kills a
    stock-glibc program at startup, so the patched libc is required. A poor
    host then starts dn-trace with a bare exec, outside the runtime. See
-   [`overlay.md`](overlay.md).
+   [`runtime.md`](runtime.md).
 2. **The patched glibc.** The same host builds glibc from Debian's source at
    the tree's `libc6` version, applying the two patches (Android base +
    dn-policy wiring), then packages the result as two real Debian packages —
    `libc6` and `libc-bin`, at `<Debian version>+dn1`
    (`scripts/glibc/dn-package-glibc.sh`, `dn-package-libc-bin.sh`). This is the
    **glibc bundle**: `libc6.deb` + `libc-bin.deb`. See
-   [`overlay.md`](overlay.md), "dn-shim".
+   [`runtime.md`](runtime.md), "dn-shim".
 3. **The tree.** `scripts/build/build-core-deb.sh BASE OUT.tar.gz` assembles
    one from an **empty base**: it indexes the mirror, downloads and
    sha256-verifies every package in the pinned list (using our `libc6`/
@@ -163,7 +163,7 @@ the target.
    database as `dpkg --unpack` would leave it (status `unpacked`, with each package's
    `Conffiles`, file lists, and every control file: `md5sums`, `conffiles`,
    maintainer scripts, triggers; `<pkg>:<arch>` for a `Multi-Arch: same`
-   package), prunes files no shipped package owns, installs the overlay into
+   package), prunes files no shipped package owns, installs the runtime into
    `RT`, builds the **local repo** (`RT/repo`, its `Release` dated and
    carrying the index hashes) with the patched glibc packages, ships the
    prefix's init and the loader, and writes the apt configuration and
@@ -181,7 +181,7 @@ The build inputs to step 3:
 | `BASE` (arg) | the tree to build on; the canonical build uses an **empty** dir |
 | `DEB_LIST` | the pinned `name<TAB>version<TAB>arch` list (packages.tsv) |
 | `DN_GLIBC_PREFIX` | the glibc bundle: a dir with `libc6.deb` + `libc-bin.deb` |
-| `DN_OVERLAY` | `build-overlay-glibc.sh`'s output |
+| `DN_RUNTIME` | `build-trace.sh`'s output |
 | `PREFIX_ROOT` | the path the build assumes; asserted not to be named (the artifact is relocatable) |
 | `DN_PROFILE` | optional; written as `.dn/profile` |
 | `DEB_CACHE` | downloaded `.debs`, kept across builds |
@@ -246,11 +246,11 @@ root. Then it restores `.dn/profile` from the mirror — `apt-get update`,
 shell.
 
 The glibc packages are held and pinned, so `apt` never replaces the patched
-files ([`overlay.md`](overlay.md), "the glibc rule").
+files ([`runtime.md`](runtime.md), "the glibc rule").
 
 ## Host updates
 
-deb-native's own overlay is not a Debian package, so `apt` cannot update it.
+deb-native's own runtime is not a Debian package, so `apt` cannot update it.
 `scripts/host/dn-update.sh` is the constrained primitive that can: copy one
 already-built file (or directory) over its fixed location, within an allowlist
 (`loader`, `libc`, `trace`, `shell`, ...), never a base package. The runtime

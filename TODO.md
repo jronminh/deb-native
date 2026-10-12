@@ -32,10 +32,10 @@ unprivileged; `apt install gcc` compiles and runs end to end.
   place (keeps `/proc/self/exe`), announce on stderr, opt out
   `DN_NO_AUTO_ADOPT=1`.
 
-## Branch `ld-dn-surgical`: the loader-centric runtime
+## Branch `dn-interp-surgical`: the loader-centric runtime
 
-Design: [`docs/spec/ld-dn-shim.md`](docs/spec/ld-dn-shim.md). A modification
-of `main`: `ld-dn` is the program's interpreter, `dn-shim.so` (linked with
+Design: [`docs/spec/dn-interp-shim.md`](docs/spec/dn-interp-shim.md). A modification
+of `main`: `dn-interp` is the program's interpreter, `dn-shim.so` (linked with
 `dn-policy`) is the in-process fast path and owns `P_GATE`, and `dn-trace` is
 the fallback. `dn-policy` and `dn-trace` are reused unchanged; glibc is not
 wired. The shim's blind spots (NSS, gconv, loader internals, inline `svc`,
@@ -47,7 +47,7 @@ there is no per-binary routing — see
 
 - **Build on WSL (amd64).** The `aarch64-linux-gnu` cross toolchain (gcc 14.2,
   `binutils`, `libc6-dev-arm64-cross`, static `/usr/aarch64-linux-gnu/lib/libc.a`)
-  builds `ld-dn`, `dn-trace` (vendored `talloc`) and `dn-shim.so`. Native
+  builds `dn-interp`, `dn-trace` (vendored `talloc`) and `dn-shim.so`. Native
   amd64 runs `tools/check-*.py`. Good for compile-verify and static/ELF checks;
   it cannot **run** the aarch64 runtime.
 - **Run on the device over `adb`**, inside the debuggable `dn-shell` app
@@ -78,8 +78,8 @@ is now a usable host too.
 **Phases** (each leaves the tree runnable):
 
 - **P1 — loader plumbing (no behaviour change).** Recover
-  `native/ld-dn.c`/`ld-dn.conf` from `d18b187`; add the build step; derive
-  `LD-DN` in `cli/dn-trace.c`; exec-gate rule 3 targets `ld-dn`. Verify:
+  `native/dn-interp.c`/`dn-interp.conf` from `d18b187`; add the build step; derive
+  `DN-INTERP` in `cli/dn-trace.c`; exec-gate rule 3 targets `dn-interp`. Verify:
   `.deb` bytes unchanged, `/proc/self/exe` correct, a dynamic program runs.
 - **P2 — shim + gate page.** Rewrite the old `path-redirect.c` as
   `dn-shim.c` (call `dn-policy`, issue syscalls from `P_GATE`); remove the gate
@@ -90,10 +90,10 @@ is now a usable host too.
   syscall that kills it.
 - **P4 — measure.** Reuse the per-tier counters; per-tier call distribution.
 
-**Status**: P1 done — `ld-dn` recovered (`native/`, `build-interp.sh`) and the
+**Status**: P1 done — `dn-interp` recovered (`native/`, `build-interp.sh`) and the
 exec gate's rule 3 runs it; the `dn-glibc` → `dn-shim` naming and mechanism
 sweep is in.  P2a done — `dn-shim.so` builds (`native/dn-shim.c`,
-`build-shim.sh`): the open family, issued from `P_GATE`, with `ld-dn.conf`
+`build-shim.sh`): the open family, issued from `P_GATE`, with `dn-interp.conf`
 preloading it.  P2b next: drop `dn-policy-glibc-wiring.patch`, widen the
 surface, recompute the catalog's `glibc`/`gate` columns.
 
@@ -139,13 +139,13 @@ runs). The 256-byte `PT_INTERP` capacity is reserved by `dn-elf`.
 - **One build entry**: wrap the build steps in a single command (a `Makefile`
   or `scripts/build.sh`), so the README's build section is one line.
 
-## Runtime v1: new overlay (dn-policy / dn-shim / dn-trace)
+## Runtime v1: new runtime (dn-policy / dn-shim / dn-trace)
 
-Design: [`docs/spec/overlay.md`](docs/spec/overlay.md). Replaces the whole
-current overlay (`dn-shim.c`, `dn-run`'s adopt-on-first-run, `dn-elf` at run
+Design: [`docs/spec/runtime.md`](docs/spec/runtime.md). Replaces the whole
+current runtime (`dn-shim.c`, `dn-run`'s adopt-on-first-run, `dn-elf` at run
 time, `patch-maintainer-scripts.sh`) rather than running beside it. Phases
 below match `runtime.md`'s roadmap; each phase must leave the tree runnable
-on the current overlay until it's actually replaced.
+on the current runtime until it's actually replaced.
 
 **Status**: P1 mostly done, reusing `src/tracer/` (the pruned PRoot fork) as
 `dn-trace`'s core rather than writing one fresh — answers the open question
@@ -217,7 +217,7 @@ below.
   for everything `dn-policy.h` declares; not yet done: caching the
   resolution (every lookup hits the real filesystem directly).
 - Patch glibc (full rebuild from Debian source, not the shipped 10-file
-  swap — see `docs/spec/overlay.md`'s status note): wire dn-policy
+  swap — see `docs/spec/runtime.md`'s status note): wire dn-policy
   into every path-taking function (public + internal + `syscall()`), route
   every kernel call through the gate page, map the gate page at loader
   startup, reorder library search (`RT/lib` first).
@@ -292,7 +292,7 @@ numbers justify it.
 ## Backend emulation (faking what the kernel refuses)
 
 Design: [`docs/spec/emulation.md`](docs/spec/emulation.md). Reimplement the
-operations Android refuses (mount/overlay, raw sockets, privileged ports,
+operations Android refuses (mount/runtime, raw sockets, privileged ports,
 capabilities, `/proc` reads) in userspace, and answer every interface that
 reads them from one model in dn-policy. The existing
 `mount`/`unshare` binding table, AF_NETLINK substitution and
@@ -368,7 +368,7 @@ is a vendored, pruned SINS. Test ladder: `cron` -> `redis` -> `dbus`.
 ## Shim & tracer hardening
 
 **Status**: the libc-interposition layer is complete for its scope
-([`docs/spec/overlay.md`](docs/spec/overlay.md)); NSS
+([`docs/spec/runtime.md`](docs/spec/runtime.md)); NSS
 and raw-syscall/static binaries route to `dn-trace`. `proot` is gone.
 
 **Open**:
@@ -383,7 +383,7 @@ and raw-syscall/static binaries route to `dn-trace`. `proot` is gone.
 - **POSIX `/dev/shm`**: absent on Android, so `shm_open`/`sem_open` fail;
   fake it in dn-policy the way `statfs` already reports it as tmpfs.
 - Bake the shim into installed ELFs
-  ([`docs/spec/overlay.md`](docs/spec/overlay.md), "Delivering
+  ([`docs/spec/runtime.md`](docs/spec/runtime.md), "Delivering
   the shim") so it survives an empty environment — `DT_AUDIT`/`--add-needed`,
   or `ld.so --preload`.
 - Test `dn-run` -> `dn-trace` from an installed prefix, not just a checkout.

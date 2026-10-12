@@ -5,7 +5,7 @@
 #
 # The prefix is staged in a scratch copy, the build invariants are applied and
 # the .dn/ contract is written (build/pack-prefix.py), then the copy is tarred.
-# A manifest of the overlay components (path -> sha256) is written into the
+# A manifest of the runtime components (path -> sha256) is written into the
 # prefix for dn-update, as before.
 #
 # Usage: package-prefix.sh PREFIX --root BUILD_PATH --name NAME [--desc TEXT]
@@ -33,7 +33,7 @@ ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd)
 VER=$(cat "$ROOT/VERSION")
 [ -n "$OUT" ] || OUT=$PWD/$NAME-$VER-arm64.tar.gz
 
-# The overlay manifest (dn-update), written into the built prefix as before.
+# The runtime manifest (dn-update), written into the built prefix as before.
 MAN="$PREFIX/var/lib/deb-native/prefix-manifest.tsv"
 mkdir -p "$(dirname "$MAN")"
 : > "$MAN"

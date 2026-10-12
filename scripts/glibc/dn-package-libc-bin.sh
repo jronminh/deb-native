@@ -87,7 +87,7 @@ fi
 # A few of the copied programs are shell scripts (ldd, tzselect) that bake the
 # build prefix into their text.  Strip it so they name guest paths, which the
 # runtime maps into whatever tree booted the prefix; an ELF keeps its baked
-# prefix because the loader rebases it at run time (docs/spec/overlay.md).
+# prefix because the loader rebases it at run time (docs/spec/runtime.md).
 if [ -n "${DN_PREFIX:-}" ]; then
   for d in usr/bin usr/sbin; do
     [ -d "$WORK/pkg/$d" ] || continue

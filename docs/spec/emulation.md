@@ -27,7 +27,7 @@ what, and what must agree. Status: design; only the pieces under
 
 ## Related docs
 
-- [`overlay.md`](overlay.md) — the runtime (`dn-policy`, `ld-dn`, `dn-shim`,
+- [`runtime.md`](runtime.md) — the runtime (`dn-policy`, `dn-interp`, `dn-shim`,
   `dn-trace`) this layer is part of.
 - [`native.md`](native.md) — the execution model this layer serves (near-full
   behaviour, near-native speed).
@@ -49,7 +49,7 @@ learns the operation did not reach the kernel.
 
 Two properties make it hold:
 
-- **One model, two enforcement points** ([`overlay.md`](overlay.md) principle
+- **One model, two enforcement points** ([`runtime.md`](runtime.md) principle
   3): dn-shim answers the same question as dn-trace, from the same state, so
   the fast and traced paths cannot disagree.
 - **Every reader is covered.** A model is only as good as its

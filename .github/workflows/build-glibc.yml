@@ -4,7 +4,7 @@ name: Build the glibc runtime
 #   - the glibc bundle: Debian's real libc6/libc-bin, repackaged with this
 #     project's own Android-patched build (patches/dn-glibc-android.patch);
 #     it is an artifact for build-prefix.yml -- not a release of its own;
-#   - the runtime overlay (dn-trace, the syscall catalog embedded in it).
+#   - the runtime runtime (dn-trace, the syscall catalog embedded in it).
 # The one published release is `prefix`, from build-prefix.yml
 # (docs/spec/prefix.md).
 
@@ -16,7 +16,7 @@ env:
   GLIBC_VERSION: "2.41"
   GLIBC_DEB_VERSION: "2.41-12+deb13u4"
   # The prefix glibc is BUILT for. It is baked as the fallback the runtime
-  # rewrites (docs/spec/overlay.md, "Runtime prefix self-derivation"),
+  # rewrites (docs/spec/runtime.md, "Runtime prefix self-derivation"),
   # so it must differ from the artifact's PREFIX_ROOT: if the two were equal,
   # every patched glibc file would name the artifact root and pack-prefix
   # would refuse it (build invariant 6). Keep it a placeholder, not a target.
@@ -157,12 +157,12 @@ jobs:
       # dn-trace is static, linked against the libc.a just built: a stock
       # glibc is killed by Android's seccomp at startup
       # (docs/reference/android-platform.md).  Handed to build-prefix.yml.
-      - name: Build the runtime overlay
-        run: DN_GLIBC_LIBC_DIR="$GITHUB_WORKSPACE/objdir" scripts/build/build-overlay-glibc.sh
+      - name: Build the runtime runtime
+        run: DN_GLIBC_LIBC_DIR="$GITHUB_WORKSPACE/objdir" scripts/build/build-trace.sh
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dn-overlay
+          name: dn-runtime
           path: src/.build-glibc/
           include-hidden-files: true
           retention-days: 14

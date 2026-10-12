@@ -17,7 +17,7 @@
 #                 and dn-package-libc-bin.sh; version `<Debian>+dn1`, loader
 #                 says "GNU libc"). They replace Debian's in step 2, are
 #                 installed in the tree, and ship in the local repo (step 6b).
-#   DN_OVERLAY    the runtime overlay (build-overlay-glibc.sh output):
+#   DN_RUNTIME    the runtime runtime (build-trace.sh output):
 #                 dn-trace, one self-contained binary (the syscall catalog is
 #                 embedded in it).
 #   DEB_MIRROR    Debian mirror, default http://deb.debian.org/debian
@@ -38,13 +38,13 @@
 #                 caller can cut core-ultra from it (cut-core-ultra.py)
 #   OUT           output tarball
 #
-# Usage: DN_GLIBC_PREFIX=... DN_OVERLAY=... PREFIX_ROOT=... DEB_LIST=... \
+# Usage: DN_GLIBC_PREFIX=... DN_RUNTIME=... PREFIX_ROOT=... DEB_LIST=... \
 #        build-core-deb.sh BASE OUT.tar.gz
 set -eu
 BASE=${1:?usage: build-core-deb.sh BASE OUT.tar.gz}
 OUT=${2:?usage: build-core-deb.sh BASE OUT.tar.gz}
 : "${DN_GLIBC_PREFIX:?set DN_GLIBC_PREFIX to the dir holding the patched libc6.deb and libc-bin.deb}"
-: "${DN_OVERLAY:?set DN_OVERLAY to the build-overlay-glibc.sh output dir}"
+: "${DN_RUNTIME:?set DN_RUNTIME to the build-trace.sh output dir}"
 : "${PREFIX_ROOT:?set PREFIX_ROOT to the absolute build path of the artifact}"
 : "${DEB_LIST:?set DEB_LIST to the pinned package list (.dn/packages format)}"
 MIRROR=${DEB_MIRROR:-http://deb.debian.org/debian}
@@ -148,7 +148,7 @@ done < "$W/debs.list"
 #    or repoint PT_INTERP: the tree's root dn-trace sees every exec, and its
 #    exec gate runs a glibc-dynamic program through the runtime loader
 #    (RT/ld.so) itself, so the kernel never has to resolve a guest PT_INTERP
-#    (docs/spec/overlay.md, "The exec gate").
+#    (docs/spec/runtime.md, "The exec gate").
 
 # 5. dpkg's database for every package in the artifact, as dpkg itself would
 #    leave it: status (with each package's Conffiles and their md5sums), file
@@ -227,12 +227,12 @@ while IFS= read -r f; do
 done < "$W/orphans.txt"
 echo "build-core-deb: pruned $pruned files of packages not shipped"
 
-# 6. Overlay: the runtime -- dn-trace, the tree's root.  The syscall catalog
+# 6. Runtime: the runtime -- dn-trace, the tree's root.  The syscall catalog
 #    (src/syscalls.tsv) is embedded in it, so it is the only file
-#    (docs/spec/overlay.md).
+#    (docs/spec/runtime.md).
 mkdir -p "$STAGE/usr/lib/deb-native"
-[ -f "$DN_OVERLAY/dn-trace" ] || die "missing $DN_OVERLAY/dn-trace"
-cp -f "$DN_OVERLAY/dn-trace" "$STAGE/usr/lib/deb-native/dn-trace"
+[ -f "$DN_RUNTIME/dn-trace" ] || die "missing $DN_RUNTIME/dn-trace"
+cp -f "$DN_RUNTIME/dn-trace" "$STAGE/usr/lib/deb-native/dn-trace"
 # The prefix's init: the host boots the tree through dn-trace into this, and it
 # completes the prefix by itself on a first boot (docs/spec/prefix.md, "Boot").
 cp -f "$ROOT/scripts/prefix/init.sh" "$STAGE/usr/lib/deb-native/init.sh"
@@ -243,7 +243,7 @@ chmod 755 "$STAGE/usr/lib/deb-native/init.sh"
 # translates the tracer's own path operations.  Nothing to ship for it beyond
 # the binary itself.
 
-# 6b. The local repo (docs/spec/overlay.md, "The local repo"): the patched
+# 6b. The local repo (docs/spec/runtime.md, "The local repo"): the patched
 #     glibc packages, so apt sees them and the origin pin (below) keeps the
 #     mirror from ever replacing them. It lives in RT, outside the
 #     dpkg-managed tree. Packages and Release are written by hand, so the
@@ -283,14 +283,14 @@ REL
 
 # 7. deb-native's own layer: the bootstrap helper the prefix runs at login.
 #    Runtime v1 needs no apt hooks -- a .deb installs intact, and dn-policy
-#    rewrites paths and identities at run time (docs/spec/overlay.md).
+#    rewrites paths and identities at run time (docs/spec/runtime.md).
 mkdir -p "$STAGE/usr/lib/deb-native/scripts/runtime"
 cp -f "$ROOT/scripts/host/bootstrap-prefix.sh" "$STAGE/usr/lib/deb-native/scripts/runtime/"
 # The alternatives that mawk's configure step would make: the package manager's
 # awk is the link, not the file (a shipped tree is not configured).
 [ -e "$STAGE/usr/bin/awk" ] || [ -L "$STAGE/usr/bin/awk" ] || ln -s mawk "$STAGE/usr/bin/awk"
 
-# The loader configuration the overlay needs. With a package-derived BASE these
+# The loader configuration the runtime needs. With a package-derived BASE these
 # may be absent, so the build writes them.  Every path is a **guest** path
 # (dn-policy maps "/" to the tree): the artifact names no host prefix, so it
 # installs anywhere (docs/spec/prefix.md, "Boot").
@@ -322,7 +322,7 @@ Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 SRC
 # The local repo: the patched glibc, and the origin pin that keeps the mirror
-# from replacing it (docs/spec/overlay.md, "The local repo"). The path is a
+# from replacing it (docs/spec/runtime.md, "The local repo"). The path is a
 # guest path: the runtime translates it into the tree.
 cat > "$STAGE/etc/apt/sources.list.d/dn-local.list" <<SRC
 deb [trusted=yes] file:/usr/lib/deb-native/repo ./

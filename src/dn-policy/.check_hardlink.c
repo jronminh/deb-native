@@ -42,7 +42,7 @@ int main(void)
 	/* Deliberately not under /tmp: this repo's *existing* tracer
 	 * (src/tracer/path/temp.c) special-cases /tmp, which broke
 	 * rename() across it during development of this check -- a
-	 * quirk of the currently-running old overlay, not of dn-policy.
+	 * quirk of the currently-running old runtime, not of dn-policy.
 	 * Right under the real home dir sidesteps that and is closer to
 	 * where TREE actually lives anyway. */
 	char tree[] = "/data/data/com.termux/files/home/.dnp-check-hl.XXXXXX";

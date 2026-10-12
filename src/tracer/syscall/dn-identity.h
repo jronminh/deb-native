@@ -1,6 +1,6 @@
 /* deb-native: the identity group (get*id, set*id, getgroups, setgroups,
  * setfs*id) under fake root, answered from the tracee's DnIdentity by
- * dn-policy's rules (docs/spec/overlay.md, "Fake root").  The call never
+ * dn-policy's rules (docs/spec/runtime.md, "Fake root").  The call never
  * reaches the kernel: the ids are recorded, nothing real changes, and a
  * program that dropped root cannot take it back.
  */

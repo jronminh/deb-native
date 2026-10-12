@@ -1,14 +1,14 @@
-/* ld-dn -- deb-native's program interpreter (trampoline)
- * (docs/spec/ld-dn-shim.md).
+/* dn-interp -- deb-native's program interpreter (trampoline)
+ * (docs/spec/dn-interp-shim.md).
  *
  * Every Debian program in the prefix names this file as its ELF interpreter
  * (PT_INTERP), so the kernel runs it first, however the program was started:
  * by name, by full path, from Termux's side, by another program. It then:
  *
  *   1. finds the prefix from the program's own PT_INTERP string
- *      ($DN/usr/lib/deb-native/ld-dn);
+ *      ($DN/usr/lib/deb-native/dn-interp);
  *   2. builds a corrected environment from a compiled-in default policy,
- *      overlaid by $DN/etc/deb-native/ld-dn.conf (or $DN_CONFIG); the
+ *      overlaid by $DN/etc/deb-native/dn-interp.conf (or $DN_CONFIG); the
  *      caller's LD_LIBRARY_PATH is merged in after the fixed dirs and
  *      DN_PRELOAD is appended to the preload list;
  *   3. maps glibc's real loader ($DN/usr/lib/ld-linux-aarch64.so.1, the
@@ -17,7 +17,7 @@
  *
  * The policy (loader, library dirs, preloads, env set/unset, shim redirect
  * roots, per-program overrides) is data, so extending behaviour is a config
- * edit in the prefix, not a rebuild -- see docs/spec/ld-dn-config.md. The
+ * edit in the prefix, not a rebuild -- see docs/spec/dn-interp-config.md. The
  * compiled defaults reproduce the pre-config behaviour exactly, so a prefix
  * with no config file (the bootstrap case) is unchanged.
  *
@@ -29,7 +29,7 @@
  * apply (the kernel maps it; nothing relocates it). Build:
  *   clang -O2 -static -nostdlib -ffreestanding -fno-builtin \
  *         -fno-stack-protector -fPIE -Wl,-pie -Wl,--no-dynamic-linker \
- *         -o ld-dn ld-dn.c
+ *         -o dn-interp dn-interp.c
  */
 typedef unsigned long u64;
 typedef long i64;
@@ -125,7 +125,7 @@ static int ends_with(const char *s, const char *suffix) {
 }
 static void put(const char *s) { sys6(SYS_write, 2, (i64)s, (i64)slen(s), 0, 0, 0); }
 static void warn(const char *what, const char *arg) {
-  put("ld-dn: "); put(what); if (arg) { put(": "); put(arg); } put("\n");
+  put("dn-interp: "); put(what); if (arg) { put(": "); put(arg); } put("\n");
 }
 static void die(const char *what, const char *arg) {
   warn(what, arg);
@@ -264,11 +264,11 @@ static void policy_defaults(void) {
   join_prefix(g_default_pre, DN_PATH_MAX, "/usr/lib/deb-native/path-redirect.so");
   add_lib("/usr/lib/aarch64-linux-gnu");
   add_lib("/usr/lib");
-  /* COMPILER_PATH: gcc's cc1/as/ld do not fall back to PATH (ld-dn.c
+  /* COMPILER_PATH: gcc's cc1/as/ld do not fall back to PATH (dn-interp.c
    * history); one of the generic env entries now, so a config can replace
    * it with `env COMPILER_PATH=...`. */
   set_env("COMPILER_PATH", "$DN/usr/bin", 0);
-  /* Replaced by ld-dn itself or rebuilt below; drop the caller's copy. */
+  /* Replaced by dn-interp itself or rebuilt below; drop the caller's copy. */
   add_unset("LD_PRELOAD"); add_unset("DN_INSTDIR");
   add_unset("LD_LIBRARY_PATH"); add_unset("COMPILER_PATH");
 }
@@ -381,7 +381,7 @@ static void load_config(const char *override) {
     if (slen(override) + 1 > DN_PATH_MAX) { warn("DN_CONFIG too long, ignored", 0); return; }
     memcpy(path, override, slen(override) + 1);
   } else {
-    cat2(path, DN_PATH_MAX, g_dn, "/etc/deb-native/ld-dn.conf");
+    cat2(path, DN_PATH_MAX, g_dn, "/etc/deb-native/dn-interp.conf");
   }
   i64 fd = sys6(SYS_openat, AT_FDCWD, (i64)path, O_RDONLY | O_CLOEXEC, 0, 0, 0);
   if (failed(fd)) return;   /* ENOENT: no config, defaults stand */
@@ -460,7 +460,7 @@ static void build_env(void) {
   if (has_rprefix) cat2(g_env_rprefix, sizeof g_env_rprefix, "DN_REDIRECT_PREFIXES=", g_rprefix);
 }
 static void dump_policy(void) {
-  put("ld-dn " DN_VERSION "\n");
+  put("dn-interp " DN_VERSION "\n");
   put("  prefix: "); put(g_dn); put("\n");
   put("  loader: "); put(g_loader); put("\n");
   for (int i = 0; i < nlib; i++) { put("  lib-add: "); put(libs[i]); put("\n"); }
@@ -476,7 +476,7 @@ static void dump_policy(void) {
 
 struct ret { u64 sp, entry; };
 
-struct ret ld_dn_main(u64 *sp) {
+struct ret dn_interp_main(u64 *sp) {
   long argc = (long)sp[0];
   char **argv = (char **)(sp + 1);
   char **envp = argv + argc + 1;
@@ -499,9 +499,9 @@ struct ret ld_dn_main(u64 *sp) {
   for (u64 i = 0; i < phnum; i++) if (pp[i].p_type == PT_PHDR) bias = phdr - pp[i].p_vaddr;
   for (u64 i = 0; i < phnum; i++) if (pp[i].p_type == PT_INTERP) interp = (const char *)(bias + pp[i].p_vaddr);
   if (!interp) die("no PT_INTERP in the program", 0);
-  const char *suffix = "/usr/lib/deb-native/ld-dn";
+  const char *suffix = "/usr/lib/deb-native/dn-interp";
   u64 li = slen(interp), ls = slen(suffix);
-  if (li <= ls || li - ls >= sizeof g_dn || !starts(interp + li - ls, suffix)) die("not installed as $PREFIX/usr/lib/deb-native/ld-dn", interp);
+  if (li <= ls || li - ls >= sizeof g_dn || !starts(interp + li - ls, suffix)) die("not installed as $PREFIX/usr/lib/deb-native/dn-interp", interp);
   memcpy(g_dn, interp, li - ls); g_dn[li - ls] = 0;
 
   /* 2. Policy: compiled defaults, config file, then one-shot overrides. */
@@ -594,7 +594,7 @@ struct ret ld_dn_main(u64 *sp) {
 }
 
 /* Reserve RESERVE bytes below the kernel's stack for the rebuilt vector,
- * call ld_dn_main(original sp), then enter glibc's loader on the new stack
+ * call dn_interp_main(original sp), then enter glibc's loader on the new stack
  * the way the kernel would have: sp at argc, x0 = 0. */
 __asm__(
     ".text\n"
@@ -602,7 +602,7 @@ __asm__(
     "_start:\n"
     "  mov x0, sp\n"
     "  sub sp, sp, #0x10000\n"
-    "  bl ld_dn_main\n"
+    "  bl dn_interp_main\n"
     "  mov sp, x0\n"
     "  mov x16, x1\n"
     "  mov x0, #0\n"

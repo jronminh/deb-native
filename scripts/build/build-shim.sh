@@ -1,10 +1,10 @@
 #!/bin/sh
 # Build the fast-path shim (native/dn-shim.c) as dn-shim.so.
 #
-# dn-shim.so is an LD_PRELOAD shared object linked with dn-policy.  ld-dn
-# delivers it (ld-dn.conf's `preload`); it translates each path/identity call
+# dn-shim.so is an LD_PRELOAD shared object linked with dn-policy.  dn-interp
+# delivers it (dn-interp.conf's `preload`); it translates each path/identity call
 # through dn-policy and issues the syscall from the fixed gate page.  See
-# docs/spec/ld-dn-shim.md; P2a is the open family.
+# docs/spec/dn-interp-shim.md; P2a is the open family.
 #
 # Usage: build-shim.sh [OUTDIR]   (default: native/.build)
 # (CC must be an aarch64 glibc cross compiler, e.g. aarch64-linux-gnu-gcc.)

@@ -2,7 +2,7 @@
 # Trim a prefix to the minimal apt/dpkg/bash-capable set (build-stage helper,
 # run before package-prefix.sh; the repo layout "Build vs Ship"). Keeps the
 # Debian Essential/Required floor plus apt/dpkg's dependency closure plus the
-# full deb-native overlay (binaries AND scripts); removes what only inflates
+# full deb-native runtime (binaries AND scripts); removes what only inflates
 # size. Experimental -- measure before trusting.
 #
 # Usage: trim-prefix.sh PREFIX [--strip]
@@ -35,4 +35,4 @@ fi
 
 after=$(du -sm "$DN" 2>/dev/null | cut -f1)
 echo "trimmed: $DN (${before}MB -> ${after}MB)"
-echo "kept: Essential/Required + apt/dpkg deps + the deb-native overlay (binaries and scripts)"
+echo "kept: Essential/Required + apt/dpkg deps + the deb-native runtime (binaries and scripts)"

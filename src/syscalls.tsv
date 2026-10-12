@@ -1,5 +1,5 @@
 # deb-native syscall catalog -- the exact, categorized list of the syscalls
-# the runtime overlay handles (docs/spec/overlay.md, "The shared filter's
+# the runtime runtime handles (docs/spec/runtime.md, "The shared filter's
 # rules").  One source of truth: the build embeds it in dn-trace verbatim
 # (src/tracer/GNUmakefile -> syscall/dn-catalog.c), which builds the filter's
 # gate-IP exemption from the gate=yes rows; dn-shim wires the glibc=yes rows,
@@ -12,7 +12,7 @@
 #   android:  12 (kernel string "android12-9"; recheck per device/API level)
 #   kernel:   5.10.240-android12-9-33405034-abS7110ZHS8GZH6 (observed on the
 #             author's device; see ~/.claude/claude-native/doctor.sh output)
-#   sources:  docs/spec/overlay.md ("The shared filter's rules" -- the
+#   sources:  docs/spec/runtime.md ("The shared filter's rules" -- the
 #             group lists); patches/dn-glibc-android.patch's fakesyscall.json
 #             (Android kernel/ABI buckets) and docs/reference/android-platform.md
 #             (per-file verdict); Termux termux-pacman/glibc-packages
@@ -20,7 +20,7 @@
 #   updated:  2026-10-08
 # Android-specific syscall faking (statx/close_range/mq_open -> ENOSYS,
 # epoll_pwait2 and SysV IPC -> real substitutes, the setuid/... "0" bucket)
-# is a dn-glibc-android.patch concern, not an overlay one; it lives in that
+# is a dn-glibc-android.patch concern, not an runtime one; it lives in that
 # patch's fakesyscall.json, which is the companion to this file.
 #
 # Columns: syscall  group  handling  glibc  gate

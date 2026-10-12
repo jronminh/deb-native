@@ -47,7 +47,7 @@
  *
  * - Nothing here is prefix-specific (principle 5, runtime.md): dn_policy_init()
  *   takes TREE/RT as plain strings the *caller* already derived (dn-trace
- *   from its own location; dn-shim from the environment ld-dn sets).
+ *   from its own location; dn-shim from the environment dn-interp sets).
  *   dn-policy itself never hardcodes a path.
  */
 

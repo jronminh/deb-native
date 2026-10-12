@@ -50,20 +50,20 @@ case "$(in_ul 'getent passwd root')" in root:*) ;; *) fail "getent passwd root f
 case "$(in_ul 'getent group root')" in root:*) ;; *) fail "getent group root failed";; esac
 ok "identity: getent resolves users/groups from the prefix"
 
-# 4. every redirect root is reachable through the overlay, with content only
+# 4. every redirect root is reachable through the runtime, with content only
 #    the prefix has; /tmp and /run write into the prefix; /dev,/proc,/sys are
 #    not pulled in. (readlink -f is unusable here: realpath(3) walks paths
 #    internally, bypassing the shim.)
 for p in /usr/bin/bash /etc/passwd /var/lib/dpkg/status /opt /bin/bash \
          /sbin/ldconfig /lib/aarch64-linux-gnu/libc.so.6 /root; do
-  in_ul "test -e $p" || fail "overlay: $p not reachable in the prefix"
+  in_ul "test -e $p" || fail "runtime: $p not reachable in the prefix"
 done
 in_ul 'echo x > /tmp/.dnprobe' && [ -f "$P/tmp/.dnprobe" ] || fail "/tmp is not redirected into the prefix"
 in_ul 'mkdir -p /run/.dnprobe && echo x > /run/.dnprobe/x' && [ -f "$P/run/.dnprobe/x" ] \
   || fail "/run is not redirected into the prefix"
 in_ul 'rm -rf /tmp/.dnprobe /run/.dnprobe'
 for d in dev proc sys; do [ ! -e "$P/$d" ] || fail "the prefix must not carry a /$d"; done
-ok "overlay: /usr /etc /var /opt /bin /sbin /lib /tmp /run /root resolve in the prefix; /dev /proc /sys stay real"
+ok "runtime: /usr /etc /var /opt /bin /sbin /lib /tmp /run /root resolve in the prefix; /dev /proc /sys stay real"
 
 # 5. no steady-state Termux path: PATH, and apt's own config
 case "$(in_ul 'echo "$PATH"' | tr ':' '\n' | grep -c "^$tp/")" in

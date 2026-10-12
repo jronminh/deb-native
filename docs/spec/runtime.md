@@ -1,4 +1,4 @@
-# The overlay: dn-policy, dn-shim, dn-trace
+# The runtime: dn-policy, dn-shim, dn-trace
 
 <!-- template: templates/docs.template.md -->
 
@@ -7,17 +7,17 @@ path-touching syscall resolves through one shared policy, dynamic glibc
 binaries take a native-speed fast path, everything else (static, Go, foreign
 loaders such as AppImage/conda/Electron/musl) falls back to a traced path with
 identical results. Runtime speed is the priority; install time may be slow.
-This is the **overlay**: the runtime pieces that sit in the tree's `RT`
+This is the **runtime**: the runtime pieces that sit in the tree's `RT`
 directory and are built once per (CPU architecture, `libc6` ABI version). On
-branch `ld-dn-surgical` the fast path is the program interpreter (`ld-dn`)
+branch `dn-interp-surgical` the fast path is the program interpreter (`dn-interp`)
 plus a shim (`dn-shim.so`), with glibc left stock — the design is
-[`ld-dn-shim.md`](ld-dn-shim.md). The older `PT_INTERP` rewriting and the
+[`dn-interp-shim.md`](dn-interp-shim.md). The older `PT_INTERP` rewriting and the
 adopt-on-first-run launcher stay gone; the `LD_PRELOAD` shim returns as the
 fast path, not as the old separate mechanism.
 
-Status: on branch `ld-dn-surgical` the interpreter (`ld-dn`) and exec-gate
+Status: on branch `dn-interp-surgical` the interpreter (`dn-interp`) and exec-gate
 rule 3 exist; the shim is P2. `dn-trace` is unchanged. See [Status](#status)
-and [`ld-dn-shim.md`](ld-dn-shim.md).
+and [`dn-interp-shim.md`](dn-interp-shim.md).
 
 ## Contents
 
@@ -35,7 +35,7 @@ and [`ld-dn-shim.md`](ld-dn-shim.md).
 
 ## Related docs
 
-- [`prefix.md`](prefix.md) — the tree and the tarball: how the overlay is
+- [`prefix.md`](prefix.md) — the tree and the tarball: how the runtime is
   assembled into a prefix and shipped.
 - [`emulation.md`](emulation.md) — the layer that fakes the operations the
   platform refuses (mount, raw sockets, privileged ports, capabilities).
@@ -69,11 +69,11 @@ Five principles, everything below follows them:
 5. **dn-policy hardcodes nothing prefix-specific.** Every difference between
    prefixes (core-ultra, core-deb, specialized) is data read at run time, not
    something rebuilt. `TREE`/`RT` derive from the runtime's own location
-   (`dn-trace` from its own path; `ld-dn` from its own path, and the shim from
-   the environment `ld-dn` sets); the path-exception list and the owner-store
+   (`dn-trace` from its own path; `dn-interp` from its own path, and the shim from
+   the environment `dn-interp` sets); the path-exception list and the owner-store
    backend choice live in a config file or are probed at startup; `P_GATE` is
    a device/kernel property (probed once, stored), not a prefix property.
-   Consequence: dn-policy, `ld-dn`, dn-shim, dn-trace and the seccomp filter
+   Consequence: dn-policy, `dn-interp`, dn-shim, dn-trace and the seccomp filter
    need only one build per (CPU architecture, `libc6` ABI version), reused
    unmodified across every tarball on that version — never rebuilt per prefix,
    and never rebuilt per glibc bump (the shim is version-independent). The one
@@ -85,20 +85,20 @@ Five principles, everything below follows them:
 
 | Prior approach | This design | Why |
 | --- | --- | --- |
-| Patch `PT_INTERP` and rpath per package | Dropped. The exec gate picks the interpreter at exec time (rule 3 runs `ld-dn`) | No per-package patching; foreign programs are covered too |
-| `LD_PRELOAD` path-redirect shim | Kept and reworked: the shim (`dn-shim.so`) *is* the fast path, consulting dn-policy | In-process and version-independent; `ld-dn` delivers it, so a program that clears its environment still gets it |
+| Patch `PT_INTERP` and rpath per package | Dropped. The exec gate picks the interpreter at exec time (rule 3 runs `dn-interp`) | No per-package patching; foreign programs are covered too |
+| `LD_PRELOAD` path-redirect shim | Kept and reworked: the shim (`dn-shim.so`) *is* the fast path, consulting dn-policy | In-process and version-independent; `dn-interp` delivers it, so a program that clears its environment still gets it |
 | First-run trial ("adopt everything") to classify a program | Dropped. Classification is static, at exec time | One run never proves later runs; the filter catches a mismatch the moment it happens |
-| A per-process filter keyed to glibc's address | Dropped. One shared filter, installed once at the root, recognizes the shim by a fixed gate page (`ld-dn` maps it) | The filter survives `exec`; one per process stacks up and misapplies addresses to children |
+| A per-process filter keyed to glibc's address | Dropped. One shared filter, installed once at the root, recognizes the shim by a fixed gate page (`dn-interp` maps it) | The filter survives `exec`; one per process stacks up and misapplies addresses to children |
 | Trap `SIGSYS` inside the process | Dropped | A static program exec'd afterward would receive `SIGSYS` and die |
 | A hand-written resolver in place of `apt` | Kept temporarily through P2, then dropped | `apt` has signature verification, a full dependency resolver, and the right `dpkg` order |
-| A patched glibc pinned through a local repo | Not needed: glibc stays stock; `ld-dn` and `dn-shim.so` live in `RT`, outside `dpkg` | No glibc package to distribute or pin |
+| A patched glibc pinned through a local repo | Not needed: glibc stays stock; `dn-interp` and `dn-shim.so` live in `RT`, outside `dpkg` | No glibc package to distribute or pin |
 | A dedicated `ld.so.cache` for the runtime | Dropped. Uses the tree's own `/etc/ld.so.cache` | The cache `ldconfig` builds in the tree already holds in-tree paths |
 | `init.sh` as the first process | `dn-trace` is the first process; `init.sh` is its child | A filter returning `TRACE` needs the tracer present from the start |
 
 ## Components and boot flow
 
 Five components, all in `RT` unless noted. `dn-*` names are provisional.
-`TREE` is the Debian tree's root directory; `RT` is the overlay's own
+`TREE` is the Debian tree's root directory; `RT` is the runtime's own
 directory inside `TREE` that `dpkg` does not manage (outside its package
 database and control, not outside the filesystem). `TREE` (with `RT` inside
 it) ships as one tarball ([`prefix.md`](prefix.md)).
@@ -106,7 +106,7 @@ it) ships as one tarball ([`prefix.md`](prefix.md)).
 | Component | What it is | Its job |
 | --- | --- | --- |
 | dn-policy | A static C library | The path-mapping table, in-tree symlink resolution, reverse translation, fake root, hardlinks. Never runs on its own; linked into both dn-shim and dn-trace |
-| ld-dn | The program interpreter: a freestanding aarch64 static-PIE | The exec gate's rule-3 target: derive `$DN`, read `ld-dn.conf`, build the environment (delivering the shim), map `P_GATE` and the tree's `ld.so`, then jump. No re-exec |
+| dn-interp | The program interpreter: a freestanding aarch64 static-PIE | The exec gate's rule-3 target: derive `$DN`, read `dn-interp.conf`, build the environment (delivering the shim), map `P_GATE` and the tree's `ld.so`, then jump. No re-exec |
 | dn-shim | An `LD_PRELOAD` shared object, linked with dn-policy | The fast path: translates each path/identity call in-process and issues the syscall from `P_GATE` |
 | dn-trace | The tracer, the tree's root process | Installs the shared filter for the first child; runs the exec gate; handles every caught call via `ptrace`, through dn-policy |
 | init.sh | The tree's shell script | Sets up the environment, completes the prefix on a first boot, then runs the command |
@@ -125,7 +125,7 @@ it) ships as one tarball ([`prefix.md`](prefix.md)).
    tracked). The child installs the shared filter itself, then execs the
    prefix's init. The filter propagates to every later process.
 3. That `exec` already passes through the exec gate: rule 3 runs the shell
-   through `ld-dn`, which delivers the shim and the tree's `ld.so`, so from
+   through `dn-interp`, which delivers the shim and the tree's `ld.so`, so from
    this step on every process runs through the interpreter and the shim.
 4. init sets the environment (env vars, `TREE/tmp`, `resolv.conf`,
    `policy-rc.d`) and, on a first boot, completes the prefix from
@@ -146,7 +146,7 @@ Classification is purely from the file header — no trial run.
 | --- | --- | --- | --- |
 | 1 | Starts with `#!` | Script | The interpreter path, translated through dn-policy, then put through the gate again from rule 2 |
 | 2 | ELF with no `PT_INTERP` | Static, including static Go | Left as is, only its own path translated. Its calls fall to `ptrace` on their own |
-| 3 | `PT_INTERP` is the standard glibc loader (`/lib/ld-linux-aarch64.so.1`) | Dynamic glibc, including Go with cgo | `ld-dn --argv0 <original argv0> <real path> <args>` |
+| 3 | `PT_INTERP` is the standard glibc loader (`/lib/ld-linux-aarch64.so.1`) | Dynamic glibc, including Go with cgo | `dn-interp --argv0 <original argv0> <real path> <args>` |
 | 4 | `PT_INTERP` names another loader (AppImage, conda, Electron, musl) | Foreign | `<its own loader, translated> <real path> <args>`. Its calls fall to `ptrace` on their own |
 | 5 | Not an ELF, not a script | Not runnable | Returns `ENOEXEC`, as the kernel would |
 
@@ -159,7 +159,7 @@ Rules that go with this:
   the interpreter.
 - No Go detection. Go-with-cgo's C side runs natively; Go's own runtime makes
   its own syscalls, outside the gate page, so it falls to `ptrace` on its own.
-- Running through `ld-dn` makes `/proc/self/exe` point at the interpreter.
+- Running through `dn-interp` makes `/proc/self/exe` point at the interpreter.
   dn-policy answers `readlink("/proc/self/exe")` with the real program's path.
 - Packages in the tree no longer need `PT_INTERP` patched. A foreign program
   loaded from outside takes the same path, no exception.
@@ -180,7 +180,7 @@ takes the native path.
 The filter recognizes a shim call by instruction address. The shim's address
 changes every run, so a fixed gate page is used instead:
 
-- `ld-dn` maps a 4 KB page holding the kernel-call instruction at a fixed
+- `dn-interp` maps a 4 KB page holding the kernel-call instruction at a fixed
   address, `P_GATE`, using `MAP_FIXED_NOREPLACE`.
 - The shim issues its syscalls from this page; it never calls the kernel
   directly elsewhere.
@@ -299,10 +299,10 @@ approach:
 ## dn-shim
 
 The shim (`dn-shim.so`) is the fast path: an `LD_PRELOAD` shared object linked
-with dn-policy. `ld-dn` puts it in the program's environment when it starts, so
+with dn-policy. `dn-interp` puts it in the program's environment when it starts, so
 it is present at every dynamic glibc program however the program was launched —
 including a program that clears its own environment, because the interpreter
-builds the environment from scratch (`ld-dn.conf`'s `preload`).
+builds the environment from scratch (`dn-interp.conf`'s `preload`).
 
 It is **version-independent**. The shim sits *above* libc: it interposes the
 public symbols (the PLT surface) and, for each path/identity call, translates
@@ -377,7 +377,7 @@ are gone: the runtime is the only thing between a package and the kernel.
 ### The glibc rule
 
 On `main` a fully patched glibc ships as **real Debian packages** (`libc6`,
-`libc-bin`) at version `<Debian version>+dn<n>`. On branch `ld-dn-surgical`
+`libc-bin`) at version `<Debian version>+dn<n>`. On branch `dn-interp-surgical`
 glibc carries only the **Android baseline** (`patches/dn-glibc-android.patch`);
 the `dn-policy` wiring is dropped, so the runtime no longer lives inside glibc
 (P3 decides whether any baseline patch is still needed at all). If a patched
@@ -457,22 +457,22 @@ a newer version of.
 
 ## Status
 
-On branch `ld-dn-surgical` (this branch):
+On branch `dn-interp-surgical` (this branch):
 
 - **dn-policy** (`src/dn-policy/`) — unchanged from `main`: the mapping,
   symlink resolution, reverse translation, fake root and hardlinks.
-- **ld-dn** — recovered from the pre-0.6 history, cross-built by
+- **dn-interp** — recovered from the pre-0.6 history, cross-built by
   `scripts/build/build-interp.sh`; it is the exec-gate rule-3 target (P1).
 - **dn-trace** — unchanged from `main`: the tree's root; the shared filter with
   the gate-IP rule built from the embedded catalog; the exec gate. Rule 3 now
-  runs `ld-dn` (P1). dn-policy is compiled in for the traced path.
+  runs `dn-interp` (P1). dn-policy is compiled in for the traced path.
 - **`src/syscalls.tsv`** — the catalog, checked by `tools/check-syscalls.py`.
 - **dn-shim** — not built yet (P2).
 
 Still open:
 
 - **P2 — the shim** (`dn-shim.so`): write it; move `P_GATE` from `elf/rtld.c`
-  into `ld-dn`/the shim; drop `dn-policy-glibc-wiring.patch` from the pipeline;
+  into `dn-interp`/the shim; drop `dn-policy-glibc-wiring.patch` from the pipeline;
   recompute the catalog's `glibc`/`gate` columns.
 - Exec-gate rule 4 (a foreign loader) and its argv semantics.
 - A program run through the interpreter reports the interpreter as its `comm`

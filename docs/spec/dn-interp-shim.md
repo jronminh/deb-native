@@ -1,19 +1,19 @@
-# The loader-centric runtime: `ld-dn`, `dn-shim`, `dn-trace`
+# The loader-centric runtime: `dn-interp`, `dn-shim`, `dn-trace`
 
 <!-- template: templates/docs.template.md -->
 
-Status: design (dry branch `ld-dn-surgical`, unbuilt). On this branch the
+Status: design (dry branch `dn-interp-surgical`, unbuilt). On this branch the
 in-process enforcement point is a **shim**, not a patched glibc: glibc stays
-stock, `ld-dn` is the program's interpreter, and the shim owns the gate page.
+stock, `dn-interp` is the program's interpreter, and the shim owns the gate page.
 `dn-policy` and `dn-trace` from `main` are reused unchanged. This supersedes
-the `dn-policy-glibc-wiring` fast path of [`overlay.md`](overlay.md) for this
+the `dn-policy-glibc-wiring` fast path of [`runtime.md`](runtime.md) for this
 branch.
 
 ## Related docs
 
 - [`native.md`](native.md) — the execution model this serves: near-full,
   near-native.
-- [`overlay.md`](overlay.md) — the current runtime; `dn-policy` and `dn-trace`
+- [`runtime.md`](runtime.md) — the current runtime; `dn-policy` and `dn-trace`
   are reused unchanged.
 - [`../reference/syscall-boundary.md`](../reference/syscall-boundary.md) — the
   five cases, and why the tracer (not the shim) reaches them.
@@ -33,7 +33,7 @@ baseline it needs to start at all); there is no `dn-policy` wiring inside it.
 
 | component | what it is | its job |
 | --- | --- | --- |
-| `ld-dn` | freestanding aarch64 static-PIE (revived from the pre-0.6 history) | the program's interpreter: derive `$DN`, read `ld-dn.conf`, rebuild the environment, map `P_GATE`, map the tree's `ld.so`, fix `AT_BASE`, jump. No re-exec. |
+| `dn-interp` | freestanding aarch64 static-PIE (revived from the pre-0.6 history) | the program's interpreter: derive `$DN`, read `dn-interp.conf`, rebuild the environment, map `P_GATE`, map the tree's `ld.so`, fix `AT_BASE`, jump. No re-exec. |
 | `dn-shim.so` | `LD_PRELOAD` shared object (the old `path-redirect`, rewired) | the in-process router: `dn-policy` path/identity translation, its syscalls issued from `P_GATE` |
 | `dn-policy` | static C library (unchanged) | the one place path-mapping, fake-root and hardlink rules live |
 | `dn-trace` | the tracer (unchanged) | the root process: the shared seccomp filter, the exec gate, the emulation of refused operations, the catalog |
@@ -49,7 +49,7 @@ disagree.
 HOST runs the contract entry
   └─ TREE/usr/lib/deb-native/dn-trace
        │  derive_prefix(): /proc/self/exe → TREE
-       │  LD-DN        = TREE/usr/lib/deb-native/ld-dn
+       │  DN-INTERP        = TREE/usr/lib/deb-native/dn-interp
        │  TREE-LD.SO   = TREE/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1
        │  dn_policy_init(TREE, RT); bindings(TREE→/, /dev /proc /sys); cwd; exe
        └─ launch_process([" /usr/bin/bash", "…/init.sh"])
@@ -73,7 +73,7 @@ The filter is installed once at the root and inherited across every
        │     PT_INTERP = ld-linux    → rule 3  GLIBC
        │     PT_INTERP other         → rule 4  FOREIGN
        ├─ remember /proc/self/exe = host_path
-       └─ rule 3 → exec:  LD-DN --argv0 orig0 host_path args…
+       └─ rule 3 → exec:  DN-INTERP --argv0 orig0 host_path args…
           rule 2/4 → exec:  host_path   (path translated, exec direct)
 ```
 
@@ -84,11 +84,11 @@ tracee's memory, so a package's files on disk are byte-identical to the `.deb`.
 
 ```
 === LANE 1 — dynamic (glibc)  [rule 3] ===
-kernel:  LD-DN --argv0 orig0 host_path args…
+kernel:  DN-INTERP --argv0 orig0 host_path args…
             │
-            │  ld-dn (freestanding, no libc)
+            │  dn-interp (freestanding, no libc)
             ├─ derive $DN from itself (/proc/self/exe)
-            ├─ read $DN/etc/deb-native/ld-dn.conf   (policy-as-data, [program] blocks)
+            ├─ read $DN/etc/deb-native/dn-interp.conf   (policy-as-data, [program] blocks)
             ├─ build env from scratch:               ← survives an empty envp
             │      LD_PRELOAD     = $DN/usr/lib/deb-native/dn-shim.so
             │      LD_LIBRARY_PATH = tree libdirs (+ caller merge)
@@ -150,10 +150,10 @@ needed; the shared filter replaces it.
 
 | piece | change |
 | --- | --- |
-| exec gate rule 3 | target `ld-dn` instead of `RT/ld.so` (one variable / one call) |
-| `ld-dn` | recover `native/ld-dn.c`/`ld-dn.conf` from the pre-0.6 history; add the build step |
+| exec gate rule 3 | target `dn-interp` instead of `RT/ld.so` (one variable / one call) |
+| `dn-interp` | recover `native/dn-interp.c`/`dn-interp.conf` from the pre-0.6 history; add the build step |
 | `dn-shim.so` | rewrite the old `path-redirect.c`: call `dn-policy`, issue syscalls from `P_GATE` |
-| gate page | remove it from `elf/rtld.c`; `ld-dn` maps it instead |
+| gate page | remove it from `elf/rtld.c`; `dn-interp` maps it instead |
 | `dn-policy-glibc-wiring.patch` | dropped from the build pipeline |
 | `dn-glibc-android.patch` | keep only the Android-baseline pieces stock glibc needs to start |
 | `src/syscalls.tsv` | `glibc` column becomes the shim's wiring; `gate=yes` for rows the shim issues from the gate; libc-internal rows stay `no` |
@@ -164,4 +164,4 @@ needed; the shared filter replaces it.
 - A glibc source fork for policy (the whole point of this branch).
 - Per-package patching or per-binary routing.
 - Isolation, TUN/firewall, services, systemd — unchanged from
-  [`overlay.md`](overlay.md)'s hard limits.
+  [`runtime.md`](runtime.md)'s hard limits.

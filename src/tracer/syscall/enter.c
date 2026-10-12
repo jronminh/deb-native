@@ -1979,7 +1979,7 @@ int translate_syscall_enter(Tracee *tracee)
 		talloc_set_name_const(tracee->fs->cwd, "$cwd");
 
 		/* deb-native: the kernel's cwd follows the guest's -- dn-shim
-		 * leaves a relative path to the kernel (docs/spec/overlay.md,
+		 * leaves a relative path to the kernel (docs/spec/runtime.md,
 		 * "Path rewriting"), and a call let through from the gate page
 		 * is resolved against it.  chdir() goes to the translated
 		 * directory; fchdir()'s descriptor is already a real one.  */

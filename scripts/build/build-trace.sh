@@ -1,11 +1,11 @@
 #!/bin/sh
-# Build the runtime overlay with a plain glibc toolchain (the repo layout):
+# Build the runtime runtime with a plain glibc toolchain (the repo layout):
 # dn-trace, one self-contained binary.  Needs gcc and make (talloc is
 # vendored) -- an arm64 Debian userland: a deb-native prefix with the
 # toolchain installed, or a Debian arm64 host such as CI.  No Bionic
 # toolchain, no Termux.
 #
-# Runtime v1 (docs/spec/overlay.md): the overlay is dn-trace, the tree's root
+# Runtime v1 (docs/spec/runtime.md): the runtime is dn-trace, the tree's root
 # process; the syscall catalog (src/syscalls.tsv) is embedded in it at build
 # time, so it reads no file at run time.  The old LD_PRELOAD
 # shim (dn-shim.so), the adopt-on-first-run launcher (dn-run) and the ELF
@@ -16,7 +16,7 @@
 # dn-trace is built in a scratch copy of src/tracer, so its objects never mix
 # with the in-tree build.
 #
-# Usage: build-overlay-glibc.sh [OUTDIR]   (default: src/.build-glibc)
+# Usage: build-trace.sh [OUTDIR]   (default: src/.build-glibc)
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/../.." && pwd)
@@ -53,5 +53,5 @@ else
 fi
 cp -f "$T/dn-trace" "$OUT/dn-trace"
 
-echo "overlay (glibc) in $OUT:"
+echo "runtime (glibc) in $OUT:"
 ls -l "$OUT"

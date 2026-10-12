@@ -1,6 +1,6 @@
 /* deb-native: file ownership under fake root, on the traced path, by
  * dn-policy's owner store -- the same store dn-shim's chown()/chmod()
- * and stat() wrappers use in-process (docs/spec/overlay.md, "Fake root").
+ * and stat() wrappers use in-process (docs/spec/runtime.md, "Fake root").
  * chown/fchown/fchownat record the owner and succeed; chmod's
  * setuid/setgid bits are recorded; a stat/fstat/statx result reports the
  * stored owner and bits (no record reads as root:root) and a link2symlink

@@ -56,10 +56,10 @@ extern const char *global_tool_name;
    Kept for the CLI contract; the exec gate's rule 3 no longer names it. */
 extern const char *global_glibc_loader;
 
-/* deb-native: the program interpreter (native/ld-dn.c), <TREE>/usr/lib/deb-native/
-   ld-dn.  The exec gate runs a rule-3 (glibc dynamic) program through it
-   (docs/spec/ld-dn-shim.md). */
-extern const char *global_ld_dn;
+/* deb-native: the program interpreter (native/dn-interp.c), <TREE>/usr/lib/deb-native/
+   dn-interp.  The exec gate runs a rule-3 (glibc dynamic) program through it
+   (docs/spec/dn-interp-shim.md). */
+extern const char *global_dn_interp;
 
 /* deb-native: the tree (TREE), an absolute host path: the guest root, and
    home of the tracer's own temp dir (<TREE>/tmp; the host's /tmp is not

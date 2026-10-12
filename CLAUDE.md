@@ -17,7 +17,7 @@ status `ii` and its program runs by name, unprivileged.
 There is **no build on the host**.
 
 - **Build** (a build host, `scripts/build/` + `scripts/glibc/`): the runtime
-  overlay (`scripts/build/build-overlay-glibc.sh` — `dn-trace`, one static
+  runtime (`scripts/build/build-trace.sh` — `dn-trace`, one static
   binary with the syscall catalog embedded, plain-gcc), the glibc bundle (the two patches in
   `patches/`, applied by `scripts/glibc/dn-apply-glibc-patch.sh`), and the
   prefix artifact
@@ -35,7 +35,7 @@ There is **no build on the host**.
 Run time is one policy in two places: dn-policy, called in-process by
 dn-shim (the fast path) and via `dn-trace`'s ptrace fallback
 (`src/tracer/`). The old shim, maintainer-script rewriting and ELF editor
-are gone; a `.deb` installs intact (`docs/spec/overlay.md`).
+are gone; a `.deb` installs intact (`docs/spec/runtime.md`).
 
 A package keeps its stock Debian `PT_INTERP`; the kernel never resolves it,
 because every exec goes through the exec gate, which runs a glibc-dynamic

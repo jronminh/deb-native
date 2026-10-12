@@ -7,7 +7,7 @@ merely suspected. Each entry says how to reproduce it, what happens, and the
 known root cause or workaround. Future work lives in [`TODO.md`](../../TODO.md);
 whole classes of "what the shim/tracer cannot reach" live in
 [`syscall-boundary.md`](syscall-boundary.md),
-[`../spec/overlay.md`](../spec/overlay.md) and
+[`../spec/runtime.md`](../spec/runtime.md) and
 [`android-platform.md`](android-platform.md).
 
 ## Contents
@@ -19,9 +19,9 @@ whole classes of "what the shim/tracer cannot reach" live in
 
 ## Related docs
 
-- [`../spec/overlay.md`](../spec/overlay.md) — the path shim and the
+- [`../spec/runtime.md`](../spec/runtime.md) — the path shim and the
   maintainer-script mechanism these issues hit.
-- [`../spec/overlay.md`](../spec/overlay.md) — the
+- [`../spec/runtime.md`](../spec/runtime.md) — the
   path-shim failure modes.
 - [`syscall-boundary.md`](syscall-boundary.md), [`android-platform.md`](android-platform.md)
   — what libc interposition cannot see, and the platform's enforcement gates.
@@ -145,7 +145,7 @@ The host workarounds are installed for you in
   `passwd`/`group`/`shadow`/`gshadow` from the prefix's own files.
 - **`ldconfig` is a no-op** in the priv layer: `libc-bin`'s postinst calls
   `ldconfig -r "$DPKG_ROOT/"`, which cannot work unprivileged. No `ld.so.cache`
-  ships ([`../spec/overlay.md`](../spec/overlay.md)); the loader derives its
+  ships ([`../spec/runtime.md`](../spec/runtime.md)); the loader derives its
   dirs from the live prefix, so a missing cache is non-fatal.
 
 ## Design limitations

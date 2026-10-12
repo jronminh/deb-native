@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check the syscall catalog (src/syscalls.tsv).
 
-It is the single source of truth the overlay is built from: the build embeds
+It is the single source of truth the runtime is built from: the build embeds
 it in dn-trace verbatim (src/tracer/GNUmakefile -> syscall/dn-catalog.c), which
 builds the seccomp filter's gate-IP exemption from it, and dn-shim is meant
 to wire the rows marked glibc=yes.  This checks the catalog is well-formed and

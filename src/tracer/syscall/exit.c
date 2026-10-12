@@ -52,7 +52,7 @@
 #include "arch.h"
 #include "syscall/dn-owner.h"
 
-/* deb-native fake root (docs/spec/overlay.md, "Fake root"): a traced
+/* deb-native fake root (docs/spec/runtime.md, "Fake root"): a traced
  * program sees itself as root: the identity calls report 0, files owned
  * by the real uid/gid show as root's, and set*id()/chown() refused only
  * for lack of rights succeed.  No right is gained.  On unless dn-trace

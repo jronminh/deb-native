@@ -51,12 +51,12 @@ static char *const DN_INIT[] = {
  * the prefix root is dn-trace's directory with this suffix removed.  */
 #define DN_TRACE_SUFFIX "/usr/lib/deb-native/dn-trace"
 #define DN_GLIBC_LOADER_REL   "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
-/* The exec gate's rule-3 target: the program interpreter (native/ld-dn.c).  */
-#define DN_LD_DN_REL    "usr/lib/deb-native/ld-dn"
+/* The exec gate's rule-3 target: the program interpreter (native/dn-interp.c).  */
+#define DN_INTERP_REL    "usr/lib/deb-native/dn-interp"
 
 static char derived_tree[PATH_MAX];
 static char derived_glibc_loader[PATH_MAX];
-static char derived_ld_dn[PATH_MAX];
+static char derived_dn_interp[PATH_MAX];
 
 /* TREE from dn-trace's own location: /proc/self/exe is
  * TREE/usr/lib/deb-native/dn-trace, so TREE is that prefix.  */
@@ -91,12 +91,12 @@ static int derive_prefix(const char **tree, const char **glibc_loader)
 
 /* deb-native, LOADER: the tree's glibc loader, the [TREE LOADER] argument,
    kept for the CLI contract.  The exec gate's rule 3 no longer names it --
-   it runs ld-dn, which finds the loader itself.  See cli/note.h. */
+   it runs dn-interp, which finds the loader itself.  See cli/note.h. */
 const char *global_glibc_loader = NULL;
 
-/* deb-native, the program interpreter (native/ld-dn.c): the exec gate's rule-3
+/* deb-native, the program interpreter (native/dn-interp.c): the exec gate's rule-3
    target, derived from TREE.  See cli/note.h. */
-const char *global_ld_dn = NULL;
+const char *global_dn_interp = NULL;
 
 /* deb-native, TREE: the guest root.  See cli/note.h. */
 const char *global_tree = NULL;
@@ -248,12 +248,12 @@ int main(int argc, char *const argv[])
 	}
 
 	/* The exec gate's rule-3 target, derived from TREE either way.  */
-	if ((size_t) snprintf(derived_ld_dn, sizeof(derived_ld_dn), "%s/%s",
-			      global_tree, DN_LD_DN_REL) >= sizeof(derived_ld_dn)) {
+	if ((size_t) snprintf(derived_dn_interp, sizeof(derived_dn_interp), "%s/%s",
+			      global_tree, DN_INTERP_REL) >= sizeof(derived_dn_interp)) {
 		note(tracee, ERROR, USER, "TREE '%s' is too long", global_tree);
 		goto error;
 	}
-	global_ld_dn = derived_ld_dn;
+	global_dn_interp = derived_dn_interp;
 
 	if (access(global_glibc_loader, X_OK) < 0) {
 		note(tracee, ERROR, SYSTEM, "glibc loader '%s'", global_glibc_loader);
@@ -293,7 +293,7 @@ int main(int argc, char *const argv[])
 		goto error;
 
 	/* The real system's /dev, /proc and /sys, as dn-policy passes them
-	 * through (docs/spec/overlay.md, "Path rewriting"): /dev/null is the
+	 * through (docs/spec/runtime.md, "Path rewriting"): /dev/null is the
 	 * device, not a file the tree grows.  */
 	{
 		static const char *const passthrough[] = { "/dev", "/proc", "/sys" };

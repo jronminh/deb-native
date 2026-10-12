@@ -7,7 +7,7 @@ A self-contained Debian `arm64` userland in a tarball.
 An `arm64` Linux host with `gcc`, `make`, `libtalloc-dev`, `python3`.
 
 ```sh
-scripts/build/build-overlay-glibc.sh    # → src/.build-glibc/
+scripts/build/build-trace.sh    # → src/.build-glibc/
 ```
 
 ## Package
@@ -15,7 +15,7 @@ scripts/build/build-overlay-glibc.sh    # → src/.build-glibc/
 A host with `dpkg-deb`, `wget`, `xz`.
 
 ```sh
-DN_GLIBC_PREFIX=... DN_OVERLAY=src/.build-glibc \
+DN_GLIBC_PREFIX=... DN_RUNTIME=src/.build-glibc \
 PREFIX_ROOT=... DEB_LIST=... \
   scripts/build/build-core-deb.sh BASE core-deb.tar.gz
 scripts/build/package-prefix.sh core-deb --root ... --name core-deb

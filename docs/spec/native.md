@@ -5,9 +5,9 @@
 The target this project is built around: a Debian `arm64` userland that behaves
 nearly like a real Debian system to the programs it runs, and runs them at
 nearly the host device's own speed. This doc states that target, why it is
-reachable at all, and the four pieces it rests on — a near-full overlay, a
+reachable at all, and the four pieces it rests on — a near-full runtime, a
 near-native host, a complete front-end for the binary, and a back-end built to
-keep the speed. It is a synthesis of [`overlay.md`](overlay.md),
+keep the speed. It is a synthesis of [`runtime.md`](runtime.md),
 [`emulation.md`](emulation.md) and [`prefix.md`](prefix.md), not a
 replacement for them. Status: the target, with what is built and what is open.
 
@@ -15,7 +15,7 @@ replacement for them. Status: the target, with what is built and what is open.
 
 - [The goal](#the-goal)
 - [Why native is possible](#why-native-is-possible)
-- [The overlay, near-full](#the-overlay-near-full)
+- [The runtime, near-full](#the-runtime-near-full)
 - [The front-end: the ABI a Debian binary sees](#the-front-end-the-abi-a-debian-binary-sees)
 - [The back-end: near-native by tier](#the-back-end-near-native-by-tier)
 - [Performance model and measurement](#performance-model-and-measurement)
@@ -25,13 +25,13 @@ replacement for them. Status: the target, with what is built and what is open.
 
 ## Related docs
 
-- [`overlay.md`](overlay.md) — the runtime (`dn-policy`, `ld-dn`, `dn-shim`,
+- [`runtime.md`](runtime.md) — the runtime (`dn-policy`, `dn-interp`, `dn-shim`,
   `dn-trace`) this model is enforced by.
 - [`emulation.md`](emulation.md) — the backend that answers operations the
   platform refuses.
 - [`prefix.md`](prefix.md) — the tree and the tarball.
-- [`ld-dn-shim.md`](ld-dn-shim.md) — the loader-centric fast path (branch
-  `ld-dn-surgical`).
+- [`dn-interp-shim.md`](dn-interp-shim.md) — the loader-centric fast path (branch
+  `dn-interp-surgical`).
 - [`../../TODO.md`](../../TODO.md) — the scheduled work (P4 is the measurement).
 
 ## The goal
@@ -66,10 +66,10 @@ Native speed for CPU-bound work is therefore not an optimization to chase but a
 consequence of not adding a layer over the instructions. The engineering is
 entirely about the *syscall* boundary.
 
-## The overlay, near-full
+## The runtime, near-full
 
-The overlay is the runtime that presents a coherent Debian view without
-modifying packages ([`overlay.md`](overlay.md)). "Near-full" means the boundary
+The runtime is the runtime that presents a coherent Debian view without
+modifying packages ([`runtime.md`](runtime.md)). "Near-full" means the boundary
 covers **every interface a program observes**, not just paths:
 
 - path translation — dn-policy longest-prefix mapping and absolute-symlink
@@ -114,7 +114,7 @@ Android can give (DNS, notifications, storage).
 ## The back-end: near-native by tier
 
 Performance is a property of **where each call is handled**
-([`overlay.md`](overlay.md) principle 4):
+([`runtime.md`](runtime.md) principle 4):
 
 | tier | what it covers | cost |
 | --- | --- | --- |
@@ -132,7 +132,7 @@ Rules that keep the design near-native:
 4. Keep new emulation (port translation, `/proc` synthesis, capabilities) **off
    the hot path**.
 5. Do no needless metadata work — owner faking only where a program observes it.
-6. Remove the overlay's own dependencies from the path (e.g. static-link
+6. Remove the runtime's own dependencies from the path (e.g. static-link
    `libtalloc` into `dn-trace`).
 
 ## Performance model and measurement
@@ -173,7 +173,7 @@ per-syscall counters in `dn-trace`, plus microbenchmarks for the three regimes
 (CPU-bound, path/syscall-bound, I/O) against native on the same hardware.
 Output: a per-tier call-distribution table for install, compile and run.
 
-**1. Complete the fast path** ([`overlay.md`](overlay.md) P2) — the decisive
+**1. Complete the fast path** ([`runtime.md`](runtime.md) P2) — the decisive
 step for near-native, because anything not on it falls to `ptrace`:
 
 - route every path/identity syscall through the gate page; flip the remaining
@@ -204,7 +204,7 @@ privileged-port translation; raw ICMP; capability synthesis; (stretch)
 userspace overlay copy-up with merged reads. Rule: every one of these stays
 **off the hot path**.
 
-**4. Clear the hot path** ([`overlay.md`](overlay.md) P3, plus hygiene).
+**4. Clear the hot path** ([`runtime.md`](runtime.md) P3, plus hygiene).
 Static-link `libtalloc` into `dn-trace` so it has no runtime dependency; remove
 the old shim and the now-duplicated `dn_fake_root()` / `fakeroot_sysnums` once
 dn-policy carries them ("one policy, two enforcement points").
@@ -215,5 +215,5 @@ added to the hot path.
 ## Status
 
 This doc is the target and its conditions, not a claim already met.
-[`overlay.md`](overlay.md) is the current runtime; the phased work to close the
+[`runtime.md`](runtime.md) is the current runtime; the phased work to close the
 gap is in [Roadmap to the target](#roadmap-to-the-target) above.
