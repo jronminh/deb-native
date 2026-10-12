@@ -43,6 +43,8 @@ and [`dn-interp-shim.md`](dn-interp-shim.md).
   near-full behaviour at near-native speed.
 - [`monitor.md`](monitor.md) — the runtime's roles (`dn-monitor`, `dn-shim`,
   `dn-trace`) and how they coordinate.
+- [`tracer-rebuild.md`](tracer-rebuild.md) — rebuilding the tracer into
+  `dn-monitor` (mechanism) + `dn-trace` (policy applier).
 - [`../../src/dn-policy/`](../../src/dn-policy) — the policy library itself.
 - [`../../src/tracer/`](../../src/tracer) — `dn-trace`, the tracer.
 - [`../../src/syscalls.tsv`](../../src/syscalls.tsv) — the syscall catalog.
