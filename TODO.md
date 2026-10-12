@@ -330,6 +330,266 @@ kernel*, and cover every reader so the two enforcement points cannot disagree).
 - **Refuse, don't fake**: real isolation, TUN and LSM-observable state get a
   clear refusal, not a fiction.
 
+## FHS-to-Android mapping contract
+
+**Status**: survey complete on `dn-stock` (SM-G970W, Android 12 / SDK 31).
+Implementation is not started. This is the shared filesystem contract for the
+prefix, not a new `dn-view` runtime component. The behavior is implemented by
+the existing `dn-shim`, `dn-trace` and `dn-emu` paths.
+
+The first survey classified the FHS surface into four outcomes:
+
+- **Direct overlay** — the guest path maps to a real path under `TREE` or to a
+  host path through a binding. Common FHS paths (`/usr`, `/etc`, `/var`,
+  `/run`, `/tmp`, `/home`, `/root`, `/opt`, `/srv`, `/media`) are in this class.
+- **Indirect overlay** — the path has a backing or answer, but Android does not
+  provide Debian semantics directly. Examples: `/dev/shm`, `/proc/version`,
+  `/proc/sys/*`, selected `/sys` values, and the resolver/runtime files.
+- **Emulation** — the kernel or Android policy refuses the operation, but a
+  coherent userspace model can answer it. The model must cover all readers:
+  `open`, `stat`, `statvfs`, `read`, `readdir`, `readlink` and reverse paths.
+- **Refuse** — isolation, LSM-observable security state, TUN, real
+  capabilities, privileged ports, raw sockets or other operations that cannot
+  be represented safely. Return a clear error and reason; never claim success.
+
+### Implementation plan
+
+1. **Freeze the inventory.** Maintain a table of guest path, Android backing,
+   operation classes, lifecycle, security boundary and classification. Cover
+   `/usr`, `/etc`, `/var`, `/run`, `/tmp`, `/home`, `/root`, `/mnt`, `/media`,
+   `/dev`, `/proc`, `/sys`, `/opt` and `/srv`.
+
+### Blocker: one root model, one shared path translator
+
+**Found by on-device probe** (`dn-stock`, SM-G970W). The direct overlay work
+cannot be correct until this is settled. A dynamic program and a static one see
+two different filesystem roots in the same boot:
+
+```text
+dynamic (shim lane):  readlink /proc/self/root = /
+static  (tracer lane): readlink /proc/self/root = TREE
+```
+
+Probing the same binding `/sdcard -> /mnt`:
+
+| lane | `/etc/passwd` | `/mnt/...` | `/sdcard/...` |
+| --- | --- | --- | --- |
+| dynamic (shim) | ok | **ENOENT** | **ENOENT** |
+| static (tracer) | ok | ok | **ENOENT** |
+
+Root cause: **two path models that disagree**, with no shared definition of
+"guest path" versus "host path".
+
+- The shim lane runs with the real kernel root `/`; `dn-shim` rewrites a guest
+  path to an absolute host path (`/etc/passwd` -> `TREE/etc/passwd`,
+  `/mnt/...` -> `/sdcard/...`) and issues it from the gate page.
+- The tracer lane presents the tree as the guest root (PRoot root binding);
+  its own `translate_path()` maps guest -> host with PRoot bindings, separate
+  from `dn-policy`.
+- A single call can be gate-ALLOWed (kernel sees `/`) or TRACEd (PRoot sees
+  `TREE`) depending on the filter, so one process has two path spaces at once.
+- When a shim-produced host path (`/sdcard/...`) is still TRACEd, PRoot treats
+  it as a guest path and maps it again (`TREE/sdcard/...`) — double translation.
+
+Neither `dn_policy_translate_path()` (used by the shim) nor PRoot's
+`translate_path()` (used by the tracer) is the single source of truth, and the
+"already-translated / already-host" predicate is not shared. Small guards in
+either place do not fix the class of bug.
+
+**Required mechanism, before direct/indirect overlay (Android-allowed scope
+only; `mount`/`chroot`/namespaces are Android-denied and out of scope):**
+
+1. **Programs see TREE as root.** This is semantic, produced by translation,
+   not a kernel `chroot` (which Android denies).
+2. **One overlay table in `dn-policy`**, one row per mapping:
+   `<android_absolute> > <tree_absolute>` (equivalently host > guest). The tree
+   root itself is the default: a guest path with no matching row maps to
+   `TREE + guest`. Longest tree-side prefix wins.
+3. **One translator.** `dn-shim` and `dn-trace` use the same mapping law; the
+   tracer stops translating the deb-native root with PRoot's private tables.
+4. **One "already host" predicate.** A path already under `TREE` or under a
+   row's android side is host-shaped and returned unchanged, in both lanes.
+5. **Coverage.** Every path-bearing syscall must be translated by the lane that
+   handles it (shim in-process, tracer otherwise), so a gate-ALLOWed call and a
+   TRACEd call observe the same host path. This is a coverage rule, not a
+   requirement that both call one physical function.
+6. **The table is a path mechanism only.** A row answers one question: which
+   android path is bound at this tree path (`android > tree`). Nothing about
+   syscalls belongs here. Whether the kernel then serves a path, refuses it
+   (SELinux/seccomp), or behaves differently is a separate layer handled by
+   `dn-monitor`/`dn-emu`, not by this table.
+
+**Done when:** the same guest path resolves to the same host resource in both
+lanes — dynamic, static/raw, and via a direct mapping like `/mnt/...` — with a
+`stat`/`open`/`read`/`readdir`/`readlink` matrix that agrees.
+
+**Progress / findings (on-device, 2026-10-12, `dn-stock`):**
+
+- Direct overlay `/mnt` now works in both lanes: write+read,
+  `lstat`/`stat`/`open`/`readdir` agree for dynamic (shim) and static
+  (tracer). `/sdcard` is not exposed as a guest path (correct).
+- A row's android side must be **canonical** (e.g. `/storage/emulated/0`, not
+  `/sdcard`): PRoot canonicalizes binding hosts, so a non-canonical row makes
+  the two lanes disagree. `dn-shim` cannot canonicalize itself — calling
+  `realpath()` inside the shim recurses through its own interposed
+  `stat`/`readlink` and fails. So the table must carry canonical android paths
+  (written by the host, or canonicalized by `dn-monitor` and shared), or
+  `dn-policy` must canonicalize with raw syscalls.
+- Performance guard: `HAVE_SECCOMP_FILTER` must be defined in the runtime
+  build. Adding `-Wl,--wrap=__libc_start_main` to the global `LDFLAGS` broke
+  the `.check_*` feature probes, silently dropped the filter, and left every
+  syscall on `ptrace` (~8x slower: 100k `getpid` 0.45s -> 17s; `open` 4.6s ->
+  12.6s). The wrap must apply only to the `dn-monitor` link.
+- Remaining: make `dn-trace` use the `dn-policy` translator (not PRoot's
+  private tables). Indirect resources (`/dev/shm`, synthetic `/proc`) are
+  `dn-emu` work, done later; they are not rows in this table.
+- **Android survey (app sandbox):** the app can reach `/dev`, `/proc`, `/sys`
+  (with limits), `/sdcard` = `/storage/emulated/0`, `/mnt` (partly) and its own
+  `/data/user/0/<pkg>`. It cannot list `/`, `/data` or `/storage` top level. So
+  passthrough/external can only cover the kernel pseudo-fs and storage; the
+  Debian userland (`/usr`, `/etc`, `/var`, `/home`, `/root`, `/run`, `/tmp`,
+  `/opt`, `/srv`, the `/bin`,`/sbin`,`/lib` links) has no Android source and
+  must stay in the tree. Only mount-point-only dirs become rows.
+- **Next rows:** `/media` -> Android storage (removable media), same shape as
+  `/mnt`. Deferred to the next iteration.
+
+### Remaining work (plan)
+
+The FHS surface still open splits into two mechanisms; the ordering is by how
+many programs break without them.
+
+**A. Missing backing — path rows (direct).**
+
+- `/dev/shm` — POSIX shared memory; DBs, Python multiprocessing, browsers.
+- `/dev/pts` — ptys; terminal, `script`, `expect`, ssh sessions.
+- `/dev/tty`, `/dev/full` — a few tools.
+- `/media` — removable storage (same shape as `/mnt`).
+
+If a real app-data directory can back each one, each stays a row and both lanes
+consume it through the table.
+
+Survey (2026-10-12, `dn-stock`):
+
+- Device `/dev`: `null`, `zero`, `random`, `urandom`, `ptmx` exist (mode 666,
+  open ok); `tty` exists but open is `ENXIO` (no controlling terminal);
+  `full` is absent/denied; `shm` is absent.
+- No tmpfs for `shm` anywhere. App data lives on `/dev/block/sda31` (real fs,
+  ~227G, writable), so a real directory under `files/` can back `/dev/shm`
+  (a place for a future row). It would not be tmpfs, so `statvfs` would report
+  the data partition, not a small tmpfs — acceptable for basic POSIX shm,
+  revisit if a program depends on tmpfs semantics.
+- PTY: `/dev/ptmx` opens and `posix_openpt` succeeds, but
+  `grantpt`/`unlockpt`/`ptsname` all fail, so a pty is not usable yet. This is
+  deeper than a binding (ioctl/devpts access) and needs its own investigation.
+- `/media`: `/storage` top level is denied; `/storage/emulated/0` is reachable,
+  so `/media` would map to the same backing as `/mnt` (or a subtree).
+
+**B. Kernel/Android-refused — emulation (`dn-emu`).**
+
+- `/proc/version`, `/proc/sys/*` — read by `configure` and build scripts.
+- `/sys/*` — hardware/CPU info.
+- `/proc/mounts`, `/proc/self/mountinfo` — must reflect the overlay view, not
+  Android's mounts.
+
+A refusal cannot be fixed by a path row; the answer must be synthesized.
+
+**C. Beyond FHS, needed for deeper integration.**
+
+- NSS/accounts: `/etc/passwd`, `/etc/group`, `getpwnam` consistent with fake
+  root.
+- Network: `/proc/net`, DNS, sockets.
+- Services: `/run`, `/var/lock`, runit.
+- Host bridge (the `dn-shell` app side): storage, notifications, DNS.
+
+Order: A first (`/media`, then `/dev/shm`, `/dev/pts`), then B, then C.
+
+### Direct overlay plan
+
+1. **Define one overlay record.** One row: `<android_absolute> > <tree_absolute>`
+   (host > guest; equivalently the earlier `host<TAB>guest<TAB>flags` shape).
+   The tree side is the lookup key; longest tree prefix wins. Keep symmetric
+   rows explicit (`/proc`, `/sys`, `/dev`) and allow asymmetric android
+   resources (`/sdcard` or `app/files/mnt` > `/mnt`).
+2. **Centralize the table in `dn-policy`.** Add init-time binding loading and
+   lookup there. Remove the duplicated hardcoded passthrough list from the
+   policy and the monitor. The same table must serve guest-to-host translation,
+   host-to-guest reverse translation and symlink decisions.
+3. **Choose a host-provided input.** Store bindings in a prefix-owned file
+   under `var/lib/deb-native/` or `RT/state/`, written before boot. `boot.sh`
+   must not need to know individual bindings; `dn-monitor` loads the table
+   before it forks the traced init. The file is data, not executable code.
+4. **Apply bindings to both executors.** `dn-monitor` converts each record into
+   its existing tracer binding table. `dn-shim` uses the same records for its
+   cheap direct redirect. A dynamic program and a static/raw program must see
+   the same `/mnt`, `/proc`, `/sys` and `/dev` resource.
+5. **Make `/mnt` the first real binding.** The `dn-shell` host writes one
+   binding for its app-owned `files/mnt` before boot. The existing storage links
+   (`Download`, `Pictures`, and so on) remain host-side data; the prefix sees
+   them through `/mnt` rather than through escaping relative symlinks.
+6. **Define mutation rules.** Bindings are fixed for the lifetime of a boot.
+   A changed table requires a new boot, so both executors cannot observe
+   different tables. Reject malformed, duplicate or escaping guest paths
+   before the monitor starts.
+7. **Acceptance tests.** Test read, write, `stat`, `readdir`, `readlink` and
+   `getcwd` for `/mnt/Download` through a dynamic glibc program and a static
+   or tracer-routed program. Test `/proc`, `/sys` and `/dev` regression too.
+
+### Indirect overlay plan
+
+1. **Define a model contract.** Each indirect path gets a model describing
+   `open`, `stat`, `statvfs`, `access`, `read`, `readdir`, `readlink`, create,
+   delete and reverse translation. Do not fix one reader while leaving another
+   inconsistent.
+2. **Implement `/dev/shm` first.** Give it one backing directory under the
+   runtime state or a dedicated tree tmp area. Make `shm_open`/`sem_open`,
+   direct `/dev/shm/<name>`, `stat`, `access`, `readdir` and `statvfs` agree on
+   existence and filesystem identity. Keep the model shared by shim and
+   tracer.
+3. **Add the virtual mount table.** Record direct bindings and indirect
+   resources in one table. Use it for `statfs`/`statvfs` and the relevant
+   `/proc/self/mounts`/`mountinfo` reads instead of returning unrelated Android
+   state.
+4. **Add synthetic global `/proc` files.** Start with `/proc/version` and
+   `/proc/sys/kernel/*` only where a Debian program needs a stable answer.
+   Serve the same result for `open`, `stat`, `read` and `access`; preserve
+   `/proc/self/*` passthrough behavior.
+5. **Handle `/sys` conservatively.** Keep readable, supported values as
+   passthrough or explicit synthetic answers. Return a clear refusal for
+   writes or security-sensitive state Android denies; do not fabricate
+   capabilities or kernel controls.
+6. **Route the model consistently.** Dynamic calls enter through `dn-shim`,
+   libc-internal/raw/static calls enter through `dn-trace`, and refused
+   operations reach `dn-emu`. The model and result must be the same at every
+   entry point.
+7. **Acceptance tests.** For each model run a dynamic test, a static/raw test,
+   direct path probes, metadata probes and a real Debian consumer (`apt`, a
+   configure script, or a package post-install check). Record unsupported
+   operations as intentional refusals.
+
+### Shared follow-up
+
+1. **Test both enforcement points.** Every mapping/model gets a dynamic glibc
+   test through `dn-shim`, a static/raw or tracer test through `dn-trace`, and
+   an Android-host probe run outside the prefix. A feature is not complete if
+   only one executor sees it.
+2. **Keep the fast path cheap.** Direct bindings remain string substitution;
+   filesystem inspection and model generation must not be added to ordinary
+   path calls.
+3. **Measure before and after.** Repeat the path benchmarks, package install,
+   shell startup and storage access after each table/model change.
+
+### First acceptance ladder
+
+- `/mnt/Download` reads the same storage through shim and tracer.
+- `/dev/shm` has consistent `open`, `stat`, `statvfs`, `readdir` and
+  `shm_open` behavior.
+- `/proc/self/*` continues to work while global `/proc` refusals become either
+  synthetic answers or documented errors.
+- `/sys` exposes only explicitly supported reads; denied writes remain clear
+  refusals.
+- `apt`, `dpkg`, shell startup and the current path fast-path benchmarks show
+  no regression.
+
 ## Per-userland home (planned)
 
 Give each prefix a **sparse `$HOME`** (`/data/data/com.termux/files/.dn/<name>/`)

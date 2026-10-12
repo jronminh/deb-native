@@ -453,6 +453,15 @@ int translate_path(Tracee *tracee, char result[PATH_MAX], int dir_fd,
 		return status;
 	strcpy(result, "/");
 
+	/* Translation must not repeat: a path already under a binding's host
+	 * side is a host path (the shim maps /mnt -> /sdcard and, when the
+	 * guarded call still reaches the tracer, /sdcard must not be mapped a
+	 * second time into the tree).  Leave it unchanged. */
+	if (guest_path[0] == '/' && get_path_binding(tracee, HOST, guest_path) != NULL) {
+		strcpy(result, guest_path);
+		goto skip;
+	}
+
 	/* Bind-only fast path: rewrite the leading bound component and let
 	 * the kernel resolve the rest, instead of walking every component
 	 * with lstat(2).  Falls back to canonicalize() for ".." (which can

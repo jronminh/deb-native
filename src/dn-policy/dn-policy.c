@@ -19,6 +19,8 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 /* Sixteen bytes of slack on top of PATH_MAX: a guest path can be up to
  * PATH_MAX-1 long on its own, and prefixing it with tree_root must
@@ -37,8 +39,123 @@ static int initialized;
  * from -- these three are architecture/kernel-fixed, not prefix-fixed,
  * so hardcoding them is not a principle-5 violation the way a
  * prefix-specific value would be. */
-static const char *const passthrough[] = { "/proc", "/sys", "/dev" };
-#define N_PASSTHROUGH (sizeof(passthrough) / sizeof(passthrough[0]))
+#define DN_MAX_BINDINGS 32
+
+typedef struct {
+	char host[PATH_MAX];
+	char guest[PATH_MAX];
+	size_t host_len;
+	size_t guest_len;
+} DnBinding;
+
+static DnBinding bindings[DN_MAX_BINDINGS];
+static size_t binding_count;
+
+static int path_join(char *out, size_t cap, const char *a, const char *b);
+
+static int binding_prefix(const char *path, const char *prefix, size_t len)
+{
+	return strncmp(path, prefix, len) == 0
+		&& (path[len] == '\0' || path[len] == '/');
+}
+
+static int add_binding(const char *host, const char *guest)
+{
+	DnBinding *b;
+	size_t hl, gl;
+	char canonical[PATH_MAX];
+	const char *h = host;
+
+	if (host == NULL || guest == NULL || host[0] != '/' || guest[0] != '/')
+		return -EINVAL;
+	/* Resolve symlinks on the host side so the shim produces the same host
+	 * path the tracer does (PRoot canonicalizes binding hosts too, e.g.
+	 * /sdcard -> /storage/emulated/0). */
+	if (realpath(host, canonical) != NULL)
+		h = canonical;
+	host = h;
+	hl = strlen(host);
+	gl = strlen(guest);
+	if (hl == 0 || gl == 0 || hl >= PATH_MAX || gl >= PATH_MAX)
+		return -ENAMETOOLONG;
+	if (hl > 1 && host[hl - 1] == '/')
+		return -EINVAL;
+	if (gl > 1 && guest[gl - 1] == '/')
+		return -EINVAL;
+	for (size_t i = 0; i < binding_count; i++) {
+		if (strcmp(bindings[i].host, host) == 0
+		    && strcmp(bindings[i].guest, guest) == 0)
+			return 0;
+	}
+	if (binding_count >= DN_MAX_BINDINGS)
+		return -ENOSPC;
+	b = &bindings[binding_count++];
+	memcpy(b->host, host, hl + 1);
+	memcpy(b->guest, guest, gl + 1);
+	b->host_len = hl;
+	b->guest_len = gl;
+	return 0;
+}
+
+static int load_bindings(const char *rt_root)
+{
+	char path[PATH_MAX];
+	char line[PATH_MAX * 2 + 8];
+	FILE *f;
+	int status;
+
+	binding_count = 0;
+	status = add_binding("/proc", "/proc");
+	if (status < 0) return status;
+	status = add_binding("/sys", "/sys");
+	if (status < 0) return status;
+	status = add_binding("/dev", "/dev");
+	if (status < 0) return status;
+	status = path_join(path, sizeof(path), rt_root, "state/bindings");
+	if (status < 0)
+		return status;
+	f = fopen(path, "r");
+	if (f == NULL)
+		return errno == ENOENT ? 0 : -errno;
+	while (fgets(line, sizeof(line), f) != NULL) {
+		char *host, *guest, *end;
+
+		line[strcspn(line, "\r\n")] = '\0';
+		host = line;
+		while (*host == ' ' || *host == '\t') host++;
+		if (*host == '\0' || *host == '#') continue;
+		guest = strchr(host, '\t');
+		if (guest == NULL) {
+			fclose(f);
+			return -EINVAL;
+		}
+		*guest++ = '\0';
+		end = guest + strcspn(guest, "\t ");
+		*end = '\0';
+		status = add_binding(host, guest);
+		if (status < 0) {
+			fclose(f);
+			return status;
+		}
+	}
+	status = ferror(f) ? -EIO : 0;
+	fclose(f);
+	return status;
+}
+
+size_t dn_policy_binding_count(void)
+{
+	return binding_count;
+}
+
+int dn_policy_binding_get(size_t index, const char **host, const char **guest)
+{
+	if (index >= binding_count || host == NULL || guest == NULL)
+		return -EINVAL;
+	*host = bindings[index].host;
+	*guest = bindings[index].guest;
+	return 0;
+}
 
 /* True if @path equals @prefix, or starts with @prefix followed by a
  * '/'. @prefix_len excludes any trailing '/'. Rejects a false match
@@ -161,6 +278,14 @@ int dn_policy_init(const char *tree_root_in, const char *rt_root_in)
 
 	memcpy(rt_root, rt_root_in, len + 1);
 	rt_root_len = len;
+
+	if (len + sizeof("state/bindings") > PATH_MAX)
+		return -ENAMETOOLONG;
+	{
+		int status = load_bindings(rt_root_in);
+		if (status < 0)
+			return status;
+	}
 
 	/* Fake root and hardlinks are NOT set up here (runtime.md
 	 * principle 2: the unit of decision is the individual syscall --
@@ -394,13 +519,30 @@ static int translate_path_common(const char *guest_path, char *host_path_out, si
 	if (has_path_prefix(guest_path, tree_root, tree_root_len))
 		return copy_out(guest_path, host_path_out, cap);
 
+	/* The host side of a binding is also already a host path: the shim maps
+	 * /mnt -> /sdcard and the guarded call may still reach the tracer, which
+	 * must not translate /sdcard a second time into TREE/sdcard. */
+	for (i = 0; i < binding_count; i++)
+		if (binding_prefix(guest_path, bindings[i].host, bindings[i].host_len))
+			return copy_out(guest_path, host_path_out, cap);
+
 	/* /proc, /sys, /dev: shared with the real system unchanged, no
 	 * in-tree symlink semantics apply.  */
-	for (i = 0; i < N_PASSTHROUGH; i++) {
-		size_t plen = strlen(passthrough[i]);
-		if (has_path_prefix(guest_path, passthrough[i], plen))
-			return copy_out(guest_path, host_path_out, cap);
-	}
+	for (i = 0; i < binding_count; i++)
+		if (binding_prefix(guest_path, bindings[i].guest, bindings[i].guest_len)) {
+			size_t best = i;
+			for (size_t j = i + 1; j < binding_count; j++)
+				if (bindings[j].guest_len > bindings[best].guest_len
+				    && binding_prefix(guest_path, bindings[j].guest, bindings[j].guest_len))
+					best = j;
+			if (bindings[best].host_len + strlen(guest_path + bindings[best].guest_len) + 1 > cap)
+				return -ENAMETOOLONG;
+			memcpy(host_path_out, bindings[best].host, bindings[best].host_len);
+			memcpy(host_path_out + bindings[best].host_len,
+			       guest_path + bindings[best].guest_len,
+			       strlen(guest_path + bindings[best].guest_len) + 1);
+			return 0;
+		}
 
 	/* guest_path == "/": tree_root itself, not "tree_root/" (which
 	 * has_path_prefix() would still match later, but a bare root is
@@ -425,11 +567,26 @@ int dn_policy_redirect_path(const char *guest_path, char *host_path_out, size_t 
 	if (has_path_prefix(guest_path, tree_root, tree_root_len))
 		return copy_out(guest_path, host_path_out, cap);
 
-	for (i = 0; i < N_PASSTHROUGH; i++) {
-		size_t plen = strlen(passthrough[i]);
-		if (has_path_prefix(guest_path, passthrough[i], plen))
+	/* Host side of a binding: already translated (see translate_path_common). */
+	for (i = 0; i < binding_count; i++)
+		if (binding_prefix(guest_path, bindings[i].host, bindings[i].host_len))
 			return copy_out(guest_path, host_path_out, cap);
-	}
+
+	for (i = 0; i < binding_count; i++)
+		if (binding_prefix(guest_path, bindings[i].guest, bindings[i].guest_len)) {
+			size_t best = i;
+			for (size_t j = i + 1; j < binding_count; j++)
+				if (bindings[j].guest_len > bindings[best].guest_len
+				    && binding_prefix(guest_path, bindings[j].guest, bindings[j].guest_len))
+					best = j;
+			if (bindings[best].host_len + strlen(guest_path + bindings[best].guest_len) + 1 > cap)
+				return -ENAMETOOLONG;
+			memcpy(host_path_out, bindings[best].host, bindings[best].host_len);
+			memcpy(host_path_out + bindings[best].host_len,
+			       guest_path + bindings[best].guest_len,
+			       strlen(guest_path + bindings[best].guest_len) + 1);
+			return 0;
+		}
 
 	/* TREE == "/" needs no prefix. Otherwise guest paths already begin with
 	 * '/', so concatenation needs no separator or normalization. */
@@ -470,13 +627,23 @@ int dn_policy_detranslate_path(const char *host_path, char *guest_path_out, size
 		return copy_out(rest, guest_path_out, cap);
 	}
 
-	/* /proc, /sys, /dev: shared, unchanged (see translate_path_common).  */
+	/* Direct bindings, including the default /proc, /sys and /dev entries. */
 	{
 		size_t i;
-		for (i = 0; i < N_PASSTHROUGH; i++) {
-			size_t plen = strlen(passthrough[i]);
-			if (has_path_prefix(host_path, passthrough[i], plen))
-				return copy_out(host_path, guest_path_out, cap);
+	for (i = 0; i < binding_count; i++)
+		if (binding_prefix(host_path, bindings[i].host, bindings[i].host_len)) {
+			size_t best = i;
+			for (size_t j = i + 1; j < binding_count; j++)
+				if (bindings[j].host_len > bindings[best].host_len
+				    && binding_prefix(host_path, bindings[j].host, bindings[j].host_len))
+					best = j;
+			if (bindings[best].guest_len + strlen(host_path + bindings[best].host_len) + 1 > cap)
+				return -ENAMETOOLONG;
+			memcpy(guest_path_out, bindings[best].guest, bindings[best].guest_len);
+			memcpy(guest_path_out + bindings[best].guest_len,
+			       host_path + bindings[best].host_len,
+			       strlen(host_path + bindings[best].host_len) + 1);
+			return 0;
 		}
 	}
 

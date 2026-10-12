@@ -293,15 +293,15 @@ int main(int argc, char *const argv[])
 	if (new_binding(tracee, tree, tree, true) == NULL)
 		goto error;
 
-	/* The real system's /dev, /proc and /sys, as dn-policy passes them
-	 * through (docs/spec/runtime.md, "Path rewriting"): /dev/null is the
-	 * device, not a file the tree grows.  */
+	/* Apply the canonical policy bindings to the tracer. */
 	{
-		static const char *const passthrough[] = { "/dev", "/proc", "/sys" };
 		size_t k;
-
-		for (k = 0; k < sizeof(passthrough) / sizeof(passthrough[0]); k++)
-			(void) new_binding(tracee, passthrough[k], passthrough[k], false);
+		for (k = 0; k < dn_policy_binding_count(); k++) {
+			const char *host, *guest;
+			if (dn_policy_binding_get(k, &host, &guest) < 0
+			    || new_binding(tracee, host, guest, false) == NULL)
+				goto error;
+		}
 	}
 
 	status = initialize_bindings(tracee);

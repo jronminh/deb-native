@@ -83,6 +83,13 @@ extern "C" {
  */
 int dn_policy_init(const char *tree_root, const char *rt_root);
 
+/* The canonical direct-binding table. Entries are loaded by
+ * dn_policy_init(): /proc, /sys and /dev are defaults, then RT/state/bindings
+ * may add host<TAB>guest records. The returned strings remain owned by the
+ * policy library until the process exits. */
+size_t dn_policy_binding_count(void);
+int dn_policy_binding_get(size_t index, const char **host, const char **guest);
+
 /* ---- Path rewriting ------------------------------------------------ */
 
 /* Cheap common-case redirect for dn-shim: map an absolute guest path into
