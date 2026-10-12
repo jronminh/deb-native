@@ -82,7 +82,7 @@ and its own files under `var/lib/deb-native/`:
 ```
 <prefix>/
 ├── boot/                       the host's interface (the convention)
-│   ├── boot.sh                 /bin/sh, the entry: sets the boot env, execs dn-monitor
+│   ├── boot.sh                 /system/bin/sh, the entry: sets the boot env, execs dn-monitor
 │   ├── init.sh                 the prefix's init, run by dn-monitor
 │   ├── bootstrap.sh            the first-boot completion (configure + the profile)
 │   ├── install.sh              /system/bin/sh, run by the host's shell: activate

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/system/bin/sh
 # The tree's boot (docs/spec/prefix.md, "The boot/ directory"): start
 # dn-monitor, the tree's root process, against this prefix and its init.
 #
@@ -13,9 +13,11 @@
 # the boot's environment is decided.
 #
 # This file is the entry by convention (`boot/boot.sh`): the host runs it with
-# the prefix root as the working directory, directly (the shebang resolves on
-# the host) or through a shell.  Any arguments are passed on to the prefix's
-# init, which takes [COMMAND [ARG...]] (docs/spec/prefix.md).
+# the prefix root as the working directory.  The shebang is `/system/bin/sh`,
+# Android's shell (there is no `/bin/sh` on the device), so the host can exec
+# the entry directly; running it through a shell (`sh boot/boot.sh`) works too.
+# Any arguments are passed on to the prefix's init, which takes
+# [COMMAND [ARG...]] (docs/spec/prefix.md).
 GLIBC_TUNABLES=glibc.pthread.rseq=0
 export GLIBC_TUNABLES
 
