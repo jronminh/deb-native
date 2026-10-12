@@ -132,6 +132,15 @@ static int dn_ret(long r)
 	return (int)r;
 }
 
+static ssize_t dn_ret_ssize(long r)
+{
+	if (r < 0) {
+		errno = (int)-r;
+		return -1;
+	}
+	return (ssize_t)r;
+}
+
 /* dn_policy_stat_post(): rewrite a stat result's owner fields from the owner
  * store, only when the path was actually translated (mirrors fstatat64.c).  */
 static void dn_stat_post(const char *host, struct stat *st)
@@ -643,4 +652,213 @@ int linkat(int olddirfd, const char *old, int newdirfd, const char *new, int fla
 		return 0;
 	}
 	return dn_ret(dn_do_syscall(SYS_linkat, olddirfd, (long)old, newdirfd, (long)new, flags));
+}
+
+/* ---- xattr family (P2b-2e) ----------------------------------------- *
+ * security.* (setcap and friends) is always faked -- a real write is what
+ * Android denies -- so route it to dn_policy_fake_*xattr(), keyed like the
+ * owner record.  Everything else is the real xattr, path-translated.  The
+ * l* variants do not follow a final symlink.  */
+
+int setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 1);
+
+	if (dn_active && dn_policy_is_fake_xattr(name)) {
+		struct stat st;
+		if (dn_stat_host(h, &st, 1) != 0)
+			return -1;
+		return dn_ret(dn_policy_fake_setxattr(h, st.st_dev, st.st_ino, name, value, size));
+	}
+	return dn_ret(dn_do_syscall(SYS_setxattr, (long)h, (long)name, (long)value, size, flags));
+}
+
+int lsetxattr(const char *path, const char *name, const void *value, size_t size, int flags)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+
+	if (dn_active && dn_policy_is_fake_xattr(name)) {
+		struct stat st;
+		if (dn_stat_host(h, &st, 0) != 0)
+			return -1;
+		return dn_ret(dn_policy_fake_setxattr(h, st.st_dev, st.st_ino, name, value, size));
+	}
+	return dn_ret(dn_do_syscall(SYS_lsetxattr, (long)h, (long)name, (long)value, size, flags));
+}
+
+ssize_t getxattr(const char *path, const char *name, void *value, size_t size)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 1);
+
+	if (dn_active && dn_policy_is_fake_xattr(name)) {
+		struct stat st;
+		int r;
+		if (dn_stat_host(h, &st, 1) != 0)
+			return -1;
+		r = dn_policy_fake_getxattr(h, st.st_dev, st.st_ino, name, value, size);
+		if (r < 0) {
+			errno = -r;
+			return -1;
+		}
+		return r;
+	}
+	return dn_ret_ssize(dn_do_syscall(SYS_getxattr, (long)h, (long)name, (long)value, size, 0));
+}
+
+ssize_t lgetxattr(const char *path, const char *name, void *value, size_t size)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+
+	if (dn_active && dn_policy_is_fake_xattr(name)) {
+		struct stat st;
+		int r;
+		if (dn_stat_host(h, &st, 0) != 0)
+			return -1;
+		r = dn_policy_fake_getxattr(h, st.st_dev, st.st_ino, name, value, size);
+		if (r < 0) {
+			errno = -r;
+			return -1;
+		}
+		return r;
+	}
+	return dn_ret_ssize(dn_do_syscall(SYS_lgetxattr, (long)h, (long)name, (long)value, size, 0));
+}
+
+int removexattr(const char *path, const char *name)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 1);
+
+	if (dn_active && dn_policy_is_fake_xattr(name)) {
+		struct stat st;
+		if (dn_stat_host(h, &st, 1) != 0)
+			return -1;
+		return dn_ret(dn_policy_fake_removexattr(h, st.st_dev, st.st_ino, name));
+	}
+	return dn_ret(dn_do_syscall(SYS_removexattr, (long)h, (long)name, 0, 0, 0));
+}
+
+int lremovexattr(const char *path, const char *name)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+
+	if (dn_active && dn_policy_is_fake_xattr(name)) {
+		struct stat st;
+		if (dn_stat_host(h, &st, 0) != 0)
+			return -1;
+		return dn_ret(dn_policy_fake_removexattr(h, st.st_dev, st.st_ino, name));
+	}
+	return dn_ret(dn_do_syscall(SYS_lremovexattr, (long)h, (long)name, 0, 0, 0));
+}
+
+ssize_t listxattr(const char *path, char *list, size_t size)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 1);
+
+	return dn_ret_ssize(dn_do_syscall(SYS_listxattr, (long)h, (long)list, size, 0, 0));
+}
+
+ssize_t llistxattr(const char *path, char *list, size_t size)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+
+	return dn_ret_ssize(dn_do_syscall(SYS_llistxattr, (long)h, (long)list, size, 0, 0));
+}
+
+/* ---- reverse translation (P2b-2f) ---------------------------------- *
+ * getcwd() and readlink() hand back a real host path; the guest must see the
+ * tree path.  Mirrors dn_policy_getcwd_post()/dn_policy_readlink_post().  */
+
+static void dn_detranslate_inplace(char *buf, size_t cap)
+{
+	char out[PATH_MAX];
+	size_t n;
+
+	if (!dn_active || buf == NULL)
+		return;
+	if (dn_policy_detranslate_path(buf, out, sizeof(out)) != 0)
+		return;
+	n = strlen(out);
+	if (n < cap)
+		memcpy(buf, out, n + 1);
+}
+
+char *getcwd(char *buf, size_t size)
+{
+	long r;
+
+	if (buf == NULL) {
+		size = size ? size : PATH_MAX;
+		buf = malloc(size);
+		if (buf == NULL) {
+			errno = ENOMEM;
+			return NULL;
+		}
+	}
+	r = dn_do_syscall(SYS_getcwd, (long)buf, size, 0, 0, 0);
+	if (r < 0) {
+		errno = (int)-r;
+		return NULL;
+	}
+	dn_detranslate_inplace(buf, size);
+	return buf;
+}
+
+ssize_t readlink(const char *path, char *buf, size_t len)
+{
+	return readlinkat(AT_FDCWD, path, buf, len);
+}
+
+/* Answer a /proc/<self> magic link: /proc/self/exe with the recorded program
+ * (DN_PROG, set by dn-interp), everything else with reverse translation.  */
+static ssize_t dn_readlink_post(const char *path, char *buf, size_t len, long n)
+{
+	char in[PATH_MAX], out[PATH_MAX];
+	const char *prog;
+	size_t olen;
+
+	if (!dn_active || path == NULL || strncmp(path, "/proc/", 6) != 0)
+		return n;
+
+	if (strcmp(path, "/proc/self/exe") == 0 || strcmp(path, "/proc/thread-self/exe") == 0) {
+		prog = getenv("DN_PROG");
+		if (prog != NULL && dn_policy_detranslate_path(prog, out, sizeof(out)) == 0) {
+			olen = strlen(out);
+			if (olen <= len) {
+				memcpy(buf, out, olen);
+				return (ssize_t)olen;
+			}
+		}
+		return n;
+	}
+
+	if ((size_t)n >= sizeof(in))
+		return n;
+	memcpy(in, buf, (size_t)n);
+	in[n] = '\0';
+	if (dn_policy_detranslate_path(in, out, sizeof(out)) != 0)
+		return n;
+	olen = strlen(out);
+	if (olen > len)
+		return n;
+	memcpy(buf, out, olen);
+	return (ssize_t)olen;
+}
+
+ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t len)
+{
+	char b[PATH_MAX];
+	const char *h = dn_redirect(b, sizeof(b), path, 0);
+	long n = dn_do_syscall(SYS_readlinkat, dirfd, (long)h, (long)buf, len, 0);
+
+	if (n < 0)
+		return dn_ret_ssize(n);
+	return dn_readlink_post(path, buf, len, n);
 }
