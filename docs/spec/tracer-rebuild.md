@@ -105,6 +105,44 @@ What cannot be cut, because nothing else can do it:
 That is the ptrace core, and it is why the fork reuses PRoot rather than a
 clean-room tracer ([`../../docs/`](../../docs), the fork-lite decision).
 
+## Cost: the unpatched loader vs a patched `rtld` (measured)
+
+The in-process fast path (the shim) never reaches the tracer. What does reach
+it, per program start, is: `exec`, and every **path/identity syscall the shim
+cannot see** — including `ld.so`'s own, because an unpatched `ld.so` is not a
+dn-glibc and its calls do not come from the gate page. So "no `rtld` patch"
+has a price, in `ld.so`'s startup.
+
+A probe on x86_64 (WSL) counted those syscalls per start on a stock glibc, and
+timed the same starts:
+
+| program | path/identity syscalls / start | start, untraced | trace every syscall |
+| --- | --- | --- | --- |
+| `/bin/true` | 4 | ~0.75 ms | ~5.3 ms |
+| `bash -c :` | 15 | ~2.5 ms | ~16 ms |
+| `python3 -c pass` | 89 | ~14.3 ms | ~62 ms |
+
+Reading:
+
+- the traced set is **small for ordinary programs** (a handful), larger only
+  for import-heavy tools;
+- tracing *every* syscall is a large multiplier, but the filter TRACEs only the
+  path/identity group plus `exec`, so the real cost tracks the first column, not
+  the third;
+- with the shim covering the program's own libc calls, the residual is `ld.so`'s
+  startup calls — a handful. An extra exec (the launcher hop) measured
+  **~0.2–0.5 ms** on the same probe.
+
+Conclusion: **not patching `rtld` is acceptable** — the cost is a fraction of a
+start, not milliseconds. A **minimal `rtld` patch** (map `P_GATE`, issue from
+it) removes the residual and needs **no install hook**: it is a build-time glibc
+patch, shipped inside the tarball, and much smaller than `main`'s wiring (two
+files vs forty-three). Defer it until an on-device measurement says the residual
+is worth it. Likewise, the second exec of the launcher (option 2) is cheap
+enough not to decide the design on speed alone.
+
+The probe is x86_64/WSL: indicative, not the device.
+
 ## One source of truth: give the catalog shapes
 
 The shim applies the law by *libc symbol*; the tracer by *syscall number*. Both
@@ -125,12 +163,13 @@ its own commit, build-verified, and leaves the tree usable.
 
 ### Track A — finish the shim runtime
 
-- **A1 (P2b-3)** — move the gate page into `dn-interp`: `dn-interp` maps
-  `P_GATE` and exports `DN_PROG` (the real program path) for
-  `/proc/self/exe`; the shim then only consumes the gate. Drop
-  `dn-policy-glibc-wiring.patch` from the pipeline (`scripts/glibc/`,
-  `.github/workflows/build-glibc.yml`); recompute `src/syscalls.tsv`'s
-  `glibc`/`gate` columns.
+- **A1 (P2b-3)** — make `dn-interp` a **launcher**: it sets the environment
+  (`LD_PRELOAD=dn-shim.so`, `LD_LIBRARY_PATH`, `DN_PROG`) and `execve`s the
+  tree's `ld.so` (`--argv0 …`), so the kernel does the load. `P_GATE` stays in
+  the **shim** (an exec wipes any mapping, so the launcher cannot map it, and
+  the loader stays unpatched). Drop `dn-policy-glibc-wiring.patch` from the
+  pipeline (`scripts/glibc/`, `.github/workflows/build-glibc.yml`); recompute
+  `src/syscalls.tsv`'s `glibc`/`gate` columns.
 - **A2 (P3)** — trim `dn-glibc-android.patch` to the Android baseline;
   confirm a stock `libc6` boots.
 
