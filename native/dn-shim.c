@@ -72,11 +72,40 @@ __asm__(
 ".size dn_gate_syscall, .-dn_gate_syscall\n"
 );
 
+extern long dn_raw_syscall(long nr, long a0, long a1, long a2,
+			   long a3, long a4, long a5);
+
 static long dn_do_syscall(long nr, long a0, long a1, long a2, long a3, long a4)
 {
 	if (dn_gate_ready)
 		return dn_gate_syscall(nr, a0, a1, a2, a3, a4, 0);
-	return syscall(nr, a0, a1, a2, a3, a4);
+	return dn_raw_syscall(nr, a0, a1, a2, a3, a4, 0);
+}
+
+/* The same syscall issued directly, no gate page: the fallback when the gate
+ * page could not be mapped.  Needed because syscall(2) is interposed (P2b-2g),
+ * so libc's syscall() is not reachable from here without recursing.  */
+__asm__(
+".text\n"
+".globl dn_raw_syscall\n"
+".type dn_raw_syscall, %function\n"
+"dn_raw_syscall:\n"
+"	mov	x8, x0\n"
+"	mov	x0, x1\n"
+"	mov	x1, x2\n"
+"	mov	x2, x3\n"
+"	mov	x3, x4\n"
+"	mov	x4, x5\n"
+"	mov	x5, x6\n"
+"	svc	#0\n"
+"	ret\n"
+".size dn_raw_syscall, .-dn_raw_syscall\n"
+);
+
+/* A raw syscall with up to three real args (the identity fallbacks).  */
+static long dn_raw(long nr, long a0, long a1, long a2)
+{
+	return dn_raw_syscall(nr, a0, a1, a2, 0, 0, 0);
 }
 
 __attribute__((constructor))
@@ -373,22 +402,22 @@ int fchmodat(int dirfd, const char *path, mode_t mode, int flags)
 
 uid_t getuid(void)
 {
-	return dn_id ? dn_policy_fake_getuid(dn_id) : (uid_t)syscall(SYS_getuid);
+	return dn_id ? dn_policy_fake_getuid(dn_id) : (uid_t)dn_raw(SYS_getuid, 0, 0, 0);
 }
 
 uid_t geteuid(void)
 {
-	return dn_id ? dn_policy_fake_getuid(dn_id) : (uid_t)syscall(SYS_geteuid);
+	return dn_id ? dn_policy_fake_getuid(dn_id) : (uid_t)dn_raw(SYS_geteuid, 0, 0, 0);
 }
 
 gid_t getgid(void)
 {
-	return dn_id ? dn_policy_fake_getgid(dn_id) : (gid_t)syscall(SYS_getgid);
+	return dn_id ? dn_policy_fake_getgid(dn_id) : (gid_t)dn_raw(SYS_getgid, 0, 0, 0);
 }
 
 gid_t getegid(void)
 {
-	return dn_id ? dn_policy_fake_getgid(dn_id) : (gid_t)syscall(SYS_getegid);
+	return dn_id ? dn_policy_fake_getgid(dn_id) : (gid_t)dn_raw(SYS_getegid, 0, 0, 0);
 }
 
 int getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
@@ -397,7 +426,7 @@ int getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
 		dn_policy_fake_getresuid(dn_id, ruid, euid, suid);
 		return 0;
 	}
-	return dn_ret(syscall(SYS_getresuid, ruid, euid, suid));
+	return dn_ret(dn_raw(SYS_getresuid, (long)ruid, (long)euid, (long)suid));
 }
 
 int getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid)
@@ -406,66 +435,64 @@ int getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid)
 		dn_policy_fake_getresgid(dn_id, rgid, egid, sgid);
 		return 0;
 	}
-	return dn_ret(syscall(SYS_getresgid, rgid, egid, sgid));
+	return dn_ret(dn_raw(SYS_getresgid, (long)rgid, (long)egid, (long)sgid));
 }
 
 int getgroups(int size, gid_t list[])
 {
 	if (dn_id)
 		return dn_policy_fake_getgroups(dn_id, (size_t)size, list);
-	return dn_ret(syscall(SYS_getgroups, size, list));
+	return dn_ret(dn_raw(SYS_getgroups, size, (long)list, 0));
 }
 
 int setuid(uid_t uid)
 {
-	return dn_ret(dn_id ? dn_policy_fake_setuid(dn_id, uid) : syscall(SYS_setuid, uid));
+	return dn_ret(dn_id ? dn_policy_fake_setuid(dn_id, uid) : dn_raw(SYS_setuid, uid, 0, 0));
 }
 
 int setgid(gid_t gid)
 {
-	return dn_ret(dn_id ? dn_policy_fake_setgid(dn_id, gid) : syscall(SYS_setgid, gid));
+	return dn_ret(dn_id ? dn_policy_fake_setgid(dn_id, gid) : dn_raw(SYS_setgid, gid, 0, 0));
 }
 
 int setreuid(uid_t r, uid_t e)
 {
-	return dn_ret(dn_id ? dn_policy_fake_setreuid(dn_id, r, e)
-			     : syscall(SYS_setreuid, r, e));
+	return dn_ret(dn_id ? dn_policy_fake_setreuid(dn_id, r, e) : dn_raw(SYS_setreuid, r, e, 0));
 }
 
 int setregid(gid_t r, gid_t e)
 {
-	return dn_ret(dn_id ? dn_policy_fake_setregid(dn_id, r, e)
-			     : syscall(SYS_setregid, r, e));
+	return dn_ret(dn_id ? dn_policy_fake_setregid(dn_id, r, e) : dn_raw(SYS_setregid, r, e, 0));
 }
 
 int setresuid(uid_t r, uid_t e, uid_t s)
 {
 	return dn_ret(dn_id ? dn_policy_fake_setresuid(dn_id, r, e, s)
-			     : syscall(SYS_setresuid, r, e, s));
+			     : dn_raw(SYS_setresuid, r, e, s));
 }
 
 int setresgid(gid_t r, gid_t e, gid_t s)
 {
 	return dn_ret(dn_id ? dn_policy_fake_setresgid(dn_id, r, e, s)
-			     : syscall(SYS_setresgid, r, e, s));
+			     : dn_raw(SYS_setresgid, r, e, s));
 }
 
 uid_t setfsuid(uid_t uid)
 {
 	return dn_id ? dn_policy_fake_setfsuid(dn_id, uid)
-		     : (uid_t)syscall(SYS_setfsuid, uid);
+		     : (uid_t)dn_raw(SYS_setfsuid, uid, 0, 0);
 }
 
 gid_t setfsgid(gid_t gid)
 {
 	return dn_id ? dn_policy_fake_setfsgid(dn_id, gid)
-		     : (gid_t)syscall(SYS_setfsgid, gid);
+		     : (gid_t)dn_raw(SYS_setfsgid, gid, 0, 0);
 }
 
 int setgroups(size_t n, const gid_t *list)
 {
 	return dn_ret(dn_id ? dn_policy_fake_setgroups(dn_id, n, list)
-			     : syscall(SYS_setgroups, n, list));
+			     : dn_raw(SYS_setgroups, n, (long)list, 0));
 }
 
 /* ---- path manipulation (P2b-2c) ------------------------------------ *
@@ -861,4 +888,126 @@ ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t len)
 	if (n < 0)
 		return dn_ret_ssize(n);
 	return dn_readlink_post(path, buf, len, n);
+}
+
+/* ---- syscall(2) (P2b-2g) ------------------------------------------- *
+ * A program that reaches the kernel through syscall(2) bypasses every
+ * wrapper above, so translate the path argument(s) of a path-group number
+ * here and issue the call from the gate -- mirroring the wiring's
+ * dn_policy_syscall_args().  */
+
+static void dn_sysarg_path(long *arg, int follow, char *buf, size_t cap)
+{
+	const char *path = (const char *)(uintptr_t)*arg;
+	const char *out;
+
+	if (path == NULL || path[0] != '/')
+		return;
+	out = dn_redirect(buf, cap, path, follow);
+	*arg = (long)(uintptr_t)out;
+}
+
+static void dn_syscall_args(long nr, long *a0, long *a1, long *a2, long *a3,
+			    char *p0, size_t cap, char *p1)
+{
+	switch (nr) {
+	case SYS_openat:
+		dn_sysarg_path(a1, !((int)*a2 & O_NOFOLLOW), p0, cap);
+		break;
+	case SYS_newfstatat:
+		dn_sysarg_path(a1, !((int)*a3 & AT_SYMLINK_NOFOLLOW), p0, cap);
+		break;
+#ifdef SYS_statx
+	case SYS_statx:
+		dn_sysarg_path(a1, !((int)*a2 & AT_SYMLINK_NOFOLLOW), p0, cap);
+		break;
+#endif
+	case SYS_faccessat:
+		dn_sysarg_path(a1, 1, p0, cap);
+		break;
+#ifdef SYS_faccessat2
+	case SYS_faccessat2:
+		dn_sysarg_path(a1, !((int)*a3 & AT_SYMLINK_NOFOLLOW), p0, cap);
+		break;
+#endif
+	case SYS_readlinkat:
+		dn_sysarg_path(a1, 0, p0, cap);
+		break;
+#ifdef SYS_openat2
+	case SYS_openat2:
+		dn_sysarg_path(a1, 1, p0, cap);
+		break;
+#endif
+	case SYS_mkdirat:
+	case SYS_mknodat:
+	case SYS_unlinkat:
+	case SYS_fchmodat:
+#ifdef SYS_fchmodat2
+	case SYS_fchmodat2:
+#endif
+	case SYS_utimensat:
+	case SYS_fchownat:
+		dn_sysarg_path(a1, 0, p0, cap);
+		break;
+	case SYS_symlinkat:
+		dn_sysarg_path(a2, 0, p0, cap);
+		break;
+	case SYS_renameat:
+#ifdef SYS_renameat2
+	case SYS_renameat2:
+#endif
+	case SYS_linkat:
+		dn_sysarg_path(a1, 0, p0, cap);
+		dn_sysarg_path(a3, 0, p1, cap);
+		break;
+#ifdef SYS_chown
+	case SYS_chown:
+#endif
+#ifdef SYS_lchown
+	case SYS_lchown:
+#endif
+	case SYS_chdir:
+	case SYS_chroot:
+	case SYS_truncate:
+	case SYS_statfs:
+	case SYS_setxattr:
+	case SYS_lsetxattr:
+	case SYS_getxattr:
+	case SYS_lgetxattr:
+	case SYS_listxattr:
+	case SYS_llistxattr:
+	case SYS_removexattr:
+	case SYS_lremovexattr:
+		dn_sysarg_path(a0, 0, p0, cap);
+		break;
+	default:
+		break;
+	}
+}
+
+long syscall(long number, ...)
+{
+	va_list ap;
+	long a0, a1, a2, a3, a4, a5, r;
+	char p0[PATH_MAX], p1[PATH_MAX];
+
+	va_start(ap, number);
+	a0 = va_arg(ap, long);
+	a1 = va_arg(ap, long);
+	a2 = va_arg(ap, long);
+	a3 = va_arg(ap, long);
+	a4 = va_arg(ap, long);
+	a5 = va_arg(ap, long);
+	va_end(ap);
+
+	if (dn_active)
+		dn_syscall_args(number, &a0, &a1, &a2, &a3, p0, sizeof(p0), p1);
+
+	r = dn_gate_ready ? dn_gate_syscall(number, a0, a1, a2, a3, a4, a5)
+			  : dn_raw_syscall(number, a0, a1, a2, a3, a4, a5);
+	if (r < 0) {
+		errno = (int)-r;
+		return -1;
+	}
+	return r;
 }
