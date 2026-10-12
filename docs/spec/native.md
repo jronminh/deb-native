@@ -30,6 +30,8 @@ replacement for them. Status: the target, with what is built and what is open.
 - [`emulation.md`](emulation.md) — the backend that answers operations the
   platform refuses.
 - [`prefix.md`](prefix.md) — the tree and the tarball.
+- [`ld-dn-shim.md`](ld-dn-shim.md) — the loader-centric fast path (branch
+  `ld-dn-surgical`).
 - [`../../TODO.md`](../../TODO.md) — the scheduled work (P4 is the measurement).
 
 ## The goal
