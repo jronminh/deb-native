@@ -7,8 +7,8 @@
 #
 # Everything here uses **guest paths**: to the runtime the tree is "/", and
 # dn-policy maps each guest path back into the tree.  It sets up the
-# environment and, on a first boot (no /.dn/bootstrapped), completes the
-# prefix from /.dn/profile by itself, then runs the command (default: an
+# environment and, on a first boot (no /var/lib/deb-native/bootstrapped), completes the
+# prefix from /var/lib/deb-native/profile by itself, then runs the command (default: an
 # interactive shell).
 set -eu
 PATH=/usr/lib/deb-native/priv:/usr/sbin:/usr/bin:/sbin:/bin
@@ -41,9 +41,9 @@ if [ ! -e /usr/sbin/policy-rc.d ]; then
   chmod 755 /usr/sbin/policy-rc.d
 fi
 
-# First boot: complete the prefix (apt update + install /.dn/profile), then
+# First boot: complete the prefix (apt update + install /var/lib/deb-native/profile), then
 # mark it done.  A later boot skips straight to the command.
-if [ -f /.dn/profile ] && [ ! -f /.dn/bootstrapped ]; then
+if [ -f /var/lib/deb-native/profile ] && [ ! -f /var/lib/deb-native/bootstrapped ]; then
   /usr/bin/bash /usr/lib/deb-native/scripts/runtime/bootstrap-prefix.sh
 fi
 

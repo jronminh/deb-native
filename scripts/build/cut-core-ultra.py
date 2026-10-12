@@ -4,7 +4,7 @@
 core-ultra v0 (docs/spec/prefix.md): the files of a few seed
 packages (from dpkg's own lists in SRC), the runtime, the small etc files a
 shell and a resolver read, and every library their ELFs need (DT_NEEDED),
-added until the set is closed. Writes DST/.dn/packages (core-ultra has no
+added until the set is closed. Writes DST/var/lib/deb-native/packages (core-ultra has no
 dpkg database). Run before pack-prefix.py, on an unpacked tree.
 
 Usage: cut-core-ultra.py SRC DST
@@ -132,9 +132,9 @@ def main():
                         add(hit)
                         changed = True
 
-    os.makedirs(os.path.join(DST, ".dn"), exist_ok=True)
+    os.makedirs(os.path.join(DST, "var/lib/deb-native"), exist_ok=True)
     with open(os.path.join(SRC, "var/lib/dpkg/status")) as s, \
-         open(os.path.join(DST, ".dn/packages"), "w") as o:
+         open(os.path.join(DST, "var/lib/deb-native/packages"), "w") as o:
         for blk in s.read().split("\n\n"):
             kv = dict(l.split(": ", 1) for l in blk.splitlines() if ": " in l and not l.startswith(" "))
             if kv.get("Package") in SEED:

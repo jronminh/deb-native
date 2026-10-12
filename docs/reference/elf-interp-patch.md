@@ -93,7 +93,7 @@ it.
   carries the build path anywhere but in `PT_INTERP` (the glibc and the shim
   derive the prefix at run time), so the recorded offsets are the whole job;
   the build fails if a binary names it elsewhere.
-- **The write stays in the reserved room.** `.dn/baked-paths` records each
+- **The write stays in the reserved room.** `var/lib/deb-native/baked-paths` records each
   `PT_INTERP` offset and capacity; `dn-elf` overwrites the string within that
   capacity, so relocation is a byte write at a recorded offset and nothing else
   moves.

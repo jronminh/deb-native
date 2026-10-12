@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the build invariants to a staged prefix tree and write its .dn/.
+"""Apply the build invariants to a staged prefix tree and write its own files.
 
 docs/spec/prefix.md, "Build invariants". Run on a copy of a built
 prefix (package-prefix.sh stages one); the tree is changed in place:
@@ -13,8 +13,8 @@ prefix (package-prefix.sh stages one); the tree is changed in place:
   - absolute symlinks into ROOT become relative; ld.so.cache is removed;
   - home/, root -> home, mnt -> ../mnt and
     etc/resolv.conf -> ../../app/etc/resolv.conf are made;
-  - boot/install.sh and boot/version are written; .dn/packages and
-    .dn/baked-paths are written.
+  - boot/install.sh and boot/version are written; var/lib/deb-native/packages
+    and var/lib/deb-native/baked-paths are written.
 
 Usage: pack-prefix.py TREE --root ROOT --name NAME [--desc TEXT]
                       [--version V]
@@ -26,6 +26,10 @@ import struct
 import sys
 
 LOADER = "usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+# Where the prefix's own files live (docs/spec/prefix.md): the packages list,
+# the baked-paths record, and, on a first boot, the profile to restore and the
+# bootstrapped marker.  The same place package-prefix.sh writes its manifest.
+STATE = "var/lib/deb-native"
 PT_INTERP = 3
 # The host's interface is the boot/ directory at the prefix root
 # (docs/spec/prefix.md, "The boot/ directory"): the entry is the fixed path
@@ -108,7 +112,7 @@ def main():
     text, bad, relinked, foreign_links = [], [], 0, []
     for dp, dns, fns in os.walk(T):
         rel_dp = os.path.relpath(dp, T)
-        if rel_dp == ".dn" or rel_dp.startswith(".dn/"):
+        if rel_dp == STATE or rel_dp.startswith(STATE + "/"):
             continue
         for n in fns + dns:
             p = os.path.join(dp, n)
@@ -152,17 +156,13 @@ def main():
     for rel, t in foreign_links:
         print(f"pack-prefix: warning: {rel} -> {t} points outside the prefix", file=sys.stderr)
 
-    dn = os.path.join(T, ".dn")
-    os.makedirs(dn, exist_ok=True)
-    # The relocation script was retired: there is no relocation.
-    stale = os.path.join(dn, "relocate.sh")
-    if os.path.exists(stale):
-        os.remove(stale)
-    with open(os.path.join(dn, "baked-paths"), "w") as f:
+    state = os.path.join(T, STATE)
+    os.makedirs(state, exist_ok=True)
+    with open(os.path.join(state, "baked-paths"), "w") as f:
         for rel in sorted(text):
             f.write(f"text\t{rel}\n")
 
-    pk = os.path.join(dn, "packages")
+    pk = os.path.join(state, "packages")
     status = os.path.join(T, "var/lib/dpkg/status")
     if not os.path.exists(pk) and os.path.exists(status):
         with open(status) as s, open(pk, "w") as o:

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Complete a shipped core-deb: install the packages named in /.dn/profile from
+# Complete a shipped core-deb: install the packages named in /var/lib/deb-native/profile from
 # the mirror, inside the prefix.  Run by the prefix's init on its first boot,
 # under dn-trace -- so every path here is a **guest** path.
 #   bash /usr/lib/deb-native/scripts/runtime/bootstrap-prefix.sh
@@ -14,8 +14,8 @@ export DEBIAN_FRONTEND
 TMPDIR=/tmp
 export TMPDIR
 mkdir -p "$TMPDIR"
-PROFILE=/.dn/profile
-DONE=/.dn/bootstrapped
+PROFILE=/var/lib/deb-native/profile
+DONE=/var/lib/deb-native/bootstrapped
 
 [ -f "$PROFILE" ] || { echo "bootstrap: no $PROFILE" >&2; exit 1; }
 if [ -f "$DONE" ]; then

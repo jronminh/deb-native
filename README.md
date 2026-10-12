@@ -60,7 +60,7 @@ boot/boot.sh
 `boot/boot.sh` sets the one environment variable `dn-monitor`'s own startup needs
 and execs it. With no program, `dn-monitor` runs the prefix's init, which sets
 the environment and, on a first boot, completes the prefix itself
-(`dpkg --configure -a`, then `apt update` + the `.dn/profile` packages), then
+(`dpkg --configure -a`, then `apt update` + the `var/lib/deb-native/profile` packages), then
 opens an interactive shell. Pass a program instead of the default shell:
 
 ```sh

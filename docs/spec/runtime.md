@@ -133,7 +133,7 @@ it) ships as one tarball ([`prefix.md`](prefix.md)).
    this step on every process runs through the interpreter and the shim.
 4. init sets the environment (env vars, `TREE/tmp`, `resolv.conf`,
    `policy-rc.d`) and, on a first boot, completes the prefix from
-   `.dn/profile` itself; then it execs the command it was given, or an
+   `var/lib/deb-native/profile` itself; then it execs the command it was given, or an
    interactive shell.
 
 Every process in the tree is a descendant of `dn-trace`. Nothing execs into
@@ -443,8 +443,8 @@ local-repo packages the mirror has a newer version of.
    without it no glibc program can resolve a domain name.
 4. Sets `usr/sbin/policy-rc.d` to return 101 — Debian's standard mechanism to
    stop an install script from starting a service on its own.
-5. On a first boot (no `.dn/bootstrapped`), completes the prefix from
-   `.dn/profile`.
+5. On a first boot (no `var/lib/deb-native/bootstrapped`), completes the prefix from
+   `var/lib/deb-native/profile`.
 6. `exec`s the command it was given, or an interactive shell.
 
 ### Services

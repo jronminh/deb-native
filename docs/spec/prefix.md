@@ -7,14 +7,14 @@ own glibc, `apt`, and files, with the runtime from [`runtime.md`](runtime.md)
 at `RT` inside it. This doc covers how a prefix is **built** (a build host with
 a toolchain and network) and **shipped** (a poor host: a POSIX shell and
 toybox). It is the artifact contract — what the build produces, what `boot/`
-and `.dn/` carry, and the steps a host runs. Status: living doc; the build and
-ship stages below are what the scripts do.
+and the prefix's own files carry, and the steps a host runs. Status: living doc;
+the build and ship stages below are what the scripts do.
 
 ## Contents
 
 - [The model](#the-model)
 - [Layers](#layers)
-- [The `.dn/` directory](#the-dn-directory)
+- [The prefix's own files](#the-prefixs-own-files)
 - [The boot/ directory](#the-boot-directory)
 - [Build](#build)
 - [Ship](#ship)
@@ -65,31 +65,33 @@ own; nothing is ever added into an installed prefix as a module:
 [`../../scripts/build/packages.tsv`](../../scripts/build/packages.tsv), 54
 packages): enough for the shell, apt and dpkg to run and for apt to fetch the
 rest. The prefix restores the remainder itself from the mirror, once, from the
-names in `.dn/profile` (21 names); a full bootstrap ends at **76 packages**.
+names in `var/lib/deb-native/profile` (21 names); a full bootstrap ends at **76 packages**.
 
 **core-ultra** is cut *from* the core-deb tree by
 [`../../scripts/build/cut-core-ultra.py`](../../scripts/build/cut-core-ultra.py):
 the files of the seed packages, the runtime, the small `etc` files a shell and
 a resolver read, and every library their ELFs need, added until the set is
-closed. core-ultra has no `dpkg` database, so its `.dn/packages` is the only
+closed. core-ultra has no `dpkg` database, so its `var/lib/deb-native/packages` is the only
 record of what it contains.
 
-## The `.dn/` directory
+## The prefix's own files
 
-Every artifact carries `boot/` at its root — the prefix's interface to its host,
-outside the runtime's own directory:
+Every artifact carries `boot/` at its root — the prefix's interface to its host —
+and its own files under `var/lib/deb-native/`:
 
 ```
 <prefix>/
-├── boot/                the host's interface (the convention)
-│   ├── boot.sh          /bin/sh, the entry: sets the boot env, execs dn-monitor
-│   ├── init.sh          the prefix's init, run by dn-monitor
-│   ├── install.sh       /system/bin/sh, run by the host's shell: activate
-│   └── version          data: key=value, read by the host without running code
-├── .dn/
-│   ├── packages        the Debian packages the prefix contains
-│   ├── profile         the packages a bootstrap restores from the mirror
-│   └── baked-paths     files naming the build path (empty: relocatable)
+├── boot/                       the host's interface (the convention)
+│   ├── boot.sh                 /bin/sh, the entry: sets the boot env, execs dn-monitor
+│   ├── init.sh                 the prefix's init, run by dn-monitor
+│   ├── install.sh              /system/bin/sh, run by the host's shell: activate
+│   └── version                 data: key=value, read by the host without running code
+├── var/lib/deb-native/
+│   ├── packages                the Debian packages the prefix contains
+│   ├── profile                 the packages a bootstrap restores from the mirror
+│   ├── bootstrapped            the first-boot marker (written on the first boot)
+│   ├── baked-paths             files naming the build path (empty: relocatable)
+│   └── prefix-manifest.tsv     the runtime files and their sha256
 ├── home/
 ├── root -> home
 ├── mnt -> ../mnt
@@ -97,8 +99,11 @@ outside the runtime's own directory:
 └── usr/ etc/ var/ ...  the tree, as built
 ```
 
-`.dn/packages` is one `package<TAB>version<TAB>arch` per line.
-`.dn/baked-paths` records any file the build path (`PREFIX_ROOT`) is written
+There is no `.dn/`: the host interface is `boot/`, and the prefix's own files are
+a normal path under `var/lib/`, which no Debian package owns.
+
+`var/lib/deb-native/packages` is one `package<TAB>version<TAB>arch` per line.
+`var/lib/deb-native/baked-paths` records any file the build path (`PREFIX_ROOT`) is written
 into, one per line, fields tab-separated, paths relative to the root.  A
 relocatable artifact names its root nowhere, so the list is **empty**; a
 non-empty `text` list means some file still names the build path, and
@@ -175,7 +180,8 @@ the target.
    certificate enabled: the tree has no debconf to ask). The bootstrap then
    builds the CA bundle.
 4. **The tarball.** `scripts/build/package-prefix.sh TREE --root PREFIX_ROOT
-   --name NAME --out OUT.tar.gz` writes `.dn/` and tars the tree.
+   --name NAME --out OUT.tar.gz` writes `boot/` and the prefix's own files and
+   tars the tree.
 5. **core-ultra**, optionally, from the core-deb tree
    (`cut-core-ultra.py`), then packaged the same way.
 
@@ -187,15 +193,15 @@ The build inputs to step 3:
 | `DEB_LIST` | the pinned `name<TAB>version<TAB>arch` list (packages.tsv) |
 | `DN_RUNTIME` | `build-trace.sh`'s output |
 | `PREFIX_ROOT` | the path the build assumes; asserted not to be named (the artifact is relocatable) |
-| `DN_PROFILE` | optional; written as `.dn/profile` |
+| `DN_PROFILE` | optional; written as `var/lib/deb-native/profile` |
 | `DEB_CACHE` | downloaded `.debs`, kept across builds |
 | `STAGE_OUT` | optional; keep the built tree (for `cut-core-ultra.py`) |
 
 `package-prefix.sh` stages a copy, runs `pack-prefix.py` on it (the build
-invariants, `boot/` and `.dn/`), then `tar --hard-dereference -czf` it (a poor
-host's tar cannot recreate hard links). `pack-prefix.py` makes every symlink
+invariants, `boot/` and the prefix's own files), then `tar --hard-dereference
+-czf` it (a poor host's tar cannot recreate hard links). `pack-prefix.py` makes every symlink
 inside the tree relative, removes any `ld.so.cache`, creates `home/`, `root`,
-`mnt` and `etc/resolv.conf`, records `.dn/baked-paths` and `.dn/packages`, and
+`mnt` and `etc/resolv.conf`, records `var/lib/deb-native/baked-paths` and `var/lib/deb-native/packages`, and
 writes `boot/install.sh` and `boot/version`. It fails the build if any file
 names `PREFIX_ROOT`.
 
@@ -244,12 +250,12 @@ It becomes the tree's root process with TREE as the guest root (TREE is also
 bound to itself, so a host path into the tree stays valid in the guest), forks
 a child that installs the one shared filter, and execs the prefix's init
 (`RT/init.sh`). Its own temp files live in `TREE/tmp`. init sets
-the environment and, on a first boot (no `.dn/bootstrapped`), completes the
+the environment and, on a first boot (no `var/lib/deb-native/bootstrapped`), completes the
 prefix itself. The build cannot run a package's scripts, so the shipped
 packages are *unpacked*, not configured (as after debootstrap's first stage):
 the first boot runs each one's `preinst install` (base-passwd's first: it
 writes `/etc/passwd` and `/etc/group`), then `dpkg --configure -a`, under fake
-root. Then it restores `.dn/profile` from the mirror — `apt-get update`,
+root. Then it restores `var/lib/deb-native/profile` from the mirror — `apt-get update`,
 `apt-get install` of the profile, the CA bundle — and writes the
 `bootstrapped` marker; a later boot skips straight to the command. It ends by exec'ing the command it was given, or an interactive
 shell.

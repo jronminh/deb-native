@@ -26,7 +26,7 @@ There is **no build on the host**.
   the session entry; the host then boots the tree by running the entry,
   `boot/boot.sh`, which starts `dn-monitor` and the prefix's init -- `dn-monitor`
   derives the prefix root from its own location, so the artifact is relocatable;
-  init completes `.dn/profile` itself on a first boot.
+  init completes `var/lib/deb-native/profile` itself on a first boot.
 
 Run time is one policy in two places: dn-policy, called in-process by
 dn-shim (the fast path) and via `dn-trace`'s ptrace fallback

@@ -11,7 +11,7 @@
 #
 # Inputs:
 #   BASE          a core-ultra tree in build form (cut-core-ultra.py output,
-#                 before pack-prefix.py), with its .dn/packages list.
+#                 before pack-prefix.py), with its var/lib/deb-native/packages list.
 #   DN_RUNTIME    the runtime runtime (build-trace.sh output):
 #                 dn-trace, one self-contained binary (the syscall catalog is
 #                 embedded in it).
@@ -26,8 +26,8 @@
 #                 takes it only to assert that nothing names it, e.g.
 #                 /data/data/org.dn.shell/files/core-deb
 #   DEB_LIST      the pinned package list to install on top of BASE, one
-#                 `name ver arch` per line (a .dn/packages file). Required.
-#   DN_PROFILE    optional: a file of package names written as .dn/profile
+#                 `name ver arch` per line (a var/lib/deb-native/packages file). Required.
+#   DN_PROFILE    optional: a file of package names written as var/lib/deb-native/profile
 #                 (the packages the prefix restores from the mirror)
 #   STAGE_OUT     optional: copy the built tree here before packaging, so a
 #                 caller can cut core-ultra from it (cut-core-ultra.py)
@@ -40,7 +40,7 @@ BASE=${1:?usage: build-core-deb.sh BASE OUT.tar.gz}
 OUT=${2:?usage: build-core-deb.sh BASE OUT.tar.gz}
 : "${DN_RUNTIME:?set DN_RUNTIME to the build-trace.sh output dir}"
 : "${PREFIX_ROOT:?set PREFIX_ROOT to the absolute build path of the artifact}"
-: "${DEB_LIST:?set DEB_LIST to the pinned package list (.dn/packages format)}"
+: "${DEB_LIST:?set DEB_LIST to the pinned package list (var/lib/deb-native/packages format)}"
 MIRROR=${DEB_MIRROR:-http://deb.debian.org/debian}
 SUITE=${DEB_SUITE:-trixie}
 SECURITY=${DEB_SECURITY:-http://security.debian.org/debian-security}
@@ -319,8 +319,8 @@ if [ -d "$STAGE/usr/share/ca-certificates" ] && [ ! -e "$STAGE/etc/ca-certificat
     > "$STAGE/etc/ca-certificates.conf"
 fi
 if [ -n "${DN_PROFILE:-}" ]; then
-  mkdir -p "$STAGE/.dn"
-  cp -f "$DN_PROFILE" "$STAGE/.dn/profile"
+  mkdir -p "$STAGE/var/lib/deb-native"
+  cp -f "$DN_PROFILE" "$STAGE/var/lib/deb-native/profile"
 fi
 
 # Keep the built tree when a caller wants to cut core-ultra from it.
