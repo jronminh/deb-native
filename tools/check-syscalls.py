@@ -4,7 +4,7 @@
 It is the single source of truth the runtime is built from: the build embeds
 it in dn-trace verbatim (src/tracer/GNUmakefile -> syscall/dn-catalog.c), which
 builds the seccomp filter's gate-IP exemption from it, and dn-shim is meant
-to wire the rows marked glibc=yes.  This checks the catalog is well-formed and
+to wire the rows marked shim=yes.  This checks the catalog is well-formed and
 internally consistent, and that it still carries its kernel/Android
 provenance -- the list follows the Android kernel and policy, so a missing or
 stale provenance block is a real problem, not a nit.
@@ -14,7 +14,7 @@ What it checks:
      sources and updated -- the catalog is scoped, not universal.
   2. Every data row has the five columns, and each column's value is one it
      is allowed to be.
-  3. Invariants: gate=yes implies glibc=yes (a call may be ALLOWed from the
+  3. Invariants: gate=yes implies shim=yes (a call may be ALLOWed from the
      gate only if dn-shim already handles it in-process), and implies the
      row is in the path or identity group (nothing else is treated specially).
   4. No syscall is listed twice.
@@ -32,7 +32,7 @@ import argparse
 import os
 import sys
 
-COLUMNS = ["syscall", "group", "handling", "glibc", "gate"]
+COLUMNS = ["syscall", "group", "handling", "shim", "gate"]
 GROUPS = {"path", "identity"}
 YESNO = {"yes", "no"}
 HANDLING = {
@@ -44,10 +44,7 @@ PROVENANCE_KEYS = ["arch", "android", "kernel", "sources", "updated"]
 # function (e.g. unlinkat()) passes its path through untranslated even when a
 # sibling (unlink()) is wired.  Drop a name once dn-shim overrides it.
 UNTRANSLATED_WRAPPERS = {
-    "mkdirat", "unlinkat", "symlinkat", "linkat", "readlinkat", "fchownat",
-    "chdir", "chroot", "inotify_add_watch",
-    "setxattr", "lsetxattr", "getxattr", "lgetxattr", "listxattr",
-    "llistxattr", "removexattr", "lremovexattr",
+    "fchownat", "chdir", "chroot", "inotify_add_watch",
 }
 # dn-trace's embedded-catalog parser reads each line into a char[512] (with
 # its NUL).
@@ -121,16 +118,16 @@ def main():
 
         if row["group"] not in GROUPS:
             problems.append(f"line {lineno}: bad group '{row['group']}'")
-        if row["glibc"] not in YESNO:
-            problems.append(f"line {lineno}: bad glibc '{row['glibc']}'")
+        if row["shim"] not in YESNO:
+            problems.append(f"line {lineno}: bad shim '{row['shim']}'")
         if row["gate"] not in YESNO:
             problems.append(f"line {lineno}: bad gate '{row['gate']}'")
         for op in row["handling"].split(","):
             if op and op not in HANDLING:
                 problems.append(f"line {lineno}: unknown handling op '{op}'")
 
-        if row["gate"] == "yes" and row["glibc"] != "yes":
-            problems.append(f"line {lineno}: '{name}' is gate=yes but glibc=no "
+        if row["gate"] == "yes" and row["shim"] != "yes":
+            problems.append(f"line {lineno}: '{name}' is gate=yes but shim=no "
                             "(a gate-issued call must already be handled in-process)")
         if row["gate"] == "yes" and name in UNTRANSLATED_WRAPPERS:
             problems.append(f"line {lineno}: '{name}' is gate=yes but its dn-shim wrapper "

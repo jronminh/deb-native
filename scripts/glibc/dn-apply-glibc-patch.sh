@@ -1,12 +1,14 @@
 #!/bin/sh
-# Apply the glibc patches to a Debian glibc source tree:
-#   - patches/dn-glibc-android.patch, substituting the real target prefix
-#     for its @DN_PREFIX@ placeholder (every compile-time path it bakes --
-#     ld.so.preload, the guest /etc, ... -- goes through that one
-#     substitution, so the same patch builds the production prefix (.dn) or
-#     a throwaway test prefix; docs/spec/runtime.md, "Install order");
-#   - then patches/dn-policy-glibc-wiring.patch, which names no prefix (the
-#     dn-policy it embeds derives TREE at run time).
+# Apply the glibc patch to a Debian glibc source tree:
+#   patches/dn-glibc-android.patch, substituting the real target prefix for
+#   its @DN_PREFIX@ placeholder (every compile-time path it bakes --
+#   ld.so.preload, the guest /etc, ... -- goes through that one substitution,
+#   so the same patch builds the production prefix (.dn) or a throwaway test
+#   prefix; docs/spec/runtime.md, "Install order").
+#
+# The dn-policy wiring patch (patches/dn-policy-glibc-wiring.patch) is NOT
+# applied on this branch: the fast path is the shim and glibc stays stock
+# apart from the Android baseline (docs/spec/tracer-rebuild.md).
 #
 # Usage: dn-apply-glibc-patch.sh SOURCE_TREE PREFIX
 #   SOURCE_TREE   Debian glibc source, Debian's own debian/patches/series
@@ -31,13 +33,3 @@ PATCH="$HERE/patches/dn-glibc-android.patch"
 
 echo "Applying dn-glibc-android.patch to $SRC for prefix $PREFIX ..."
 sed "s|@DN_PREFIX@|$PREFIX|g" "$PATCH" | patch -p1 -d "$SRC"
-
-# The dn-policy wiring (patches/dn-policy-glibc-wiring.patch) goes on top:
-# it names no prefix (dn-policy derives TREE at run time), so it needs no
-# substitution.  It replaces __dn_redirect in the wrappers with real
-# dn-policy calls, wires syscall(2), and adds the gate page + the RT/lib-first
-# search order (docs/spec/runtime.md, "Building dn-shim").  Kept a separate
-# file from the Android patch on purpose, so the two can be reviewed and
-# re-generated independently.
-echo "Applying dn-policy-glibc-wiring.patch to $SRC ..."
-patch -p1 -d "$SRC" < "$HERE/patches/dn-policy-glibc-wiring.patch"
