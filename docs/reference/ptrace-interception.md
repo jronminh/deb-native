@@ -19,6 +19,7 @@ cost of two stacked filters. Living doc.
 - [What the filter traces](#what-the-filter-traces)
 - [What one stop costs](#what-one-stop-costs)
 - [Measured: one trivial launch](#measured-one-trivial-launch)
+- [A real workload: the first-boot bootstrap](#a-real-workload-the-first-boot-bootstrap)
 - [Alternatives to ptrace](#alternatives-to-ptrace)
 - [Code map](#code-map)
 - [Open items](#open-items)
@@ -325,6 +326,113 @@ What the numbers say:
   (`tools/bench/perf-run.sh`). The free numbers here therefore depend on the
   app's scheduling state when they are taken.
 
+## A real workload: the first-boot bootstrap
+
+The freestanding tracer (the prototype above) ran the whole first boot of a prefix
+(`boot/bootstrap.sh`: `dpkg --configure` of 54 shipped packages, two CA-bundle
+rebuilds, `apt-get update`, `apt-get install` of the profile, 76 packages in all)
+in the app domain of the Android 12 phone, 2026-10-13. It finished with exit
+status 0 in 196 s: 402203 syscall entries, 167126 mapped paths, 4407 `execve`
+calls, 13210 `SIGSYS` stops (3.3% of the entries). The killed calls answered were
+`set_robust_list` 9057, `rseq` 3995, `faccessat2` 92, `clone3` 44, `setresgid` 11,
+`setgroups` 11. No other call of the census's 32 was reached. The earlier
+`dn-monitor` first boot on the same phone took about 5 minutes, but that run was not
+repeated under the same conditions (network and the apt mirror are in both), so the
+two times are not a measured comparison.
+
+Getting there needed five things that the launch and syscall tests above had not
+shown, in the order they appeared:
+
+1. **Hard links are denied by SELinux, not by seccomp.** `link(2)` from the app
+   domain fails with `EACCES` (`ln a b` in the app: `Permission denied`), so the
+   census does not list it, and `dpkg-divert`, `dpkg` and `git` use it. Answering
+   `EXDEV` does not help (`dpkg-divert` has no fallback). Making the new name a symlink
+   to the old one got dpkg through, then broke `git`, which links a temporary file to
+   the object name and removes the temporary one (the object became a dangling
+   symlink). The tracer now answers `linkat` by copying the file itself (a symlink is
+   copied as a symlink; a directory is refused, a missing or existing name gives
+   `ENOENT` or `EEXIST`, as `link(2)` does), and the call is skipped. What a copy does
+   not keep is that the two names are one file: a later write to one is not seen by
+   the other and `st_nlink` stays 1. A program that checks the link by comparing
+   inodes fails: `git clone /local/path` (since the 2024 hardening, "hardlink different
+   from source") has to use `--no-hardlinks` or `file://`, as it would on this phone
+   without the tracer. Not checked on Android 16.
+2. **A symlink with an absolute target is the prefix's path, not the host's.** 233 of
+   the 798 symlinks in a bootstrapped prefix are absolute (150 CA links, about 40
+   `alternatives`, the rest under `/usr`), and the kernel follows them from the
+   host's `/`: `awk` (`/usr/bin/awk` -> `/etc/alternatives/awk` -> `/usr/bin/mawk`)
+   could not be executed, and `update-ca-certificates` deleted the CA links as
+   dangling. The tracer walks the path one component at a time (`readlink` on each,
+   at most 40 links), maps an absolute target from the prefix root, and hands the
+   kernel the resolved path. The last component is followed or not by the syscall's
+   own rule (`unlinkat`, `readlinkat`, `lstat`, `O_NOFOLLOW`, `AT_SYMLINK_NOFOLLOW`).
+   Relative paths are resolved from `/proc/<pid>/cwd` or `/proc/<pid>/fd/<n>`, because
+   `openssl rehash` opens CA links relative to the directory. Nothing is written into
+   the prefix, so it stays relocatable, which a baked host path (the prefix's absolute
+   path on Android depends on the package and the user) would not. The walk costs one
+   `readlink` per component, made by the tracer and not stops of the tracee. Its cost
+   is not isolated: the runs before and after it ended at different points (the two
+   runs that stopped at `apt-get update` took 129.2 s without the walker for
+   absolute paths and 126.8 s with it, and the run that completed took 196 s).
+3. **A call the platform kills never reaches the entry stop.** seccomp takes the
+   strictest action among the filters, and `SECCOMP_RET_TRAP` (the platform's) outranks
+   `SECCOMP_RET_TRACE` (ours). A call that is both killed and faked, the `set*id`
+   family, is answered at the `SIGSYS` stop; the same fake code serves both stops.
+4. **Fake root keeps the ids a process was given.** `apt`'s download method drops to
+   `_apt` and reads the ids back; a constant 0 made it exit with `Could not switch
+   group`. A table by pid holds the six ids (real, effective, saved, for the user and
+   the group); `set*id` update it as root would (anything is allowed), `get*id` and
+   `getres*id` read it, and a fork copies it.
+5. **`lstat` of a symlink on an encrypted file system reports a padded size** (18 for
+   a 7 byte target here), which `dpkg-realpath` compares with `readlink`. The tracer
+   sets `st_size` to the length of the target as the program will read it.
+
+Four more faults showed up when the prefix was used after the bootstrap (installing
+`python3-minimal`, `git`, `curl`, `gcc`, `make`), all in the tracer and not in the
+prefix:
+
+6. **`execve` with a relative path was not mapped.** `./prog` and `dir/script` name the
+   program from the cwd; the gate mapped only absolute paths, so the kernel looked for
+   the glibc loader of a freshly compiled program and a `./script`'s interpreter in
+   the host's `/` ("required file not found"). The path is now made absolute from
+   `/proc/<pid>/cwd` first.
+7. **A long argument list stopped the gate silently.** The gate held at most 256
+   arguments and 32 KB of strings; beyond that it gave up and the kernel ran the
+   unmapped path (`python3.13-minimal`'s post-install script passes hundreds of file
+   names to `py_compile.py`). Only `argv[0]` is read as a string now; the pointers to
+   `argv[1..]` stay as the program left them and are put behind whatever is built in
+   front (checked with 20000 arguments, a 6000 byte argument, a script with 600).
+8. **`readlink` with a full buffer returned a short, wrong text.** `readlink` starts
+   with a small buffer and grows it while the result fills it; the tracer mapped the
+   cut host path back to a shorter guest text that no longer filled the buffer, so
+   `readlink /proc/self/cwd` answered `/usr/` for `/usr/lib`. When the buffer is full
+   the tracer now reads the whole link itself before mapping it.
+9. **Killing the tracer left the program running.** `PTRACE_O_EXITKILL` was not set;
+   it is now (a `sleep` under a tracer that was `kill -9`ed: running before, gone
+   after).
+
+After the bootstrap, in the app, on a copy of the prefix under another name (no path
+of the original is written into it: `baked-paths` is empty and no file names it):
+`id` reports `uid=0(root) gid=0(root)`; `awk`, `readlink` and `cat` through absolute
+links work; `dpkg -l` lists 76 packages and `dpkg --audit` is clean; `apt-get update`
+as `_apt` reaches the mirror; a write lands in the copy and not in the original;
+`python3` runs threads, `fork` and `subprocess`; `git` commits, clones
+(`--no-hardlinks`, `file://`), packs, checks and stashes; `curl` fetches over HTTPS;
+`gcc -pthread` compiles a threaded program that `make` runs through `./`; 100
+concurrent children finish.
+
+What is still not done: `dirfd`-relative resolution is only as good as
+`/proc/<pid>/fd/<n>` (a deleted directory is not handled); `openat2` with `RESOLVE_*`
+answers `ENOSYS`; there is no store for owners, so `chown` is accepted and not kept;
+the tables for the pid (`pid % 16384`: the id table, the `/proc/<pid>/exe` table)
+can collide, as this phone's `pid_max` is 32768; the rows still come from PRoot's
+tables (`gen_rows.py` over `src/tracer`), not from `src/syscalls.tsv`; the environment
+the guest sees still holds two variables that name the host's path
+(`org.dn.shell...`), and the guest can still reach the host through `/proc/self/root`
+(`monitor.md`, "Where the model leaks"); and the code, in `src/dn-tiny/` (about 1,900 lines with the resolver, ids, links and
+the exec gate; `scripts/build/build-tiny.sh` builds it), is not yet wired into
+`dn-monitor`'s build or the shipped prefix.
+
 ## Alternatives to ptrace
 
 None of these is in the tree today.
@@ -351,6 +459,8 @@ None of these is in the tree today.
 | `src/tracer/execve/` | the exec gate |
 | `src/tracer/ptrace/` | `ptrace(2)` wrappers and the emulation of tracees that ptrace each other |
 | `src/syscalls.tsv`, `syscall/dn-syscalls.c` | the catalog; the gate-exempt list |
+| `src/dn-tiny/` | the freestanding tracer (below): `sys.c` raw syscalls and `_start`, `monitor.c` the filter and the event loop, `trace.c` the applier (paths, fake root, results, links), `exec.c` the exec gate, `policy.c` the table, the path walker and the answers to denied calls, `gen_rows.py` the rows from `src/tracer` |
+| `src/dn-tiny/substtest.c`, `src/dn-tiny/census.c` | a guest program that calls the substituted and faked syscalls; the census program |
 
 ## Open items
 

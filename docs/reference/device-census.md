@@ -27,11 +27,13 @@ by hand once. Living doc; the table is one device, not a general policy.
 
 ## Method
 
-A freestanding aarch64 program (no libc, 129 lines, 67 KB) forks, with a raw
+`src/dn-tiny/census.c`, a freestanding aarch64 program (no libc, 88 lines, 2.5 KB;
+built by `scripts/build/build-tiny.sh` as `dn-census`) forks, with a raw
 `clone`, once per syscall; the child makes the call with zero arguments and exits
 with the errno, and the parent reports how the child ended. Zero arguments make
 the call fail harmlessly (`EFAULT`, `EINVAL`). A death by signal 31 is the
-seccomp filter's answer to a call it does not allow. 62 numbers were tried,
+seccomp filter's answer to a call it does not allow. The first run tried 62 numbers (an earlier version that took a list; the program in
+the tree tries every number from 0 to 470, see "The whole range"), 
 including a number no kernel defines (9999) and `getpid` as a control. It was run
 twice: in the app's own process tree, and through `run-as`, whose shell has
 `Seccomp: 0`.

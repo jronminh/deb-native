@@ -650,6 +650,51 @@ is a vendored, pruned SINS. Test ladder: `cron` -> `redis` -> `dbus`.
   (a fake-root library beside the shim).
 - Keep `base-passwd`'s `root` user and `sudo` group as Debian has them.
 
+## Freestanding tracer (`dn-tiny` prototype)
+
+A 1,800-line tracer with no libc (`src/dn-tiny/`, built by `scripts/build/build-tiny.sh`) bootstraps a prefix on the Android 12 phone and runs
+`python3`, `git`, `curl`, `gcc`, `make` in the app domain; what it does and what it
+found is in [`docs/reference/ptrace-interception.md`](docs/reference/ptrace-interception.md).
+The decision to make is whether it replaces `dn-monitor`'s path layer; these are the
+checks and the work still open.
+
+**Checks not done yet**:
+
+- **Android 16 phone**: the same bootstrap and the tests after it. Hard links and
+  `openat2` / `faccessat2` / `clone3` behave differently there (the census), and the
+  prefix has to be pushed to the phone (127 MB).
+- **Guest isolation (L1)**: `/proc/self/root` still reaches the host's token and
+  socket, and two environment variables name the host's path. Decide whether the
+  prototype must close this before it counts as ready (`monitor.md`, "Where the model
+  leaks"; `fhs-projection.md`).
+- **A controlled speed comparison**: the same bootstrap under `dn-monitor` and
+  `dn-tiny`, same prefix, same phone, repeated. The 196 s against about 5 minutes is
+  not one.
+- **Another phone** and the Google Play build of the launcher app (as in the alpha
+  goal).
+- **More packages**: `perl` with an XS module, `nodejs`, `ruby`; `apt upgrade`;
+  uninstall; a package whose maintainer script uses a hard link in the way `git clone
+  /local/path` does (inode comparison).
+
+**Open work**:
+
+- **pid-indexed tables**: the id table and the `/proc/<pid>/exe` table are
+  `pid % 16384`; this phone's `pid_max` is 32768. Size them from `pid_max`.
+- **Owner store**: `chown` is accepted and not kept (`user.dn.*` was the plan).
+- **`dirfd` resolution**: a deleted directory behind `/proc/<pid>/fd/<n>`;
+  `execveat`; `openat2` with `RESOLVE_*` (answers `ENOSYS`).
+- **Rows from the catalog**: generate the rows from `src/syscalls.tsv`, not from
+  PRoot's `proot_sysnums` / `fakeroot_sysnums`.
+- **Hard links**: `linkat` is a copy. A real `link2symlink` (`dn-policy-hardlink.c`)
+  would keep the two names one file; do it only if a real program needs it.
+- **Mount-family calls** (`mount`, `umount2`, `chroot`) by path mapping; the
+  `CPU pinning` policy (off by default, probe the cores at run time).
+- **Wiring**: the code is in `src/dn-tiny/` (branch `tracer/dn-tiny`) but nothing ships
+  it: `boot/boot.sh` starts `dn-monitor`. Decide how it starts (a flag, or replacing
+  `dn-monitor`), add it to the artifact build, and update `monitor.md` ("single
+  decision point" becomes: the monitor executes, the policy decides) and the credits
+  once no PRoot-derived data (the rows) remains.
+
 ## Shim & tracer hardening
 
 **Status**: the libc-interposition layer is complete for its scope
