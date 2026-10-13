@@ -14,6 +14,10 @@ draft of this doc. Refines principle 3 of [`runtime.md`](runtime.md).
   "refuse, don't fake".
 - [`../reference/syscall-boundary.md`](../reference/syscall-boundary.md) — the
   five cases a libc interposer cannot reach.
+- [`../reference/ptrace-interception.md`](../reference/ptrace-interception.md) —
+  the ptrace and seccomp primitives, and how `dn-monitor` composes them.
+- [`../reference/device-census.md`](../reference/device-census.md) — the census
+  taken by hand on one device: which syscalls kill a process in the app domain.
 
 ## The problem this settles
 

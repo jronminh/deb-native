@@ -3,16 +3,32 @@
 `deb-native` is assembled from other people's work. This file records what it
 builds on, and the license each part is under.
 
-## PRoot — the syscall tracer
+## PRoot — the source of dn-monitor's syscall catcher
 
 - <https://github.com/termux/proot> (a fork of
-  <https://github.com/proot-me/PRoot>)
-- License: **GPL-2.0-or-later**. Copyright STMicroelectronics and the PRoot
-  contributors.
-- Used for: `src/tracer/` is a reduced fork of `termux/proot`
-  (arm64-only, path handling, extensions removed). The original copyright and
-  license headers are kept in every derived file. The `ptrace`
-  syscall-interception core — the hard part — is theirs.
+  <https://github.com/proot-me/PRoot>); PRoot was written by Cédric Vincent at
+  STMicroelectronics, with the PRoot and Termux contributors.
+- License: **GPL-2.0-or-later**. Copyright (C) 2015 STMicroelectronics and the
+  PRoot contributors; the notice is kept in the 59 files of `src/tracer/` that
+  carry it.
+- Used for: `dn-monitor`, the tree's root process and its syscall catcher, is
+  built from `src/tracer/`, a reduced fork of `termux/proot` (arm64 only; path
+  handling, bindings and extensions reduced). What comes from PRoot is the
+  mechanism of catching a process's syscalls with `ptrace` and a `seccomp`
+  filter: the launch of a traced child, the filter builder
+  (`monitor/monitor.c`), the event loop and its stop state machine
+  (`tracee/event.c`), register and memory access (`tracee/reg.c`,
+  `tracee/mem.c`), `SIGSYS` handling (`tracee/seccomp.c`), process tracking
+  (`tracee/tracee.c`) and the per-syscall handlers (`syscall/`). That core is
+  theirs. This project's changes (the catalog-driven gate page, the exec gate,
+  fake root, the routing by `dn-policy`) are recorded in the git history of
+  `src/tracer/`.
+- Going forward: `dn-monitor` is being reduced to catching syscalls and routing
+  them by `dn-policy`. PRoot's code stays credited for as long as any of it
+  remains in the tree. Code written to replace a part of it uses the same
+  kernel interfaces and follows the same technique, described in
+  [`docs/reference/ptrace-interception.md`](docs/reference/ptrace-interception.md);
+  it is credited as following PRoot's technique even where no source is shared.
 - Why a fork and not a fresh tracer: rewriting a syscall's path arguments
   requires `ptrace` (seccomp user-notification can inspect and inject but not
   modify arguments).
@@ -52,7 +68,7 @@ builds on, and the license each part is under.
 - <https://www.samba.org> (`lib/talloc/` in the `samba` source package) —
   **LGPL-3.0-or-later**, copyright Andrew Tridgell, Jelmer Vernooij and
   the Samba Team.
-- Used for: a build-time and run-time dependency of `src/tracer/` (`dn-trace`),
+- Used for: a build-time and run-time dependency of `src/tracer/` (`dn-monitor`),
   inherited from PRoot's own build requirements — PRoot's hierarchical
   memory allocation is built on talloc, unchanged by this project's fork.
   Optional at install; without it, static binaries and programs making their
