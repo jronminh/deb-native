@@ -45,6 +45,8 @@ and [`dn-interp-shim.md`](dn-interp-shim.md).
   executors, `dn-emu`) and how they coordinate.
 - [`tracer-rebuild.md`](tracer-rebuild.md) — rebuilding the tracer into
   `dn-monitor` (mechanism) + `dn-trace` (policy applier).
+- [`fhs-projection.md`](fhs-projection.md) — where each Debian path lands on
+  Android, and which part is in its way.
 - [`../../src/dn-policy/`](../../src/dn-policy) — the policy library itself.
 - [`../../src/tracer/`](../../src/tracer) — `dn-trace`, the tracer.
 - [`../../src/syscalls.tsv`](../../src/syscalls.tsv) — the syscall catalog.
