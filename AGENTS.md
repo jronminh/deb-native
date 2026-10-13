@@ -37,7 +37,9 @@ are gone; a `.deb` installs intact (`docs/spec/runtime.md`).
 ## Layout
 
 - `src/` — `dn-policy/` (the shared policy library), `tracer/` (dn-trace, a
-  pruned PRoot fork), `syscalls.tsv` (the syscall catalog).
+  pruned PRoot fork), `dn-tiny/` (a freestanding tracer with no PRoot code,
+  not yet wired into the runtime: `docs/reference/ptrace-interception.md`),
+  `syscalls.tsv` (the syscall catalog).
 - `scripts/build/` — build host: runtime, artifact assembly, packaging.
 - `scripts/host/` — the host's own shell (poor host): ship,
   install (activation), update.
