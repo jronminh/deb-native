@@ -741,6 +741,31 @@ libc-internal calls whatever the fast path does):
   (46.6 s and 46.9 s; back to back runs of one binary differ by 10-20%). The floor
   of a stop (120-600 us in `-m bare`) is what is left: core placement, sleep states,
   a bounded spin in the tracer; measure with repeated runs per configuration.
+- **What sets the floor, measured in the app** (2026-10-14, a session of the
+  `org.dn.shell.dev` rebuild on the Android 12 phone, the `core-deb-tiny` prefix, the
+  Lua build, the app with a foreground service, on battery):
+  - The session is forked while the app is `top-app` and keeps that cpuset and boost
+    (cpus 0-7, `schedtune` boost 1, nice -10) after the app goes to the background
+    (the app itself drops to `foreground`: cpus 0-2,4-7, no boost); so the app state is
+    not what slows a stop. Lua `-j1`: 50.5, 51.6, 51.7, 51.4, 47.2 s with the app in
+    front, 64.4, 64.8, 45.9 s behind it, with identical stop counts: the spread is the
+    system's, not the app state's. `-m bare` stops measured 590-685 us in one run and
+    174-179 us in the next, same state.
+  - The cause visible in the samples: `dn-tiny` runs on the big cluster (cpus 4-6) and
+    that cluster sits at its lowest frequency (710-825 of 2419 MHz) in about 60% of the
+    one-second samples (mean about 1.1 GHz), while the little cluster stays near its
+    maximum (1785 MHz), where the guest's work seems to run: the tracer mostly sleeps
+    in `wait4`, schedutil reads the cluster as idle, and every stop pays a low clock,
+    an idle exit (C1 exit latency 909 us little, 1461 us big) and a cross-cluster wake.
+  - To try, cheapest first, each configuration repeated 3-5 times: the tracer and the
+    guest on one cluster (`-c` / `taskset`, e.g. cpus 4-6) or one core for sequential
+    work; a bounded spin in the tracer (`wait4(WNOHANG)` for N us before blocking) so its
+    core keeps a load; the app's ADPF hint session (`PerformanceHintManager`, API 31)
+    raising `uclamp.min` for the tracer's tid, if it accepts a child process's tid of
+    the same uid; raising the tracer's own priority (`RLIMIT_NICE` is 40 for the app,
+    so nice down to -20 needs no privilege; no realtime: `RLIMIT_RTPRIO` 0).
+  - Measure in an app session, not in Termux (`top-app`, nice -10) or through `run-as`
+    (the shell's root cpuset): both give a different scheduling context.
 - **Who calls `readlinkat`**: the guess is `realpath()` in `cpp`/`gcc`/libiberty
   (glibc resolves it with an internal `__readlink`, one call per component). Confirm
   with a `realpath` test program and per-program counts.
