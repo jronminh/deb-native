@@ -727,13 +727,19 @@ paths) in 46.6 s, and the checks after the bootstrap still pass.
 Algorithm work in `dn-tiny` first (it stays the net for static programs and
 libc-internal calls whatever the fast path does):
 
-- **`readlinkat` exit stop only when needed**: the walk at entry already knows whether
-  the target is a symlink; a non-link answers `EINVAL` and a link inside the prefix
-  already holds a guest path, so only `/proc` links (and links to host paths) need the
-  result rewritten. About 38k stops on the Lua build.
-- **Owner faking on demand**: the `fstat` / `newfstatat` exit stops exist for fake root
-  owners and symlink sizes; make owner faking switchable (rule 5 of `native.md`) and
-  decide the symlink-size fix at entry. About 8k stops.
+- **Where it stands** (Termux, same Lua build): `readlinkat`, `newfstatat` and `fstat`
+  are answered at entry by the tracer (`README.md` of `src/dn-tiny`), which leaves 127
+  exit stops of 46.6k: 58.5k stops in all (from 118.2k at the start), and 31.3 s and
+  43.2 s against 54.0 s and 58.0 s for the same build interleaved. With `-s 500` (the
+  tracer polls 500 us before blocking) the build takes 17.6 s and 18.2 s, with less CPU
+  in all (user+sys 20.0 s, 20.7 s against 31.8-43.7 s without), and runs stop varying;
+  `-s 100`: 23.6 s, 23.0 s. A `-m bare` stop falls from 450-615 us to about 30 us
+  (`-s 500`), 34-47 us (`-s 100`). The floor was the tracer's core waking up.
+- **Open for speed**: the remaining 58k entry stops are mostly `readlinkat` from
+  `realpath` (one per component), only the shim fast lane below removes those; `statx`
+  and `getcwd` still use the exit stop (rare in a build); measure `-s` in an app
+  session, on the Android 16 phone, and with `make -j`, where a polling tracer competes
+  with the guest for a core; the host (the app) decides when to pass `-s`.
 - **The cost of a stop is the kernel's, not the tracer's**: with the link cache, the
   cached working directory and no `PTRACE_GETEVENTMSG` in `full` mode, the tracer's own
   syscalls for 2000 `stat` calls on a 7-component path fell from 40.6k to 24.5k

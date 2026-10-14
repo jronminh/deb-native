@@ -38,6 +38,16 @@ entries; without the file there is no cache. The working directory of each proce
 (`trace.c`) is kept the same way, dropped by `chdir`, `fchdir`, a rename or an unlink,
 and when the process is gone or its pid comes back in a fork.
 
+The tracer mostly lets the program run the syscall itself, with its path argument
+rewritten: a call that acts in the program's own context (`openat` makes an fd in its
+table, `chdir` moves its cwd) has to. Where the answer is only data and costs an exit
+stop to rewrite, the tracer makes the call itself and skips it, as it does for fake
+root: `readlinkat`, `newfstatat` and `fstat` are run by the tracer on the host path
+(`/proc/<pid>/fd/<n>` for an fd), the owner and a link's size are fixed in its own
+copy, and the result is written into the program's buffer. When it cannot name the
+file, the call runs and the exit stop rewrites the kernel's answer as before. The
+summary line counts these as `answered`.
+
 Build and run:
 
 ```sh
@@ -45,5 +55,9 @@ sh scripts/build/build-tiny.sh OUTDIR          # dn-tiny, dn-substtest, dn-censu
 OUTDIR/dn-tiny -t PREFIX_ROOT -- /usr/bin/bash /boot/init.sh COMMAND ...
 ```
 
-`-t` is the prefix root (a host path). `-m bare|regs|full` and `-c CPU` are for
-measurements, `-q` silences the summary line.
+`-t` is the prefix root (a host path). `-s USEC` polls for the next stop for up to
+USEC microseconds before blocking (off by default): a tracer that sleeps between stops
+lets its core drop to a low clock or an idle state that every stop then pays to
+leave, and polling keeps it awake during a burst. Whether to turn it on is the host's
+choice. `-m bare|regs|full` and `-c CPU` are for measurements, `-q` silences the
+summary line.

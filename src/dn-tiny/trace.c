@@ -276,6 +276,8 @@ static void link_by_copy(struct tracee *t)
 	mon_skip(t, r < 0 ? r : 0);
 }
 
+static void answer_at_entry(struct tracee *t, const struct row *rw);
+
 void trace_enter(struct tracee *t, const struct row *rw)
 {
 	if (rw->effect) {                               /* drop now, and again once the call is over */
@@ -296,6 +298,8 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		rewrite_path(t, rw->path_arg2);
 	if (rw->special == SP_LINK)             /* linkat: the platform denies it, so it is a copy */
 		link_by_copy(t);
+	if (rw->result == R_LINK || rw->result == R_STAT)
+		answer_at_entry(t, rw);         /* skipped when answered: no exit stop */
 }
 
 /* ---- results: what the program is told, not what the kernel returned --------- */
@@ -465,6 +469,156 @@ static void fix_link_size(struct tracee *t, u64 buf, unsigned mode_off, unsigned
 	if (policy_unpath(host, guest, sizeof guest) != 0)
 		size = (u64) strlen(guest);
 	mon_write(t, buf + size_off, &size, 8);
+}
+
+/* ---- answers at entry.  An exit stop costs a whole stop, a syscall made by the tracer
+ * a few microseconds: for readlinkat, newfstatat and fstat the tracer makes the call on
+ * the host path itself, writes what the program is told, and the syscall is skipped.
+ * When it cannot name the file (a relative path from a directory outside the prefix,
+ * a link too long for its buffer), it answers nothing and the exit stop rewrites the
+ * kernel's result as before. */
+
+unsigned long trace_n_answered;
+
+/* "/proc/<pid>/fd/<fd>", or "/proc/<pid>/cwd" for AT_FDCWD when `cwd_ok` */
+static int fd_name(pid_t pid, int fd, int cwd_ok, char *out, size_t cap)
+{
+	char dig[12];
+	size_t i = 6;
+	int nd = 0;
+
+	if (cap < 48 || (fd < 0 && !(fd == -100 && cwd_ok)))
+		return 0;
+	memcpy(out, "/proc/", 6);
+	do { dig[nd++] = (char) ('0' + pid % 10); pid /= 10; } while (pid);
+	while (nd)
+		out[i++] = dig[--nd];
+	if (fd == -100) {
+		scpy(out + i, cap - i, "/cwd");
+		return 1;
+	}
+	memcpy(out + i, "/fd/", 4);
+	i += 4;
+	do { dig[nd++] = (char) ('0' + fd % 10); fd /= 10; } while (fd);
+	while (nd)
+		out[i++] = dig[--nd];
+	out[i] = 0;
+	return 1;
+}
+
+/* The path in register 1 as the tracer can name it: an absolute host path (/proc/self
+ * spelled with the pid) -> 1; an empty path with `empty_fd` set (AT_EMPTY_PATH): the
+ * directory fd in register 0 -> 2; anything else (a relative path the walk left as it
+ * was) -> 0. */
+static int name_for_tracer(struct tracee *t, int empty_fd, char *out, size_t cap)
+{
+	char path[256];
+	ssize_t k = mon_read_str(t, t->r.regs[1], path, sizeof path);
+
+	if (k <= 0 || memchr(path, 0, (size_t) k) == NULL)
+		return 0;
+	if (path[0] == '/') {
+		self_to_pid(path, out, cap, t->pid);
+		return 1;
+	}
+	if (path[0] == '\0' && empty_fd)
+		return fd_name(t->pid, (int) t->r.regs[0], 1, out, cap) ? 2 : 0;
+	return 0;
+}
+
+/* readlinkat(dirfd, path, buf, size) */
+static int answer_link(struct tracee *t)
+{
+	char host[300], b[512], g[512];
+	u64 buf = t->r.regs[2];
+	i64 size = (i64) t->r.regs[3];
+	const char *text = b;
+	pid_t who;
+	ssize_t r;
+	int m;
+
+	if (name_for_tracer(t, 0, host, sizeof host) != 1)
+		return 0;
+	if (size <= 0) {
+		mon_skip(t, -22);                        /* EINVAL, as the kernel says */
+		return 1;
+	}
+	if ((who = proc_exe_pid(host, t->pid)) != 0 && exe_now[(unsigned) who % EXE_SLOTS][0]) {
+		text = exe_now[(unsigned) who % EXE_SLOTS];
+		m = (int) strlen(text);
+	} else {
+		r = sys_readlink(host, b, sizeof b - 1);
+		if (r < 0) {
+			mon_skip(t, r);
+			return 1;
+		}
+		if (r >= (ssize_t) sizeof b - 1)
+			return 0;                        /* maybe longer than read: let the kernel do it */
+		b[r] = '\0';
+		m = policy_unpath(b, g, sizeof g);
+		if (m > 0) {
+			text = g;
+			m--;                             /* the link text has no NUL */
+		} else {
+			m = (int) r;
+		}
+	}
+	if ((i64) m > size)
+		m = (int) size;
+	mon_skip(t, mon_write(t, buf, text, (size_t) m) == m ? m : -14);   /* EFAULT */
+	return 1;
+}
+
+/* newfstatat(dirfd, path, buf, flags) and fstat(fd, buf).  struct stat is 128 bytes:
+ * the mode at 16, the owner at 24 and 28, the size at 48. */
+static int answer_stat(struct tracee *t, const struct row *rw)
+{
+	char host[300], st[128], link[256], guest[256];
+	int at = t->r.regs[8] == 79, flags = at ? (int) t->r.regs[3] : 0, how, r;
+	unsigned mode, id[2];
+
+	how = at ? name_for_tracer(t, flags & 0x1000, host, sizeof host)          /* AT_EMPTY_PATH */
+		 : (fd_name(t->pid, (int) t->r.regs[0], 0, host, sizeof host) ? 2 : 0);
+	if (how == 0)
+		return 0;
+	r = sys_fstatat(host, st, how == 2 ? 0 : flags & 0x900);   /* AT_SYMLINK_NOFOLLOW, AT_NO_AUTOMOUNT */
+	if (r == -2 && how == 2 && (int) t->r.regs[0] >= 0)
+		r = -9;                                  /* no such fd: EBADF, as fstat says */
+	if (r < 0) {
+		mon_skip(t, r);
+		return 1;
+	}
+	memcpy(id, st + 24, sizeof id);
+	id[0] = policy_map_uid(id[0]);
+	id[1] = policy_map_gid(id[1]);
+	memcpy(st + 24, id, sizeof id);
+	memcpy(&mode, st + 16, sizeof mode);
+	if (how == 1 && (mode & 0xf000) == 0xa000) {     /* a link: its size is the target as the program reads it */
+		ssize_t n = sys_readlink(host, link, sizeof link - 1);
+
+		if (n > 0) {
+			u64 size = (u64) n;
+
+			link[n] = 0;
+			if (policy_unpath(link, guest, sizeof guest) != 0)
+				size = (u64) strlen(guest);
+			memcpy(st + 48, &size, sizeof size);
+		}
+	}
+	mon_skip(t, mon_write(t, t->r.regs[rw->result_arg], st, sizeof st) == (ssize_t) sizeof st ? 0 : -14);
+	return 1;
+}
+
+static void answer_at_entry(struct tracee *t, const struct row *rw)
+{
+	int done = 0;
+
+	if (rw->result == R_LINK)
+		done = answer_link(t);
+	else if (rw->result == R_STAT)
+		done = answer_stat(t, rw);
+	if (done)
+		trace_n_answered++;
 }
 
 void trace_exit(struct tracee *t, const struct row *rw)

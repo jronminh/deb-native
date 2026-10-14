@@ -42,6 +42,7 @@ static inline ssize_t sys_read(int fd, void *b, size_t n) { return sc(N_read, fd
 static inline int sys_open(const char *p, int flags) { return (int) sc(N_openat, -100, (i64) p, flags, 0, 0, 0); }
 static inline int sys_close(int fd) { return (int) sc(N_close, fd, 0, 0, 0, 0, 0); }
 static inline ssize_t sys_readlink(const char *p, char *buf, size_t n) { return sc(78, -100, (i64) p, (i64) buf, (i64) n, 0, 0); }
+static inline int sys_fstatat(const char *p, void *st, int flags) { return (int) sc(79, -100, (i64) p, (i64) st, flags, 0, 0); }
 static inline i64 sys_ptrace(i64 req, i64 pid, i64 addr, i64 data) { return sc(N_ptrace, req, pid, addr, data, 0, 0); }
 static inline pid_t sys_wait4(pid_t pid, int *st, int opt) { return (pid_t) sc(N_wait4, pid, (i64) st, opt, 0, 0, 0); }
 static inline pid_t sys_fork(void) { return (pid_t) sc(N_clone, 17 /* SIGCHLD */, 0, 0, 0, 0, 0); }

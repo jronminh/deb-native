@@ -5,6 +5,7 @@
 #include "policy.h"
 
 extern unsigned long trace_n_rewritten;
+extern unsigned long trace_n_answered;   /* calls answered at entry, with no exit stop */
 
 /* at syscall entry; may change the tracee's argument registers */
 void trace_enter(struct tracee *t, const struct row *rw);

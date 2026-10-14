@@ -1,6 +1,6 @@
 /* monitor.c -- the catcher: the ancestor of every process in the prefix.
  *
- *   dn-tiny [-m bare|regs|full] [-t ROOT] [-c CPU] [-q] -- PROGRAM [ARG...]
+ *   dn-tiny [-m bare|regs|full] [-t ROOT] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]
  *
  * It installs one seccomp filter built from the policy's rows, traces the whole
  * tree through ptrace's automatic attach, and at each stop hands the stopped
@@ -13,6 +13,12 @@
  *   bare   restart only (the floor of a stop)
  *   regs   + fetch the registers
  *   full   + look the syscall up in the policy and apply it (default)
+ *
+ * -s USEC: before blocking for the next stop, poll for it for up to USEC
+ * microseconds (off by default).  A tracer that sleeps between stops lets its core
+ * drop to a low clock or an idle state that every stop then pays to leave; polling
+ * keeps it awake during a burst of stops, at the price of the CPU time spent
+ * polling.  Whether that pays is the host's decision, not the tracer's.
  */
 #include <linux/audit.h>
 #include <linux/filter.h>
@@ -40,6 +46,7 @@
 
 enum { M_BARE, M_REGS, M_FULL };
 static int mode = M_FULL;
+static i64 spin_ns;                              /* -s: poll this long before blocking, 0: never */
 static unsigned long n_enter, n_exit, n_event, n_sig, n_sigsys;
 static unsigned deny_count[512];                 /* by syscall number: killed by the platform, answered here */
 static unsigned char expect_exit[1 << 16];       /* by pid, enough here */
@@ -181,8 +188,18 @@ static int loop(pid_t root)
 
 	for (;;) {
 		int st, how = PTRACE_CONT, deliver = 0;
-		pid_t p = sys_wait4(-1, &st, WALL);
+		pid_t p = 0;
 		struct tracee t;
+
+		if (spin_ns) {                                    /* -s: poll for a while before blocking */
+			i64 until = sys_monotonic_ns() + spin_ns;
+
+			do
+				p = sys_wait4(-1, &st, WALL | 1);  /* WNOHANG */
+			while (p == 0 && sys_monotonic_ns() < until);
+		}
+		if (p == 0)
+			p = sys_wait4(-1, &st, WALL);
 
 		if (p < 0) {
 			if (p == -EINTR)
@@ -221,8 +238,10 @@ static int loop(pid_t root)
 						trace_enter(&t, rw);
 					if (t.dirty)
 						set_regs(&t);
-					if (t.skip)
+					if (t.skip) {
 						skip_syscall(&t);
+						msg = 0;            /* answered at entry: nothing to rewrite at exit */
+					}
 				} else {
 					sys_ptrace(PTRACE_GETEVENTMSG, p, 0, (i64) &msg);
 					if (mode == M_REGS)
@@ -280,6 +299,7 @@ static void stats(i64 ns)
 	put(2, " event="); putu(2, n_event);
 	put(2, " sig="); putu(2, n_sig);
 	put(2, " paths="); putu(2, trace_n_rewritten);
+	put(2, " answered="); putu(2, trace_n_answered);
 	put(2, " execs="); putu(2, exec_n_rewritten);
 	put(2, " sigsys="); putu(2, n_sigsys);
 	put(2, "  "); putms(2, ns); put(2, "s  (filter "); putu(2, policy_count()); put(2, " syscalls)\n");
@@ -307,13 +327,15 @@ int main(int argc, char **argv)
 			policy_set_root(root);
 		} else if (!strcmp(argv[i], "-c") && i + 1 < argc) {
 			sys_cpu_pin((int) atou(argv[++i]));
+		} else if (!strcmp(argv[i], "-s") && i + 1 < argc) {
+			spin_ns = (i64) atou(argv[++i]) * 1000;
 		} else if (!strcmp(argv[i], "-q"))
 			quiet = 1;
 	}
 	if (i < argc && !strcmp(argv[i], "--"))
 		i++;
 	if (i >= argc || (mode == M_FULL && root == NULL)) {
-		put(2, "usage: dn-tiny [-m bare|regs|full] [-t ROOT] [-c CPU] [-q] -- PROGRAM [ARG...]\n");
+		put(2, "usage: dn-tiny [-m bare|regs|full] [-t ROOT] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]\n");
 		return 2;
 	}
 
