@@ -2,7 +2,7 @@
 #include "policy.h"
 
 static const struct row ROWS[] = {
-#include "policy-rows.inc"        /* generated: dn-monitor's traced set + the path arguments */
+#include "policy-rows.inc"        /* generated: the caught syscalls and what is done with each */
 };
 #define NROWS (sizeof ROWS / sizeof ROWS[0])
 

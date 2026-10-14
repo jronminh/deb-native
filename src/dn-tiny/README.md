@@ -24,8 +24,10 @@ Android's filter kills (`docs/reference/device-census.md`). Both are built besid
 
 `sys.c`, `sys.h` hold the raw aarch64 syscalls, `_start` and the few string
 functions the rest uses. `gen_rows.py` writes the rows (`policy-rows.inc`) at build
-time from the syscall tables in `src/tracer`; those tables come from PRoot, which is
-why the credits still name it.
+time from its own tables: a syscall is caught only when the tracer maps a path in it,
+gates it (exec), answers it at entry (fake root) or rewrites its result, and only a
+result to rewrite asks for the exit stop. The rows are ordered hottest first, since the
+filter tests them in order.
 
 Build and run:
 

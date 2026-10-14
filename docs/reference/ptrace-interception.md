@@ -425,8 +425,8 @@ What is still not done: `dirfd`-relative resolution is only as good as
 `/proc/<pid>/fd/<n>` (a deleted directory is not handled); `openat2` with `RESOLVE_*`
 answers `ENOSYS`; there is no store for owners, so `chown` is accepted and not kept;
 the tables for the pid (`pid % 16384`: the id table, the `/proc/<pid>/exe` table)
-can collide, as this phone's `pid_max` is 32768; the rows still come from PRoot's
-tables (`gen_rows.py` over `src/tracer`), not from `src/syscalls.tsv`; the environment
+can collide, as this phone's `pid_max` is 32768; the rows are `gen_rows.py`'s own
+tables (only the syscalls the tracer acts on), not yet `src/syscalls.tsv`; the environment
 the guest sees still holds two variables that name the host's path
 (`org.dn.shell...`), and the guest can still reach the host through `/proc/self/root`
 (`monitor.md`, "Where the model leaks"); and the code, in `src/dn-tiny/` (about 1,900 lines with the resolver, ids, links and
@@ -459,7 +459,7 @@ None of these is in the tree today.
 | `src/tracer/execve/` | the exec gate |
 | `src/tracer/ptrace/` | `ptrace(2)` wrappers and the emulation of tracees that ptrace each other |
 | `src/syscalls.tsv`, `syscall/dn-syscalls.c` | the catalog; the gate-exempt list |
-| `src/dn-tiny/` | the freestanding tracer (below): `sys.c` raw syscalls and `_start`, `monitor.c` the filter and the event loop, `trace.c` the applier (paths, fake root, results, links), `exec.c` the exec gate, `policy.c` the table, the path walker and the answers to denied calls, `gen_rows.py` the rows from `src/tracer` |
+| `src/dn-tiny/` | the freestanding tracer (below): `sys.c` raw syscalls and `_start`, `monitor.c` the filter and the event loop, `trace.c` the applier (paths, fake root, results, links), `exec.c` the exec gate, `policy.c` the table, the path walker and the answers to denied calls, `gen_rows.py` the rows (the syscalls it acts on, hottest first) |
 | `src/dn-tiny/substtest.c`, `src/dn-tiny/census.c` | a guest program that calls the substituted and faked syscalls; the census program |
 
 ## Open items

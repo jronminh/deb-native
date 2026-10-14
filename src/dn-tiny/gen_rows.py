@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Generate policy-rows.inc: dn-monitor's traced set (arm64 numbers and the
-exit-stop flag, read from the tracer's own sources) plus the register index of
-the path argument for the path syscalls."""
-import re, sys
+"""Generate policy-rows.inc: dn-tiny's traced set.  A syscall is caught only when
+the tracer does something with it -- maps a path, runs the exec gate, answers it
+at entry (fake root) or rewrites its result at exit -- because a caught call costs
+a stop whether or not anything is done.  Only the rows that rewrite a result ask
+for the exit stop.
 
-src, out = sys.argv[1], sys.argv[2]
+Usage: gen_rows.py OUT"""
+import sys
+
+out = sys.argv[1]
 
 # arm64 syscall number -> index of the path argument register(s); the second
 # is for the two-path calls (rename, link).  symlinkat's target (arg 0) is data,
@@ -51,31 +55,10 @@ RESULT = {17: (1, -1),                           # getcwd
           79: (3, 2), 80: (3, 1),                # newfstatat (buf in x2), fstat (buf in x1)
           291: (4, 4)}                           # statx (buf in x4)
 
-nums = {}
-for line in open(f"{src}/syscall/sysnums-arm64.h", encoding="utf-8", errors="replace"):
-    m = re.search(r"\[\s*(\d+)\s*\]\s*=\s*(PR_\w+)", line)
-    if m:
-        nums[m.group(2)] = int(m.group(1))
-
-text = open(f"{src}/monitor/monitor.c", encoding="utf-8", errors="replace").read()
-flags, order = {}, []
-for name in ("proot_sysnums", "fakeroot_sysnums"):
-    blk = re.search(r"static FilteredSysnum %s\[\] = \{(.*?)FILTERED_SYSNUM_END" % name, text, re.S)
-    for e in re.finditer(r"\{\s*(PR_\w+)\s*,\s*(FILTER_SYSEXIT|0)\s*\}", blk.group(1)):
-        pr, fl = e.group(1), (1 if e.group(2) == "FILTER_SYSEXIT" else 0)
-        if pr not in nums:
-            continue
-        n = nums[pr]
-        if n not in flags:
-            order.append(n)
-            flags[n] = 0
-        flags[n] |= fl
-
-# a path row the filter would not catch is useless: catch it (one stop, no exit stop)
-added = [n for n in list(PATH_ARG) + list(FAKE) + list(RESULT) if n not in flags]
-for n in added:
-    order.append(n)
-    flags[n] = 0
+# The filter tests the rows in order, for every syscall that reaches it, so the
+# rows met most often come first (a gcc build: readlinkat, openat, fstat, newfstatat).
+HOT = [78, 56, 80, 79, 48, 17, 221, 35, 291, 34, 38, 276, 49]
+order = HOT + sorted(n for n in set(PATH_ARG) | set(FAKE) | set(RESULT) if n not in HOT)
 
 with open(out, "w") as f:
     for n in order:
@@ -84,13 +67,8 @@ with open(out, "w") as f:
         if n == 221:
             a = ()                                       # its path is mapped by the gate, not generically
         fk = FAKE.get(n, 0)
-        if fk:
-            flags[n] = 0                                 # a faked call is skipped at entry: no exit stop
         rs, ra = RESULT.get(n, (0, -1))
-        if rs:
-            flags[n] = 1                                 # a result to rewrite needs the exit stop
-        f.write("\t{ %d, %d, %d, %d, %s, %d, %d, %d },\n" % (n, flags[n], a[0] if len(a) > 0 else -1, a[1] if len(a) > 1 else -1, sp, fk, rs, ra))
-print("rows:", len(order), " with exit stop:", sum(flags.values()), " with a path argument:",
-      sum(1 for n in order if n in PATH_ARG), " faked:", sum(1 for n in order if n in FAKE),
-      " result rewritten:", sum(1 for n in order if n in RESULT),
-      " added to the traced set:", added)
+        ex = 1 if rs else 0                              # only a result to rewrite needs the exit stop
+        f.write("\t{ %d, %d, %d, %d, %s, %d, %d, %d },\n" % (n, ex, a[0] if len(a) > 0 else -1, a[1] if len(a) > 1 else -1, sp, fk, rs, ra))
+print("rows:", len(order), " with exit stop:", len(RESULT), " with a path argument:", len(PATH_ARG),
+      " faked:", len(FAKE), " result rewritten:", len(RESULT))

@@ -683,8 +683,8 @@ checks and the work still open.
 - **Owner store**: `chown` is accepted and not kept (`user.dn.*` was the plan).
 - **`dirfd` resolution**: a deleted directory behind `/proc/<pid>/fd/<n>`;
   `execveat`; `openat2` with `RESOLVE_*` (answers `ENOSYS`).
-- **Rows from the catalog**: generate the rows from `src/syscalls.tsv`, not from
-  PRoot's `proot_sysnums` / `fakeroot_sysnums`.
+- **Rows from the catalog**: generate the rows from `src/syscalls.tsv` instead of the
+  tables in `gen_rows.py` (see "Coverage of the rows" below).
 - **Hard links**: `linkat` is a copy. A real `link2symlink` (`dn-policy-hardlink.c`)
   would keep the two names one file; do it only if a real program needs it.
 - **Mount-family calls** (`mount`, `umount2`, `chroot`) by path mapping; the
@@ -718,26 +718,58 @@ The core pinned with `-c` changed the wall time from 20.5 s (cpu5, one run, not
 repeated) to 61 s (cpu4, same cluster): not understood yet, re-measure before relying
 on affinity.
 
+Those figures are from the rows PRoot's tables gave (86 rows, 33 with an exit stop).
+`gen_rows.py` now catches only the syscalls the tracer acts on, hottest first, and asks
+for the exit stop only where a result is rewritten (51 rows, 5 with an exit stop); the
+same build then makes 104.9k stops (58.3k entry, 46.6k exit, the same 51.9k mapped
+paths) in 46.6 s, and the checks after the bootstrap still pass.
+
 Algorithm work in `dn-tiny` first (it stays the net for static programs and
 libc-internal calls whatever the fast path does):
 
 - **`readlinkat` exit stop only when needed**: the walk at entry already knows whether
   the target is a symlink; a non-link answers `EINVAL` and a link inside the prefix
   already holds a guest path, so only `/proc` links (and links to host paths) need the
-  result rewritten. About 38k stops (-32%) on the Lua build.
-- **Drop `brk` and `close` from the filter** unless `policy.c` needs them (PRoot
-  heritage; check first). About 11k stops.
+  result rewritten. About 38k stops on the Lua build.
 - **Owner faking on demand**: the `fstat` / `newfstatat` exit stops exist for fake root
   owners and symlink sizes; make owner faking switchable (rule 5 of `native.md`) and
-  decide the symlink-size fix at entry. About 10-13k stops.
+  decide the symlink-size fix at entry. About 8k stops.
 - **A resolution cache** in the tracer (component -> link or not, target), invalidated
   by the mutating calls it already traces (`rename*`, `unlink*`, `symlink*`, `mkdir*`,
   `linkat`).
-- **Filter order by frequency** (`readlinkat`, `openat` first; the 4.14 kernel walks
-  the whole filter for every syscall).
 - **Who calls `readlinkat`**: the guess is `realpath()` in `cpp`/`gcc`/libiberty
   (glibc resolves it with an internal `__readlink`, one call per component). Confirm
   with a `realpath` test program and per-program counts.
+
+**Coverage of the rows** (surveyed 2026-10-14 against the arm64 syscalls that take or
+return a path, a socket path, an exec or an identity):
+
+- **Mapped and complete**: `openat`, `openat2`, `newfstatat`, `statx`, `faccessat(2)`,
+  `readlinkat`, `mkdirat`, `mknodat`, `unlinkat`, `symlinkat`, `linkat`, `renameat(2)`,
+  `fchmodat(2)`, `fchownat`, `utimensat`, `truncate`, `statfs`, `chdir`, `chroot`, the
+  eight `xattr` calls, `inotify_add_watch`, `execve` (the gate), `getcwd`, the
+  identity calls and the owners in `stat` results.
+- **Gaps** (not caught, and nothing would be done with them yet; each needs its
+  action before it gets a row):
+  - **AF_UNIX socket paths**: `bind`, `connect`, `sendto`, `sendmsg` in; `accept(4)`,
+    `getsockname`, `getpeername`, `recvfrom`, `recvmsg` out. A guest `bind("/tmp/x.sock")`
+    gets `ENOENT` (it reaches the host's `/tmp`): tmux, ssh-agent, gpg-agent, dbus, and
+    the host bridge into a prefix, all need it.
+  - **`execveat`**: not sent through the exec gate; glibc's `fexecve` uses
+    `execveat(fd, "", AT_EMPTY_PATH)` and the kernel then looks for the host's
+    `/lib/ld-linux-aarch64.so.1`.
+  - **`name_to_handle_at`**: its path argument is not mapped (a real leak, rarely used).
+- **No row needed**: `mount`, `umount2`, `swapon`, `swapoff` are trapped by Android's
+  filter, which outranks TRACE, and answered at the `SIGSYS` stop whatever the rows say;
+  `pivot_root` and `acct` fail with `EPERM` on the capability check before any path is
+  looked up.
+- **Missing for newer kernels** (ENOSYS on this 4.14 kernel, present on Android 16's):
+  `open_tree` (5.2; unprivileged without `OPEN_TREE_CLONE`, an `O_PATH` open), `move_mount`,
+  `fspick`, `mount_setattr`, `fanotify_mark` (path in argument 4), `setxattrat`,
+  `getxattrat`, `listxattrat`, `removexattrat` (6.13), `file_getattr`, `file_setattr` (6.17).
+- The rest is the catalog: one explicit table (`src/syscalls.tsv`) giving each syscall a
+  class (path, result, socket, exec, identity, refused by the platform, none) and the
+  rows generated from it.
 
 **Fast lane for the shim** (later, if the numbers after the work above still call for
 it; replaces the P-gate):
