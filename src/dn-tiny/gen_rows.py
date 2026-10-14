@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Generate policy-rows.inc: dn-tiny's traced set.  A syscall is caught only when
 the tracer does something with it -- maps a path, runs the exec gate, answers it
-at entry (fake root) or rewrites its result at exit -- because a caught call costs
+at entry (fake root), rewrites its result at exit, or drops a copy the tracer
+keeps (the link cache, a working directory) -- because a caught call costs
 a stop whether or not anything is done.  Only the rows that rewrite a result ask
 for the exit stop.
 
@@ -55,10 +56,16 @@ RESULT = {17: (1, -1),                           # getcwd
           79: (3, 2), 80: (3, 1),                # newfstatat (buf in x2), fstat (buf in x1)
           291: (4, 4)}                           # statx (buf in x4)
 
+# what a call may change that the tracer keeps a copy of (E_LINKS=1: the link cache,
+# E_CWD=2: the working directory).  A rename or an unlink of a directory moves every
+# path below it, so they drop the cached working directories too.
+EFFECT = {35: 3, 36: 1, 37: 1, 38: 3, 276: 3,     # unlinkat symlinkat linkat renameat renameat2
+          49: 2, 50: 2}                          # chdir fchdir
+
 # The filter tests the rows in order, for every syscall that reaches it, so the
 # rows met most often come first (a gcc build: readlinkat, openat, fstat, newfstatat).
 HOT = [78, 56, 80, 79, 48, 17, 221, 35, 291, 34, 38, 276, 49]
-order = HOT + sorted(n for n in set(PATH_ARG) | set(FAKE) | set(RESULT) if n not in HOT)
+order = HOT + sorted(n for n in set(PATH_ARG) | set(FAKE) | set(RESULT) | set(EFFECT) if n not in HOT)
 
 with open(out, "w") as f:
     for n in order:
@@ -69,6 +76,6 @@ with open(out, "w") as f:
         fk = FAKE.get(n, 0)
         rs, ra = RESULT.get(n, (0, -1))
         ex = 1 if rs else 0                              # only a result to rewrite needs the exit stop
-        f.write("\t{ %d, %d, %d, %d, %s, %d, %d, %d },\n" % (n, ex, a[0] if len(a) > 0 else -1, a[1] if len(a) > 1 else -1, sp, fk, rs, ra))
+        f.write("\t{ %d, %d, %d, %d, %s, %d, %d, %d, %d },\n" % (n, ex, a[0] if len(a) > 0 else -1, a[1] if len(a) > 1 else -1, sp, fk, rs, ra, EFFECT.get(n, 0)))
 print("rows:", len(order), " with exit stop:", len(RESULT), " with a path argument:", len(PATH_ARG),
-      " faked:", len(FAKE), " result rewritten:", len(RESULT))
+      " faked:", len(FAKE), " result rewritten:", len(RESULT), " with an effect:", len(EFFECT))

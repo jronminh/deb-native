@@ -16,7 +16,12 @@ struct row {
 	int fake;             /* F_*: answer at entry without running the syscall (fake root) */
 	int result;           /* R_*: rewrite what the syscall returned, at exit */
 	int result_arg;       /* register index of the buffer the result is in (R_STAT, R_STATX) */
+	int effect;           /* E_*: what the call may change that the tracer keeps a copy of */
 };
+
+/* E_LINKS: the call may make, remove or move a link (or a directory holding one), so
+ * the link cache is dropped.  E_CWD: the call changes the working directory. */
+enum { E_LINKS = 1, E_CWD = 2 };
 
 /* R_CWD: getcwd's buffer.  R_LINK: readlinkat's buffer, and /proc/<pid>/exe.
  * R_STAT, R_STATX: the owner in a stat buffer. */
@@ -33,6 +38,13 @@ const struct row *policy_at(size_t i);
 const struct row *policy_row(unsigned nr);     /* NULL: not caught */
 
 void policy_set_root(const char *root);
+
+/* The link cache: what readlink said for a host path, so that a walk costs no
+ * syscall for a component already seen.  Its generation lives in a file of the
+ * prefix that every tracer on it maps, so a link made under one session drops the
+ * cache of all of them; without that file there is no cache. */
+void policy_links_changed(void);
+unsigned policy_links_gen(void);
 
 /* The law for a path: 0 if `in` stays as it is, else the length of the
  * rewritten path (NUL included) written to `out`. */

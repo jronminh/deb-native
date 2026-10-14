@@ -19,4 +19,9 @@ void trace_exe_pending(pid_t pid, const char *guest_path);
 void trace_exe_commit(pid_t pid);
 void trace_exe_fork(pid_t parent, pid_t child);
 
+/* at every stop of a process (a call with an effect is over by its next stop, so
+ * the copies it may have changed are dropped again there), and when it is gone */
+void trace_stop(pid_t pid);
+void trace_gone(pid_t pid);
+
 #endif

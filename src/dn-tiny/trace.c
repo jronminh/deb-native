@@ -6,6 +6,69 @@
 
 unsigned long trace_n_rewritten;
 
+/* ---- copies the tracer keeps, and what drops them ---------------------------- */
+
+/* The working directory of a process, as /proc/<pid>/cwd said.  Valid while the pid,
+ * the cwd generation and the link generation are the ones it was read under: a chdir
+ * by any process moves the first (threads share a cwd), a rename or an unlink of a
+ * directory the second. */
+#define CWD_SLOTS 4096
+#define CWD_LEN   256
+struct cwdc { pid_t pid; unsigned gen, lgen; char path[CWD_LEN]; };
+static struct cwdc cwd_cache[CWD_SLOTS];
+static unsigned cwd_gen = 1;
+static unsigned char pending[1 << 16];          /* by pid: the effects of the call in flight */
+
+static void drop(int effect)
+{
+	if (effect & E_LINKS)
+		policy_links_changed();
+	if (effect & E_CWD)
+		cwd_gen++;
+}
+
+void trace_stop(pid_t pid)
+{
+	unsigned char *e = &pending[(unsigned) pid & 0xffff];
+
+	if (*e) {                                       /* the call is over: what it changed is visible now */
+		drop(*e);
+		*e = 0;
+	}
+}
+
+void trace_gone(pid_t pid)
+{
+	trace_stop(pid);
+	cwd_cache[(unsigned) pid % CWD_SLOTS].pid = 0;
+}
+
+/* /proc/<pid>/cwd, from the cache when it holds it */
+static ssize_t cwd_of(pid_t pid, const char *link, char *buf, size_t n)
+{
+	struct cwdc *c = &cwd_cache[(unsigned) pid % CWD_SLOTS];
+	unsigned lg = policy_links_gen();
+	size_t len;
+	ssize_t b;
+
+	if (c->pid == pid && c->gen == cwd_gen && c->lgen == lg) {
+		len = strlen(c->path);
+		if (len < n) {
+			memcpy(buf, c->path, len);
+			return (ssize_t) len;
+		}
+	}
+	b = sys_readlink(link, buf, n);
+	if (b > 0 && (size_t) b < CWD_LEN) {
+		memcpy(c->path, buf, (size_t) b);
+		c->path[b] = 0;
+		c->pid = pid;
+		c->gen = cwd_gen;
+		c->lgen = lg;
+	}
+	return b;
+}
+
 static void rewrite_path(struct tracee *t, int arg)
 {
 	char in[256], out[512];
@@ -43,7 +106,8 @@ static void rewrite_path(struct tracee *t, int arg)
 				link[i++] = dig[--nd];
 			link[i] = 0;
 		}
-		b = sys_readlink(link, base, sizeof base - 1);
+		b = fd == -100 ? cwd_of(t->pid, link, base, sizeof base - 1)
+			       : sys_readlink(link, base, sizeof base - 1);
 		if (b <= 0)
 			return;
 		base[b] = 0;
@@ -214,6 +278,10 @@ static void link_by_copy(struct tracee *t)
 
 void trace_enter(struct tracee *t, const struct row *rw)
 {
+	if (rw->effect) {                               /* drop now, and again once the call is over */
+		drop(rw->effect);
+		pending[(unsigned) t->pid & 0xffff] |= (unsigned char) rw->effect;
+	}
 	if (rw->fake != F_NONE) {
 		fake_result(t, rw->fake);
 		return;

@@ -734,9 +734,13 @@ libc-internal calls whatever the fast path does):
 - **Owner faking on demand**: the `fstat` / `newfstatat` exit stops exist for fake root
   owners and symlink sizes; make owner faking switchable (rule 5 of `native.md`) and
   decide the symlink-size fix at entry. About 8k stops.
-- **A resolution cache** in the tracer (component -> link or not, target), invalidated
-  by the mutating calls it already traces (`rename*`, `unlink*`, `symlink*`, `mkdir*`,
-  `linkat`).
+- **The cost of a stop is the kernel's, not the tracer's**: with the link cache, the
+  cached working directory and no `PTRACE_GETEVENTMSG` in `full` mode, the tracer's own
+  syscalls for 2000 `stat` calls on a 7-component path fell from 40.6k to 24.5k
+  (`readlinkat` 14012 -> 16), but the Lua build's wall time did not move measurably
+  (46.6 s and 46.9 s; back to back runs of one binary differ by 10-20%). The floor
+  of a stop (120-600 us in `-m bare`) is what is left: core placement, sleep states,
+  a bounded spin in the tracer; measure with repeated runs per configuration.
 - **Who calls `readlinkat`**: the guess is `realpath()` in `cpp`/`gcc`/libiberty
   (glibc resolves it with an internal `__readlink`, one call per component). Confirm
   with a `realpath` test program and per-program counts.

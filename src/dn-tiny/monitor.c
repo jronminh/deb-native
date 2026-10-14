@@ -193,12 +193,16 @@ static int loop(pid_t root)
 			if (p == root)
 				rc = WIFEXITED_(st) ? WEXITSTATUS_(st) : 128 + WTERMSIG_(st);
 			EXP(p) = 0;
+			if (mode == M_FULL)
+				trace_gone(p);
 			continue;
 		}
 
 		t.pid = p;
 		t.dirty = 0;
 		t.skip = 0;
+		if (mode == M_FULL)
+			trace_stop(p);
 		{
 			int sig = WSTOPSIG_(st), ev = st >> 16;
 
@@ -206,10 +210,11 @@ static int loop(pid_t root)
 				unsigned long msg = 0;
 
 				n_enter++;
-				sys_ptrace(PTRACE_GETEVENTMSG, p, 0, (i64) &msg);
-				if (mode >= M_REGS && get_regs(&t) == 0 && mode == M_FULL) {
+				if (mode == M_FULL && get_regs(&t) == 0) {
 					const struct row *rw = policy_row((unsigned) t.r.regs[8]);
 
+					/* the row says whether to stop at exit: no need for the event message */
+					msg = rw ? rw->exit_stop : 0;
 					cur_nr[p & 0xffff] = (unsigned short) t.r.regs[8];
 					saved0[p & 0xffff] = t.r.regs[0];
 					if (rw)
@@ -218,6 +223,10 @@ static int loop(pid_t root)
 						set_regs(&t);
 					if (t.skip)
 						skip_syscall(&t);
+				} else {
+					sys_ptrace(PTRACE_GETEVENTMSG, p, 0, (i64) &msg);
+					if (mode == M_REGS)
+						get_regs(&t);
 				}
 				if (msg & 1) {
 					EXP(p) = 1;
@@ -243,6 +252,7 @@ static int loop(pid_t root)
 						unsigned long child = 0;
 
 						sys_ptrace(PTRACE_GETEVENTMSG, p, 0, (i64) &child);
+						trace_gone((pid_t) child);      /* a reused pid: nothing of the old process */
 						trace_exe_fork(p, (pid_t) child);
 					}
 				}

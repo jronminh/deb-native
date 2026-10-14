@@ -29,6 +29,15 @@ gates it (exec), answers it at entry (fake root) or rewrites its result, and onl
 result to rewrite asks for the exit stop. The rows are ordered hottest first, since the
 filter tests them in order.
 
+Two copies keep a stop cheap. The path walk reads each component's link through a
+cache (`policy.c`) whose generation lives in `var/lib/deb-native/dn-tiny.gen`, a file
+of the prefix every `dn-tiny` on it maps: a call that can make, remove or move a link
+(`symlinkat`, `unlinkat`, `linkat`, `renameat(2)`) moves the generation at entry and
+again at the process's next stop, when the call is over, so every session drops its
+entries; without the file there is no cache. The working directory of each process
+(`trace.c`) is kept the same way, dropped by `chdir`, `fchdir`, a rename or an unlink,
+and when the process is gone or its pid comes back in a fork.
+
 Build and run:
 
 ```sh

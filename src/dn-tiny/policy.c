@@ -13,6 +13,94 @@ static const char *root;
 static size_t root_len;
 static char loader[512], libpath[1024];
 
+/* ---- the link cache (policy.h).  An entry is valid while its generation is the
+ * shared one; moving the generation drops every entry at once. ------------------ */
+#define LC_SLOTS 4096
+#define LC_KEY   192
+#define LC_TGT   128
+struct lc {
+	unsigned gen;                 /* 0: empty */
+	unsigned hash;
+	int r;                        /* what readlink returned: <= 0 not a link, else the target's length */
+	char key[LC_KEY];
+	char tgt[LC_TGT];
+};
+static struct lc lcache[LC_SLOTS];
+static volatile unsigned *links_gen;  /* in the shared file; NULL: no cache */
+
+static void links_init(void)
+{
+	char p[600];
+	int fd;
+	i64 m;
+
+	links_gen = NULL;
+	if (cat2(p, sizeof p, root, "/var/lib/deb-native/dn-tiny.gen") <= 0)
+		return;
+	fd = (int) sc(56, -100, (i64) p, 02 | 0100, 0600, 0, 0);          /* openat O_RDWR|O_CREAT */
+	if (fd < 0)
+		return;
+	if (sc(46, fd, 4096, 0, 0, 0, 0) == 0) {                            /* ftruncate */
+		m = sc(222, 0, 4096, 3, 1, fd, 0);                          /* mmap PROT_READ|WRITE, MAP_SHARED */
+		if (m > 0 || m < -4095)
+			links_gen = (volatile unsigned *) m;
+	}
+	sys_close(fd);
+	if (links_gen && *links_gen == 0)
+		policy_links_changed();                                     /* generation 0 marks an empty slot */
+}
+
+void policy_links_changed(void)
+{
+	unsigned tmp, fail;
+
+	if (!links_gen)
+		return;
+	__asm__ volatile("1: ldaxr %w0, [%2]\n"
+			 "   add   %w0, %w0, #1\n"
+			 "   stlxr %w1, %w0, [%2]\n"
+			 "   cbnz  %w1, 1b\n"
+			 : "=&r"(tmp), "=&r"(fail) : "r"(links_gen) : "memory");
+}
+
+unsigned policy_links_gen(void) { return links_gen ? *links_gen : 0; }
+
+/* readlink(host path), from the cache when it holds the answer */
+static ssize_t lc_readlink(const char *p, char *buf, size_t n)
+{
+	unsigned h = 2166136261u, g;
+	size_t len = 0;
+	struct lc *e;
+	ssize_t r;
+
+	if (!links_gen)
+		return sys_readlink(p, buf, n);
+	while (p[len]) {
+		h = (h ^ (unsigned char) p[len]) * 16777619u;
+		len++;
+	}
+	g = *links_gen;
+	e = &lcache[h % LC_SLOTS];
+	if (e->gen == g && e->hash == h && strcmp(e->key, p) == 0) {
+		if (e->r <= 0)
+			return e->r;
+		if ((size_t) e->r <= n) {
+			memcpy(buf, e->tgt, (size_t) e->r);
+			return e->r;
+		}
+	}
+	r = sys_readlink(p, buf, n);
+	if (len < LC_KEY && r < LC_TGT) {
+		e->gen = g;
+		e->hash = h;
+		e->r = (int) r;
+		memcpy(e->key, p, len + 1);
+		if (r > 0)
+			memcpy(e->tgt, buf, (size_t) r);
+	}
+	return r;
+}
+
 size_t policy_count(void) { return NROWS; }
 const struct row *policy_at(size_t i) { return &ROWS[i]; }
 
@@ -48,6 +136,7 @@ void policy_set_root(const char *r)
 	append(libpath, sizeof libpath, "/usr/lib/aarch64-linux-gnu:");
 	append(libpath, sizeof libpath, r);
 	append(libpath, sizeof libpath, "/usr/lib");
+	links_init();
 }
 
 const char *policy_loader(void) { return loader; }
@@ -137,7 +226,7 @@ static int walk(const char *base, const char *in, char *out, size_t cap, int nof
 		cur[cl + 1 + (size_t) (p - comp)] = '\0';
 		if (last && nofollow)
 			continue;                              /* a name to create, remove or read as a link */
-		r = sys_readlink(cur, tgt, sizeof tgt - 1);
+		r = lc_readlink(cur, tgt, sizeof tgt - 1);
 		if (r <= 0)
 			continue;                              /* not a link (or not there): it stays */
 		tgt[r] = '\0';
