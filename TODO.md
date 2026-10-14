@@ -695,6 +695,71 @@ checks and the work still open.
   decision point" becomes: the monitor executes, the policy decides) and the credits
   once no PRoot-derived data (the rows) remains.
 
+**Speed** (compiling is the priority workload; the threat model is accidental leaks
+only, not a security boundary):
+
+Measured on the Android 12 phone, in Termux, 2026-10-14: `make -j1` of Lua 5.4.7 with
+gcc under `dn-tiny` takes about 50 s with 118k stops (67.6k entry, 50.6k exit, 52k
+mapped paths, 189 execs); Termux's own clang builds the same tree natively in 9.9 s
+(a reference only, another compiler). One stop costs 120-600 us even in `-m bare`
+(native `stat` is 0.8 us), so the time is set by the **number of stops**; the path
+work adds about 80 us per stop (`full` against `bare`). Stops by syscall:
+
+| syscall | entry | exit | share |
+| --- | --- | --- | --- |
+| `readlinkat` | 38185 | 38185 | 64.6% |
+| `openat` | 10381 | 0 | 8.8% |
+| `fstat` | 5183 | 5183 | 8.8% |
+| `newfstatat` | 3099 | 3099 | 5.2% |
+| `brk` | 3035 | 3035 | 5.1% |
+| `close` | 5303 | 0 | 4.5% |
+
+The core pinned with `-c` changed the wall time from 20.5 s (cpu5, one run, not
+repeated) to 61 s (cpu4, same cluster): not understood yet, re-measure before relying
+on affinity.
+
+Algorithm work in `dn-tiny` first (it stays the net for static programs and
+libc-internal calls whatever the fast path does):
+
+- **`readlinkat` exit stop only when needed**: the walk at entry already knows whether
+  the target is a symlink; a non-link answers `EINVAL` and a link inside the prefix
+  already holds a guest path, so only `/proc` links (and links to host paths) need the
+  result rewritten. About 38k stops (-32%) on the Lua build.
+- **Drop `brk` and `close` from the filter** unless `policy.c` needs them (PRoot
+  heritage; check first). About 11k stops.
+- **Owner faking on demand**: the `fstat` / `newfstatat` exit stops exist for fake root
+  owners and symlink sizes; make owner faking switchable (rule 5 of `native.md`) and
+  decide the symlink-size fix at entry. About 10-13k stops.
+- **A resolution cache** in the tracer (component -> link or not, target), invalidated
+  by the mutating calls it already traces (`rename*`, `unlink*`, `symlink*`, `mkdir*`,
+  `linkat`).
+- **Filter order by frequency** (`readlinkat`, `openat` first; the 4.14 kernel walks
+  the whole filter for every syscall).
+- **Who calls `readlinkat`**: the guess is `realpath()` in `cpp`/`gcc`/libiberty
+  (glibc resolves it with an internal `__readlink`, one call per component). Confirm
+  with a `realpath` test program and per-program counts.
+
+**Fast lane for the shim** (later, if the numbers after the work above still call for
+it; replaces the P-gate):
+
+- **Cookie in a spare argument register instead of the gate page.** Every path syscall
+  leaves `x5` free; the shim issues the call itself with a 64-bit cookie in `x5`, and
+  one test at the top of the filter (about 4 instructions) ALLOWs it. No fixed mapping,
+  no trampoline, a shorter filter than the 7 instructions per exempted syscall the gate
+  costs. As tight as the gate (any code can set `x5`), enough for accidental leaks.
+- **Load the shim through the exec gate**: `dn-tiny` already rewrites the exec to
+  `ld.so --library-path L --argv0 A prog`; add `--preload dn-shim.so` (glibc >= 2.30).
+  No `dn-interp` hop, no `LD_PRELOAD` in the environment, every exec reloads it.
+- **Only read-only calls take the lane**: `openat` without `O_CREAT`/`O_TRUNC`/write
+  access, the `stat` family, `readlinkat`, `faccessat`, `getcwd`. Mutating calls,
+  `execve` and the id calls always go to `dn-tiny`, so its resolution cache and fake
+  root state stay right.
+- **One resolver**: the shim links the same `policy.c` and reads the same address
+  table, so both paths see one tree.
+- **Interpose above the syscall wrappers**: libc-internal calls carry no cookie and stay
+  traced, so the shim must cover `realpath` / `canonicalize_file_name` (resolved in the
+  shim, no per-component `readlink`), `fopen*`, `opendir`, `fstat`.
+
 ## Shim & tracer hardening
 
 **Status**: the libc-interposition layer is complete for its scope
