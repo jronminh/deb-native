@@ -29,6 +29,7 @@
 #include "mon.h"
 #include "policy.h"
 #include "trace.h"
+#include "lane.h"
 
 #define NT_PRSTATUS 1
 #define NT_ARM_SYSTEM_CALL 0x404
@@ -57,13 +58,41 @@ static u64 saved0[1 << 16];                      /* by pid: x0 as that syscall w
 /* ---- the filter: one TRACE rule per row -------------------------------- */
 static int install_filter(void)
 {
-	struct sock_filter f[2 * 512 + 8];
+	struct sock_filter f[2 * 512 + 32];
 	struct sock_fprog prog = { 0, f };
 	size_t i, n = 0;
 
 	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
 	f[n++] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0);
 	f[n++] = (struct sock_filter) BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+	{
+		/* the shim's lane (lane.h): the cookie in x5 and a call from the lane's list, or
+		 * an openat that only reads */
+		static const unsigned lane[] = DN_LANE_NRS;
+		const size_t nl = sizeof lane / sizeof lane[0];
+		const size_t rows_at = n + 4 + 1 + nl + 4;       /* where the rows begin */
+		size_t k;
+
+		f[n] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]));
+		n++;
+		f[n] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_LO, 0, (unsigned char) (rows_at - n - 1));
+		n++;
+		f[n] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]) + 4);
+		n++;
+		f[n] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_HI, 0, (unsigned char) (rows_at - n - 1));
+		n++;
+		f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+		for (k = 0; k < nl; k++) {
+			f[n] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, lane[k], (unsigned char) (rows_at - 1 - n - 1), 0);
+			n++;
+		}
+		f[n] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_OPENAT, 0, (unsigned char) (rows_at - n - 1));
+		n++;
+		f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2]));
+		f[n] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, DN_LANE_OPEN_DENY, (unsigned char) (rows_at - n - 1), 0);
+		n++;
+		f[n++] = (struct sock_filter) BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+	}
 	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 	for (i = 0; i < policy_count(); i++) {
 		const struct row *rw = policy_at(i);

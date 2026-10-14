@@ -735,6 +735,19 @@ libc-internal calls whatever the fast path does):
   in all (user+sys 20.0 s, 20.7 s against 31.8-43.7 s without), and runs stop varying;
   `-s 100`: 23.6 s, 23.0 s. A `-m bare` stop falls from 450-615 us to about 30 us
   (`-s 500`), 34-47 us (`-s 100`). The floor was the tracer's core waking up.
+- **The shim `dn-lane.so` (`src/dn-tiny/lane.c`), work in progress, not to ship
+  yet**: the exec gate preloads it when the prefix has
+  `usr/lib/deb-native/dn-lane.so`, and the filter lets its read-only calls through
+  (`lane.h`). Measured with the realpath-only first version: entry stops 58.3k -> 20.4k
+  and the Lua build 18.9 s -> 14.6 s on average (`-s 500`), `realpath` results identical
+  to the tracer's. The current version also covers `open`/`openat` (read-only flags),
+  the `stat` family and `access`; `realpath`, `open`, `stat`, `lstat`, `fstat` and
+  `access` give the same answers as without it on 96 test lines, but with it
+  `git init` fails (`cannot opendir '/usr/share/git-core/templates/branches'`) and
+  `apt-get clean` fails (`Unable to read /var/cache/apt/ - opendir`), every time;
+  a build of the same file with logging calls added does not fail. Find that before
+  the shim goes into a prefix. Remaining stops with the shim, by syscall: `openat`
+  52%, `fstat` 26%, `newfstatat` 15%, `faccessat` 4%.
 - **Open for speed**: the remaining 58k entry stops are mostly `readlinkat` from
   `realpath` (one per component), only the shim fast lane below removes those; `statx`
   and `getcwd` still use the exit stop (rare in a build); measure `-s` in an app

@@ -11,7 +11,7 @@ static int indexed;
 
 static const char *root;
 static size_t root_len;
-static char loader[512], libpath[1024];
+static char loader[512], libpath[1024], preload[512];
 
 /* ---- the link cache (policy.h).  An entry is valid while its generation is the
  * shared one; moving the generation drops every entry at once. ------------------ */
@@ -136,9 +136,19 @@ void policy_set_root(const char *r)
 	append(libpath, sizeof libpath, "/usr/lib/aarch64-linux-gnu:");
 	append(libpath, sizeof libpath, r);
 	append(libpath, sizeof libpath, "/usr/lib");
+	preload[0] = '\0';
+	append(preload, sizeof preload, r);
+	append(preload, sizeof preload, "/usr/lib/deb-native/dn-lane.so");
+	{
+		char st[128];
+
+		if (sys_fstatat(preload, st, 0) != 0)
+			preload[0] = '\0';
+	}
 	links_init();
 }
 
+const char *policy_preload(void) { return preload; }
 const char *policy_loader(void) { return loader; }
 const char *policy_libpath(void) { return libpath; }
 
@@ -195,6 +205,8 @@ static int walk(const char *base, const char *in, char *out, size_t cap, int nof
 
 	if (scpy(rest, sizeof rest, in) < 0 || scpy(cur, sizeof cur, base) < 0)
 		goto plain;
+	if (in[0] && in[strlen(in) - 1] == '/')
+		nofollow = 0;                                  /* a trailing slash follows the link, as the kernel does */
 	p = rest;
 	for (;;) {
 		char *comp, *after;

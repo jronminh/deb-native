@@ -72,6 +72,9 @@ unsigned policy_map_gid(unsigned id);
  * library search path to give it, both as host paths. */
 const char *policy_loader(void);
 const char *policy_libpath(void);
+/* the shim the exec gate preloads into a glibc program: usr/lib/deb-native/dn-lane.so
+ * when the prefix has it, else "" */
+const char *policy_preload(void);
 /* Is this PT_INTERP the Debian glibc loader (a path that does not exist here)? */
 int policy_is_glibc_interp(const char *interp);
 

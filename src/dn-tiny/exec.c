@@ -210,6 +210,10 @@ static void resolve(const char *cur_in, struct vec *a, char *final, size_t cap, 
 			vpush(out, policy_loader());
 			vpush(out, "--library-path");
 			vpush(out, policy_libpath());
+			if (policy_preload()[0]) {                /* the shim, when the prefix ships one */
+				vpush(out, "--preload");
+				vpush(out, policy_preload());
+			}
 			vpush(out, "--argv0");
 			vpush(out, a->n > 0 ? a->s[0] : cur);
 			vpush(out, host);
