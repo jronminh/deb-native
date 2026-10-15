@@ -236,7 +236,7 @@ static void lc_put(struct lc *e, unsigned cur, unsigned h, const char *host, siz
 
 static int guest_readlink(const char *g, char *buf, size_t n)
 {
-	char host[PATH_MAX + PATH_MAX];
+	char host[PATH_MAX];
 	unsigned h = 2166136261u, cur = gen ? *gen : 0;
 	struct lc *e;
 	size_t len;
@@ -275,7 +275,7 @@ static unsigned long cwd_dev, cwd_ino;  /* what "." was then */
 /* "." and the host path of guest directory g are the same directory */
 static int cwd_same(const char *g, unsigned long dev, unsigned long ino)
 {
-	char host[PATH_MAX + PATH_MAX];
+	char host[PATH_MAX];
 	struct stat a, b;
 
 	return to_host(g, host, sizeof host) == 0 &&
@@ -380,7 +380,7 @@ int fchdir(int fd)
  * `nofollow` the last component is left as it is (a link stays a link).  0, or -errno. */
 static int resolve(const char *in, int nofollow, char *res)
 {
-	char rest[PATH_MAX * 2], tgt[PATH_MAX];
+	char rest[PATH_MAX], tgt[PATH_MAX];
 	size_t rl;
 	int links = 0;
 	char *p;
@@ -446,15 +446,14 @@ static int resolve(const char *in, int nofollow, char *res)
 			return -ELOOP;
 		tgt[r] = '\0';
 		{
-			char nrest[PATH_MAX * 2];
+			/* the target, then what was left of the path, in place */
 			size_t al = strlen(p);
 
-			if ((size_t) r + 1 + al >= sizeof nrest)
+			if ((size_t) r + 1 + al >= sizeof rest)
 				return -ENAMETOOLONG;
-			memcpy(nrest, tgt, (size_t) r);
-			nrest[r] = '/';
-			memcpy(nrest + r + 1, p, al + 1);
-			strcpy(rest, nrest);
+			memmove(rest + r + 1, p, al + 1);
+			memcpy(rest, tgt, (size_t) r);
+			rest[r] = '/';
 			p = rest;
 		}
 		if (tgt[0] == '/')
@@ -518,7 +517,7 @@ static size_t fd_host(int fd, char *out, size_t cap)
  * path.  A directory outside the prefix is a host directory: its paths stay. */
 static int lane_at(int dirfd, const char *path, int nofollow, char *host, size_t cap, int *at)
 {
-	char dir[PATH_MAX], guest[PATH_MAX + PATH_MAX];
+	char dir[PATH_MAX], guest[PATH_MAX];
 	size_t dl, pl;
 
 	if (!root_len || !path || path[0] == '\0')
@@ -605,7 +604,7 @@ static void *real_openat;
 
 static int lane_open(int dirfd, const char *path, int flags, mode_t mode)
 {
-	char host[PATH_MAX + PATH_MAX];
+	char host[PATH_MAX];
 	int at, e;
 
 	if (flags & DN_LANE_OPEN_DENY)
@@ -759,7 +758,7 @@ static void map_owner(unsigned *uid, unsigned *gid)
 
 static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 {
-	char host[PATH_MAX + PATH_MAX];
+	char host[PATH_MAX];
 	int nofollow = flags & AT_SYMLINK_NOFOLLOW, at, e;
 
 	if ((flags & AT_EMPTY_PATH) && path && path[0] == '\0' && dirfd >= 0) {
@@ -801,7 +800,7 @@ int fstat64(int fd, struct stat64 *st) { return lane_fstatat(fd, "", (struct sta
 /* statx: the same, with the sync type kept */
 int statx(int dirfd, const char *path, int flags, unsigned mask, struct statx *stx)
 {
-	char host[PATH_MAX + PATH_MAX];
+	char host[PATH_MAX];
 	int nofollow = flags & AT_SYMLINK_NOFOLLOW, at, e;
 
 	if (!root_len || (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH | AT_STATX_SYNC_TYPE)))
@@ -833,7 +832,7 @@ static void *real_faccessat;
 
 static int lane_faccessat(int dirfd, const char *path, int mode, int flags)
 {
-	char host[PATH_MAX + PATH_MAX];
+	char host[PATH_MAX];
 	int at, e;
 
 	if (flags != 0)
@@ -858,7 +857,7 @@ static void *real_readlinkat;
 
 ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n)
 {
-	char host[PATH_MAX + PATH_MAX], tgt[PATH_MAX];
+	char host[PATH_MAX], tgt[PATH_MAX];
 	int at, e;
 	long r;
 
@@ -894,7 +893,7 @@ static void *real_getxattr, *real_lgetxattr, *real_listxattr, *real_llistxattr;
 
 static ssize_t lane_xattr(long nr, const char *path, int nofollow, long a, long b, long c, int *handled)
 {
-	char host[PATH_MAX + PATH_MAX];
+	char host[PATH_MAX];
 	int at, e = lane_at(AT_FDCWD, path, nofollow, host, sizeof host, &at);
 
 	*handled = e != 0;
@@ -1116,7 +1115,7 @@ int eaccess(const char *path, int mode) { return euidaccess(path, mode); }
  * 0 to make the call as it is */
 static int lane_hook(unsigned long *r)
 {
-	char host[PATH_MAX + PATH_MAX];
+	char host[PATH_MAX];
 	int saved = errno, at, e, done = 1;
 	long nr = (long) r[8], res = 0;
 	const char *path = (const char *) r[1];
@@ -1254,6 +1253,50 @@ static int lane_hook(unsigned long *r)
 	return done;
 }
 
+/* The hook runs on a stack of its own, one per thread: libc's calls come from
+ * anywhere, posix_spawn's child among them, which runs on a small stack glibc
+ * allocates (64 KB and the arguments), and the hook's path work needs tens of
+ * KB.  The stack is mapped at a thread's first hook and unmapped when the
+ * thread ends; a vfork or posix_spawn child, which runs in its parent's thread,
+ * uses its parent's while the parent waits. */
+#define HOOK_STACK (128 * 1024)
+static __thread char *hook_stack __attribute__((tls_model("initial-exec")));
+static pthread_key_t hook_key;
+
+/* lane_on_stack(r, fn, top): fn(r) with sp at top, the caller's sp kept there */
+int lane_on_stack(unsigned long *r, int (*fn)(unsigned long *), void *top);
+__asm__(".text\n"
+	".p2align 2\n"
+	".type lane_on_stack, %function\n"
+	"lane_on_stack:\n"
+	"	mov x9, sp\n"
+	"	mov sp, x2\n"
+	"	stp x9, x30, [sp, #-16]!\n"
+	"	blr x1\n"
+	"	ldp x9, x30, [sp], #16\n"
+	"	mov sp, x9\n"
+	"	ret\n"
+	".size lane_on_stack, .-lane_on_stack\n");
+
+static void hook_stack_free(void *s) { munmap(s, HOOK_STACK); }
+
+static int lane_hook_entry(unsigned long *r)
+{
+	char *s = hook_stack, here;
+
+	if (!s) {
+		void *m = mmap(NULL, HOOK_STACK, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+
+		if (m == MAP_FAILED)
+			return 0;                       /* make the call as it is */
+		hook_stack = s = m;
+		pthread_setspecific(hook_key, m);
+	}
+	if (&here >= s && &here < s + HOOK_STACK)
+		return lane_hook(r);                    /* already on it: a signal during a hook */
+	return lane_on_stack(r, lane_hook, s + HOOK_STACK);
+}
+
 /* ---- the code the stubs run, encoded here (no assembler at run time) ---- */
 static unsigned *emit_p;
 static void emit(unsigned insn) { *emit_p++ = insn; }
@@ -1288,7 +1331,7 @@ static void emit_common(void)
 	emit(strx(30, 256));
 	emit(0x910003e0u);                              /* mov x0, sp */
 	lit = emit_p;
-	emit(0);                                        /* ldr x16, =lane_hook (set below) */
+	emit(0);                                        /* ldr x16, =lane_hook_entry (set below) */
 	emit(0xd63f0200u);                              /* blr x16 */
 	emit(ldrx(9, 248));
 	emit(0xd51b4209u);                              /* msr nzcv, x9 */
@@ -1310,7 +1353,7 @@ static void emit_common(void)
 	if ((unsigned long) emit_p & 4)
 		emit(0xd503201fu);                      /* nop: the literal is 8-aligned */
 	*lit = 0x58000000u | ((unsigned) (emit_p - lit) & 0x7ffff) << 5 | 16u;
-	*(void **) emit_p = (void *) lane_hook;
+	*(void **) emit_p = (void *) lane_hook_entry;
 	emit_p += 2;
 }
 
@@ -1357,6 +1400,8 @@ static void patch_libc(void)
 	int k;
 
 	if ((knob && strcmp(knob, "0") == 0) || !dl_iterate_phdr(find_libc, &t) || !t.lo)
+		return;
+	if (pthread_key_create(&hook_key, hook_stack_free) != 0)
 		return;
 	for (p = t.lo + 1; p < t.hi; p++)
 		if (*p == 0xd4000001u && (p[-1] & 0xffe0001fu) == 0xd2800008u && hooked_nr((p[-1] >> 5) & 0xffff))
