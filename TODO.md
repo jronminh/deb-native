@@ -121,6 +121,14 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 
 ## Speed
 
+- **Keep it small and fast as it grows**: the runtime is 33 KB (`dn-tiny`) and
+  77 KB (`dn-lane.so`), and a program in it feels native. Every feature to come
+  (binds, SysV, `/proc` files) must leave that so. Move the measuring kit into
+  the repo (`tests/bench/`: the regression set, the file-tree set, the Lua
+  build, the stop counts; today in a work prefix's `tmp/lane/`), one script that
+  prints the rows of `docs/performance.md`, "In an app session", and run it
+  before and after each runtime change, interleaved. The filter's order (below)
+  is the first change to measure with it.
 - **`ld.so`'s own calls** (about 1,100 of the Lua build's 1,700 stops): the
   program, the shim and the libraries are opened before the shim is loaded. The
   exec gate could patch the loader's `svc` sites as the shim does libc's.
