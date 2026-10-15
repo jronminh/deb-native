@@ -61,7 +61,7 @@ static void *real_fn(const char *name, void **slot)
 /* A call on the lane: the cookie is in x5 for the svc only.  libc's syscall() would
  * leave it there, and the next call libc makes on its own (opendir's openat, say)
  * would pass the filter unmapped and look for the guest path on the host. */
-static long lane_svc(long nr, long a, long b, long c, long d, long e)
+static long lane_raw(long nr, long a, long b, long c, long d, long e)
 {
 	register long x8 __asm__("x8") = nr;
 	register long x0 __asm__("x0") = a;
@@ -75,16 +75,27 @@ static long lane_svc(long nr, long a, long b, long c, long d, long e)
 			 : "+r"(x0), "+r"(x5)
 			 : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4)
 			 : "memory");
-	if (x0 < 0 && x0 > -4096) {
-		errno = (int) -x0;
+	return x0;
+}
+
+/* the same, as libc's wrappers say it: -1 and errno */
+static long lane_svc(long nr, long a, long b, long c, long d, long e)
+{
+	long r = lane_raw(nr, a, b, c, d, e);
+
+	if (r < 0 && r > -4096) {
+		errno = (int) -r;
 		return -1;
 	}
-	return x0;
+	return r;
 }
 #define lane_call(nr, a, b, c, d, e) \
 	lane_svc(nr, (long) (a), (long) (b), (long) (c), (long) (d), (long) (e))
+#define lane_rawc(nr, a, b, c, d, e) \
+	lane_raw(nr, (long) (a), (long) (b), (long) (c), (long) (d), (long) (e))
 
 static void lane_atfork(void);
+static void patch_libc(void);
 
 /* ---- set up: the root from this library's own path, the shared generation ---- */
 __attribute__((constructor)) static void lane_init(void)
@@ -119,6 +130,7 @@ __attribute__((constructor)) static void lane_init(void)
 	memcpy(root, di.dli_fname, n - t);
 	root[n - t] = '\0';
 	root_len = n - t;                               /* set last: until now everything falls back */
+	patch_libc();
 }
 
 /* ---- the tracer's law, in guest terms -------------------------------------- */
@@ -1018,3 +1030,313 @@ int euidaccess(const char *path, int mode)
 }
 
 int eaccess(const char *path, int mode) { return euidaccess(path, mode); }
+
+/* ---- libc's own calls: its svc sites, patched at load --------------------- */
+/* libc's internal calls (opendir and the locale's opens through __open_nocancel,
+ * fstatat, getcwd, the ids) do not come through the symbols above.  At set-up each
+ * `mov x8, #nr; svc #0` in libc's text whose nr this file answers becomes a branch to
+ * a stub near libc; the stub calls lane_hook with every register saved, and either
+ * returns its answer in x0 or makes the original call.  Only x0 changes, as with the
+ * svc.  The hook reads x8 when the call is made, so a site picked wrongly costs a
+ * plain svc, no more.  libc's cancellable path (the number in a register) is left
+ * alone: pthread_cancel looks for the program counter there.
+ * DN_LANE_PATCH=0 leaves libc as it is. */
+#include <link.h>
+#include <sys/syscall.h>
+
+#define HOOK_FRAME 272                  /* x0-x30 (x29, x30 at 232), nzcv at 248, lr at 256 */
+
+/* a call libc makes by itself: 1 with the answer in r[0] (a result or -errno),
+ * 0 to make the call as it is */
+static int lane_hook(unsigned long *r)
+{
+	char host[PATH_MAX + PATH_MAX];
+	int saved = errno, at, e, done = 1;
+	long nr = (long) r[8], res = 0;
+	const char *path = (const char *) r[1];
+
+	switch (nr) {
+	case SYS_openat:
+		if (r[2] & DN_LANE_OPEN_DENY) {
+			done = 0;
+			break;
+		}
+		e = lane_at((int) r[0], path, (int) r[2] & O_NOFOLLOW, host, sizeof host, &at);
+		if (e <= 0) {
+			done = e < 0;
+			res = e;
+			break;
+		}
+		res = lane_rawc(SYS_openat, at, host, r[2], r[3], 0L);
+		break;
+	case SYS_faccessat:
+		e = lane_at((int) r[0], path, 0, host, sizeof host, &at);
+		if (e <= 0) {
+			done = e < 0;
+			res = e;
+			break;
+		}
+		res = lane_rawc(SYS_faccessat, at, host, r[2], 0L, 0L);
+		break;
+	case SYS_newfstatat:
+	case SYS_statx: {
+		int fl = (int) (nr == SYS_statx ? r[2] : r[3]), nofollow = fl & AT_SYMLINK_NOFOLLOW;
+		int ok = AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH | (nr == SYS_statx ? AT_STATX_SYNC_TYPE : 0);
+
+		if (fl & ~ok) {
+			done = 0;
+			break;
+		}
+		if ((fl & AT_EMPTY_PATH) && path && path[0] == '\0') {
+			at = (int) r[0];
+			host[0] = '\0';
+		} else {
+			e = lane_at((int) r[0], path, nofollow, host, sizeof host, &at);
+			if (e <= 0) {
+				done = e < 0;
+				res = e;
+				break;
+			}
+			fl &= ~AT_EMPTY_PATH;
+		}
+		if (nr == SYS_statx) {
+			struct statx *x = (struct statx *) r[4];
+
+			res = lane_rawc(SYS_statx, at, host, fl, r[3], x);
+			if (res == 0) {
+				map_owner(&x->stx_uid, &x->stx_gid);
+				if (nofollow && host[0] && S_ISLNK(x->stx_mode))
+					x->stx_size = (unsigned long) link_size(at, host, (long) x->stx_size);
+			}
+		} else {
+			struct stat *st = (struct stat *) r[2];
+
+			res = lane_rawc(SYS_newfstatat, at, host, st, fl, 0L);
+			if (res == 0) {
+				map_owner(&st->st_uid, &st->st_gid);
+				if (nofollow && host[0] && S_ISLNK(st->st_mode))
+					st->st_size = link_size(at, host, st->st_size);
+			}
+		}
+		break;
+	}
+	case SYS_readlinkat: {
+		char tgt[PATH_MAX];
+		size_t n = (size_t) r[3];
+
+		if (!path || strncmp(path, "/proc/", 6) == 0 || n == 0) {
+			done = 0;
+			break;
+		}
+		e = lane_at((int) r[0], path, 1, host, sizeof host, &at);
+		if (e <= 0 || (at != AT_FDCWD && strncmp(host, "/proc/", 6) == 0)) {
+			done = e < 0;
+			res = e;
+			break;
+		}
+		res = lane_rawc(SYS_readlinkat, at, host, tgt, sizeof tgt, 0L);
+		if (res > 0) {
+			if ((size_t) res >= root_len && strncmp(tgt, root, root_len) == 0 &&
+			    ((size_t) res == root_len || tgt[root_len] == '/')) {
+				memmove(tgt, tgt + root_len, (size_t) res - root_len);
+				res -= (long) root_len;
+				if (res == 0)
+					tgt[res++] = '/';
+			}
+			if ((size_t) res > n)
+				res = (long) n;
+			memcpy((char *) r[2], tgt, (size_t) res);
+		}
+		break;
+	}
+	case SYS_getcwd: {
+		char g[PATH_MAX];
+		size_t n;
+
+		e = get_cwd(g);
+		if (e < 0) {
+			res = e;
+			break;
+		}
+		n = strlen(g) + 1;
+		if (n > (size_t) r[1]) {
+			res = -ERANGE;
+			break;
+		}
+		memcpy((char *) r[0], g, n);
+		res = (long) n;
+		break;
+	}
+	case SYS_getuid: case SYS_geteuid: case SYS_getgid: case SYS_getegid: {
+		unsigned v[6];
+
+		if (!get_ids(v)) {
+			done = 0;
+			break;
+		}
+		res = v[nr == SYS_getuid ? 0 : nr == SYS_geteuid ? 1 : nr == SYS_getgid ? 3 : 4];
+		break;
+	}
+	default:
+		done = 0;
+	}
+	errno = saved;
+	if (done)
+		r[0] = (unsigned long) res;
+	return done;
+}
+
+/* ---- the code the stubs run, encoded here (no assembler at run time) ---- */
+static unsigned *emit_p;
+static void emit(unsigned insn) { *emit_p++ = insn; }
+static unsigned stp(int a, int b, int off) { return 0xa9000000u | ((unsigned) (off / 8) & 0x7f) << 15 | (unsigned) b << 10 | 31u << 5 | (unsigned) a; }
+static unsigned ldp(int a, int b, int off) { return 0xa9400000u | ((unsigned) (off / 8) & 0x7f) << 15 | (unsigned) b << 10 | 31u << 5 | (unsigned) a; }
+static unsigned strx(int t, int off) { return 0xf9000000u | (unsigned) (off / 8) << 10 | 31u << 5 | (unsigned) t; }
+static unsigned ldrx(int t, int off) { return 0xf9400000u | (unsigned) (off / 8) << 10 | 31u << 5 | (unsigned) t; }
+static unsigned branch(unsigned op, const void *from, const void *to)
+{
+	long d = ((const char *) to - (const char *) from) / 4;
+
+	return op | ((unsigned) d & 0x3ffffffu);
+}
+static int in_reach(const void *a, const void *b)
+{
+	long d = (const char *) a - (const char *) b;
+
+	return d > -(120L << 20) && d < (120L << 20);
+}
+
+/* the shared part: save, call lane_hook, restore; make the call if it said 0 */
+static void emit_common(void)
+{
+	unsigned *cbz, *lit;
+	int i;
+
+	for (i = 0; i < 28; i += 2)
+		emit(stp(i, i + 1, i * 8));
+	emit(strx(28, 224));
+	emit(0xd53b4209u);                              /* mrs x9, nzcv */
+	emit(strx(9, 248));
+	emit(strx(30, 256));
+	emit(0x910003e0u);                              /* mov x0, sp */
+	lit = emit_p;
+	emit(0);                                        /* ldr x16, =lane_hook (set below) */
+	emit(0xd63f0200u);                              /* blr x16 */
+	emit(ldrx(9, 248));
+	emit(0xd51b4209u);                              /* msr nzcv, x9 */
+	emit(ldrx(30, 256));
+	cbz = emit_p;
+	emit(0);                                        /* cbz x0, passthrough (set below) */
+	emit(ldrx(0, 0));                               /* answered: x0 from the frame */
+	emit(ldrx(1, 8));
+	for (i = 2; i < 28; i += 2)
+		emit(ldp(i, i + 1, i * 8));
+	emit(ldrx(28, 224));
+	emit(0xd65f03c0u);                              /* ret */
+	*cbz = 0xb4000000u | ((unsigned) (emit_p - cbz) & 0x7ffff) << 5;
+	for (i = 0; i < 28; i += 2)
+		emit(ldp(i, i + 1, i * 8));
+	emit(ldrx(28, 224));
+	emit(0xd4000001u);                              /* svc #0 */
+	emit(0xd65f03c0u);                              /* ret */
+	if ((unsigned long) emit_p & 4)
+		emit(0xd503201fu);                      /* nop: the literal is 8-aligned */
+	*lit = 0x58000000u | ((unsigned) (emit_p - lit) & 0x7ffff) << 5 | 16u;
+	*(void **) emit_p = (void *) lane_hook;
+	emit_p += 2;
+}
+
+static int hooked_nr(unsigned nr)
+{
+	switch (nr) {
+	case SYS_openat: case SYS_faccessat: case SYS_newfstatat: case SYS_statx: case SYS_readlinkat:
+	case SYS_getcwd: case SYS_getuid: case SYS_geteuid: case SYS_getgid: case SYS_getegid:
+		return 1;
+	}
+	return 0;
+}
+
+struct text { unsigned *lo, *hi; };
+
+static int find_libc(struct dl_phdr_info *info, size_t size, void *data)
+{
+	struct text *t = data;
+	size_t n = info->dlpi_name ? strlen(info->dlpi_name) : 0;
+	int i;
+
+	(void) size;
+	if (n < 10 || strcmp(info->dlpi_name + n - 10, "/libc.so.6") != 0)
+		return 0;
+	for (i = 0; i < info->dlpi_phnum; i++) {
+		const ElfW(Phdr) *ph = &info->dlpi_phdr[i];
+
+		if (ph->p_type == PT_LOAD && (ph->p_flags & PF_X)) {
+			t->lo = (unsigned *) (info->dlpi_addr + ph->p_vaddr);
+			t->hi = (unsigned *) (info->dlpi_addr + ph->p_vaddr + ph->p_filesz);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static void patch_libc(void)
+{
+	struct text t = { 0, 0 };
+	const char *knob = getenv("DN_LANE_PATCH");
+	unsigned *p, *common, *page = MAP_FAILED;
+	size_t sites = 0, len = 4096 * 4;
+	unsigned long lo, hi;
+	int k;
+
+	if ((knob && strcmp(knob, "0") == 0) || !dl_iterate_phdr(find_libc, &t) || !t.lo)
+		return;
+	for (p = t.lo + 1; p < t.hi; p++)
+		if (*p == 0xd4000001u && (p[-1] & 0xffe0001fu) == 0xd2800008u && hooked_nr((p[-1] >> 5) & 0xffff))
+			sites++;
+	if (sites == 0 || 128 + sites * 6 > len / 4)
+		return;
+	for (k = 1; k <= 8 && page == MAP_FAILED; k++) {      /* a page the stubs can reach: near the text */
+		char *hint = (char *) (((unsigned long) t.hi + ((unsigned long) k << 21)) & ~0xfffffUL);
+
+		page = mmap(hint, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		if (page != MAP_FAILED && (!in_reach(page, t.lo) || !in_reach(page + len / 4, t.hi))) {
+			munmap(page, len);
+			page = MAP_FAILED;
+		}
+	}
+	if (page == MAP_FAILED)
+		return;
+	emit_p = common = page;
+	emit_common();
+	lo = (unsigned long) t.lo & ~4095UL;
+	hi = ((unsigned long) t.hi + 4095) & ~4095UL;
+	{
+		unsigned *stubs = emit_p;
+
+		for (p = t.lo + 1; p < t.hi; p++) {
+			if (!(*p == 0xd4000001u && (p[-1] & 0xffe0001fu) == 0xd2800008u && hooked_nr((p[-1] >> 5) & 0xffff)))
+				continue;
+			emit(0xd10443ffu);                              /* sub sp, sp, #272 */
+			emit(stp(29, 30, 232));
+			emit(branch(0x94000000u, emit_p, common));      /* bl common */
+			emit(ldp(29, 30, 232));
+			emit(0x910443ffu);                              /* add sp, sp, #272 */
+			emit(branch(0x14000000u, emit_p, p + 1));       /* b site + 4 */
+		}
+		__builtin___clear_cache((char *) page, (char *) emit_p);
+		if (mprotect(page, len, PROT_READ | PROT_EXEC) != 0)
+			return;
+		/* libc's own mprotect may sit in the text being made writable: call the kernel */
+		if (plain_svc(SYS_mprotect, (long) lo, (long) (hi - lo), PROT_READ | PROT_WRITE | PROT_EXEC) != 0 &&
+		    plain_svc(SYS_mprotect, (long) lo, (long) (hi - lo), PROT_READ | PROT_WRITE) != 0)
+			return;
+		for (p = t.lo + 1; p < t.hi; p++) {
+			if (!(*p == 0xd4000001u && (p[-1] & 0xffe0001fu) == 0xd2800008u && hooked_nr((p[-1] >> 5) & 0xffff)))
+				continue;
+			*p = branch(0x14000000u, p, stubs);
+			stubs += 6;
+		}
+		__builtin___clear_cache((char *) lo, (char *) hi);
+		plain_svc(SYS_mprotect, (long) lo, (long) (hi - lo), PROT_READ | PROT_EXEC);
+	}
+}

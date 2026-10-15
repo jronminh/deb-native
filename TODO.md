@@ -863,10 +863,23 @@ when it is rare, changes the tree, or must hold for programs without the shim
    then `fork` and exec, `git status`, `apt-get -s install`, `dpkg -l` and
    `dn-substtest` give the same answers as before. Still to move: the rest of this
    item.
-3. **Patch the `svc` sites of `libc.so.6` at load** (as `svc-hook` does: each `svc`
-   becomes a `b` to a trampoline within 128 MB) so that libc-internal calls (`opendir`,
-   `fopen`, locale, `gconv`) take the shim too, with the stock `libc6` package left
-   as Debian ships it. Patched text may be made executable (`execmod`) on the
+3. **Patch the `svc` sites of `libc.so.6` at load: done** (`lane.c`, `patch_libc`).
+   Each `mov x8, #nr; svc #0` whose nr the shim answers (`openat`, `faccessat`,
+   `newfstatat`, `statx`, `readlinkat`, `getcwd`, `get[e][ug]id`) becomes a `b` to a
+   stub in a page mapped within 120 MB of libc's text; the stub saves every register
+   and NZCV, calls `lane_hook` (which reads `x8` at run time, keeps `errno`, and answers
+   like the kernel: a result or `-errno`) or makes the original call. The cancellable
+   path (`__syscall_cancel_arch`, the number in a register) is left alone:
+   `pthread_cancel` checks the program counter there. The stock `libc6` stays as Debian
+   ships it; `DN_LANE_PATCH=0` turns it off. Measured: the regression set (`ls -lR`,
+   `find` over `/usr` and `/etc`, `stat`, `readlink`, `pwd`, Python's dirfd calls,
+   `xattr`, `tar`, `cp -a`) 36.4k stops and 19.5 s -> 552 stops and 1.5 s with the
+   same output; file-tree set 793 -> 242 stops (without `-s`, `ls -lR` 170-206 ->
+   57-58 ms); Lua build 2577 -> 1727 stops, the same time (11-12 s: it is gcc's own
+   work). `git init`, `apt-get clean`, `apt-get -s install`, fake root, the thread and
+   `vfork` checks pass. Left: `ld.so`'s own opens (954 `openat` and 128 `faccessat` in
+   the Lua build: the program, the shim and the libraries, before the shim is loaded),
+   the cancellable path (324), and `execve`. Patched text may be made executable (`execmod`) on the
    Android 12 phone, both in Termux and in the app (`untrusted_app_27`, targetSdk 28):
    a private mapping of the prefix's `libc.so.6`, written, then `PROT_READ|PROT_EXEC`
    again, and anonymous memory from RW to RX; checked 2026-10-15 from inside an app
