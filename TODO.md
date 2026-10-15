@@ -73,6 +73,35 @@ the shim:
 - a clear refusal (`EPERM` or `ENOSYS`, with the reason) for what cannot be
   faked: real isolation, TUN, anything an LSM sees.
 
+## Beyond Debian, and bundles (later; the focus is Debian)
+
+The runtime knows nothing of dpkg or apt: a tree with a loader, its libraries
+and a program is enough. What still assumes Debian:
+
+- `policy.c` names the loader by Debian's multiarch path
+  (`/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`) and gives it a
+  `--library-path` of Debian's directories. Take the loader from the program's
+  `PT_INTERP`, resolved in the tree, and let it find libraries through the tree's
+  own `ld.so.cache` (its guest paths are mapped like any other): Ubuntu, Arch,
+  Fedora trees would then boot as they are.
+- `boot.sh` needs `/usr/bin/bash` and `/boot/init.sh`; a tree without a shell
+  should run its program directly.
+- The exec gate and the shim know glibc only (`ld-linux-*`, `libc.so.6`); musl
+  (Alpine) needs the gate's `ld-musl-*` case and a musl build of the shim.
+- Ubuntu through debootstrap (`--suite noble --mirror
+  http://ports.ubuntu.com/ubuntu-ports`) may work as it is; untested.
+
+**Bundles**: a minimal tree for one program, tens of MB instead of hundreds:
+the program, its library closure (`ld.so --list`), glibc and the loader, a few
+files it reads (`/etc/ssl/certs`, `/etc/passwd`, `nsswitch.conf`,
+`resolv.conf`), `dn-tiny` and `dn-lane.so`, and no dpkg or apt. Made from a full
+prefix as a builder (`apt-get download` the package and its dependencies,
+`dpkg-deb -x` them, no maintainer scripts): an image, not upgraded in place.
+A bundle needs no fake root (fewer rows); the shim built in the builder works on
+the same or a newer glibc; a static program (Go, Rust with musl) needs only
+`dn-tiny`. For an app that embeds a tool (ffmpeg, python, node), or a glibc
+binary such as Claude Code.
+
 ## Building a prefix
 
 - `build-prefix.sh` relies on Termux's `debootstrap` for the first stage, which
