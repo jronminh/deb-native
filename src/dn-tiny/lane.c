@@ -10,8 +10,8 @@
  * A path is resolved by the tracer's rules (policy.c): a guest path is the prefix's,
  * except the host directories the tracer leaves as they are; an absolute link target
  * is the prefix's too.  The call is then issued on the host path with the lane cookie
- * in x5 (lane.h), which the filter lets through without a stop, and only for calls
- * that read: anything that writes, and any case this file does not handle (a path
+ * in x5 (lane.h; set for the svc only), which the filter lets through without a stop,
+ * and only for calls that read:anything that writes, and any case this file does not handle (a path
  * relative to a directory fd, flags it does not know), goes to the real function and
  * through the tracer as before.  readlink answers are cached; the cache is dropped
  * when the generation in var/lib/deb-native/dn-tiny.gen moves (a symlinkat, unlinkat,
@@ -52,6 +52,32 @@ static void *real_fn(const char *name, void **slot)
 	return *slot;
 }
 
+/* A call on the lane: the cookie is in x5 for the svc only.  libc's syscall() would
+ * leave it there, and the next call libc makes on its own (opendir's openat, say)
+ * would pass the filter unmapped and look for the guest path on the host. */
+static long lane_svc(long nr, long a, long b, long c, long d, long e)
+{
+	register long x8 __asm__("x8") = nr;
+	register long x0 __asm__("x0") = a;
+	register long x1 __asm__("x1") = b;
+	register long x2 __asm__("x2") = c;
+	register long x3 __asm__("x3") = d;
+	register long x4 __asm__("x4") = e;
+	register long x5 __asm__("x5") = LANE;
+
+	__asm__ volatile("svc #0\n\tmov x5, xzr"
+			 : "+r"(x0), "+r"(x5)
+			 : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4)
+			 : "memory");
+	if (x0 < 0 && x0 > -4096) {
+		errno = (int) -x0;
+		return -1;
+	}
+	return x0;
+}
+#define lane_call(nr, a, b, c, d, e) \
+	lane_svc(nr, (long) (a), (long) (b), (long) (c), (long) (d), (long) (e))
+
 /* ---- set up: the root from this library's own path, the shared generation ---- */
 __attribute__((constructor)) static void lane_init(void)
 {
@@ -67,13 +93,13 @@ __attribute__((constructor)) static void lane_init(void)
 	n = strlen(di.dli_fname);
 	if (n <= t || n - t >= sizeof root || strcmp(di.dli_fname + n - t, tail) != 0)
 		return;
-	if (syscall(SYS_newfstatat, AT_FDCWD, "/proc/self", &st, 0, 0L, LANE) != 0)
+	if (lane_call(SYS_newfstatat, AT_FDCWD, "/proc/self", &st, 0, 0L) != 0)
 		return;                                 /* the lane is not there: leave it all to the tracer */
 	real_uid = st.st_uid;
 	real_gid = st.st_gid;
 	memcpy(p, di.dli_fname, n - t);
 	strcpy(p + (n - t), "/var/lib/deb-native/dn-tiny.gen");
-	fd = syscall(SYS_openat, AT_FDCWD, p, O_RDONLY | O_CLOEXEC, 0, 0L, LANE);
+	fd = lane_call(SYS_openat, AT_FDCWD, p, O_RDONLY | O_CLOEXEC, 0, 0L);
 	if (fd >= 0) {
 		void *m = mmap(NULL, 4096, PROT_READ, MAP_SHARED, (int) fd, 0);
 
@@ -144,7 +170,7 @@ static int guest_readlink(const char *g, char *buf, size_t n)
 		if (r > 0)
 			memcpy(buf, e->tgt, (size_t) r);
 	} else {
-		r = syscall(SYS_readlinkat, AT_FDCWD, host, buf, n, 0L, LANE);
+		r = lane_call(SYS_readlinkat, AT_FDCWD, host, buf, n, 0L);
 		if (r < 0)
 			r = -errno;
 		if (gen && len < sizeof e->key && r < (long) sizeof e->tgt) {
@@ -350,7 +376,7 @@ static int lane_open(int dirfd, const char *path, int flags, mode_t mode)
 		errno = -e;
 		return -1;
 	}
-	r = syscall(SYS_openat, AT_FDCWD, host, flags, mode, 0L, LANE);
+	r = lane_call(SYS_openat, AT_FDCWD, host, flags, mode, 0L);
 	return (int) r;
 }
 
@@ -428,7 +454,7 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 	size_t n;
 
 	if ((flags & AT_EMPTY_PATH) && path && path[0] == '\0' && dirfd >= 0) {
-		if (!root_len || syscall(SYS_fstat, dirfd, st, 0L, 0L, 0L, LANE) != 0)
+		if (!root_len || lane_call(SYS_fstat, dirfd, st, 0L, 0L, 0L) != 0)
 			return root_len ? -1 : REAL(fstatat)(dirfd, path, st, flags);
 		fix_stat(st, NULL, 0);
 		return 0;
@@ -447,7 +473,7 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 		errno = -e;
 		return -1;
 	}
-	if (syscall(SYS_newfstatat, AT_FDCWD, host, st, flags & (AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT), 0L, LANE) != 0)
+	if (lane_call(SYS_newfstatat, AT_FDCWD, host, st, flags & (AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT), 0L) != 0)
 		return -1;
 	fix_stat(st, res, nofollow);
 	return 0;
@@ -477,7 +503,7 @@ static int lane_faccessat(int dirfd, const char *path, int mode, int flags)
 		errno = -e;
 		return -1;
 	}
-	return (int) syscall(SYS_faccessat, AT_FDCWD, host, mode, 0L, 0L, LANE);
+	return (int) lane_call(SYS_faccessat, AT_FDCWD, host, mode, 0L, 0L);
 }
 
 int faccessat(int dirfd, const char *path, int mode, int flags) { return lane_faccessat(dirfd, path, mode, flags); }
