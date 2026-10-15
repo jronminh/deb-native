@@ -14,7 +14,7 @@ where it is answered, and what it costs. Building and booting a prefix is in
 - [The law: guest paths and host paths](#the-law-guest-paths-and-host-paths)
 - [Identity: fake root](#identity-fake-root)
 - [What Android refuses](#what-android-refuses)
-- [Threat model](#threat-model)
+- [The boundary: what a program sees](#the-boundary-what-a-program-sees)
 - [Known gaps](#known-gaps)
 
 ## The problem
@@ -138,12 +138,38 @@ the net for everything.
 | `mount`, `umount2`, `swapon`, `swapoff` | answered at the `SIGSYS` stop |
 | locales other than `C.UTF-8` | not installed; `init.sh` links `C.UTF-8` to `C.utf8` so glibc's first try succeeds |
 
-## Threat model
+## The boundary: what a program sees
 
-Accidental leaks only. A program can always reach the host: it can issue a
-syscall with the lane cookie, or use a path the law leaves to the host. The
-runtime makes programs that follow Debian's conventions see a Debian system;
-it is not a sandbox.
+A program in the prefix sees three things, and nothing else of Android:
+
+- the prefix, as `/`;
+- the kernel's own truth: `/proc`, `/sys`, `/dev`, `uname`, as a Debian chroot
+  on the same kernel would see them;
+- the host directories the law lets into the tree (today the ten above, under
+  their own names).
+
+The test for a leak: a program that does not ask where it runs and still meets
+Android (in its environment, in `ls -l`, in `df`, in `pwd`) is a bug. A program
+that looks on purpose finds out, and that is accepted:
+
+- `uname`, `/proc/version`, `/proc/cpuinfo`: the phone's kernel;
+- `/proc/self/status`: `TracerPid` is `dn-tiny`, `Seccomp` is 2;
+- `/dev`: `binder`, `ashmem`;
+- SELinux: `/sys/fs/selinux`, and an `EACCES` where Debian would allow;
+- the time a call takes when it stops in the tracer.
+
+So what the runtime answers in `/proc` is what ordinary tools read (`mounts`,
+`mountinfo`, `maps`, and the links already told back: `cwd`, `exe`, `fd`), not
+`status` or `cpuinfo`.
+
+This is about accidental leaks only, not a sandbox. A program can always reach
+the host: it can issue a syscall with the lane cookie, or use a path the law
+leaves to the host.
+
+**One prefix, one boot.** A prefix is booted by its host (an app, Termux), never
+from inside another prefix: a seccomp filter cannot be removed, so a tree
+started under another tree's `dn-tiny` would carry that tree's filter. Several
+prefixes can run at once, each under its own `dn-tiny`; they share nothing.
 
 ## Known gaps
 
@@ -156,3 +182,11 @@ it is not a sandbox.
   paths (`bind`, `connect`) are not mapped yet.
 - `ld.so`'s own opens (the program, the shim, the libraries) happen before the
   shim is loaded and stop in the tracer.
+- Where the boundary leaks without being asked (`TODO.md`, "The boundary"): the
+  host's environment passes through (`ANDROID_*`, `BOOTCLASSPATH`, the host's
+  `PATH`-like variables), and so do its umask (077) and, for a command, its
+  working directory; `ls -l` shows the SELinux label as a `.` after the mode;
+  `/proc/self/mounts` is Android's; `/data`, `/storage`, `/sdcard`, `/system`
+  and the other host directories answer `stat` and `cd`; `/proc/self/maps`
+  names the libraries by their host paths. There is no way to bind a host
+  directory at a guest path of one's choosing.

@@ -12,20 +12,86 @@ the numbers: [`docs/performance.md`](docs/performance.md).
   `removexattrat`, `file_getattr`/`file_setattr`). Check `execmod` there too: the
   shim's libc patching needs it.
 - **Another phone**, and Termux from F-Droid as a user gets it.
-- **dn-shell**: it runs `boot/boot.sh` of a prefix under `prefixes/`; its spec
-  still describes `.dn/contract`.
+- **dn-shell**: it runs `boot/boot.sh` of a prefix under `prefixes/`, one prefix
+  per session, and writes the prefix's `boot/binds` before (see "The
+  boundary"); its spec still describes `.dn/contract`.
 - **A warning during the second stage**: Android's linker prints "failed to find
   generated linker configuration" once; find which program it is.
 - **The default for `-s`**: on in `build-prefix.sh`, off in `boot.sh`. Measure
   `make -j` (the polling tracer competes for a core) and an app session before
   choosing a default for `boot.sh`.
 
+## The boundary
+
+Close what a program meets without asking (`docs/architecture.md`, "The
+boundary"; the leaks are listed under "Known gaps" there). In this order, each
+step checked as `AGENTS.md` says, in Termux and in the app:
+
+1. **The environment, the umask, the working directory** (`init.sh` and
+   `boot.sh` only, no runtime change).
+   - Start from an empty environment, as `login` does: `PATH`, `HOME`, `LANG`,
+     `TMPDIR`, `TERM` and `COLORTERM`, and what the host asks to keep. **(open)**
+     how the host names those: (a) an argument to `boot.sh` (`--keep-env
+     TERM,DISPLAY -- CMD`), or (b) a file `boot/env` (a name per line, or
+     `NAME=value`), written by the host like `boot/binds`. Leaning to (b): the
+     same shape as `boot/binds`, and a Termux user can edit it.
+   - `TZ` from the phone (`getprop persist.sys.timezone`). Debian-noroot's
+     launcher keeps the same few: `HOME`, `SHELL`, a Debian `PATH`, `TZ`
+     (`boot.sh` already drops the host's `LD_PRELOAD` and `LD_LIBRARY_PATH`).
+   - `umask 022`, as on Debian (the app's is 077: every new file reads
+     `-rw-------`).
+   - A command started from a directory outside the tree and its binds starts
+     at `/` (`boot.sh` knows the root); today `pwd -P` and `/proc/self/cwd` show
+     the host's path.
+2. **The SELinux label**: `security.selinux` reads as absent (`ENODATA`, and left
+   out of `listxattr`), in the tracer and the shim. The `.` that `ls -l` prints
+   after the mode is that label; a Debian without SELinux shows none.
+3. **Binds: the law becomes a table.**
+   - First, **one copy of the law** (under "The law"): without it a bind is
+     written twice, and the 0.7 runtime's two path models disagreed in exactly
+     this way.
+   - The table: one row per guest path. `/` is the prefix's root; `/proc`,
+     `/sys`, `/dev` and the other host directories are rows of their own name;
+     binds are rows too. Guest to host by the longest guest prefix; host to guest
+     (`policy_unpath`: `getcwd`, `readlink`, `/proc/self/{cwd,exe,fd/N}`) by the
+     longest host prefix.
+   - `walk` resolves `.`, `..` and links on the guest path and maps at the end:
+     `cd /mnt/sdcard/..` is `/mnt`, not `/storage/emulated`, and an absolute
+     link inside a bind is the guest's, as under a real bind mount.
+   - `boot/binds`: one line per bind, `GUEST<TAB>HOST<TAB>FLAGS` (`rw`; `ro`
+     later, answered `EROFS`). Written by the host (dn-shell from its settings,
+     a user by hand in Termux) before `boot.sh`; read by the tracer and the shim
+     from the root; fixed for a boot. `HOST` must be canonical
+     (`/storage/emulated/0`, not `/sdcard`): the shim cannot canonicalize (its
+     `realpath` goes through its own hooks), so `dn-tiny` refuses to boot on a
+     non-canonical `HOST`, a duplicate `GUEST`, or a `GUEST` under a host row.
+   - The mount point: an empty directory at `GUEST`, made at boot if missing, so
+     `readdir` of its parent needs nothing; it stays when the bind goes, as after
+     `umount`.
+   - `rename` and `link` between two rows: `EXDEV`, as between two mounts
+     (`prefixes/` and the app's `home/` are one file system, so the kernel would
+     allow it). `st_dev` and `statfs` stay the kernel's, as for a bind mount.
+   - `/proc/self/mounts`, `/proc/self/mountinfo` (and `/etc/mtab`, a link to the
+     first) built from the table, generated at `open` into a memfd ("Emulation").
+   - Done when `stat`, `open`, `read`, `readdir`, `readlink`, `getcwd`,
+     `realpath` and `pwd -P` agree inside a bind for a dynamic and a static
+     program, and `mount`, `df`, `findmnt` list it.
+   - Later: `mount --bind` inside the prefix adds a row (it is refused now); the
+     table then has to live where the shim sees a change, not a copy read once.
+4. **Narrow the host directories**, with binds as the way out: drop `/data`,
+   `/storage`, `/sdcard` and `/mnt` from the host rows, and try `/system`,
+   `/apex`, `/vendor` (the runtime's own calls use host paths and do not go
+   through the law; to check). In the same change, `/proc/*/maps` and `smaps`
+   name files by their guest paths: gdb and the JVM open the paths they read
+   there, which works today only because `/data` is the host's.
+
 ## The law
 
 - **One copy of the law**: the shim has its own resolver (`resolve`,
   `is_host_path` in `lane.c`); link `policy.c` into it instead. It needs a build
   of `policy.c` against glibc (its `sys.h` defines `_start` and the string
-  functions) and its link cache made thread-safe.
+  functions) and its link cache made thread-safe. Binds need it first ("The
+  boundary", step 3).
 - **Not mapped yet**: `execveat` (glibc's `fexecve`), `openat2` with
   `RESOLVE_*` (answers `ENOSYS`), `name_to_handle_at`, AF_UNIX socket paths
   (`bind`, `connect`, `sendto`, `sendmsg`; `getsockname`, `getpeername`,
@@ -46,6 +112,11 @@ the numbers: [`docs/performance.md`](docs/performance.md).
   the contents shared.
 - **Modes**: a user mode (real identity) beside fake root, chosen per command
   (`sudo` turning a process tree to root), for programs that check ownership.
+  The user mode needs an `/etc/passwd`, `group` and `shadow` line for the app's
+  UID (written at boot when missing), so `whoami`, `ssh` and `$HOME` lookups
+  work; `sudo` and `su` then are small scripts that accept the common flags
+  (`-A -E -n -S -p`) and switch the tree, as debian-noroot's do with
+  `fakeroot-tcp`.
 
 ## Speed
 
@@ -65,9 +136,19 @@ the numbers: [`docs/performance.md`](docs/performance.md).
 Answer what Android refuses in place of the kernel, the same in the tracer and
 the shim:
 
-- a synthetic `/proc` and `/sys` (`/proc/self/mounts`, `/proc/version`,
-  `/proc/sys/*`), generated at `open` into a memfd so `read` needs no stop;
-- a virtual mount table (`mount`, `umount2`, `statfs`, `/proc/self/mountinfo`);
+- `/proc` files generated at `open` into a memfd so `read` needs no stop: the
+  mount table and `maps` first ("The boundary"); `/proc/sys/*` where a program
+  needs an answer Android hides. `/proc/version`, `cpuinfo` and `status` stay
+  the kernel's (`docs/architecture.md`, "The boundary"); the files Android 8+
+  denies to apps (`/proc/stat`, `loadavg`, `uptime`, `vmstat`: `top`, `uptime`,
+  `ps` and `htop` read them) are the first candidates, as Termux's
+  proot-distro fakes them;
+- SysV IPC (`shmget`, `shmat`, `shmdt`, `shmctl`; `semget` and `msgget` later),
+  killed by the platform today: a segment is a `memfd`, its key and id kept by
+  a broker in the tracer that hands the fd over a unix socket, `shmat` an
+  `mmap` of it, in the shim. Debian-noroot's `android-shmem` does the same
+  with ashmem for X's MIT-SHM; PostgreSQL's postmaster needs a small segment
+  too. Do it when a program needs it;
 - privileged ports (a bind translation, and `getsockname`/`accept` back);
 - capabilities (`capget`, `PR_CAPBSET_READ`);
 - a clear refusal (`EPERM` or `ENOSYS`, with the reason) for what cannot be
@@ -109,10 +190,37 @@ dn-shell is one frontend, not the platform: a prefix's whole contract is
 terminal (a script, a local server, a tool an app embeds; with a bundle, tens of
 MB). What it takes, as far as known:
 
-- **targetSdk 28 or lower.** From API 29 the app domain may not execute, nor map
-  executable, files in its own data directory, where the prefix's loader and
+- **targetSdk 28 or lower**, as things stand. From API 29 the app domain may not
+  `execve` files in its own data directory, where the prefix's loader and
   libraries live (Termux stays at 28 for the same reason). Google Play requires
   a much newer target, so such an app ships outside it (F-Droid, GitHub, by hand).
+- **A way past it, to try: a trampoline in the APK.** Believed, not checked: at
+  API 29+ only the `execve` is refused; `mmap(PROT_EXEC)` of a data file is still
+  allowed (`dlopen` of a downloaded `.so`, Termux's `linker64` trick), and so is
+  an `execve` of the APK's native library directory (`apk_data_file`). The
+  exec gate already rewrites every `execve` into "run the loader on the
+  program"; only its target changes:
+  - ship `dn-tiny` and a small `dn-exec` as `libdntiny.so`, `libdnexec.so` in
+    the APK's `jniLibs` (`extractNativeLibs="true"`);
+  - the gate turns `execve(PROG)` into `execve(APKLIB/libdnexec.so, ...)`;
+    `dn-exec`, a userland exec, maps the **prefix's own** `ld-linux-aarch64.so.1`,
+    builds the stack and auxv, and jumps into it as `ld.so PROG`; a static
+    program it maps directly. Not glibc's loader in the APK: `ld.so` and
+    `libc.so.6` are a pair, and `apt upgrade libc6` would split them;
+  - `/proc/self/exe` is already answered with the program (`exe_now`).
+  - The shim's libc patching needs `execmod`, likely refused at API 29+: copy
+    the text pages to anonymous memory, patch, `mprotect` RX and `mremap` them
+    over the file mapping instead (needs `execmem`, which apps have for JIT; to
+    check).
+  - The runtime then ships with the APK (an update of `dn-tiny` is an app
+    update); `boot.sh` keeps working in Termux at 28 the current way.
+  - If a later Android refuses executable mappings of data files too, as it did
+    for dex in 14, what is left is copying code into anonymous memory (`execmem`).
+  - The checks first, in a `dev` build of dn-shell at `targetSdk 34` on the
+    Android 16 phone, from a session of the app: `execve` of a file in `files/`
+    (expected: refused); `/system/bin/linker64` on a bionic binary in `files/`
+    (expected: runs); `mmap(PROT_EXEC)` of a file in `files/`, and `mprotect`
+    RX of anonymous memory (`execmem`), each in a small program.
 - arm64; `ptrace` of its own children and `execmod` (both allowed in
   `untrusted_app_27`).
 - The app extracts the prefix into its files directory (a prefix names no
