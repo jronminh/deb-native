@@ -62,7 +62,8 @@ What it does, in order:
 5. Installs the packages you chose, then `apt-get clean`, and writes
    `boot/version`.
 
-A minimal prefix takes a few minutes, most of it the download.
+On the S10e (Android 12), from a fresh clone: `minimal` in about 3 minutes
+(265 MB), `dev` in about 3 minutes (811 MB), most of it the download.
 
 Options (`scripts/build-prefix.sh --help`):
 
