@@ -65,6 +65,16 @@ static int install_filter(void)
 	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
 	f[n++] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0);
 	f[n++] = (struct sock_filter) BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+	/* The audit socket: Android's policy refuses it (EACCES), and libaudit gives up
+	 * on that where it accepts a kernel without audit (shadow's useradd aborts).  The
+	 * filter says what such a kernel says, with no stop. */
+	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+	f[n++] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 198 /* socket */, 0, 5);
+	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
+	f[n++] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 16 /* AF_NETLINK */, 0, 3);
+	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2]));
+	f[n++] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 9 /* NETLINK_AUDIT */, 0, 1);
+	f[n++] = (struct sock_filter) BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | 93 /* EPROTONOSUPPORT */);
 	{
 		/* the shim's lane (lane.h): the cookie in x5 and a call from the lane's list, or
 		 * an openat that only reads */

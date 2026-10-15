@@ -37,6 +37,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 #include "lane.h"
@@ -685,6 +686,68 @@ static long link_size(int at, const char *host, long size)
 	return r;
 }
 
+/* ---- hard links: Android refuses them; the tracer copies the file and keeps their
+ * link count for the stats it answers.  The stats this file answers see a process's
+ * own links: linkat records the two copies, unlinkat drops a name, and a stat of one
+ * says how many names its group has (shadow links a temporary name to lock its files
+ * and checks for a count of 2).  No table, no cost: most processes never link. */
+#define CL_MAX 16
+static struct { unsigned long dev, ino; int group; } cl[CL_MAX];
+static int ncl, cl_lock, cl_next = 1;
+
+static int cl_take(int wait)
+{
+	while (__atomic_exchange_n(&cl_lock, 1, __ATOMIC_ACQUIRE))
+		if (!wait)
+			return 0;                       /* a signal handler: do without */
+	return 1;
+}
+
+static void cl_give(void) { __atomic_store_n(&cl_lock, 0, __ATOMIC_RELEASE); }
+
+static int cl_find(unsigned long dev, unsigned long ino)
+{
+	for (int i = 0; i < ncl; i++)
+		if (cl[i].dev == dev && cl[i].ino == ino)
+			return i;
+	return -1;
+}
+
+static void cl_put(unsigned long dev, unsigned long ino, int group)
+{
+	if (ncl == CL_MAX) {
+		memmove(&cl[0], &cl[1], sizeof cl[0] * (CL_MAX - 1));
+		ncl--;
+	}
+	cl[ncl].dev = dev;
+	cl[ncl].ino = ino;
+	cl[ncl].group = group;
+	__atomic_store_n(&ncl, ncl + 1, __ATOMIC_RELEASE);
+}
+
+/* the link count to report for (dev, ino), or 0 */
+static unsigned cl_count(unsigned long dev, unsigned long ino)
+{
+	unsigned n = 0;
+	int i;
+
+	if (!__atomic_load_n(&ncl, __ATOMIC_ACQUIRE) || !cl_take(0))
+		return 0;
+	if ((i = cl_find(dev, ino)) >= 0)
+		for (int j = 0; j < ncl; j++)
+			n += cl[j].group == cl[i].group;
+	cl_give();
+	return n;
+}
+
+static void cl_fix(unsigned long dev, unsigned long ino, unsigned *nlink)
+{
+	unsigned n = cl_count(dev, ino);
+
+	if (n > *nlink)
+		*nlink = n;
+}
+
 /* what the program is told: the owner read as root */
 static void map_owner(unsigned *uid, unsigned *gid)
 {
@@ -705,6 +768,7 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 		if (lane_call(SYS_fstat, dirfd, st, 0L, 0L, 0L) != 0)
 			return -1;
 		map_owner(&st->st_uid, &st->st_gid);
+		cl_fix(st->st_dev, st->st_ino, &st->st_nlink);
 		return 0;
 	}
 	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT))
@@ -719,6 +783,7 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 	if (lane_call(SYS_newfstatat, at, host, st, flags, 0L) != 0)
 		return -1;
 	map_owner(&st->st_uid, &st->st_gid);
+	cl_fix(st->st_dev, st->st_ino, &st->st_nlink);
 	if (nofollow && S_ISLNK(st->st_mode))
 		st->st_size = link_size(at, host, st->st_size);
 	return 0;
@@ -757,6 +822,7 @@ int statx(int dirfd, const char *path, int flags, unsigned mask, struct statx *s
 	if (lane_call(SYS_statx, at, host, flags, mask, stx) != 0)
 		return -1;
 	map_owner(&stx->stx_uid, &stx->stx_gid);
+	cl_fix(makedev(stx->stx_dev_major, stx->stx_dev_minor), stx->stx_ino, &stx->stx_nlink);
 	if (nofollow && host[0] && S_ISLNK(stx->stx_mode))
 		stx->stx_size = (unsigned long) link_size(at, host, (long) stx->stx_size);
 	return 0;
@@ -1105,6 +1171,7 @@ static int lane_hook(unsigned long *r)
 			res = lane_rawc(SYS_statx, at, host, fl, r[3], x);
 			if (res == 0) {
 				map_owner(&x->stx_uid, &x->stx_gid);
+				cl_fix(makedev(x->stx_dev_major, x->stx_dev_minor), x->stx_ino, &x->stx_nlink);
 				if (nofollow && host[0] && S_ISLNK(x->stx_mode))
 					x->stx_size = (unsigned long) link_size(at, host, (long) x->stx_size);
 			}
@@ -1114,6 +1181,7 @@ static int lane_hook(unsigned long *r)
 			res = lane_rawc(SYS_newfstatat, at, host, st, fl, 0L);
 			if (res == 0) {
 				map_owner(&st->st_uid, &st->st_gid);
+				cl_fix(st->st_dev, st->st_ino, &st->st_nlink);
 				if (nofollow && host[0] && S_ISLNK(st->st_mode))
 					st->st_size = link_size(at, host, st->st_size);
 			}
@@ -1340,3 +1408,58 @@ static void patch_libc(void)
 		plain_svc(SYS_mprotect, (long) lo, (long) (hi - lo), PROT_READ | PROT_EXEC);
 	}
 }
+
+/* ---- link and unlink, for the link counts (see cl_count) ------------------ */
+static void *real_linkat, *real_unlinkat;
+
+int linkat(int od, const char *op, int nd, const char *np, int flags)
+{
+	struct stat a, b;
+	int r = REAL(linkat)(od, op, nd, np, flags), e = errno;
+
+	if (r == 0 && root_len &&
+	    lane_fstatat(od, op, &a, (flags & AT_SYMLINK_FOLLOW) ? 0 : AT_SYMLINK_NOFOLLOW) == 0 &&
+	    lane_fstatat(nd, np, &b, AT_SYMLINK_NOFOLLOW) == 0 && (a.st_dev != b.st_dev || a.st_ino != b.st_ino)) {
+		int i, g;
+
+		cl_take(1);
+		if ((i = cl_find(a.st_dev, a.st_ino)) >= 0) {
+			g = cl[i].group;
+		} else {
+			g = cl_next++;
+			cl_put(a.st_dev, a.st_ino, g);
+		}
+		cl_put(b.st_dev, b.st_ino, g);
+		cl_give();
+	}
+	errno = e;
+	return r;
+}
+
+int link(const char *op, const char *np) { return linkat(AT_FDCWD, op, AT_FDCWD, np, 0); }
+
+int unlinkat(int dirfd, const char *path, int flags)
+{
+	struct stat st;
+	int known = 0, r, e;
+
+	if (__atomic_load_n(&ncl, __ATOMIC_ACQUIRE) && !(flags & AT_REMOVEDIR) &&
+	    lane_fstatat(dirfd, path, &st, AT_SYMLINK_NOFOLLOW) == 0)
+		known = 1;
+	r = REAL(unlinkat)(dirfd, path, flags);
+	e = errno;
+	if (r == 0 && known) {
+		int i;
+
+		cl_take(1);
+		if ((i = cl_find(st.st_dev, st.st_ino)) >= 0) {
+			memmove(&cl[i], &cl[i + 1], sizeof cl[0] * (size_t) (ncl - i - 1));
+			ncl--;
+		}
+		cl_give();
+	}
+	errno = e;
+	return r;
+}
+
+int unlink(const char *path) { return unlinkat(AT_FDCWD, path, 0); }

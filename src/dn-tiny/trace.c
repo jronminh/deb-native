@@ -207,6 +207,73 @@ static void fake_result(struct tracee *t, int fake)
  * copied as a symlink, a directory is refused as link(2) refuses it. */
 #define LINK_BUF 65536
 
+/* ---- hard links: Android refuses them and linkat makes a copy.  The copies of one
+ * file are remembered here, so a stat says the link count a real link would (shadow
+ * locks its files by linking a temporary name and checking for a count of 2); an
+ * unlink drops the name it removes.  One table for every process of the session.
+ * The copies do not share their contents: a write to one is not seen in the other. */
+#define CL_MAX 64
+static struct { u64 dev, ino; int group; } copies[CL_MAX];
+static int n_copies, next_group = 1;
+
+static int cl_find(u64 dev, u64 ino)
+{
+	int i;
+
+	for (i = 0; i < n_copies; i++)
+		if (copies[i].dev == dev && copies[i].ino == ino)
+			return i;
+	return -1;
+}
+
+static void cl_put(u64 dev, u64 ino, int group)
+{
+	if (n_copies == CL_MAX) {                       /* full: forget the oldest */
+		memmove(&copies[0], &copies[1], sizeof copies[0] * (CL_MAX - 1));
+		n_copies--;
+	}
+	copies[n_copies].dev = dev;
+	copies[n_copies].ino = ino;
+	copies[n_copies].group = group;
+	n_copies++;
+}
+
+static void cl_add(u64 odev, u64 oino, u64 ndev, u64 nino)
+{
+	int i = cl_find(odev, oino), g;
+
+	if (i >= 0) {
+		g = copies[i].group;
+	} else {
+		g = next_group++;
+		cl_put(odev, oino, g);
+	}
+	cl_put(ndev, nino, g);
+}
+
+static void cl_drop(u64 dev, u64 ino)
+{
+	int i = cl_find(dev, ino);
+
+	if (i < 0)
+		return;
+	memmove(&copies[i], &copies[i + 1], sizeof copies[0] * (size_t) (n_copies - i - 1));
+	n_copies--;
+}
+
+/* the link count of (dev, ino) if it is one of the copies, else 0 */
+static unsigned cl_count(u64 dev, u64 ino)
+{
+	int i = cl_find(dev, ino), j;
+	unsigned n = 0;
+
+	if (i < 0)
+		return 0;
+	for (j = 0; j < n_copies; j++)
+		n += copies[j].group == copies[i].group;
+	return n;
+}
+
 static i64 link_copy(const char *old, const char *new)
 {
 	static char buf[LINK_BUF];
@@ -252,6 +319,12 @@ static i64 link_copy(const char *old, const char *new)
 done:
 	if (r == 0)
 		r = sc(52, out, mode & 07777, 0, 0, 0, 0);   /* fchmod: the umask must not narrow it */
+	if (r == 0) {
+		u64 nst[18];
+
+		if (sc(80, out, (i64) nst, 0, 0, 0, 0) == 0)
+			cl_add(st[0], st[1], nst[0], nst[1]);
+	}
 	sys_close((int) in);
 	sys_close((int) out);
 	if (r < 0)
@@ -277,6 +350,7 @@ static void link_by_copy(struct tracee *t)
 }
 
 static void answer_at_entry(struct tracee *t, const struct row *rw);
+static void unlink_copy(struct tracee *t);
 
 void trace_enter(struct tracee *t, const struct row *rw)
 {
@@ -298,6 +372,8 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		rewrite_path(t, rw->path_arg2);
 	if (rw->special == SP_LINK)             /* linkat: the platform denies it, so it is a copy */
 		link_by_copy(t);
+	if (rw->nr == 35 && n_copies && !(t->r.regs[2] & 0x200))   /* unlinkat, not AT_REMOVEDIR */
+		unlink_copy(t);
 	if (rw->result == R_LINK || rw->result == R_STAT || rw->result == R_STATX)
 		answer_at_entry(t, rw);         /* skipped when answered: no exit stop */
 }
@@ -613,6 +689,18 @@ static int answer_statx(struct tracee *t, const struct row *rw)
 		return 1;
 	}
 	map_owner(stx, 20);
+	if (n_copies) {
+		u64 ino;
+		unsigned ma, mi, n;
+
+		memcpy(&ino, stx + 32, sizeof ino);
+		memcpy(&ma, stx + 136, sizeof ma);
+		memcpy(&mi, stx + 140, sizeof mi);
+		n = cl_count(((u64) (ma & 0xfffff000u) << 32) | ((u64) (ma & 0xfffu) << 8) |
+			     ((u64) (mi & 0xffffff00u) << 12) | (mi & 0xffu), ino);
+		if (n)
+			memcpy(stx + 16, &n, sizeof n);
+	}
 	memcpy(&mode, stx + 28, sizeof mode);
 	if (how == 1 && (mode & 0xf000) == 0xa000) {
 		memcpy(&size, stx + 40, sizeof size);
@@ -644,6 +732,15 @@ static int answer_stat(struct tracee *t, const struct row *rw)
 		return 1;
 	}
 	map_owner(st, 24);
+	if (n_copies) {
+		u64 dev, ino;
+		unsigned n;
+
+		memcpy(&dev, st, sizeof dev);
+		memcpy(&ino, st + 8, sizeof ino);
+		if ((n = cl_count(dev, ino)) != 0)
+			memcpy(st + 20, &n, sizeof n);
+	}
 	memcpy(&mode, st + 16, sizeof mode);
 	if (how == 1 && (mode & 0xf000) == 0xa000) {     /* a link: its size is the target as the program reads it */
 		memcpy(&size, st + 48, sizeof size);
@@ -652,6 +749,16 @@ static int answer_stat(struct tracee *t, const struct row *rw)
 	}
 	mon_skip(t, mon_write(t, t->r.regs[rw->result_arg], st, sizeof st) == (ssize_t) sizeof st ? 0 : -14);
 	return 1;
+}
+
+/* unlinkat at entry, its path mapped: a copy losing a name */
+static void unlink_copy(struct tracee *t)
+{
+	char host[300];
+	u64 st[18];
+
+	if (name_for_tracer(t, 0, host, sizeof host) == 1 && sys_fstatat(host, st, 0x100) == 0)
+		cl_drop(st[0], st[1]);
 }
 
 static void answer_at_entry(struct tracee *t, const struct row *rw)
