@@ -99,7 +99,8 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   the host's `/tmp`: tmux, ssh-agent, gpg-agent, dbus need it.
 - **Rows from a catalog**: generate the rows from one table giving each syscall
   a class (path, result, socket, exec, identity, refused, none) instead of the
-  tables in `gen_rows.py`.
+  tables in `gen_rows.py`. Termux's glibc `fakesyscall.json` is a checked
+  list of answers to start from (`docs/reference/prior-art.md`).
 
 ## Identity and files
 
@@ -144,7 +145,8 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 - **libc's generic `syscall()`**: its `svc` takes the number from a register,
   so the shim's patch (`mov x8,#nr; svc`) misses it. FEX, and programs that
   call `openat` through `syscall()`, stop in the tracer for each path call.
-  Route it to the lane for the lane's numbers.
+  Route it to the lane for the lane's numbers. svc-hook patches every `svc`,
+  which also reaches the loader's own calls (`docs/reference/prior-art.md`).
 - **A second tracer for a busy subtree**: one tracer serves every stop of a
   session; DroidDeck measured 2.5x the stops per second with two (a game tree
   apart from Steam's). Only if bursts on many threads show up after the shim.
