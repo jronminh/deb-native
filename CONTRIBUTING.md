@@ -6,35 +6,24 @@ are welcome.
 ## Reporting a bug
 
 Use the [bug report](https://github.com/jronminh/deb-native/issues/new/choose)
-form, and check
-[`docs/reference/known-issues.md`](docs/reference/known-issues.md) first. Include
-the `termux-dn-doctor` output and the package state (`dpkg -l <package>`) — most
-issues here come down to those. Setup questions go to
-[Discussions](https://github.com/jronminh/deb-native/discussions). Security
-problems: see [`SECURITY.md`](SECURITY.md).
+form. Include the phone and Android version, the prefix's `boot/version`, the
+command and what it printed, and, if you can, the same command run without the
+shim (move `usr/lib/deb-native/dn-lane.so` aside) and with `DN_LANE_PATCH=0`.
+Security problems: see [`SECURITY.md`](SECURITY.md).
 
 ## Working on the code
 
-Read [`AGENTS.md`](AGENTS.md) first; it is the conventions doc. The essentials:
+Read [`AGENTS.md`](AGENTS.md) first; it holds the conventions. The essentials:
 
-- **It runs on a device.** deb-native targets Termux on unrooted Android, so
-  there is no dev container and no CI that runs the program — you need a Termux
-  device (with the [requirements](README.md#requirements)) to build and test.
-  Where the maintainer's reference device is a phone reached over SSH, yours is
-  whatever you have.
-- **Test where it runs.** Edit anywhere, then build and run the on-device tests
-  there — `tests/` each have their own `run.sh` — before you commit.
-- **Run one command at a time** — no chaining, no parallel jobs.
-- **Docs state only the current state**; history lives in `docs/log/`. New docs
-  and directory READMEs follow `templates/`.
-- After moving or renaming a doc or script, run
-  `tools/check-repo.py`.
-
-CI on pull requests runs only **static** checks (`check-repo.py`, shell and
-Python syntax); it cannot run the program. Say what you tested, and on what.
+- **It runs on a phone.** There is no CI and no container that can run it: build
+  and test in Termux on an `arm64` phone ([`docs/building.md`](docs/building.md)).
+- **Test what you change** in a prefix: build the runtime, copy it into a prefix
+  (`docs/building.md`, "Updating the runtime in a prefix"), and run the programs
+  your change touches, with and without the shim.
+- **Docs state the current truth**; history lives in git.
 
 ## Pull requests
 
-Keep them small and focused, say what you tested and on which device, and match
+Keep them small and focused, say what you tested and on which phone, and match
 the surrounding style. No CLA; contributions are under the project license
 (GPL-3.0-or-later).

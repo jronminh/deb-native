@@ -1,19 +1,14 @@
 #!/bin/sh
-# The prefix's init.  dn-monitor, the tree's root process, runs this -- reached
-# through boot/boot.sh, the host's entry (docs/spec/prefix.md, "The boot/
-# directory"):
+# The prefix's init: dn-tiny, the tree's root process, runs it (boot/boot.sh):
 #
-#   dn-monitor -- /usr/bin/bash /boot/init.sh [COMMAND [ARG...]]
+#   dn-tiny -t ROOT -- /usr/bin/bash /boot/init.sh [COMMAND [ARG...]]
 #
-# Everything here uses **guest paths**: to the runtime the tree is "/", and
-# dn-policy maps each guest path back into the tree.  It sets up the
-# environment and, on a first boot (no /var/lib/deb-native/bootstrapped), completes the
-# prefix from /var/lib/deb-native/profile by itself, then runs the command (default: an
-# interactive shell).
+# Everything here uses guest paths: to the runtime the tree is "/".  It sets up
+# the environment, then runs the command (default: an interactive shell).
 set -eu
-PATH=/usr/lib/deb-native/priv:/usr/sbin:/usr/bin:/sbin:/bin
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
-# The host's environment reaches the tree through dn-monitor: drop the host's
+# The host's environment reaches the tree through dn-tiny: drop the host's
 # deb-native knobs and its locale (the tree ships no locales but C.UTF-8).
 for v in $(env | sed -n 's/^\(DN_[A-Za-z0-9_]*\)=.*/\1/p'); do
   unset "$v"
@@ -54,12 +49,6 @@ if [ ! -e /usr/sbin/policy-rc.d ]; then
   mkdir -p /usr/sbin
   printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
   chmod 755 /usr/sbin/policy-rc.d
-fi
-
-# First boot: complete the prefix (apt update + install /var/lib/deb-native/profile), then
-# mark it done.  A later boot skips straight to the command.
-if [ -f /var/lib/deb-native/profile ] && [ ! -f /var/lib/deb-native/bootstrapped ]; then
-  /usr/bin/bash /boot/bootstrap.sh
 fi
 
 if [ $# -gt 0 ]; then

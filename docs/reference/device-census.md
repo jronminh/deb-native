@@ -1,12 +1,11 @@
 # Device census: which syscalls the app domain may call
 
-<!-- template: templates/docs.template.md -->
-
 A measurement of one device and one execution context, with the method, so it
 can be repeated on another phone. It answers a narrow question: which syscalls
-kill a process in the app's own domain under Android's seccomp filter. It is the
-per-device truth that [`monitor.md`](../spec/monitor.md) calls the census, taken
-by hand once. Living doc; the table is one device, not a general policy.
+kill a process in the app's own domain under Android's seccomp filter. Taken by hand;
+the table is one device, not a general policy. What the runtime answers for the
+calls killed here: [`architecture.md`](../architecture.md), "What Android
+refuses".
 
 ## Contents
 
@@ -15,15 +14,6 @@ by hand once. Living doc; the table is one device, not a general policy.
 - [Result](#result)
 - [What it means for glibc programs](#what-it-means-for-glibc-programs)
 - [Open items](#open-items)
-
-## Related docs
-
-- [`android-platform.md`](android-platform.md) — the three enforcement gates this
-  measures Gate A of.
-- [`../log/android-seccomp-audit.md`](../log/android-seccomp-audit.md) — the
-  original audit, on a different device and Android version.
-- [`ptrace-interception.md`](ptrace-interception.md) — how a tracer answers these
-  calls.
 
 ## Method
 
@@ -149,30 +139,20 @@ What changed:
 Stock Debian glibc (`libc6 2.41-12+deb13u4`, the loader and libraries as they come
 out of the `.deb`) started through `ld.so` in the app, with no tracer, was killed
 by `SIGSYS` with and without `GLIBC_TUNABLES=glibc.pthread.rseq=0`, and ran under
-the freestanding tracer (`ptrace-interception.md`) with `rseq` and
-`set_robust_list` answered once for each process. This does not reproduce the
-segfault the original audit recorded on this phone for a glibc taken through the
-translation pipeline (`patchelf` on every ELF); that pipeline had, the same day, a
-bug of its own that produced an identical segfault (`docs/log/`). The stock files
-here were not modified.
+`dn-tiny` with `rseq` and `set_robust_list` answered once for each process. The
+stock files were not modified.
 
 ## What it means for glibc programs
 
 - Every glibc process, static or dynamic, calls `rseq` and `set_robust_list` at
   startup. In this domain both kill it. `GLIBC_TUNABLES=glibc.pthread.rseq=0`
-  removes only the first: a static glibc binary (`dn-tiny` as built, with glibc
-  2.41) was killed three times out of three with the tunable set. The outermost
-  process therefore needs either an early `SIGSYS` handler (`dn-start.c`) or no
-  glibc startup at all.
+  removes only the first: a static glibc binary was killed three times out of
+  three with the tunable set. The outermost process (the tracer, which nothing
+  traces) therefore has no glibc startup at all: `dn-tiny` has no libc.
 - glibc 2.33 and later try `faccessat2` first for `access` and `faccessat`, and
   `clone3` for threads and `posix_spawn`, and fall back only on `ENOSYS`. Here they
   are killed, so a program that makes those calls dies unless something answers
   `ENOSYS`.
-- The note in [`android-platform.md`](android-platform.md) that `set_robust_list`
-  "was allowed on this device" was inferred from the absence of a warning under
-  `dn-trace`'s static build. That build installs a handler that answers it
-  silently (`dn-start.c`), so no warning does not mean allowed. The census shows
-  it is killed.
 - A freestanding binary (this one) starts and runs in the app, since it never
   makes the startup calls.
 
@@ -180,9 +160,7 @@ here were not modified.
 
 - Two devices, one Android version each. Samsung may change the policy between
   releases of the same Android version.
-- Whether the filter's action is `SECCOMP_RET_TRAP` (a catchable `SIGSYS`) or a
-  kill is inferred from `dn-trace` catching it at the signal stop; the census
-  reports only the death. An in-process handler has not been tried here.
-- 62 numbers is a sample, not the whole table. The per-device list a runtime uses
-  should be produced by running the census at first boot, as `monitor.md`
-  describes.
+- The census reports only the death; that the action is `SECCOMP_RET_TRAP` (a
+  catchable `SIGSYS`) is known from `dn-tiny` answering these calls at the signal
+  stop.
+- 62 numbers is a sample, not the whole table.

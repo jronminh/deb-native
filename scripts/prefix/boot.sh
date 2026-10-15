@@ -1,25 +1,14 @@
 #!/system/bin/sh
-# The tree's boot (docs/spec/prefix.md, "The boot/ directory"): start
-# dn-monitor, the tree's root process, against this prefix and its init.
+# The prefix's entry, boot/boot.sh: start dn-tiny, the tracer, as the tree's root
+# process, against this prefix and its init (docs/building.md, "The prefix").
 #
-# Why a script and not a bare command line.  dn-monitor is the *outermost*
-# process -- nothing traces it -- so its own startup must survive Android's
-# seccomp unaided.  A stock static glibc registers `rseq` at startup, and the
-# app domain TRAPs it: SIGSYS, and with no tracer above to answer it, the
-# process dies.  The supported tunable `glibc.pthread.rseq=0` turns that
-# registration off, and glibc reads tunables before `main` -- so the variable
-# has to be in the environment of the exec that starts dn-monitor, i.e. set by
-# whoever launches it.  This script is that launcher, and it is the only place
-# the boot's environment is decided.
+# The host runs it from anywhere; the prefix root is this file's directory's
+# parent, so a prefix can be moved or copied as it is.  The shebang is Android's
+# shell (there is no /bin/sh on the device); `sh boot/boot.sh` works too.  Any
+# arguments are the command to run in the prefix (default: an interactive shell).
 #
-# This file is the entry by convention (`boot/boot.sh`): the host runs it with
-# the prefix root as the working directory.  The shebang is `/system/bin/sh`,
-# Android's shell (there is no `/bin/sh` on the device), so the host can exec
-# the entry directly; running it through a shell (`sh boot/boot.sh`) works too.
-# Any arguments are passed on to the prefix's init, which takes
-# [COMMAND [ARG...]] (docs/spec/prefix.md).
-GLIBC_TUNABLES=glibc.pthread.rseq=0
-export GLIBC_TUNABLES
-
-root=${0%/*}/..
-exec "$root/usr/lib/deb-native/dn-monitor" -- /usr/bin/bash /boot/init.sh "$@"
+#   DN_TINY_FLAGS   extra dn-tiny options, e.g. "-s 500" to poll 500 us for the
+#                   next stop before sleeping (faster on stop-heavy work, more CPU)
+root=$(CDPATH= cd -- "${0%/*}/.." && pwd) || exit 1
+# shellcheck disable=SC2086
+exec "$root/usr/lib/deb-native/dn-tiny" -q ${DN_TINY_FLAGS:-} -t "$root" -- /usr/bin/bash /boot/init.sh "$@"

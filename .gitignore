@@ -1,23 +1,5 @@
-# Build artifacts of the runtime (see scripts/prefix/interface.tsv).
-src/*.so
-src/.build/
-src/.build-runtime/
-src/tracer/**/*.o
-src/tracer/**/*.d
-src/tracer/dn-trace
-src/tracer/build.h
-src/tracer/syscall/dn-catalog.c
-src/tracer/licenses
-src/tracer/loader/loader
-src/tracer/loader/loader-m32
-src/tracer/loader/loader-info.c
-src/tracer/.check_*
-!src/tracer/.check_*.c
-# Test build outputs.
-tests/shim-libc/test
-tests/shim-libc/dn-shim.so
-tests/tracer-nss/nss-probe
-# Core dumps (kept distinct from the src/ module directory).
-src.[0-9]*
+# The runtime build (scripts/build-runtime.sh)
+/build/
+# Core dumps
 *.core
 __pycache__/

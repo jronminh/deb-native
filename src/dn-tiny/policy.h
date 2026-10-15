@@ -1,5 +1,5 @@
 /* policy.h -- what the catcher and the applier are told; the only place that
- * knows which syscall means what.  In the real tree this is dn-policy. */
+ * knows which syscall means what. */
 #ifndef POLICY_H
 #define POLICY_H
 #include <stddef.h>

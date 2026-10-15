@@ -1,74 +1,59 @@
 # deb-native
 
-A self-contained Debian `arm64` userland in a tarball.
+Debian `arm64`, unmodified, in a directory on an Android phone: `apt`, `dpkg`,
+`gcc`, `python3`, `git` running as they do on Debian, with no root, no `chroot`,
+no namespaces and no emulation.
 
-## Build
+> **Pre-alpha** (0.8.0). AI-assisted and not independently audited
+> ([`SECURITY.md`](SECURITY.md)). The threat model is accidental leaks, not
+> isolation: this is not a sandbox.
 
-An `arm64` Linux host with `gcc`, `make`, `libtalloc-dev`, `python3`.
+## How
 
-```sh
-scripts/build/build-trace.sh    # → src/.build-runtime/
-```
+The repository is the runtime's source and the recipe for a prefix; you build
+both in Termux. Nothing prebuilt is downloaded except Debian's own packages.
 
-## Package
+- **`dn-tiny`**, a tracer of about 2,000 lines with no libc, runs every program
+  in the prefix under `ptrace` behind a seccomp filter. The few syscalls that
+  need it get their paths mapped into the prefix, root faked, or an answer
+  Android will not give.
+- **`dn-lane.so`**, a shim compiled in the prefix against its own glibc, does the
+  same work inside each program for the calls that only read, including libc's
+  own (its `svc` sites are patched at load), so they cost no stop.
 
-A host with `dpkg-deb`, `wget`, `xz`.
+A gcc build runs at about the speed of a native compiler; a `find` over 13,000
+files takes 60 ms. Details: [`docs/architecture.md`](docs/architecture.md),
+[`docs/performance.md`](docs/performance.md).
 
-```sh
-DN_RUNTIME=src/.build-runtime \
-PREFIX_ROOT=... DEB_LIST=... \
-  scripts/build/build-core-deb.sh BASE core-deb.tar.gz
-scripts/build/package-prefix.sh core-deb --root ... --name core-deb
-```
+## Quick start
 
-## Install
-
-On a host with `curl` (or toybox `wget`) and `tar`, fetch the rolling `prefix`
-release and ship it to a destination you choose (the artifact is relocatable:
-dn-monitor derives the prefix root from its own location):
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/jronminh/deb-native/main/scripts/host/install-from-release.sh | sh -s -- core-deb "$HOME/core-deb"
-```
-
-The second argument is `DEST` (default `./core-deb`). `core-ultra`, or from a
-checkout:
+In Termux, on an `arm64` phone:
 
 ```sh
-scripts/host/install-from-release.sh core-ultra /data/local/deb-native
-scripts/host/install-from-release.sh core-deb
+pkg install git clang python debootstrap
+git clone https://github.com/jronminh/deb-native
+cd deb-native
+scripts/build-prefix.sh ~/debian          # builds the runtime, then the prefix
+~/debian/boot/boot.sh                     # a root shell in Debian
 ```
 
-Or ship a tarball already on disk:
+`scripts/build-prefix.sh --set dev ~/debian` adds a toolchain, `git`, `curl`
+and `python3`; `--packages "..."` adds anything else. Everything is in
+[`docs/building.md`](docs/building.md).
 
-```sh
-scripts/host/ship-prefix.sh core-deb.tar.gz DEST
-```
+## Layout
 
-## Boot
+| path | |
+| --- | --- |
+| `src/dn-tiny/` | the runtime: the tracer and the shim ([`README`](src/dn-tiny/README.md)) |
+| `scripts/build-runtime.sh` | builds `dn-tiny` |
+| `scripts/build-prefix.sh` | builds a prefix in Termux |
+| `scripts/prefix/` | the prefix's `boot.sh` and `init.sh` |
+| `docs/` | [building](docs/building.md), [architecture](docs/architecture.md), [performance](docs/performance.md), [reference](docs/reference/) |
 
-The host boots the tree by running the entry, `boot/boot.sh`, from the prefix
-root (`boot/install.sh` writes the same command to `DN_SESSION_SHELL` if the host
-sets it). `dn-monitor` derives the tree from its own location, so the artifact
-installs at any path:
-
-```sh
-cd DEST
-boot/boot.sh
-```
-
-`boot/boot.sh` sets the one environment variable `dn-monitor`'s own startup needs
-and execs it. With no program, `dn-monitor` runs the prefix's init, which sets
-the environment and, on a first boot, completes the prefix itself
-(`dpkg --configure -a`, then `apt update` + the `var/lib/deb-native/profile` packages), then
-opens an interactive shell. Pass a program instead of the default shell:
-
-```sh
-boot/boot.sh /usr/bin/dpkg -l
-```
-
-See [`docs/spec/prefix.md`](docs/spec/prefix.md), "Boot".
+The earlier runtime (`dn-monitor`, a PRoot fork) and its shipped prefixes are at
+tag `legacy-dn-monitor`.
 
 ## License
 
-GPL-3.0-or-later — see [`LICENSE`](LICENSE).
+GPL-3.0-or-later — see [`LICENSE`](LICENSE) and [`CREDITS.md`](CREDITS.md).

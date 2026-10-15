@@ -2,109 +2,62 @@
 
 ## What this repo is
 
-`deb-native` builds a **self-contained Debian `arm64` userland in a tarball**
-(a "prefix"): its own glibc, `apt`, and files. A **poor host** installs it
-with nothing but a POSIX shell and `tar`/`dd`/`sed` (toybox is enough) — no
-root, no `chroot`, no namespaces, and the host's own tree untouched. Goal: a
-package reaches `dpkg` status **`ii`** and its program runs **by name**,
-unprivileged. "Install and run, not emulate" — no isolation.
+The source of a runtime that runs an unmodified Debian `arm64` tree (a
+**prefix**) on Android as an ordinary app, with no root, no `chroot` and no
+namespaces, and the recipe for building a prefix in Termux. Nothing is shipped
+prebuilt: users build the runtime and their prefix themselves
+([`docs/building.md`](docs/building.md)). There is no CI.
 
-## How it ships: build → ship → boot
+- `src/dn-tiny/` — the runtime: `dn-tiny` (the tracer, no libc) and
+  `dn-lane.so` (the shim, built in a prefix against its glibc).
+  [`docs/architecture.md`](docs/architecture.md) is how they work.
+- `scripts/build-runtime.sh` — builds `dn-tiny` (any aarch64 compiler; python3
+  for the rows).
+- `scripts/build-prefix.sh` — builds a prefix in Termux: debootstrap's first
+  stage, the second stage under `dn-tiny`, apt, the shim, packages.
+- `scripts/prefix/` — `boot.sh` (the entry) and `init.sh` (the tree's init),
+  copied into a prefix's `boot/`.
+- `docs/` — building, architecture, performance, reference.
 
-There is **no build on the host**.
+The 0.7 runtime (`dn-monitor`, a PRoot fork, shipped prefixes, CI) is at tag
+`legacy-dn-monitor`; nothing in the tree depends on it.
 
-- **Build** (a build host: `scripts/build/`): the runtime
-  runtime (`scripts/build/build-trace.sh` — `dn-trace`, one static
-  binary with the syscall catalog embedded, plain-gcc, linked against stock
-  `libc6-dev`), and the prefix artifact
-  (`build-core-deb.sh` + `package-prefix.sh`, which writes `boot/` and
-  `var/lib/deb-native/` —
-  `docs/spec/prefix.md`).
-- **Ship** (`scripts/host/ship-prefix.sh`, the host's own shell): read
-  `boot/version` without extracting, extract, run `boot/install.sh`. This is the
-  one install path, on a **poor host** (POSIX sh + toybox only).
-- **Activate / boot**: the artifact's own `boot/install.sh` (host shell) wires
-  the session entry; the host then boots the tree by running the entry,
-  `boot/boot.sh`, which starts `dn-monitor` and the prefix's init -- `dn-monitor`
-  derives the prefix root from its own location, so the artifact is relocatable;
-  init completes `var/lib/deb-native/profile` itself on a first boot.
+## Where it runs
 
-Run time is one policy in two places: dn-policy, called in-process by
-dn-shim (the fast path) and via `dn-trace`'s ptrace fallback
-(`src/tracer/`). The old shim, maintainer-script rewriting and ELF editor
-are gone; a `.deb` installs intact (`docs/spec/runtime.md`).
+Everything happens on the phone, in Termux: edit, build, test, commit, push
+(`gh` is the git credential helper). The maintainer's phone is a Samsung Galaxy
+S10e, Android 12, kernel 4.14; an Android 16 phone is the second target.
 
-## Layout
+## Build and test
 
-- `src/` — `dn-policy/` (the shared policy library), `tracer/` (dn-trace, a
-  pruned PRoot fork), `dn-tiny/` (a freestanding tracer with no PRoot code,
-  not yet wired into the runtime: `docs/reference/ptrace-interception.md`),
-  `syscalls.tsv` (the syscall catalog).
-- `scripts/build/` — build host: runtime, artifact assembly, packaging.
-- `scripts/host/` — the host's own shell (poor host): ship,
-  install (activation), update.
-- `scripts/prefix/` — run by the prefix (its own glibc); `interface.tsv` is
-  the module surface.
-- `patches/` — the glibc patches: the Android base + the dn-policy wiring.
-- `tests/` — on-device smoke tests; `tools/` — repo checks + helpers;
-  `docs/` — spec, reference, notes.
+```sh
+scripts/build-runtime.sh                     # build/dn-tiny
+scripts/build-prefix.sh --set dev ~/work/p   # a fresh prefix, end to end
+```
 
-## Where truth lives / workflow
+To test a runtime change without a new prefix, copy `build/dn-tiny` into an
+existing prefix's `usr/lib/deb-native/`, and rebuild the shim in it with the
+prefix's own gcc (`docs/building.md`, "Updating the runtime in a prefix"). Then
+run what the change touches, with and without the shim, and compare against the
+previous build interleaved: the phone's timings vary by 10-20% between runs.
 
-- **Source of truth is the phone: `ssh fe2` → `~/deb-native`** (the build host
-  with the toolchain). It pushes to GitHub. A local copy may be stale: edit
-  locally, `scp`/`tar` to `fe2`, build and test there, then commit and push
-  there. `gh` is authed as `jronminh`.
-- **Current WSL workspace:** `/root/deb-native` is the current clone used for
-  editing and cross-building. `/root/deb-native-old` is an archived older
-  clone; do not use it for current runtime work.
-- **Device test workflow:** build the AArch64 runtime or prefix artifact in
-  WSL, push test files with `adb` to `/data/local/tmp`, then copy them into
-  the debuggable `org.dn.shell` sandbox with `run-as`. The active device is
-  the Samsung `SM-G970W` (Android 12, SDK 31, arm64-v8a); check the actual
-  connection with `adb devices -l` rather than assuming a port or IP.
-- **App test environment:** `org.dn.shell` has `targetSdk=28` and supports
-  `run-as`. The current runtime prefix is
-  `/data/user/0/org.dn.shell/files/prefixes/dn-stock`. It contains the
-  `0.7.1-dev` runtime with `dn-monitor`, `dn-interp`, and `dn-shim.so`.
-  `core-deb` and `dn-gcc` on the device are legacy prefixes using the older
-  runtime and must not be used for current runtime experiments.
-- **Direct device test:** use absolute paths and invoke the prefix entry
-  directly, for example:
+Things worth running for any change to the tracer or the shim: `ls -lR` and
+`find -printf` over `/usr` and `/etc` (diff the output against the previous
+build), `stat`/`readlink`/`realpath` on links and missing names, `pwd -P`,
+Python's `os` calls with `dir_fd`, `git init` and `git status`, `apt-get
+install`, `useradd`/`userdel`, a threaded program, a `vfork` child that
+`chdir`s, and a build (Lua 5.4 with `make`). `dn-tiny` without `-q` prints the
+stop counts.
 
-  ```sh
-  adb shell run-as org.dn.shell \
-    /data/user/0/org.dn.shell/files/prefixes/dn-stock/boot/boot.sh \
-    /usr/bin/id
-  ```
+To test inside an app (dn-shell) rather than Termux: `run-as` runs in the
+`runas_app` domain, not the app's, so type the command into the app's own shell
+session (`adb shell input text ...`) and read its output from a file.
 
-  This should report fake `uid=0(root)`. For a pushed runtime component,
-  stage it under `/data/local/tmp`, then copy it with one quoted `run-as`
-  command so the whole command stays inside the app uid:
+## Conventions
 
-  ```sh
-  adb push FILE /data/local/tmp/FILE
-  adb shell "run-as org.dn.shell sh -c 'cp -f /data/local/tmp/FILE /data/user/0/org.dn.shell/files/prefixes/dn-stock/DEST && chmod 755 /data/user/0/org.dn.shell/files/prefixes/dn-stock/DEST'"
-  ```
-
-  Do not uninstall the app or remove prefixes without explicit approval.
-- No `sudo`/root anywhere. Persisted files (code, docs, commits) are in
-  **English**.
-- **Docs state only the current truth.** No history narrative; history lives
-  in git.
-- After moving/renaming/deleting a doc or a script, run
-  `tools/check-repo.py` (links, anchors, reachability), plus
-  `check-modules.py`, `check-interface.py` and `check-paths.py`.
-
-## Priority: ship the idea fast, don't study every failure
-
-The owner's time is the scarce resource. Build the idea the **fastest testable
-way**; dig into a failure only when the shortest path is actually blocked.
-
-- Choose the approach that directly exercises the idea.
-- **Verify the change builds** before trusting or shipping it.
-
-## Rule
-
-**Run one command at a time.** No chaining, no parallel jobs, no `-P` fan-out.
-Wait for the command to finish and read its output before starting the next.
+- Persisted text (code, docs, commits) in English.
+- Docs state the current truth only; history lives in git.
+- Comments say why, in the surrounding style; C is kernel style (tabs).
+- Run one command at a time: no chaining of independent steps, no parallel jobs.
+- Commit messages: a `part: what changed` subject, then why, and the measurements
+  when the change is about speed.
