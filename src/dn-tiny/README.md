@@ -42,11 +42,19 @@ The tracer mostly lets the program run the syscall itself, with its path argumen
 rewritten: a call that acts in the program's own context (`openat` makes an fd in its
 table, `chdir` moves its cwd) has to. Where the answer is only data and costs an exit
 stop to rewrite, the tracer makes the call itself and skips it, as it does for fake
-root: `readlinkat`, `newfstatat` and `fstat` are run by the tracer on the host path
+root: `readlinkat`, `newfstatat` and `statx` are run by the tracer on the host path
 (`/proc/<pid>/fd/<n>` for an fd), the owner and a link's size are fixed in its own
 copy, and the result is written into the program's buffer. When it cannot name the
 file, the call runs and the exit stop rewrites the kernel's answer as before. The
-summary line counts these as `answered`.
+summary line counts these as `answered`. `fstat` is not caught: it has no path, and
+only the owner would be fixed. The shim fixes it in the `fstat` a program calls;
+libc's own (`fopen`, `opendir`, the loader) read sizes and modes, and a program
+without the shim (static, Go) sees the real owner there.
+
+Fake root costs the shim one question per process: `dn-lane.so` asks the tracer
+`getresuid` and `getresgid` once and answers the `get*id` calls from that copy; a
+`set*id` goes to the tracer and drops it (the tracer copies a process's ids to its
+children).
 
 Build and run:
 

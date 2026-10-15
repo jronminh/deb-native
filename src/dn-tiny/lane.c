@@ -6,6 +6,7 @@
  *   open, openat (read-only flags)       opened here, so the fd is the program's own
  *   stat, lstat, fstatat, fstat          stat here, the owner read as root, a link's size
  *   access, faccessat (no flags)         checked here
+ *   getuid, geteuid, getresuid, ...      answered from the ids the tracer gave once
  *
  * A path is resolved by the tracer's rules (policy.c): a guest path is the prefix's,
  * except the host directories the tracer leaves as they are; an absolute link target
@@ -508,3 +509,82 @@ static int lane_faccessat(int dirfd, const char *path, int mode, int flags)
 
 int faccessat(int dirfd, const char *path, int mode, int flags) { return lane_faccessat(dirfd, path, mode, flags); }
 int access(const char *path, int mode) { return lane_faccessat(AT_FDCWD, path, mode, 0); }
+
+/* ---- identity: asked of the tracer once, answered from a copy -------------- */
+/* The tracer keeps each process's ids (fake root: getresuid and getresgid are its
+ * rows); the shim asks once, with x5 clear so the calls stop, and answers getuid and
+ * the rest from what it was told.  A set*id goes to the tracer and drops the copy. */
+static unsigned ids[6];                 /* ruid euid suid rgid egid sgid */
+static int ids_ok;
+
+static long plain_svc(long nr, long a, long b, long c)
+{
+	register long x8 __asm__("x8") = nr;
+	register long x0 __asm__("x0") = a;
+	register long x1 __asm__("x1") = b;
+	register long x2 __asm__("x2") = c;
+	register long x5 __asm__("x5") = 0;
+
+	__asm__ volatile("svc #0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x5) : "memory");
+	return x0;
+}
+
+static int load_ids(void)
+{
+	unsigned v[6];
+
+	if (__atomic_load_n(&ids_ok, __ATOMIC_ACQUIRE))
+		return 1;
+	if (plain_svc(SYS_getresuid, (long) &v[0], (long) &v[1], (long) &v[2]) != 0 ||
+	    plain_svc(SYS_getresgid, (long) &v[3], (long) &v[4], (long) &v[5]) != 0)
+		return 0;
+	memcpy(ids, v, sizeof ids);
+	__atomic_store_n(&ids_ok, 1, __ATOMIC_RELEASE);
+	return 1;
+}
+
+static void drop_ids(void) { __atomic_store_n(&ids_ok, 0, __ATOMIC_RELEASE); }
+
+static void *real_getuid, *real_geteuid, *real_getgid, *real_getegid, *real_getresuid, *real_getresgid;
+
+uid_t getuid(void) { return root_len && load_ids() ? ids[0] : REAL(getuid)(); }
+uid_t geteuid(void) { return root_len && load_ids() ? ids[1] : REAL(geteuid)(); }
+gid_t getgid(void) { return root_len && load_ids() ? ids[3] : REAL(getgid)(); }
+gid_t getegid(void) { return root_len && load_ids() ? ids[4] : REAL(getegid)(); }
+
+int getresuid(uid_t *r, uid_t *e, uid_t *s)
+{
+	if (!root_len || !load_ids())
+		return REAL(getresuid)(r, e, s);
+	*r = ids[0];
+	*e = ids[1];
+	*s = ids[2];
+	return 0;
+}
+
+int getresgid(gid_t *r, gid_t *e, gid_t *s)
+{
+	if (!root_len || !load_ids())
+		return REAL(getresgid)(r, e, s);
+	*r = ids[3];
+	*e = ids[4];
+	*s = ids[5];
+	return 0;
+}
+
+#define SET_ID(name, params, args)                              \
+	static void *real_##name;                               \
+	int name params                                         \
+	{                                                       \
+		int ret_ = REAL(name) args;                     \
+		drop_ids();                                     \
+		return ret_;                                    \
+	}
+SET_ID(setuid, (uid_t u), (u))
+SET_ID(seteuid, (uid_t u), (u))
+SET_ID(setreuid, (uid_t r, uid_t e), (r, e))
+SET_ID(setresuid, (uid_t r, uid_t e, uid_t s), (r, e, s))
+SET_ID(setgid, (gid_t g), (g))
+SET_ID(setegid, (gid_t g), (g))
+SET_ID(setregid, (gid_t r, gid_t e), (r, e))
+SET_ID(setresgid, (gid_t r, gid_t e, gid_t s), (r, e, s))

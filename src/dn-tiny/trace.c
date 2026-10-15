@@ -298,7 +298,7 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		rewrite_path(t, rw->path_arg2);
 	if (rw->special == SP_LINK)             /* linkat: the platform denies it, so it is a copy */
 		link_by_copy(t);
-	if (rw->result == R_LINK || rw->result == R_STAT)
+	if (rw->result == R_LINK || rw->result == R_STAT || rw->result == R_STATX)
 		answer_at_entry(t, rw);         /* skipped when answered: no exit stop */
 }
 
@@ -569,13 +569,68 @@ static int answer_link(struct tracee *t)
 	return 1;
 }
 
+/* a link's size as the program will read its target (fix_link_size, from the tracer) */
+static void link_size(const char *host, u64 *size)
+{
+	char link[256], guest[256];
+	ssize_t n = sys_readlink(host, link, sizeof link - 1);
+
+	if (n <= 0)
+		return;
+	link[n] = 0;
+	*size = policy_unpath(link, guest, sizeof guest) != 0 ? (u64) strlen(guest) : (u64) n;
+}
+
+/* the owner at buf + off (uid, then gid): the real ids read as root */
+static void map_owner(char *buf, unsigned off)
+{
+	unsigned id[2];
+
+	memcpy(id, buf + off, sizeof id);
+	id[0] = policy_map_uid(id[0]);
+	id[1] = policy_map_gid(id[1]);
+	memcpy(buf + off, id, sizeof id);
+}
+
+/* statx(dirfd, path, flags, mask, buf).  struct statx is 256 bytes: the owner at 20
+ * and 24, the mode at 28 (16 bits), the size at 40. */
+static int answer_statx(struct tracee *t, const struct row *rw)
+{
+	char host[300], stx[256];
+	int flags = (int) t->r.regs[2], how, r;
+	unsigned short mode;
+	u64 size;
+
+	how = name_for_tracer(t, flags & 0x1000, host, sizeof host);            /* AT_EMPTY_PATH */
+	if (how == 0)
+		return 0;
+	/* an fd is named by its /proc link, which is followed; the sync type is kept */
+	r = sys_statx(host, flags & (how == 2 ? 0x6000 : 0x6900), (unsigned) t->r.regs[3], stx);
+	if (r == -2 && how == 2 && (int) t->r.regs[0] >= 0)
+		r = -9;                                  /* no such fd: EBADF */
+	if (r < 0) {
+		mon_skip(t, r);
+		return 1;
+	}
+	map_owner(stx, 20);
+	memcpy(&mode, stx + 28, sizeof mode);
+	if (how == 1 && (mode & 0xf000) == 0xa000) {
+		memcpy(&size, stx + 40, sizeof size);
+		link_size(host, &size);
+		memcpy(stx + 40, &size, sizeof size);
+	}
+	mon_skip(t, mon_write(t, t->r.regs[rw->result_arg], stx, sizeof stx) == (ssize_t) sizeof stx ? 0 : -14);
+	return 1;
+}
+
 /* newfstatat(dirfd, path, buf, flags) and fstat(fd, buf).  struct stat is 128 bytes:
  * the mode at 16, the owner at 24 and 28, the size at 48. */
 static int answer_stat(struct tracee *t, const struct row *rw)
 {
-	char host[300], st[128], link[256], guest[256];
+	char host[300], st[128];
 	int at = t->r.regs[8] == 79, flags = at ? (int) t->r.regs[3] : 0, how, r;
-	unsigned mode, id[2];
+	unsigned mode;
+	u64 size;
 
 	how = at ? name_for_tracer(t, flags & 0x1000, host, sizeof host)          /* AT_EMPTY_PATH */
 		 : (fd_name(t->pid, (int) t->r.regs[0], 0, host, sizeof host) ? 2 : 0);
@@ -588,22 +643,12 @@ static int answer_stat(struct tracee *t, const struct row *rw)
 		mon_skip(t, r);
 		return 1;
 	}
-	memcpy(id, st + 24, sizeof id);
-	id[0] = policy_map_uid(id[0]);
-	id[1] = policy_map_gid(id[1]);
-	memcpy(st + 24, id, sizeof id);
+	map_owner(st, 24);
 	memcpy(&mode, st + 16, sizeof mode);
 	if (how == 1 && (mode & 0xf000) == 0xa000) {     /* a link: its size is the target as the program reads it */
-		ssize_t n = sys_readlink(host, link, sizeof link - 1);
-
-		if (n > 0) {
-			u64 size = (u64) n;
-
-			link[n] = 0;
-			if (policy_unpath(link, guest, sizeof guest) != 0)
-				size = (u64) strlen(guest);
-			memcpy(st + 48, &size, sizeof size);
-		}
+		memcpy(&size, st + 48, sizeof size);
+		link_size(host, &size);
+		memcpy(st + 48, &size, sizeof size);
 	}
 	mon_skip(t, mon_write(t, t->r.regs[rw->result_arg], st, sizeof st) == (ssize_t) sizeof st ? 0 : -14);
 	return 1;
@@ -617,6 +662,8 @@ static void answer_at_entry(struct tracee *t, const struct row *rw)
 		done = answer_link(t);
 	else if (rw->result == R_STAT)
 		done = answer_stat(t, rw);
+	else if (rw->result == R_STATX)
+		done = answer_statx(t, rw);
 	if (done)
 		trace_n_answered++;
 }

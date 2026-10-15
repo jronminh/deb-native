@@ -742,12 +742,13 @@ libc-internal calls whatever the fast path does):
   and the Lua build 18.9 s -> 14.6 s on average (`-s 500`), `realpath` results identical
   to the tracer's. The current version also covers `open`/`openat` (read-only flags),
   the `stat` family and `access`; `realpath`, `open`, `stat`, `lstat`, `fstat` and
-  `access` give the same answers as without it on 96 test lines, but with it
-  `git init` fails (`cannot opendir '/usr/share/git-core/templates/branches'`) and
-  `apt-get clean` fails (`Unable to read /var/cache/apt/ - opendir`), every time;
-  a build of the same file with logging calls added does not fail. Find that before
-  the shim goes into a prefix. Remaining stops with the shim, by syscall: `openat`
-  52%, `fstat` 26%, `newfstatat` 15%, `faccessat` 4%.
+  `access` give the same answers as without it on 96 test lines, and `git init` and
+  `apt-get clean` pass (the shim issues its own `svc` and clears `x5` after it:
+  through libc's `syscall()` the cookie stayed in `x5`, and the next call libc made by
+  itself, `opendir`'s `openat`, passed the filter unmapped). Lua build (Termux,
+  `-s 500`, interleaved): entry stops 58.7k -> 5.3k, mapped paths 52.1k -> 2.2k,
+  16.0 s and 16.8 s -> 12.2 s and 11.3 s. Before it ships: the rest of the checks
+  after a bootstrap with it, and a run in an app session.
 - **Open for speed**: the remaining 58k entry stops are mostly `readlinkat` from
   `realpath` (one per component), only the shim fast lane below removes those; `statx`
   and `getcwd` still use the exit stop (rare in a build); measure `-s` in an app
@@ -788,6 +789,71 @@ libc-internal calls whatever the fast path does):
 - **Who calls `readlinkat`**: the guess is `realpath()` in `cpp`/`gcc`/libiberty
   (glibc resolves it with an internal `__readlink`, one call per component). Confirm
   with a `realpath` test program and per-program counts.
+
+**What is left with the shim** (measured 2026-10-15, Termux, `-s 500`, the fixed
+`dn-lane.so`; the per-syscall counts come from a probe build of the tracer, not in the
+tree):
+
+- **Compiling is near its floor.** The Lua build's 5.3k remaining entry stops cost
+  about 0.4 s of 11.3 s. By syscall: read-only `openat` the shim does not see 2.4k
+  (libc-internal and the loader: about 820 are the loader opening libraries by host
+  path, about 1.2k are glibc loading `C.UTF-8` file by file in every process: it tries
+  `C.UTF-8/*`, then `C.utf8/*`, `gconv`, `LC_MESSAGES`), `fstat` 1.7k (no path: only
+  the owner read as root), `execve` 196, `faccessat` 193 (the loader's `/etc/*`
+  check). With `LC_ALL=C` the stops fall to 3.6k and the time does not move. An exec
+  under `dn-tiny` costs about 2.8 ms (200 runs of `true`: 0.57 s; 1.33 s natively in
+  Termux).
+- **File-tree work is not.** `find /usr -type f`: 264-295 ms against 57 ms natively;
+  `ls -lR /usr/share/doc`: 252 ms against 31 ms. The stops there are path mappings
+  the shim does not take: `*at` calls on a real dirfd (about 3k, `find`), `statx`
+  with its exit stop and `lgetxattr`/`llistxattr` (1.6k each, `ls -l`), and `fstat`.
+- **Dropping the fake-root reads** (rows for `get*id` and the `fstat`/`statx` owner,
+  44 rows and 3 exit rows) removes about 30% of these stops (11.5k entry and 1.8k exit
+  -> 9.2k and 11). With `-s 500` that is no measurable time (a stop costs about 30
+  us); without `-s` the same file-tree work takes 2.4-4.1 s instead of 5.5-6.2 s
+  (`find` 1.0-1.5 s against 2.0-2.3 s, `ls -lR` 1.0-2.1 s against 2.7-3.1 s), so
+  fake root as it is costs a third to a half of it.
+- **Letting real-dirfd calls pass in the filter** brings `find` to 57 ms with the
+  same output (12863 files, 2511 links), but a link with an absolute target is then
+  followed on the host: `openat(fd of /etc/alternatives, "awk")` gives `ENOENT`. Not
+  acceptable; the filter cannot read the path, the shim can.
+
+**Plan: the shim first, the tracer as the net** (`monitor.md`, "The cascade": the
+shim front-runs, the tracer takes the residual). One law (`policy.c`) in both; a part
+of it moves to the shim when it is frequent and only reads, and stays in the tracer
+when it is rare, changes the tree, or must hold for programs without the shim
+(static binaries, Go, an inline `svc`). A call the shim misses is slower, never wrong.
+
+1. **Make the shim safe with threads**: the link cache and the cached working
+   directory in `lane.c` are unlocked globals; a torn entry gives a wrong answer
+   (gcc is single-threaded, node, cargo and apt are not). Also a `vfork` /
+   `posix_spawn` child writes its parent's copies.
+2. **Move to the shim**: `*at` calls on a real dirfd (a one-component name with a
+   no-follow flag goes straight through; otherwise read the link first), `statx`,
+   the `xattr` calls, `getcwd`, the fake-root reads (ask the tracer once per process,
+   then answer from a copy; a `set*id` still goes to the tracer). Measure `find`,
+   `ls -lR` and the Lua build again.
+   **Fake root at the cost of nothing beyond the path stops: done** (the goal is no
+   accidental identity leak, not isolation; `src/dn-tiny/README.md`). The `fstat`
+   row is gone, `statx` is answered at entry, the shim answers `get*id` from one
+   question per process. The accepted gap: a program without the shim (static, Go)
+   sees the real owner through `fstat` only. Measured (Termux, no `-s`, interleaved,
+   3 runs): the file-tree set (`find`, `git status`, `dpkg -l`, `apt-cache show`,
+   `ls -lR`) 7.7-9.3 s -> 4.1-6.4 s, entry stops 11.5k -> 9.3k, exit stops 1825 ->
+   11; the Lua build 5.3k -> 3.6k stops, 14.4 s -> 13.0 s (one run each). `id`,
+   `stat`, `ls -ln`, Python's `stat`/`lstat`/`fstat`/`getres[ug]id`, `setresuid`
+   then `fork` and exec, `git status`, `apt-get -s install`, `dpkg -l` and
+   `dn-substtest` give the same answers as before. Still to move: the rest of this
+   item.
+3. **Patch the `svc` sites of `libc.so.6` at load** (as `svc-hook` does: each `svc`
+   becomes a `b` to a trampoline within 128 MB) so that libc-internal calls (`opendir`,
+   `fopen`, locale, `gconv`) take the shim too, with the stock `libc6` package left
+   as Debian ships it. First check that the app domain may make patched text
+   executable (`execmod`), in Termux, in the app, and on the Android 16 phone.
+4. **In the prefix, at no cost**: `C.UTF-8` in `/usr/lib/locale/locale-archive` (one
+   file mapped instead of about 12 opened per process), and
+   `GLIBC_TUNABLES=glibc.pthread.rseq=0` (one platform `SIGSYS` stop less per
+   process).
 
 **Coverage of the rows** (surveyed 2026-10-14 against the arm64 syscalls that take or
 return a path, a socket path, an exec or an identity):

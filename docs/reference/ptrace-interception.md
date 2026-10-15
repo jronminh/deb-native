@@ -249,7 +249,7 @@ buffer, the policy gives the new text:
 | --- | --- |
 | `getcwd` | the guest path: the prefix root is removed, the prefix itself reads `/` |
 | `readlinkat` | the same, for any link text that starts with the prefix root; for `/proc/self/exe` and `/proc/<pid>/exe`, the program that process runs |
-| `newfstatat`, `fstat`, `statx` | the owner: the real uid and gid read 0 (so `ls -l` and `stat` show root, files the program creates included) |
+| `newfstatat`, `statx` | the owner: the real uid and gid read 0 (so `ls -l` and `stat` show root, files the program creates included); `fstat` is not caught, the shim fixes the owner in a program's own `fstat` |
 
 `/proc/<pid>/exe` needs a record per process. The exec gate notes, at execve entry,
 the real program (through the loader, the loader would be wrong) as the kernel
