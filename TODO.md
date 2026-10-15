@@ -861,8 +861,12 @@ when it is rare, changes the tree, or must hold for programs without the shim
 3. **Patch the `svc` sites of `libc.so.6` at load** (as `svc-hook` does: each `svc`
    becomes a `b` to a trampoline within 128 MB) so that libc-internal calls (`opendir`,
    `fopen`, locale, `gconv`) take the shim too, with the stock `libc6` package left
-   as Debian ships it. First check that the app domain may make patched text
-   executable (`execmod`), in Termux, in the app, and on the Android 16 phone.
+   as Debian ships it. Patched text may be made executable (`execmod`) on the
+   Android 12 phone, both in Termux and in the app (`untrusted_app_27`, targetSdk 28):
+   a private mapping of the prefix's `libc.so.6`, written, then `PROT_READ|PROT_EXEC`
+   again, and anonymous memory from RW to RX; checked 2026-10-15 from inside an app
+   session (`run-as` runs as `runas_app`, not the app's domain). Not yet checked on the
+   Android 16 phone.
 4. **In the prefix, at no cost: done** (`scripts/prefix/init.sh`). `localedef` will
    not put `C.utf8` in `locale-archive` (it adds the same data under another name), so
    init makes `/usr/lib/locale/C.UTF-8` a link to `C.utf8`: glibc tries that spelling
