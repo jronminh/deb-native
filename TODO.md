@@ -877,7 +877,13 @@ when it is rare, changes the tree, or must hold for programs without the shim
    same output; file-tree set 793 -> 242 stops (without `-s`, `ls -lR` 170-206 ->
    57-58 ms); Lua build 2577 -> 1727 stops, the same time (11-12 s: it is gcc's own
    work). `git init`, `apt-get clean`, `apt-get -s install`, fake root, the thread and
-   `vfork` checks pass. Left: `ld.so`'s own opens (954 `openat` and 128 `faccessat` in
+   `vfork` checks pass. **In an app session** (2026-10-15, `org.dn.shell.dev` on the
+   Android 12 phone, `untrusted_app_27`, the `core-deb-tiny` prefix, interleaved
+   against the app's dn-tiny of 2026-10-14 without the shim): Lua build 91.8 s
+   (58.3k entry, 46.7k exit stops) -> 11.9 s (1720, 0), with or without `-s 500`;
+   regression set 64.2 s -> 0.88 s, the same output; file-tree set 2.3-2.9 s ->
+   0.27-0.36 s (`find` 1.3 s -> 70 ms, `ls -lR` 0.7-1.0 s -> 50-73 ms); fake root,
+   `git init`, `apt-get clean`, the thread and `vfork` checks pass. Left: `ld.so`'s own opens (954 `openat` and 128 `faccessat` in
    the Lua build: the program, the shim and the libraries, before the shim is loaded),
    the cancellable path (324), and `execve`. Patched text may be made executable (`execmod`) on the
    Android 12 phone, both in Termux and in the app (`untrusted_app_27`, targetSdk 28):
