@@ -10,5 +10,8 @@
 #   DN_TINY_FLAGS   extra dn-tiny options, e.g. "-s 500" to poll 500 us for the
 #                   next stop before sleeping (faster on stop-heavy work, more CPU)
 root=$(CDPATH= cd -- "${0%/*}/.." && pwd) || exit 1
+# The host's loader knobs are for its own libc: Termux's LD_PRELOAD is a bionic
+# library, and the prefix's glibc loader fails on it before init.sh could drop it.
+unset LD_PRELOAD LD_LIBRARY_PATH
 # shellcheck disable=SC2086
 exec "$root/usr/lib/deb-native/dn-tiny" -q ${DN_TINY_FLAGS:-} -t "$root" -- /usr/bin/bash /boot/init.sh "$@"
