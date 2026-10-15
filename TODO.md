@@ -824,10 +824,15 @@ of it moves to the shim when it is frequent and only reads, and stays in the tra
 when it is rare, changes the tree, or must hold for programs without the shim
 (static binaries, Go, an inline `svc`). A call the shim misses is slower, never wrong.
 
-1. **Make the shim safe with threads**: the link cache and the cached working
-   directory in `lane.c` are unlocked globals; a torn entry gives a wrong answer
-   (gcc is single-threaded, node, cargo and apt are not). Also a `vfork` /
-   `posix_spawn` child writes its parent's copies.
+1. **Make the shim safe with threads: done.** The link cache, the working directory
+   and the ids are seqlocks, and the last two are tagged with the pid they were asked
+   for (a `vfork` child shares its parent's memory: with the old shim a child's
+   `chdir` and `setuid` showed in its parent; `pthread_atfork` keeps them in a forked
+   child). "Not a link" is cached too (it was asked again every time). Checked: 8
+   threads, 160k `realpath`/`stat`/`getuid` calls, no wrong answer; the `vfork` case;
+   Lua build 2.8k entry stops, 10.4-11.1 s with `-s 500`. Still to do: the shim's own
+   resolver is a second copy of the law (`is_host_path`, `resolve`); link `policy.c`
+   instead.
 2. **Move to the shim**: `*at` calls on a real dirfd (a one-component name with a
    no-follow flag goes straight through; otherwise read the link first), `statx`,
    the `xattr` calls, `getcwd`, the fake-root reads (ask the tracer once per process,

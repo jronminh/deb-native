@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,7 +44,7 @@
 static char root[PATH_MAX];             /* the prefix root, a host path; "" = not set up */
 static size_t root_len;
 static volatile unsigned *gen;          /* the shared link generation, or NULL: no cache */
-static char cwd[PATH_MAX];              /* the guest working directory, "" = unknown */
+static char cwd[PATH_MAX];              /* the guest working directory (get_cwd) */
 static unsigned real_uid, real_gid;     /* read as root, as the tracer does (policy_map_uid) */
 
 #define REAL(name) ((__typeof__(&name)) real_fn(#name, &real_##name))
@@ -80,6 +81,8 @@ static long lane_svc(long nr, long a, long b, long c, long d, long e)
 #define lane_call(nr, a, b, c, d, e) \
 	lane_svc(nr, (long) (a), (long) (b), (long) (c), (long) (d), (long) (e))
 
+static void lane_atfork(void);
+
 /* ---- set up: the root from this library's own path, the shared generation ---- */
 __attribute__((constructor)) static void lane_init(void)
 {
@@ -109,6 +112,7 @@ __attribute__((constructor)) static void lane_init(void)
 			gen = (volatile unsigned *) m;
 		close((int) fd);
 	}
+	pthread_atfork(NULL, NULL, lane_atfork);
 	memcpy(root, di.dli_fname, n - t);
 	root[n - t] = '\0';
 	root_len = n - t;                               /* set last: until now everything falls back */
@@ -148,10 +152,71 @@ static int to_host(const char *g, char *host, size_t cap)
 	return 0;
 }
 
-/* readlink of a guest path: on the host path, through the lane, from the cache */
+/* Threads and vfork.  The copies below are shared by every thread of the process,
+ * and by a vfork or posix_spawn child until it execs.  Each is a seqlock: a reader
+ * that sees a write under way, or a sequence that moved while it copied, does
+ * without the copy.  What only a process can answer for itself (its working
+ * directory, its ids) is also tagged with the pid it was asked for, so a vfork
+ * child's answer is never its parent's; fork retags (lane_atfork). */
+static int seq_begin(unsigned *seq)
+{
+	unsigned s = __atomic_load_n(seq, __ATOMIC_ACQUIRE);
+
+	return (s & 1) || !__atomic_compare_exchange_n(seq, &s, s + 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)
+	       ? -1 : (int) (s >> 1);
+}
+
+static void seq_end(unsigned *seq) { __atomic_add_fetch(seq, 1, __ATOMIC_RELEASE); }
+
+static int seq_read(unsigned *seq, unsigned *s)
+{
+	*s = __atomic_load_n(seq, __ATOMIC_ACQUIRE);
+	return !(*s & 1);
+}
+
+static int seq_check(unsigned *seq, unsigned s)
+{
+	__atomic_thread_fence(__ATOMIC_ACQUIRE);
+	return __atomic_load_n(seq, __ATOMIC_RELAXED) == s;
+}
+
+/* readlink of a guest path: on the host path, through the lane, from the cache.
+ * "Not a link" (-EINVAL) is cached as well: it is the answer most components get. */
 #define LC_SLOTS 2048
-struct lc { unsigned gen, hash; int r; char key[200]; char tgt[120]; };
+struct lc { unsigned seq, gen, hash; int r; char key[200]; char tgt[120]; };
 static struct lc lcache[LC_SLOTS];
+
+static int lc_get(struct lc *e, unsigned cur, unsigned h, const char *host, size_t len, char *buf, size_t n, long *out)
+{
+	unsigned s;
+	int r;
+
+	if (!seq_read(&e->seq, &s) || e->gen != cur || e->hash != h || len >= sizeof e->key ||
+	    memcmp(e->key, host, len + 1) != 0)
+		return 0;
+	r = e->r;
+	if (r > (int) sizeof e->tgt || (r > 0 && (size_t) r > n))
+		return 0;
+	if (r > 0)
+		memcpy(buf, e->tgt, (size_t) r);
+	if (!seq_check(&e->seq, s))
+		return 0;
+	*out = r;
+	return 1;
+}
+
+static void lc_put(struct lc *e, unsigned cur, unsigned h, const char *host, size_t len, const char *buf, long r)
+{
+	if (len >= sizeof e->key || r >= (long) sizeof e->tgt || seq_begin(&e->seq) < 0)
+		return;
+	e->gen = cur;
+	e->hash = h;
+	e->r = (int) r;
+	memcpy(e->key, host, len + 1);
+	if (r > 0)
+		memcpy(e->tgt, buf, (size_t) r);
+	seq_end(&e->seq);
+}
 
 static int guest_readlink(const char *g, char *buf, size_t n)
 {
@@ -167,22 +232,12 @@ static int guest_readlink(const char *g, char *buf, size_t n)
 	for (size_t i = 0; i < len; i++)
 		h = (h ^ (unsigned char) host[i]) * 16777619u;
 	e = &lcache[h % LC_SLOTS];
-	if (gen && e->gen == cur && e->hash == h && strcmp(e->key, host) == 0 && (size_t) e->r <= n) {
-		r = e->r;
-		if (r > 0)
-			memcpy(buf, e->tgt, (size_t) r);
-	} else {
+	if (!gen || !lc_get(e, cur, h, host, len, buf, n, &r)) {
 		r = lane_call(SYS_readlinkat, AT_FDCWD, host, buf, n, 0L);
 		if (r < 0)
 			r = -errno;
-		if (gen && len < sizeof e->key && r < (long) sizeof e->tgt) {
-			e->gen = cur;
-			e->hash = h;
-			e->r = (int) r;
-			memcpy(e->key, host, len + 1);
-			if (r > 0)
-				memcpy(e->tgt, buf, (size_t) r);
-		}
+		if (gen)
+			lc_put(e, cur, h, host, len, buf, r);
 	}
 	/* a target the kernel spells as a host path inside the prefix is the guest's */
 	if (r > 0 && (size_t) r >= root_len && strncmp(buf, root, root_len) == 0 &&
@@ -196,18 +251,54 @@ static int guest_readlink(const char *g, char *buf, size_t n)
 }
 
 /* ---- the working directory: asked once, dropped by chdir/fchdir ---------- */
+static unsigned cwd_seq, cwd_epoch;     /* the epoch moves with every chdir */
+static int cwd_pid;                     /* the process the copy is for, 0: none */
 static void *real_chdir, *real_fchdir;
+
+static void drop_cwd(void)
+{
+	__atomic_add_fetch(&cwd_epoch, 1, __ATOMIC_ACQ_REL);
+	__atomic_store_n(&cwd_pid, 0, __ATOMIC_RELEASE);
+}
+
+/* the guest working directory into out (PATH_MAX); 0, or -errno */
+static int get_cwd(char *out)
+{
+	int pid = getpid();
+	unsigned s, ep;
+
+	if (seq_read(&cwd_seq, &s) && __atomic_load_n(&cwd_pid, __ATOMIC_ACQUIRE) == pid) {
+		memcpy(out, cwd, PATH_MAX);
+		if (seq_check(&cwd_seq, s) && memchr(out, 0, PATH_MAX))
+			return 0;
+	}
+	ep = __atomic_load_n(&cwd_epoch, __ATOMIC_ACQUIRE);
+	if (!getcwd(out, PATH_MAX))
+		return -errno;
+	if (seq_begin(&cwd_seq) >= 0) {
+		if (__atomic_load_n(&cwd_epoch, __ATOMIC_ACQUIRE) == ep) {     /* no chdir meanwhile */
+			strcpy(cwd, out);
+			__atomic_store_n(&cwd_pid, pid, __ATOMIC_RELEASE);
+		}
+		seq_end(&cwd_seq);
+	}
+	return 0;
+}
 
 int chdir(const char *p)
 {
-	cwd[0] = '\0';
-	return REAL(chdir)(p);
+	int r = REAL(chdir)(p);
+
+	drop_cwd();
+	return r;
 }
 
 int fchdir(int fd)
 {
-	cwd[0] = '\0';
-	return REAL(fchdir)(fd);
+	int r = REAL(fchdir)(fd);
+
+	drop_cwd();
+	return r;
 }
 
 /* ---- resolving ------------------------------------------------------------ */
@@ -229,9 +320,12 @@ static int resolve(const char *in, int nofollow, char *res)
 	if (in[0] == '/') {
 		res[0] = '\0';
 	} else {
-		if (!cwd[0] && !getcwd(cwd, sizeof cwd))
-			return -errno;
-		strcpy(res, strcmp(cwd, "/") == 0 ? "" : cwd);
+		int e = get_cwd(res);
+
+		if (e < 0)
+			return e;
+		if (strcmp(res, "/") == 0)
+			res[0] = '\0';
 	}
 	rl = strlen(res);
 	strcpy(rest, in);
@@ -516,7 +610,8 @@ int access(const char *path, int mode) { return lane_faccessat(AT_FDCWD, path, m
  * rows); the shim asks once, with x5 clear so the calls stop, and answers getuid and
  * the rest from what it was told.  A set*id goes to the tracer and drops the copy. */
 static unsigned ids[6];                 /* ruid euid suid rgid egid sgid */
-static int ids_ok;
+static unsigned ids_seq, ids_epoch;     /* the epoch moves with every set*id */
+static int ids_pid;                     /* the process the copy is for, 0: none */
 
 static long plain_svc(long nr, long a, long b, long c)
 {
@@ -530,46 +625,76 @@ static long plain_svc(long nr, long a, long b, long c)
 	return x0;
 }
 
-static int load_ids(void)
+/* this process's ids into v; 1, or 0 when the tracer could not be asked */
+static int get_ids(unsigned v[6])
 {
-	unsigned v[6];
+	int pid = getpid();
+	unsigned s, ep;
 
-	if (__atomic_load_n(&ids_ok, __ATOMIC_ACQUIRE))
-		return 1;
+	if (seq_read(&ids_seq, &s) && __atomic_load_n(&ids_pid, __ATOMIC_ACQUIRE) == pid) {
+		memcpy(v, ids, sizeof ids);
+		if (seq_check(&ids_seq, s))
+			return 1;
+	}
+	ep = __atomic_load_n(&ids_epoch, __ATOMIC_ACQUIRE);
 	if (plain_svc(SYS_getresuid, (long) &v[0], (long) &v[1], (long) &v[2]) != 0 ||
 	    plain_svc(SYS_getresgid, (long) &v[3], (long) &v[4], (long) &v[5]) != 0)
 		return 0;
-	memcpy(ids, v, sizeof ids);
-	__atomic_store_n(&ids_ok, 1, __ATOMIC_RELEASE);
+	if (seq_begin(&ids_seq) >= 0) {
+		if (__atomic_load_n(&ids_epoch, __ATOMIC_ACQUIRE) == ep) {     /* no set*id meanwhile */
+			memcpy(ids, v, sizeof ids);
+			__atomic_store_n(&ids_pid, pid, __ATOMIC_RELEASE);
+		}
+		seq_end(&ids_seq);
+	}
 	return 1;
 }
 
-static void drop_ids(void) { __atomic_store_n(&ids_ok, 0, __ATOMIC_RELEASE); }
+static void drop_ids(void)
+{
+	__atomic_add_fetch(&ids_epoch, 1, __ATOMIC_ACQ_REL);
+	__atomic_store_n(&ids_pid, 0, __ATOMIC_RELEASE);
+}
+
+/* a forked child has its parent's working directory and ids: keep the copies */
+static void lane_atfork(void)
+{
+	int pid = getpid();
+
+	if (__atomic_load_n(&cwd_pid, __ATOMIC_ACQUIRE) != 0)
+		__atomic_store_n(&cwd_pid, pid, __ATOMIC_RELEASE);
+	if (__atomic_load_n(&ids_pid, __ATOMIC_ACQUIRE) != 0)
+		__atomic_store_n(&ids_pid, pid, __ATOMIC_RELEASE);
+}
 
 static void *real_getuid, *real_geteuid, *real_getgid, *real_getegid, *real_getresuid, *real_getresgid;
 
-uid_t getuid(void) { return root_len && load_ids() ? ids[0] : REAL(getuid)(); }
-uid_t geteuid(void) { return root_len && load_ids() ? ids[1] : REAL(geteuid)(); }
-gid_t getgid(void) { return root_len && load_ids() ? ids[3] : REAL(getgid)(); }
-gid_t getegid(void) { return root_len && load_ids() ? ids[4] : REAL(getegid)(); }
+uid_t getuid(void) { unsigned v[6]; return root_len && get_ids(v) ? v[0] : REAL(getuid)(); }
+uid_t geteuid(void) { unsigned v[6]; return root_len && get_ids(v) ? v[1] : REAL(geteuid)(); }
+gid_t getgid(void) { unsigned v[6]; return root_len && get_ids(v) ? v[3] : REAL(getgid)(); }
+gid_t getegid(void) { unsigned v[6]; return root_len && get_ids(v) ? v[4] : REAL(getegid)(); }
 
 int getresuid(uid_t *r, uid_t *e, uid_t *s)
 {
-	if (!root_len || !load_ids())
+	unsigned v[6];
+
+	if (!root_len || !get_ids(v))
 		return REAL(getresuid)(r, e, s);
-	*r = ids[0];
-	*e = ids[1];
-	*s = ids[2];
+	*r = v[0];
+	*e = v[1];
+	*s = v[2];
 	return 0;
 }
 
 int getresgid(gid_t *r, gid_t *e, gid_t *s)
 {
-	if (!root_len || !load_ids())
+	unsigned v[6];
+
+	if (!root_len || !get_ids(v))
 		return REAL(getresgid)(r, e, s);
-	*r = ids[3];
-	*e = ids[4];
-	*s = ids[5];
+	*r = v[3];
+	*e = v[4];
+	*s = v[5];
 	return 0;
 }
 
@@ -597,7 +722,9 @@ static void *real_euidaccess;
 
 int euidaccess(const char *path, int mode)
 {
-	if (root_len && load_ids() && ids[0] == ids[1] && ids[3] == ids[4])
+	unsigned v[6];
+
+	if (root_len && get_ids(v) && v[0] == v[1] && v[3] == v[4])
 		return lane_faccessat(AT_FDCWD, path, mode, 0);
 	return REAL(euidaccess)(path, mode);
 }
