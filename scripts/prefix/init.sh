@@ -21,6 +21,17 @@ done
 unset LC_ALL LANGUAGE
 LANG=C.UTF-8
 export LANG
+# glibc reads C.UTF-8 file by file, trying the directory C.UTF-8/ before
+# C.utf8/ for every category of every process; under the tracer each failed
+# open is a stop.  localedef will not put C.utf8 in the archive, so the
+# spelling glibc tries first is made to exist.
+if [ -d /usr/lib/locale/C.utf8 ] && [ ! -e /usr/lib/locale/C.UTF-8 ] && [ ! -L /usr/lib/locale/C.UTF-8 ]; then
+  ln -s C.utf8 /usr/lib/locale/C.UTF-8 2>/dev/null || true
+fi
+# Android's filter kills rseq, and glibc registers it in every process: a
+# SIGSYS stop each, for nothing.  Turn the registration off.
+GLIBC_TUNABLES=${GLIBC_TUNABLES:+$GLIBC_TUNABLES:}glibc.pthread.rseq=0
+export GLIBC_TUNABLES
 # No tty and no dialog/hterm here: debconf would otherwise probe Dialog,
 # Readline and Teletype first and print a warning for each before falling back.
 DEBIAN_FRONTEND=noninteractive

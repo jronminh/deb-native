@@ -850,10 +850,13 @@ when it is rare, changes the tree, or must hold for programs without the shim
    `fopen`, locale, `gconv`) take the shim too, with the stock `libc6` package left
    as Debian ships it. First check that the app domain may make patched text
    executable (`execmod`), in Termux, in the app, and on the Android 16 phone.
-4. **In the prefix, at no cost**: `C.UTF-8` in `/usr/lib/locale/locale-archive` (one
-   file mapped instead of about 12 opened per process), and
-   `GLIBC_TUNABLES=glibc.pthread.rseq=0` (one platform `SIGSYS` stop less per
-   process).
+4. **In the prefix, at no cost: done** (`scripts/prefix/init.sh`). `localedef` will
+   not put `C.utf8` in `locale-archive` (it adds the same data under another name), so
+   init makes `/usr/lib/locale/C.UTF-8` a link to `C.utf8`: glibc tries that spelling
+   first for every category, and the failed open is gone. `GLIBC_TUNABLES` turns
+   `rseq` off (Android's filter kills it). Lua build: entry stops 3128 -> 2764, platform
+   `SIGSYS` stops 388 -> 266. The locale files are still opened one by one, by libc,
+   and only step 3 takes those.
 
 **Coverage of the rows** (surveyed 2026-10-14 against the arm64 syscalls that take or
 return a path, a socket path, an exec or an identity):
