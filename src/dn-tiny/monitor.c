@@ -50,10 +50,10 @@ static int mode = M_FULL;
 static i64 spin_ns;                              /* -s: poll this long before blocking, 0: never */
 static unsigned long n_enter, n_exit, n_event, n_sig, n_sigsys;
 static unsigned deny_count[512];                 /* by syscall number: killed by the platform, answered here */
-static unsigned char expect_exit[1 << 16];       /* by pid, enough here */
-#define EXP(p) expect_exit[(p) & 0xffff]
-static unsigned short cur_nr[1 << 16];           /* by pid: the syscall to be seen again at exit */
-static u64 saved0[1 << 16];                      /* by pid: x0 as that syscall was entered */
+static unsigned char expect_exit[PID_SLOTS];      /* by pid */
+#define EXP(p) expect_exit[PID_SLOT(p)]
+static unsigned short cur_nr[PID_SLOTS];             /* by pid: the syscall to be seen again at exit */
+static u64 saved0[PID_SLOTS];                     /* by pid: x0 as that syscall was entered */
 
 /* ---- the filter: one TRACE rule per row -------------------------------- */
 static int install_filter(void)
@@ -271,8 +271,8 @@ static int loop(pid_t root)
 
 					/* the row says whether to stop at exit: no need for the event message */
 					msg = rw ? rw->exit_stop : 0;
-					cur_nr[p & 0xffff] = (unsigned short) t.r.regs[8];
-					saved0[p & 0xffff] = t.r.regs[0];
+					cur_nr[PID_SLOT(p)] = (unsigned short) t.r.regs[8];
+					saved0[PID_SLOT(p)] = t.r.regs[0];
 					if (rw)
 						trace_enter(&t, rw);
 					if (t.dirty)
@@ -291,11 +291,11 @@ static int loop(pid_t root)
 					how = PTRACE_SYSCALL;
 				}
 			} else if (sig == (SIGTRAP_ | 0x80)) {     /* the exit stop */
-				const struct row *rw = mode == M_FULL ? policy_row(cur_nr[p & 0xffff]) : NULL;
+				const struct row *rw = mode == M_FULL ? policy_row(cur_nr[PID_SLOT(p)]) : NULL;
 
 				n_exit++;
 				if (rw && rw->result != R_NONE && get_regs(&t) == 0) {
-					t.entry_arg0 = saved0[p & 0xffff];
+					t.entry_arg0 = saved0[PID_SLOT(p)];
 					trace_exit(&t, rw);
 					if (t.dirty)
 						set_regs(&t);
@@ -378,6 +378,20 @@ int main(int argc, char **argv)
 		return 2;
 	}
 
+	{                                        /* the per-process tables (mon.h) and this kernel's pids */
+		char b[16] = { 0 };
+		int fd = sys_open("/proc/sys/kernel/pid_max", 0);
+
+		if (fd >= 0) {
+			sys_read(fd, b, sizeof b - 1);
+			sys_close(fd);
+			if (atou(b) > PID_SLOTS) {
+				put(2, "dn-tiny: pid_max is ");
+				put(2, b);
+				put(2, "  two processes whose pids differ by 65536 would share their state\n");
+			}
+		}
+	}
 	pid = sys_fork();                        /* a raw clone: no libc, so no set_robust_list in the child */
 	if (pid < 0) {
 		put(2, "dn-tiny: clone failed\n");

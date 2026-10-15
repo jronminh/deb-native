@@ -17,7 +17,7 @@ unsigned long trace_n_rewritten;
 struct cwdc { pid_t pid; unsigned gen, lgen; char path[CWD_LEN]; };
 static struct cwdc cwd_cache[CWD_SLOTS];
 static unsigned cwd_gen = 1;
-static unsigned char pending[1 << 16];          /* by pid: the effects of the call in flight */
+static unsigned char pending[PID_SLOTS];         /* by pid: the effects of the call in flight */
 
 static void drop(int effect)
 {
@@ -29,7 +29,7 @@ static void drop(int effect)
 
 void trace_stop(pid_t pid)
 {
-	unsigned char *e = &pending[(unsigned) pid & 0xffff];
+	unsigned char *e = &pending[PID_SLOT(pid)];
 
 	if (*e) {                                       /* the call is over: what it changed is visible now */
 		drop(*e);
@@ -124,11 +124,10 @@ static void rewrite_path(struct tracee *t, int arg)
 
 /* The ids a process was last given.  Everything starts as root (0); a process that
  * drops privilege, as apt's download method does, then reads back what it set. */
-#define EXE_SLOTS_IDS (1 << 14)
 struct ids { unsigned ru, eu, su, rg, eg, sg; };
-static struct ids fake_ids[EXE_SLOTS_IDS];
+static struct ids fake_ids[PID_SLOTS];
 
-static struct ids *ids_of(pid_t pid) { return &fake_ids[(unsigned) pid % EXE_SLOTS_IDS]; }
+static struct ids *ids_of(pid_t pid) { return &fake_ids[PID_SLOT(pid)]; }
 
 static void set_id(unsigned *r, unsigned *e, unsigned *s, long a, long b, long c, int mode)
 {
@@ -356,7 +355,7 @@ void trace_enter(struct tracee *t, const struct row *rw)
 {
 	if (rw->effect) {                               /* drop now, and again once the call is over */
 		drop(rw->effect);
-		pending[(unsigned) t->pid & 0xffff] |= (unsigned char) rw->effect;
+		pending[PID_SLOT(t->pid)] |= (unsigned char) rw->effect;
 	}
 	if (rw->fake != F_NONE) {
 		fake_result(t, rw->fake);
@@ -380,19 +379,18 @@ void trace_enter(struct tracee *t, const struct row *rw)
 
 /* ---- results: what the program is told, not what the kernel returned --------- */
 
-#define EXE_SLOTS (1 << 14)
 #define EXE_LEN   128
-static char exe_now[EXE_SLOTS][EXE_LEN];          /* by pid, the program each process runs */
-static char exe_next[EXE_SLOTS][EXE_LEN];         /* noted at execve entry, valid once it succeeds */
+static char exe_now[PID_SLOTS][EXE_LEN];          /* by pid, the program each process runs */
+static char exe_next[PID_SLOTS][EXE_LEN];         /* noted at execve entry, valid once it succeeds */
 
 void trace_exe_pending(pid_t pid, const char *guest_path)
 {
-	scpy(exe_next[(unsigned) pid % EXE_SLOTS], EXE_LEN, guest_path);
+	scpy(exe_next[PID_SLOT(pid)], EXE_LEN, guest_path);
 }
 
 void trace_exe_commit(pid_t pid)
 {
-	unsigned i = (unsigned) pid % EXE_SLOTS;
+	unsigned i = PID_SLOT(pid);
 
 	memcpy(exe_now[i], exe_next[i], EXE_LEN);
 }
@@ -400,7 +398,7 @@ void trace_exe_commit(pid_t pid)
 void trace_exe_fork(pid_t parent, pid_t child)
 {
 	*ids_of(child) = *ids_of(parent);
-	memcpy(exe_now[(unsigned) child % EXE_SLOTS], exe_now[(unsigned) parent % EXE_SLOTS], EXE_LEN);
+	memcpy(exe_now[PID_SLOT(child)], exe_now[PID_SLOT(parent)], EXE_LEN);
 }
 
 /* "/proc/self/exe" or "/proc/<pid>/exe": the pid it names, or 0 if it is neither */
@@ -467,7 +465,7 @@ static void fix_link(struct tracee *t)
 	if (n <= 0 || n > (i64) sizeof b - 1)
 		return;
 	if (k > 0 && (path[k] = '\0', 1) && (who = proc_exe_pid(path, t->pid)) != 0) {
-		const char *exe = exe_now[(unsigned) who % EXE_SLOTS];
+		const char *exe = exe_now[PID_SLOT(who)];
 
 		m = (int) strlen(exe);
 		if (m == 0)
@@ -619,8 +617,8 @@ static int answer_link(struct tracee *t)
 		mon_skip(t, -22);                        /* EINVAL, as the kernel says */
 		return 1;
 	}
-	if ((who = proc_exe_pid(host, t->pid)) != 0 && exe_now[(unsigned) who % EXE_SLOTS][0]) {
-		text = exe_now[(unsigned) who % EXE_SLOTS];
+	if ((who = proc_exe_pid(host, t->pid)) != 0 && exe_now[PID_SLOT(who)][0]) {
+		text = exe_now[PID_SLOT(who)];
 		m = (int) strlen(text);
 	} else {
 		r = sys_readlink(host, b, sizeof b - 1);

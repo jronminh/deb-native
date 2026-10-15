@@ -2,6 +2,11 @@
  * stopped tracee, and nothing about any syscall. */
 #ifndef MON_H
 #define MON_H
+
+/* Per-process state is kept in tables indexed by pid.  65536 slots cover the
+ * pid_max Android sets (32768); a larger pid_max is reported at start. */
+#define PID_SLOTS 65536u
+#define PID_SLOT(p) ((unsigned) (p) & (PID_SLOTS - 1))
 #include "sys.h"
 
 struct tracee {
