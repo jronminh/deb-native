@@ -129,7 +129,25 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 - **Who sets the floor of a stop**: on this phone the tracer's big core sits at a
   low clock while the guest runs on the little cluster. Try the tracer and the
   guest on one cluster, a priority raised with `nice` (no privilege needed down to
-  -20), an ADPF hint session from the app.
+  -20), an ADPF hint session from the app. DroidDeck measured one stop at
+  6.2 us with tracer and tracee on one core, 15.5 us unpinned, 42-61 us across
+  clusters (`docs/development/proot-performance.md` in Droid-Deck/DroidDeck):
+  never pin the tracer away from its guests; try both on one cluster.
+- **The filter's order**: since 5.11 the kernel caches, per syscall number, a
+  filter whose answer depends on the number alone, and skips the filter for it.
+  `install_filter` (`monitor.c`) loads the lane's cookie (`args[5]`) for every
+  syscall before the rows, so no number is ever cached: `futex`, `read`,
+  `ioctl` run the whole filter on the Android 16 phone. Dispatch on `nr` first
+  (a number in no row and not in the lane: `ALLOW` at once), and test the
+  cookie only for the lane's numbers. On 4.14 (no cache) it still shortens the
+  path of every untraced call. Measure the Lua build before and after.
+- **libc's generic `syscall()`**: its `svc` takes the number from a register,
+  so the shim's patch (`mov x8,#nr; svc`) misses it. FEX, and programs that
+  call `openat` through `syscall()`, stop in the tracer for each path call.
+  Route it to the lane for the lane's numbers.
+- **A second tracer for a busy subtree**: one tracer serves every stop of a
+  session; DroidDeck measured 2.5x the stops per second with two (a game tree
+  apart from Steam's). Only if bursts on many threads show up after the shim.
 
 ## Emulation
 
@@ -143,16 +161,51 @@ the shim:
   denies to apps (`/proc/stat`, `loadavg`, `uptime`, `vmstat`: `top`, `uptime`,
   `ps` and `htop` read them) are the first candidates, as Termux's
   proot-distro fakes them;
-- SysV IPC (`shmget`, `shmat`, `shmdt`, `shmctl`; `semget` and `msgget` later),
+- SysV IPC (`shmget`, `shmat`, `shmdt`, `shmctl`, then `semget`/`semop` and `msgget`),
   killed by the platform today: a segment is a `memfd`, its key and id kept by
   a broker in the tracer that hands the fd over a unix socket, `shmat` an
   `mmap` of it, in the shim. Debian-noroot's `android-shmem` does the same
   with ashmem for X's MIT-SHM; PostgreSQL's postmaster needs a small segment
-  too. Do it when a program needs it;
+  too. Steam needs semaphores with the real semantics (a `semop` waiting is
+  woken when another process changes the set): huntergdavis/steamclienttermux
+  names that, with robust lists, as what made Steam run. Droid-Deck/DroidDeck's
+  `tools/linuxfs/preload/sysv.c` (GPL-3.0, as this repo) keeps shm, sem and msg
+  as files under `/dev/shm`. Do it when a program needs it;
 - privileged ports (a bind translation, and `getsockname`/`accept` back);
 - capabilities (`capget`, `PR_CAPBSET_READ`);
 - a clear refusal (`EPERM` or `ENOSYS`, with the reason) for what cannot be
   faked: real isolation, TUN, anything an LSM sees.
+
+## Graphics (later)
+
+What the Steam-on-Android projects of 2026 do (Droid-Deck/DroidDeck,
+phobos665/SteamOS-Lite, huntergdavis/steamclienttermux; all under PRoot), for
+when a prefix should draw with the GPU:
+
+- **The GPU from the prefix**: Mesa's Turnip (Vulkan for Adreno) talks to
+  `/dev/kgsl-3d0` directly from glibc, no bionic in between; OpenGL is Zink on
+  Turnip. The S10e has an Adreno 640 (a6xx, supported), `/dev/kgsl-3d0` is
+  `rw-rw-rw-`, and its buffers come from `/dev/ion` (`/dev/dma_heap` on newer
+  kernels). Needs: those nodes kept visible (step 4 of "The boundary"),
+  `ioctl` never stopped (every GPU submit is one), and probably a Mesa built
+  with `-Dfreedreno-kmds=kgsl` (check what Debian's `mesa-vulkan-drivers`
+  enables). DroidDeck's preloads show the KGSL quirks to expect: `drm.c`
+  (GEM handles over KGSL for dma-buf sharing), `kgslid.c` (a chip id fix),
+  `kgslpoll.c` (timestamp waits).
+- **The screen**: the app is a Wayland compositor (DroidDeck's
+  `app/src/main/cpp/waylandcomp`, drawing on a SurfaceView with a bionic
+  Turnip through adrenotools); clients hand dma-bufs over
+  `zwp_linux_dmabuf_v1`, and the compositor blits each frame once. One
+  `ASurfaceControl` layer per window with `AHardwareBuffer`s drops the copy
+  (about 20% more FPS measured) but needs a patch to Mesa's Wayland WSI
+  (`ZERO_COPY_SPIKE.md` there). This is the shape for dn-shell: the app the
+  compositor, the prefix its clients; X programs through Xwayland. The other
+  way, Termux:X11, broke Chromium's GPU compositing (steamclienttermux keeps
+  CEF in software).
+- **GPUs other than Adreno** (Mali, Xclipse): no open driver reaches them
+  from glibc. huntergdavis/bionic-vulkan-bridge forwards Vulkan from a glibc
+  client over a unix socket to a bionic service using the system's
+  `libvulkan.so`; compute works there, display does not yet.
 
 ## Beyond Debian, and bundles (later; the focus is Debian)
 
