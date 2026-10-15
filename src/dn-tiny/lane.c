@@ -7,6 +7,7 @@
  *   stat, lstat, fstatat, fstat          stat here, the owner read as root, a link's size
  *   access, faccessat (no flags)         checked here
  *   getuid, geteuid, getresuid, ...      answered from the ids the tracer gave once
+ *   euidaccess, eaccess                  access(), when the real and effective ids agree
  *
  * A path is resolved by the tracer's rules (policy.c): a guest path is the prefix's,
  * except the host directories the tracer leaves as they are; an absolute link target
@@ -588,3 +589,17 @@ SET_ID(setgid, (gid_t g), (g))
 SET_ID(setegid, (gid_t g), (g))
 SET_ID(setregid, (gid_t r, gid_t e), (r, e))
 SET_ID(setresgid, (gid_t r, gid_t e, gid_t s), (r, e, s))
+
+/* euidaccess and eaccess ask libc's own get*id (four stops a call, from make and
+ * bash looking for commands).  With the real and effective ids equal, glibc's answer
+ * is access(); the shim says the same from its copy. */
+static void *real_euidaccess;
+
+int euidaccess(const char *path, int mode)
+{
+	if (root_len && load_ids() && ids[0] == ids[1] && ids[3] == ids[4])
+		return lane_faccessat(AT_FDCWD, path, mode, 0);
+	return REAL(euidaccess)(path, mode);
+}
+
+int eaccess(const char *path, int mode) { return euidaccess(path, mode); }
