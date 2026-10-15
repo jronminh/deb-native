@@ -312,8 +312,19 @@ static int get_cwd(char *out)
 		}
 	}
 	ep = __atomic_load_n(&cwd_epoch, __ATOMIC_ACQUIRE);
-	if (!real_getcwd_fn()(out, PATH_MAX))
-		return -errno;
+	{
+		/* the kernel's answer is a host path: inside the prefix it is the guest's */
+		long n = lane_call(SYS_getcwd, out, PATH_MAX, 0L, 0L, 0L);
+
+		if (n < 0)
+			return -errno;
+		if (strncmp(out, root, root_len) == 0 && (out[root_len] == '/' || out[root_len] == '\0')) {
+			if (out[root_len] == '\0')
+				strcpy(out, "/");
+			else
+				memmove(out, out + root_len, strlen(out + root_len) + 1);
+		}
+	}
 	if (seq_begin(&cwd_seq) >= 0) {
 		if (__atomic_load_n(&cwd_epoch, __ATOMIC_ACQUIRE) == ep) {     /* no chdir meanwhile */
 			struct stat d;

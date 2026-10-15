@@ -837,15 +837,20 @@ when it is rare, changes the tree, or must hold for programs without the shim
    one-component name goes straight to the kernel when it is not followed or is not a
    link; anything else is resolved from the directory's guest path, read from
    `/proc/self/fd`), `statx`, `readlink(at)` (not `/proc`), `[l]getxattr`,
-   `[l]listxattr`, `getcwd` (a copy, checked against `.` when the link generation
-   moves, so a rename elsewhere shows), the fake-root reads. The same output as the
+   `[l]listxattr`, `getcwd` (asked on the lane and unmapped in the shim; a copy,
+   checked against `.` when the link generation moves, so a rename elsewhere shows),
+   the fake-root reads. The same output as the
    previous shim for `ls -lR`, `find -printf` over `/usr` and `/etc`, `find -L`,
    `stat`/`readlink`/`realpath` on links and missing names, `pwd -P`, Python's dirfd
    calls (including an absolute link through a dirfd), `xattr`, `tar`. File-tree set
    (interleaved, 2 runs each): entry stops 8839 -> 867; with `-s 500` `find` 198-202
    -> 59-67 ms (57 natively) and `ls -lR` 223 -> 64-77 ms (31 natively); without `-s`
-   `find` 1.2-1.8 s -> 85-151 ms and `ls -lR` 1.7-4.2 s -> 135-535 ms. Lua build: 2757
-   entry and 117 exit stops.
+   `find` 1.2-1.8 s -> 85-151 ms and `ls -lR` 1.7-4.2 s -> 135-535 ms. Lua build: 2640
+   entry stops and no exit stop. Where those come from (the stop's program counter):
+   954 `openat` and 128 `faccessat` in `ld.so` (the program, the shim and the libraries,
+   loaded before the shim is there), 918 `openat` in libc's `__open_nocancel` (`mov x8,
+   #56; svc`), 324 `openat` through libc's cancellable path (the number in a register),
+   195 `execve`, 79 `unlinkat`, 20 for the shim's question about the ids.
    **Fake root at the cost of nothing beyond the path stops: done** (the goal is no
    accidental identity leak, not isolation; `src/dn-tiny/README.md`). The `fstat`
    row is gone, `statx` is answered at entry, the shim answers `get*id` from one
