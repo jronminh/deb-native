@@ -102,6 +102,29 @@ the same or a newer glibc; a static program (Go, Rust with musl) needs only
 `dn-tiny`. For an app that embeds a tool (ffmpeg, python, node), or a glibc
 binary such as Claude Code.
 
+## Open question: a prefix in any app
+
+dn-shell is one frontend, not the platform: a prefix's whole contract is
+`boot/boot.sh`, so any app that can start a child process can run one, with no
+terminal (a script, a local server, a tool an app embeds; with a bundle, tens of
+MB). What it takes, as far as known:
+
+- **targetSdk 28 or lower.** From API 29 the app domain may not execute, nor map
+  executable, files in its own data directory, where the prefix's loader and
+  libraries live (Termux stays at 28 for the same reason). Google Play requires
+  a much newer target, so such an app ships outside it (F-Droid, GitHub, by hand).
+- arm64; `ptrace` of its own children and `execmod` (both allowed in
+  `untrusted_app_27`).
+- The app extracts the prefix into its files directory (a prefix names no
+  absolute path and holds no hard links), runs `ROOT/boot/boot.sh CMD...`
+  (`/system/bin/sh`) or `dn-tiny -t ROOT -- ...` directly, and keeps a foreground
+  service for long work.
+- Testing must happen inside the app's own process: `run-as` runs in
+  `runas_app`, another domain.
+
+Open: whether to write this up as `docs/embedding.md`, and a minimal sample app
+(one activity, one button that runs a command in a prefix) to prove the path.
+
 ## Building a prefix
 
 - `build-prefix.sh` relies on Termux's `debootstrap` for the first stage, which
