@@ -10,7 +10,8 @@
 
 #define DN_LANE_LO 0xd7f2a541u
 #define DN_LANE_HI 0x9e1ab6c3u
-#define DN_LANE_NRS { 78, 79, 80, 48, 291 }   /* readlinkat newfstatat fstat faccessat statx */
+#define DN_LANE_NRS { 78, 79, 80, 48, 291, 9, 12, 8, 11 }   /* readlinkat newfstatat fstat faccessat statx
+                                                       * lgetxattr llistxattr getxattr listxattr */
 /* openat takes the lane only to read: none of O_WRONLY, O_RDWR, O_CREAT, O_TRUNC,
  * O_APPEND in its flags (x2); O_TMPFILE needs write access, so it is excluded too */
 #define DN_LANE_OPENAT 56

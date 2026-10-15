@@ -4,8 +4,11 @@
  *
  *   realpath, canonicalize_file_name     resolved here, one cached readlink a component
  *   open, openat (read-only flags)       opened here, so the fd is the program's own
- *   stat, lstat, fstatat, fstat          stat here, the owner read as root, a link's size
+ *   stat, lstat, fstatat, fstat, statx   stat here, the owner read as root, a link's size
  *   access, faccessat (no flags)         checked here
+ *   readlink, readlinkat (not /proc)     read here, a target inside the prefix as the guest's
+ *   [l]getxattr, [l]listxattr            read here
+ *   getcwd                               from a copy, dropped by chdir and by a rename
  *   getuid, geteuid, getresuid, ...      answered from the ids the tracer gave once
  *   euidaccess, eaccess                  access(), when the real and effective ids agree
  *
@@ -14,7 +17,7 @@
  * is the prefix's too.  The call is then issued on the host path with the lane cookie
  * in x5 (lane.h; set for the svc only), which the filter lets through without a stop,
  * and only for calls that read:anything that writes, and any case this file does not handle (a path
- * relative to a directory fd, flags it does not know), goes to the real function and
+ * on a deleted directory's fd, flags it does not know), goes to the real function and
  * through the tracer as before.  readlink answers are cached; the cache is dropped
  * when the generation in var/lib/deb-native/dn-tiny.gen moves (a symlinkat, unlinkat,
  * linkat or rename by any process of any session, seen by the tracer).
@@ -253,6 +256,20 @@ static int guest_readlink(const char *g, char *buf, size_t n)
 /* ---- the working directory: asked once, dropped by chdir/fchdir ---------- */
 static unsigned cwd_seq, cwd_epoch;     /* the epoch moves with every chdir */
 static int cwd_pid;                     /* the process the copy is for, 0: none */
+static unsigned cwd_gen;                /* the link generation it was asked under: a rename moves it */
+static unsigned long cwd_dev, cwd_ino;  /* what "." was then */
+
+/* "." and the host path of guest directory g are the same directory */
+static int cwd_same(const char *g, unsigned long dev, unsigned long ino)
+{
+	char host[PATH_MAX + PATH_MAX];
+	struct stat a, b;
+
+	return to_host(g, host, sizeof host) == 0 &&
+	       lane_call(SYS_newfstatat, AT_FDCWD, ".", &a, 0, 0L) == 0 &&
+	       lane_call(SYS_newfstatat, AT_FDCWD, host, &b, 0, 0L) == 0 &&
+	       a.st_dev == b.st_dev && a.st_ino == b.st_ino && a.st_dev == dev && a.st_ino == ino;
+}
 static void *real_chdir, *real_fchdir;
 
 static void drop_cwd(void)
@@ -261,23 +278,54 @@ static void drop_cwd(void)
 	__atomic_store_n(&cwd_pid, 0, __ATOMIC_RELEASE);
 }
 
+static void *real_getcwd;
+static char *(*real_getcwd_fn(void))(char *, size_t)
+{
+	return (char *(*)(char *, size_t)) real_fn("getcwd", &real_getcwd);
+}
+
 /* the guest working directory into out (PATH_MAX); 0, or -errno */
 static int get_cwd(char *out)
 {
 	int pid = getpid();
 	unsigned s, ep;
 
+	unsigned g = gen ? *gen : 0;
+
 	if (seq_read(&cwd_seq, &s) && __atomic_load_n(&cwd_pid, __ATOMIC_ACQUIRE) == pid) {
+		unsigned cg = cwd_gen;
+		unsigned long dev = cwd_dev, ino = cwd_ino;
+
 		memcpy(out, cwd, PATH_MAX);
-		if (seq_check(&cwd_seq, s) && memchr(out, 0, PATH_MAX))
-			return 0;
+		if (seq_check(&cwd_seq, s) && memchr(out, 0, PATH_MAX)) {
+			if (cg == g)
+				return 0;
+			/* a link, a rename or an unlink somewhere since: still the same directory? */
+			if (cwd_same(out, dev, ino)) {
+				if (seq_begin(&cwd_seq) >= 0) {
+					if (cwd_dev == dev && cwd_ino == ino && strcmp(cwd, out) == 0)
+						cwd_gen = g;
+					seq_end(&cwd_seq);
+				}
+				return 0;
+			}
+		}
 	}
 	ep = __atomic_load_n(&cwd_epoch, __ATOMIC_ACQUIRE);
-	if (!getcwd(out, PATH_MAX))
+	if (!real_getcwd_fn()(out, PATH_MAX))
 		return -errno;
 	if (seq_begin(&cwd_seq) >= 0) {
 		if (__atomic_load_n(&cwd_epoch, __ATOMIC_ACQUIRE) == ep) {     /* no chdir meanwhile */
+			struct stat d;
+
 			strcpy(cwd, out);
+			cwd_gen = g;
+			if (lane_call(SYS_newfstatat, AT_FDCWD, ".", &d, 0, 0L) == 0) {
+				cwd_dev = d.st_dev;
+				cwd_ino = d.st_ino;
+			} else {
+				cwd_dev = cwd_ino = 0;
+			}
 			__atomic_store_n(&cwd_pid, pid, __ATOMIC_RELEASE);
 		}
 		seq_end(&cwd_seq);
@@ -413,10 +461,82 @@ static int host_of(const char *in, int nofollow, char *host, size_t cap)
 	return r;
 }
 
-/* the paths this file handles: absolute, or relative to the working directory */
-static int ours(int dirfd, const char *path)
+/* the host path of a directory fd, as the kernel names it; its length, or 0 */
+static size_t fd_host(int fd, char *out, size_t cap)
 {
-	return root_len && path && (path[0] == '/' || dirfd == AT_FDCWD);
+	char p[40] = "/proc/self/fd/", d[12];
+	int k = 0;
+	unsigned v = (unsigned) fd;
+	long r;
+
+	do
+		d[k++] = (char) ('0' + v % 10);
+	while ((v /= 10));
+	for (size_t i = 14; k; )
+		p[i++] = d[--k], p[i] = '\0';
+	r = lane_call(SYS_readlinkat, AT_FDCWD, p, out, cap - 1, 0L);
+	if (r <= 0 || out[0] != '/')
+		return 0;
+	out[r] = '\0';
+	if (r > 10 && strcmp(out + r - 10, " (deleted)") == 0)
+		return 0;
+	return (size_t) r;
+}
+
+/* Where a call on (dirfd, path) goes: 1 with *at and host set (the call is then made
+ * on the lane as (*at, host)), 0 when this file does not handle it (the real function,
+ * through the tracer), or -errno.
+ *
+ * An absolute path, or one relative to the working directory, is resolved here.  On
+ * a real dirfd, a one-component name goes to the kernel as it is when the last
+ * component is not followed, or is not a link (a link with an absolute target would
+ * be followed on the host); anything else is resolved from the directory's guest
+ * path.  A directory outside the prefix is a host directory: its paths stay. */
+static int lane_at(int dirfd, const char *path, int nofollow, char *host, size_t cap, int *at)
+{
+	char dir[PATH_MAX], guest[PATH_MAX + PATH_MAX];
+	size_t dl, pl;
+
+	if (!root_len || !path || path[0] == '\0')
+		return 0;
+	*at = AT_FDCWD;
+	if (path[0] == '/' || dirfd == AT_FDCWD) {
+		int e = host_of(path, nofollow, host, cap);
+
+		return e < 0 ? e : 1;
+	}
+	if (dirfd < 0)
+		return 0;
+	pl = strlen(path);
+	if (pl >= cap)
+		return -ENAMETOOLONG;
+	if (!strchr(path, '/') && strcmp(path, ".") != 0 && strcmp(path, "..") != 0) {
+		char t[2];
+
+		if (nofollow || lane_call(SYS_readlinkat, dirfd, path, t, sizeof t, 0L) < 0) {
+			memcpy(host, path, pl + 1);     /* not followed, not a link, or not there */
+			*at = dirfd;
+			return 1;
+		}
+	}
+	dl = fd_host(dirfd, dir, sizeof dir);
+	if (dl == 0)
+		return 0;
+	if (strncmp(dir, root, root_len) != 0 || (dir[root_len] != '/' && dir[root_len] != '\0')) {
+		memcpy(host, path, pl + 1);             /* a host directory */
+		*at = dirfd;
+		return 1;
+	}
+	if ((dl - root_len) + 1 + pl >= sizeof guest)
+		return -ENAMETOOLONG;
+	memcpy(guest, dir + root_len, dl - root_len);
+	guest[dl - root_len] = '/';
+	memcpy(guest + (dl - root_len) + 1, path, pl + 1);
+	{
+		int e = host_of(guest, nofollow, host, cap);
+
+		return e < 0 ? e : 1;
+	}
 }
 
 /* ---- realpath ------------------------------------------------------------- */
@@ -462,18 +582,18 @@ static void *real_openat;
 static int lane_open(int dirfd, const char *path, int flags, mode_t mode)
 {
 	char host[PATH_MAX + PATH_MAX];
-	long r;
-	int e;
+	int at, e;
 
-	if (!ours(dirfd, path) || (flags & DN_LANE_OPEN_DENY))
+	if (flags & DN_LANE_OPEN_DENY)
 		return REAL(openat)(dirfd, path, flags, mode);
-	e = host_of(path, flags & O_NOFOLLOW, host, sizeof host);
+	e = lane_at(dirfd, path, flags & O_NOFOLLOW, host, sizeof host, &at);
+	if (e == 0)
+		return REAL(openat)(dirfd, path, flags, mode);
 	if (e < 0) {
 		errno = -e;
 		return -1;
 	}
-	r = lane_call(SYS_openat, AT_FDCWD, host, flags, mode, 0L);
-	return (int) r;
+	return (int) lane_call(SYS_openat, at, host, flags, mode, 0L);
 }
 
 #define MODE_ARG(flags, mode)                                           \
@@ -525,53 +645,59 @@ int __openat_2(int dirfd, const char *path, int flags) { return lane_open(dirfd,
 int __openat64_2(int dirfd, const char *path, int flags) { return lane_open(dirfd, path, flags, 0); }
 
 /* ---- stat ------------------------------------------------------------------ */
-static void *real_fstatat;
+static void *real_fstatat, *real_statx;
 
-/* what the program is told: the owner read as root, a link's size as readlink says */
-static void fix_stat(struct stat *st, const char *res_guest, int is_lstat)
+/* a link's size as the program will read its target: the kernel's spelling of a
+ * path inside the prefix is shortened to the guest's */
+static long link_size(int at, const char *host, long size)
 {
-	if (st->st_uid == real_uid)
-		st->st_uid = 0;
-	if (st->st_gid == real_gid)
-		st->st_gid = 0;
-	if (is_lstat && S_ISLNK(st->st_mode)) {
-		char tgt[PATH_MAX];
-		int r = guest_readlink(res_guest, tgt, sizeof tgt - 1);
+	char tgt[PATH_MAX];
+	long r = lane_call(SYS_readlinkat, at, host, tgt, sizeof tgt - 1, 0L);
 
-		if (r > 0)
-			st->st_size = r;
-	}
+	if (r <= 0)
+		return size;
+	if ((size_t) r >= root_len && strncmp(tgt, root, root_len) == 0 &&
+	    ((size_t) r == root_len || tgt[root_len] == '/'))
+		return (size_t) r == root_len ? 1 : r - (long) root_len;
+	return r;
+}
+
+/* what the program is told: the owner read as root */
+static void map_owner(unsigned *uid, unsigned *gid)
+{
+	if (*uid == real_uid)
+		*uid = 0;
+	if (*gid == real_gid)
+		*gid = 0;
 }
 
 static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 {
-	char res[PATH_MAX], host[PATH_MAX + PATH_MAX];
-	int nofollow = flags & AT_SYMLINK_NOFOLLOW, e;
-	size_t n;
+	char host[PATH_MAX + PATH_MAX];
+	int nofollow = flags & AT_SYMLINK_NOFOLLOW, at, e;
 
 	if ((flags & AT_EMPTY_PATH) && path && path[0] == '\0' && dirfd >= 0) {
-		if (!root_len || lane_call(SYS_fstat, dirfd, st, 0L, 0L, 0L) != 0)
-			return root_len ? -1 : REAL(fstatat)(dirfd, path, st, flags);
-		fix_stat(st, NULL, 0);
+		if (!root_len)
+			return REAL(fstatat)(dirfd, path, st, flags);
+		if (lane_call(SYS_fstat, dirfd, st, 0L, 0L, 0L) != 0)
+			return -1;
+		map_owner(&st->st_uid, &st->st_gid);
 		return 0;
 	}
-	if (!ours(dirfd, path) || (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT)))
+	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT))
 		return REAL(fstatat)(dirfd, path, st, flags);
-	n = strlen(path);
-	if (n > 0 && path[n - 1] == '/')
-		nofollow = 0;
-	e = resolve(path, nofollow, res);
+	e = lane_at(dirfd, path, nofollow, host, sizeof host, &at);
 	if (e == 0)
-		e = to_host(res, host, sizeof host - 1);
-	if (e == 0 && n > 0 && path[n - 1] == '/' && strcmp(res, "/") != 0)
-		strcat(host, "/");
+		return REAL(fstatat)(dirfd, path, st, flags);
 	if (e < 0) {
 		errno = -e;
 		return -1;
 	}
-	if (lane_call(SYS_newfstatat, AT_FDCWD, host, st, flags & (AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT), 0L) != 0)
+	if (lane_call(SYS_newfstatat, at, host, st, flags, 0L) != 0)
 		return -1;
-	fix_stat(st, res, nofollow);
+	map_owner(&st->st_uid, &st->st_gid);
+	if (nofollow && S_ISLNK(st->st_mode))
+		st->st_size = link_size(at, host, st->st_size);
 	return 0;
 }
 
@@ -584,26 +710,177 @@ int lstat64(const char *path, struct stat64 *st) { return lane_fstatat(AT_FDCWD,
 int fstat(int fd, struct stat *st) { return lane_fstatat(fd, "", st, AT_EMPTY_PATH); }
 int fstat64(int fd, struct stat64 *st) { return lane_fstatat(fd, "", (struct stat *) st, AT_EMPTY_PATH); }
 
+/* statx: the same, with the sync type kept */
+int statx(int dirfd, const char *path, int flags, unsigned mask, struct statx *stx)
+{
+	char host[PATH_MAX + PATH_MAX];
+	int nofollow = flags & AT_SYMLINK_NOFOLLOW, at, e;
+
+	if (!root_len || (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH | AT_STATX_SYNC_TYPE)))
+		return REAL(statx)(dirfd, path, flags, mask, stx);
+	if ((flags & AT_EMPTY_PATH) && path && path[0] == '\0') {
+		at = dirfd;
+		host[0] = '\0';
+	} else {
+		e = lane_at(dirfd, path, nofollow, host, sizeof host, &at);
+		if (e == 0)
+			return REAL(statx)(dirfd, path, flags, mask, stx);
+		if (e < 0) {
+			errno = -e;
+			return -1;
+		}
+		flags &= ~AT_EMPTY_PATH;
+	}
+	if (lane_call(SYS_statx, at, host, flags, mask, stx) != 0)
+		return -1;
+	map_owner(&stx->stx_uid, &stx->stx_gid);
+	if (nofollow && host[0] && S_ISLNK(stx->stx_mode))
+		stx->stx_size = (unsigned long) link_size(at, host, (long) stx->stx_size);
+	return 0;
+}
+
 /* ---- access ---------------------------------------------------------------- */
 static void *real_faccessat;
 
 static int lane_faccessat(int dirfd, const char *path, int mode, int flags)
 {
 	char host[PATH_MAX + PATH_MAX];
-	int e;
+	int at, e;
 
-	if (!ours(dirfd, path) || flags != 0)
+	if (flags != 0)
 		return REAL(faccessat)(dirfd, path, mode, flags);
-	e = host_of(path, 0, host, sizeof host);
+	e = lane_at(dirfd, path, 0, host, sizeof host, &at);
+	if (e == 0)
+		return REAL(faccessat)(dirfd, path, mode, flags);
 	if (e < 0) {
 		errno = -e;
 		return -1;
 	}
-	return (int) lane_call(SYS_faccessat, AT_FDCWD, host, mode, 0L, 0L);
+	return (int) lane_call(SYS_faccessat, at, host, mode, 0L, 0L);
 }
 
 int faccessat(int dirfd, const char *path, int mode, int flags) { return lane_faccessat(dirfd, path, mode, flags); }
 int access(const char *path, int mode) { return lane_faccessat(AT_FDCWD, path, mode, 0); }
+
+/* ---- readlink -------------------------------------------------------------- */
+/* /proc is left to the tracer: /proc/<pid>/exe names the loader to the kernel, and
+ * the tracer knows the program. */
+static void *real_readlinkat;
+
+ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n)
+{
+	char host[PATH_MAX + PATH_MAX], tgt[PATH_MAX];
+	int at, e;
+	long r;
+
+	if (strncmp(path, "/proc/", 6) == 0 || n == 0)
+		return REAL(readlinkat)(dirfd, path, buf, n);
+	e = lane_at(dirfd, path, 1, host, sizeof host, &at);
+	if (e == 0 || (at != AT_FDCWD && strncmp(host, "/proc/", 6) == 0))
+		return REAL(readlinkat)(dirfd, path, buf, n);
+	if (e < 0) {
+		errno = -e;
+		return -1;
+	}
+	r = lane_call(SYS_readlinkat, at, host, tgt, sizeof tgt, 0L);
+	if (r < 0)
+		return -1;
+	if ((size_t) r >= root_len && strncmp(tgt, root, root_len) == 0 &&
+	    ((size_t) r == root_len || tgt[root_len] == '/')) {
+		memmove(tgt, tgt + root_len, (size_t) r - root_len);
+		r -= (long) root_len;
+		if (r == 0)
+			tgt[r++] = '/';
+	}
+	if ((size_t) r > n)
+		r = (long) n;
+	memcpy(buf, tgt, (size_t) r);
+	return r;
+}
+
+ssize_t readlink(const char *path, char *buf, size_t n) { return readlinkat(AT_FDCWD, path, buf, n); }
+
+/* ---- xattr by path (ls -l asks two for every name) -------------------------- */
+static void *real_getxattr, *real_lgetxattr, *real_listxattr, *real_llistxattr;
+
+static ssize_t lane_xattr(long nr, const char *path, int nofollow, long a, long b, long c, int *handled)
+{
+	char host[PATH_MAX + PATH_MAX];
+	int at, e = lane_at(AT_FDCWD, path, nofollow, host, sizeof host, &at);
+
+	*handled = e != 0;
+	if (e < 0) {
+		errno = -e;
+		return -1;
+	}
+	return e ? lane_call(nr, host, a, b, c, 0L) : 0;
+}
+
+ssize_t getxattr(const char *path, const char *name, void *v, size_t size)
+{
+	int h;
+	ssize_t r = lane_xattr(SYS_getxattr, path, 0, (long) name, (long) v, (long) size, &h);
+
+	return h ? r : REAL(getxattr)(path, name, v, size);
+}
+
+ssize_t lgetxattr(const char *path, const char *name, void *v, size_t size)
+{
+	int h;
+	ssize_t r = lane_xattr(SYS_lgetxattr, path, 1, (long) name, (long) v, (long) size, &h);
+
+	return h ? r : REAL(lgetxattr)(path, name, v, size);
+}
+
+ssize_t listxattr(const char *path, char *list, size_t size)
+{
+	int h;
+	ssize_t r = lane_xattr(SYS_listxattr, path, 0, (long) list, (long) size, 0L, &h);
+
+	return h ? r : REAL(listxattr)(path, list, size);
+}
+
+ssize_t llistxattr(const char *path, char *list, size_t size)
+{
+	int h;
+	ssize_t r = lane_xattr(SYS_llistxattr, path, 1, (long) list, (long) size, 0L, &h);
+
+	return h ? r : REAL(llistxattr)(path, list, size);
+}
+
+/* ---- the working directory, as getcwd says it -------------------------------- */
+
+char *getcwd(char *buf, size_t size)
+{
+	char g[PATH_MAX];
+	size_t n;
+	int e;
+
+	if (!root_len)
+		return real_getcwd_fn()(buf, size);
+	e = get_cwd(g);
+	if (e < 0) {
+		errno = -e;
+		return NULL;
+	}
+	n = strlen(g) + 1;
+	if (!buf) {
+		if (size == 0)
+			size = n;
+		if (size < n) {
+			errno = ERANGE;
+			return NULL;
+		}
+		buf = malloc(size);
+		if (!buf)
+			return NULL;
+	} else if (size < n) {
+		errno = size == 0 ? EINVAL : ERANGE;
+		return NULL;
+	}
+	memcpy(buf, g, n);
+	return buf;
+}
 
 /* ---- identity: asked of the tracer once, answered from a copy -------------- */
 /* The tracer keeps each process's ids (fake root: getresuid and getresgid are its

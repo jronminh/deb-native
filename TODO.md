@@ -833,11 +833,19 @@ when it is rare, changes the tree, or must hold for programs without the shim
    Lua build 2.8k entry stops, 10.4-11.1 s with `-s 500`. Still to do: the shim's own
    resolver is a second copy of the law (`is_host_path`, `resolve`); link `policy.c`
    instead.
-2. **Move to the shim**: `*at` calls on a real dirfd (a one-component name with a
-   no-follow flag goes straight through; otherwise read the link first), `statx`,
-   the `xattr` calls, `getcwd`, the fake-root reads (ask the tracer once per process,
-   then answer from a copy; a `set*id` still goes to the tracer). Measure `find`,
-   `ls -lR` and the Lua build again.
+2. **Move to the shim: done** (`lane.c`, `lane_at`). `*at` calls on a real dirfd (a
+   one-component name goes straight to the kernel when it is not followed or is not a
+   link; anything else is resolved from the directory's guest path, read from
+   `/proc/self/fd`), `statx`, `readlink(at)` (not `/proc`), `[l]getxattr`,
+   `[l]listxattr`, `getcwd` (a copy, checked against `.` when the link generation
+   moves, so a rename elsewhere shows), the fake-root reads. The same output as the
+   previous shim for `ls -lR`, `find -printf` over `/usr` and `/etc`, `find -L`,
+   `stat`/`readlink`/`realpath` on links and missing names, `pwd -P`, Python's dirfd
+   calls (including an absolute link through a dirfd), `xattr`, `tar`. File-tree set
+   (interleaved, 2 runs each): entry stops 8839 -> 867; with `-s 500` `find` 198-202
+   -> 59-67 ms (57 natively) and `ls -lR` 223 -> 64-77 ms (31 natively); without `-s`
+   `find` 1.2-1.8 s -> 85-151 ms and `ls -lR` 1.7-4.2 s -> 135-535 ms. Lua build: 2757
+   entry and 117 exit stops.
    **Fake root at the cost of nothing beyond the path stops: done** (the goal is no
    accidental identity leak, not isolation; `src/dn-tiny/README.md`). The `fstat`
    row is gone, `statx` is answered at entry, the shim answers `get*id` from one
