@@ -91,15 +91,19 @@ void policy_set_ids(unsigned uid, unsigned gid);
 unsigned policy_map_uid(unsigned id);
 unsigned policy_map_gid(unsigned id);
 
-/* How a glibc program is started: the loader to run it through and the
- * library search path to give it, both as host paths. */
+/* How a glibc program is started: the loader to run it through and the library
+ * search path to give it, both in the tree's own spelling.  The gate maps the
+ * loader itself to a host path to exec, but hands the program and the library
+ * search path as the tree sees them, so the loader goes through the law like any
+ * program (its own opens of the program and the libraries are the tree's paths). */
 const char *policy_loader(void);
 const char *policy_libpath(void);
-/* the shim the exec gate preloads into a glibc program: usr/lib/deb-native/dn-lane.so
- * when the prefix has it, else "" */
+/* the shim the exec gate preloads into a glibc program (/usr/lib/deb-native/
+ * dn-lane.so, a host path when the prefix has it, else ""): the runtime's own,
+ * so it stays host -- the shim finds the root from its own path */
 const char *policy_preload(void);
-/* the loader hook the exec gate audits with: usr/lib/deb-native/dn-ldhook.so
- * (empty when the prefix ships none); see docs/reference/syscall-patching.md */
+/* the loader hook the exec gate audits with (usr/lib/deb-native/dn-ldhook.so, a
+ * host path; empty when the prefix ships none); see docs/reference/syscall-patching.md */
 const char *policy_ldhook(void);
 /* Is this PT_INTERP the Debian glibc loader (a path that does not exist here)? */
 int policy_is_glibc_interp(const char *interp);

@@ -158,9 +158,11 @@ cookie in `x5`, re-issues the `svc`, and branches back to the instruction after
 the original `svc`. The tracer's filter sees the cookie and lets the call
 through with no stop.
 
-The loader's paths are **host paths** — the exec gate passes the program and the
-library path as host paths (`exec.c`) — so the stub needs no path law: it only
-adds the cookie. Stops, `dn-tiny -t ROOT -- PROG`, the shim present:
+The loader's paths were **host paths** then — the exec gate passed the program
+and the library path as host paths (`exec.c`) — so the stub needed no path law:
+it only added the cookie. (The gate now hands those as the tree's own paths, so
+this stub is wrong: it must map them through the law.) Stops, `dn-tiny -t ROOT --
+PROG`, the shim present:
 
 | program | before | after |
 | --- | --- | --- |
@@ -197,9 +199,10 @@ Two bugs were found and fixed on the way, both worth remembering:
   sequence (`0x9e1ab6c3d7f2a541` needs `movk hw=2 = 0xb6c3, hw=3 = 0x9e1a`), so
   the filter never matched and the calls still stopped.
 
-The module is a proof of concept: it assumes the loader's paths are host paths
-and that each site is entered with `x8` already the number, and it has no
-fallback. It runs in `~/work/p-dev`; the source is not committed.
+The module is a proof of concept (`src/dn-tiny/ldhook.c`, E7's commit): it assumes
+the loader's paths are host paths and that each site is entered with `x8` already
+the number, and it has no fallback. The gate now hands those paths as the tree's
+own, so the module is broken until its stub calls the law.
 
 ## E8: the Lua build's stops, by syscall
 

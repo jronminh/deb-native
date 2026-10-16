@@ -78,8 +78,11 @@ the net for everything.
   the host path, fixes the result and skips the syscall: no exit stop.
 - **The exec gate.** An `execve` of a glibc program is rewritten to run the
   prefix's loader: `ld-linux-aarch64.so.1 --library-path ... --preload
-  dn-lane.so --argv0 NAME PROGRAM`. Scripts go through their interpreter the
-  same way. `/proc/<pid>/exe` is answered with the program, not the loader.
+  dn-lane.so --argv0 NAME PROGRAM`. The loader it execs, and the shim it
+  preloads (the runtime's own), are host paths; the program and the library
+  search path are **the tree's own** paths, so the loader opens them through the
+  law like any program. Scripts go through their interpreter the same way.
+  `/proc/<pid>/exe` is answered with the program, not the loader.
 - **Per-session state**: the fake ids of each process, the program each process
   runs, the working directory, a cache of `readlink` answers whose generation
   lives in `var/lib/deb-native/dn-tiny.gen` (shared by every session on the

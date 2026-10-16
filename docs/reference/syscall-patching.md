@@ -111,8 +111,9 @@ Writing code needs both, in this order (`flush`):
 
 ## The minimal variant (the loader)
 
-The loader's paths are **host paths** (the exec gate passes host paths), so its
-stub needs no path law and no hook call -- only the cookie (E7):
+When E7 was measured the loader's paths were **host paths** (the exec gate passed
+host paths then), so its stub needed no path law and no hook call -- only the
+cookie (E7):
 
 ```
 stub: movz x5,#0xa541; movk hw=1..3 ...; svc #0; b site+4
@@ -121,10 +122,13 @@ stub: movz x5,#0xa541; movk hw=1..3 ...; svc #0; b site+4
 Six words, no register save, no separate block. The loader's text is found from
 `/proc/self/maps` (`LD_AUDIT` runs at `la_version`, before `dl_iterate_phdr`
 would know libc), and the stub page is mapped within `B` reach the same way.
-**But** the loader also issues `faccessat` on a **guest** path
-(`/etc/ld.so.preload`) and `dlopen`s plugins with guest paths: those need the
-path mapped, so a cookie-only stub is wrong for them -- they must either take
-the law or stay on the tracer (measured this session; see the session note).
+
+**But this is no longer the loader's case.** The exec gate now hands the program
+and `--library-path` as the tree's own paths (Phase 0 step 2), so *every* path the
+loader opens is a guest path and the cookie-only stub is wrong for all of them:
+the stub must map each through the one law (`policy.c`), the same as the shim.
+The loader had already shown the shape of this with its `faccessat` on
+`/etc/ld.so.preload` and its `dlopen`s of plugins.
 
 ## What can go wrong
 

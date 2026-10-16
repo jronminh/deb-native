@@ -48,36 +48,16 @@ static void host_of(const char *guest, char *out, size_t cap)
 		scpy(out, cap, guest);
 }
 
-/* The path the kernel itself gives a file once every symlink is followed: open it
- * by O_PATH and read the link /proc/self/fd/N, which names the real file.  If that
- * fails (an absolute symlink inside the prefix does not resolve here), the path
- * stays as it was. */
-static void canon(const char *path, char *out, size_t cap)
+/* The program's guest path, links followed, for /proc/<pid>/exe: the law resolves
+ * it and the root is stripped back off.  A host path (or one the law leaves) stays
+ * as it is. */
+static void guest_canon(const char *in, char *out, size_t cap)
 {
-	char link[40] = "/proc/self/fd/";
-	int fd = sys_open(path, 0x280000 /* O_PATH | O_CLOEXEC */);
-	ssize_t n;
-	size_t l = strlen(link);
-	char digits[12];
-	int i = 11;
-	unsigned v;
+	char host[512];
 
-	if (fd < 0) {
-		scpy(out, cap, path);
+	if (policy_path_nf(in, host, sizeof host, 0) > 0 && policy_unpath(host, out, cap) > 0)
 		return;
-	}
-	for (digits[i] = '\0', v = (unsigned) fd; i > 0; v /= 10) {
-		digits[--i] = (char) ('0' + v % 10);
-		if (v < 10)
-			break;
-	}
-	scpy(link + l, sizeof link - l, digits + i);
-	n = sys_readlink(link, out, cap - 1);
-	sys_close(fd);
-	if (n <= 0)
-		scpy(out, cap, path);
-	else
-		out[n] = '\0';
+	scpy(out, cap, in);
 }
 
 static ssize_t head(const char *host, unsigned char *buf, size_t n)
@@ -220,11 +200,11 @@ static void resolve(const char *cur_in, struct vec *a, char *final, size_t cap, 
 			}
 			vpush(out, "--argv0");
 			vpush(out, a->n > 0 ? a->s[0] : cur);
-			vpush(out, host);
+			vpush(out, cur);                          /* the program, as the tree names it */
 			for (i = 1; i < a->n; i++)
 				vpush(out, a->s[i]);
-			scpy(final, cap, policy_loader());
-			canon(host, prog, pcap);                  /* the program, not the loader */
+			host_of(policy_loader(), final, cap);     /* the loader, a host path for the kernel */
+			guest_canon(cur, prog, pcap);             /* /proc/<pid>/exe says the program */
 			return;
 		}
 		break;                                            /* static, foreign or not an ELF */
@@ -233,7 +213,7 @@ static void resolve(const char *cur_in, struct vec *a, char *final, size_t cap, 
 	for (i = 0; i < a->n; i++)
 		vpush(out, a->s[i]);
 	host_of(cur, final, cap);
-	canon(final, prog, pcap);
+	guest_canon(cur, prog, pcap);
 }
 
 /* execve("./prog") and execve("dir/prog") name the program from the cwd, which the
@@ -328,7 +308,7 @@ void exec_enter(struct tracee *t)
 	struct vec a = { .n = 0, .used = 0 }, out = { .n = 0, .used = 0 };
 	static u64 ptrs[MAXORIG + MAXARGS + 8];
 	u64 pa, pp;
-	char path[512], final[512], prog[512], guest[512];
+	char path[512], final[512], prog[512];
 	unsigned nr = (unsigned) t->r.regs[8];
 	int parg = nr == 281 ? 1 : 0, aarg = nr == 281 ? 2 : 1;
 	ssize_t k;
@@ -351,8 +331,8 @@ void exec_enter(struct tracee *t)
 	if (read_argv(t, t->r.regs[aarg], &a) < 0 || a.n == 0)
 		return;
 	resolve(path, &a, final, sizeof final, &out, prog, sizeof prog);
-	/* what /proc/<pid>/exe will say once the exec succeeds */
-	trace_exe_pending(t->pid, policy_unpath(prog, guest, sizeof guest) ? guest : prog);
+	/* what /proc/<pid>/exe will say once the exec succeeds (prog is a guest path) */
+	trace_exe_pending(t->pid, prog);
 
 	for (i = 0; i < out.n; i++) {
 		ptrs[i] = mon_scratch(t, out.s[i], strlen(out.s[i]) + 1);

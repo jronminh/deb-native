@@ -215,12 +215,10 @@ void policy_root_set(const char *r)
 	root = r;
 	root_len = strlen(r);
 	loader[0] = libpath[0] = preload[0] = ldhook[0] = '\0';
-	append(loader, sizeof loader, r);
 	append(loader, sizeof loader, "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1");
-	append(libpath, sizeof libpath, r);
-	append(libpath, sizeof libpath, "/usr/lib/aarch64-linux-gnu:");
-	append(libpath, sizeof libpath, r);
-	append(libpath, sizeof libpath, "/usr/lib");
+	append(libpath, sizeof libpath, "/usr/lib/aarch64-linux-gnu:/usr/lib");
+	/* the shim and the loader hook are the runtime's own, and the shim finds the
+	 * root from its own host path: both stay host paths */
 	append(preload, sizeof preload, r);
 	append(preload, sizeof preload, "/usr/lib/deb-native/dn-lane.so");
 	append(ldhook, sizeof ldhook, r);

@@ -8,10 +8,9 @@ proposal.
 
 ## Where we are (the honest baseline)
 
-- The mapping is **partial and seamed**: path in/out only. The law is **one**
-  now -- `policy.c`, linked into the shim (`-DDN_LIBC`) as well as the tracer --
-  but the exec gate hands the loader **host paths**, so the loader is still a
-  special case (the `LD_AUDIT` hook just broke on it).
+- The mapping is **partial**: path in/out only, and the loader's own opens and
+  the `LD_AUDIT` hook are still open (see below), but the law is one and the
+  loader goes through it.
 - The speed engines (the filter's tree, the shared cookie block, the site
   patches, the `LD_AUDIT` loader hook, the cancellable `svc`) work, but serve a
   mapping that is not yet complete.
@@ -28,10 +27,13 @@ The mapping must be *single* and *consistent* before it is widened.
    `policy_is_host`); its own resolver is gone, and the link cache (now
    `policy.c`'s) is a seqlock the shim's threads share. Two copies can disagree,
    and the 0.7 runtime died of that.
-2. **Loader and gate uniform.** The exec gate hands the loader **guest** paths
-   (the program, `--library-path`), so the loader is a program like any other
-   and the host/guest seam goes. This also removes the `LD_AUDIT` hook's
-   host/guest guess: its stub calls the one law.
+2. **Loader and gate uniform.** Done for the gate: the exec gate maps the loader
+   itself to a host path (the kernel needs a file to exec) and preloads the shim
+   by its host path (the runtime's own; the shim finds the root from it), but
+   hands the program and `--library-path` as the tree's own paths, so the loader
+   opens them through the law like any program. Left: the `LD_AUDIT` hook, whose
+   stub now meets those tree paths and so must call the one law, not just add the
+   cookie.
 3. **Binds are data.** One table (the prefix root + the host rows: `/proc`,
    `/sys`, `/dev`, the shared dirs), read by every engine -- not re-derived in
    each. This is the model's "binds are data".
