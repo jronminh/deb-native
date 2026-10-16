@@ -206,6 +206,16 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   shim's patch sites for jump targets, and whether `x8` is still the number there.
 - **Syscall User Dispatch** is a third net below the tracer, but it needs kernel
   5.11: neither phone has it (4.14, 5.10). Keep it for a 5.11+ device.
+- **The fast paths are manipulations of the syscall instruction.** The room the
+  "stable net, fast path" rule opens (`mapped-kernel.md`, rule 7) is mostly
+  here: rewriting a `svc` into a call to a handler (zpoline's shape, on arm64),
+  one trampoline per number (gVisor's specialization), a first-call trap that
+  patches the site it learns (systrap; E12), the cancellable `svc`, the generic
+  `syscall()` whose number is in a register, the loader's own sites. Each is
+  fast and each needs its own fail-safe. The one that best fits "rest on stable
+  things" learns a site from a **real trap** instead of guessing it from the
+  codegen -- which is what E12 tried; its block (a handler that does not survive
+  `exec`) is the thing to solve.
 
 ## In-process: the catcher into the tracee
 

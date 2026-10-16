@@ -79,6 +79,16 @@ why Phase 0 comes first.
    the cheapest it can be. The filter, the lane, the site patches and the loader
    hook are all this: fast paths to the one mapping. Optimise them, but only in
    service of the mapping.
+7. **A stable net, a fast path.** The tracer rests only on the stable things --
+   the syscall ABI (`svc #0`, the number in `x8`), seccomp and ptrace -- and
+   never reads or patches code, so it serves any program, static or raw `svc`.
+   The shim may take any fast path, however strange, but its contract is **fast
+   or step aside**: where it does not handle a call it leaves it to the tracer,
+   and it never answers *differently* than the law would. Some shim faults -- a
+   site patched wrong, a marker a program can forge -- change the call itself
+   and so fall outside the tracer's net; the shim must guard those itself (a
+   load-time check, a fail-safe that drops the patch). No feature lives only in
+   the shim: without it a program is slower, never wrong.
 
 ## Reading the code through it
 
