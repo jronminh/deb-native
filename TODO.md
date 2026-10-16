@@ -113,11 +113,11 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   exit stop), the length register or the `msghdr`'s `msg_namelen` adjusted. A
   guest `bind("/tmp/x.sock")` now makes the file in the tree. tmux, ssh-agent,
   gpg-agent and dbus can meet.
-- **Still not mapped** (audited,
-  [`policy-audit.md`](docs/reference/policy-audit.md)): `openat2` with `RESOLVE_*`
-  (answers `ENOSYS`); and minor, privileged (allowed, a guest path reaches the
-  kernel): `pivot_root`, `quotactl`. `execveat` is done (a row through the exec
-  gate; `fexecve` works).
+- **Refused on purpose** (a mapping would be a lie): `openat2` with `RESOLVE_*`
+  answers `ENOSYS` (without a resolve flag it runs as `openat`, the path mapped);
+  and minor, privileged (allowed, a guest path reaches the kernel): `pivot_root`,
+  `quotactl`. `execveat` is done (a row through the exec gate; `fexecve` works).
+  The SELinux xattr is read absent, the fd forms (`fgetxattr`/`flistxattr`) too.
 - **The census against the rows**: `docs/reference/device-census.md` lists the 32
   calls the app's filter kills on the S10e, and each must end in a row (or be
   answered `ENOSYS` on purpose). Check that by hand against `gen_rows.py`. Also

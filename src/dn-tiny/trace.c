@@ -943,16 +943,22 @@ static void unlink_copy(struct tracee *t)
 static int answer_xlist(struct tracee *t, const struct row *rw)
 {
 	char host[300], tmp[8192];
-	ssize_t k = mon_read_str(t, t->r.regs[0], host, sizeof host - 1);
 	ssize_t n, i = 0, m = 0;
 	u64 size;
 
-	if (k <= 0)
-		return 0;
-	host[k] = '\0';
-	if (host[0] != '/')
-		return 0;                              /* a relative name: leave it to the kernel */
-	n = (ssize_t) sc(rw->nr, (i64) host, (i64) tmp, (i64) sizeof tmp, 0, 0, 0);
+	if (rw->nr == 13) {                            /* flistxattr: the fd names the file */
+		if (!fd_name(t->pid, (int) t->r.regs[0], 0, host, sizeof host))
+			return 0;
+	} else {
+		ssize_t k = mon_read_str(t, t->r.regs[0], host, sizeof host - 1);
+
+		if (k <= 0)
+			return 0;
+		host[k] = '\0';
+		if (host[0] != '/')
+			return 0;                      /* a relative name: leave it to the kernel */
+	}
+	n = (ssize_t) sc(rw->nr == 13 ? 11 : rw->nr, (i64) host, (i64) tmp, (i64) sizeof tmp, 0, 0, 0);
 	if (n < 0) {
 		mon_skip(t, n);
 		return 1;

@@ -73,7 +73,11 @@ RESULT = {17: (1, -1),                           # getcwd
           78: (2, -1),                           # readlinkat
           79: (3, 2),                            # newfstatat (buf in x2)
           291: (4, 4),                           # statx (buf in x4)
-          11: (5, 1), 12: (5, 1)}                # listxattr llistxattr: drop the SELinux label
+          11: (5, 1), 12: (5, 1), 13: (5, 1)}    # listxattr llistxattr flistxattr: drop the SELinux label
+
+# caught only for the SELinux label (the tracer answers them specially): fgetxattr
+# (the name is checked), flistxattr (its result is rewritten; see RESULT)
+CAUGHT = {10, 13}
 # fstat (80) has no path: it would be caught only for the owner read as root.  The
 # shim fixes the owner of the fstat a program calls; libc's own (fopen, opendir, the
 # loader) read sizes and modes, and a program without the shim sees the real owner
@@ -88,7 +92,7 @@ EFFECT = {35: 3, 36: 1, 37: 1, 38: 3, 276: 3,     # unlinkat symlinkat linkat re
 # The filter tests the rows in order, for every syscall that reaches it, so the
 # rows met most often come first (a gcc build: readlinkat, openat, newfstatat).
 HOT = [78, 56, 79, 48, 17, 221, 35, 291, 34, 38, 276, 49]
-order = HOT + sorted(n for n in set(PATH_ARG) | set(FAKE) | set(RESULT) | set(EFFECT) | set(SOCK) if n not in HOT)
+order = HOT + sorted(n for n in set(PATH_ARG) | set(FAKE) | set(RESULT) | set(EFFECT) | set(SOCK) | CAUGHT if n not in HOT)
 
 with open(out, "w") as f:
     for n in order:

@@ -34,6 +34,7 @@ mapped, so a program cannot find the host frame through an unmapped reader.
 | --- | --- |
 | `/proc/<pid>/fd/<n>` | done |
 | `fstat`/`statx` owner | done (fake root) |
+| `fgetxattr`/`flistxattr` (the fd's file, for the SELinux label) | done |
 | `fdinfo` | no path |
 
 ## AF_UNIX
@@ -55,7 +56,7 @@ mapped, so a program cannot find the host frame through an unmapped reader.
 | reader | state |
 | --- | --- |
 | `/sys`, `/dev`, `/storage` | host rows (bound as they are; a later step narrows) |
-| `openat2` with `RESOLVE_*` | **open**: answers `ENOSYS` |
+| `openat2` with `RESOLVE_*` | refused `ENOSYS` (a clear refusal; without a resolve flag it runs as `openat`, the path mapped) |
 
 ## The test
 
