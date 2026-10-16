@@ -50,9 +50,14 @@ still find the phone; this is about what a program finds *without asking*.
 
 ## Order
 
-1. the fingerprint test (A);
-2. `/proc/<pid>/status` (D) -- the biggest trace of the runtime;
-3. the denied files (C), reading the kernel where it can;
+1. the fingerprint test (A) -- done;
+2. `/proc/<pid>/status` (D) -- done: TracerPid 0, no Seccomp, State running, Name
+   the program;
+3. the denied files (C) -- `/proc/uptime` and `/proc/loadavg` are answered with
+   the real values (`CLOCK_BOOTTIME` and `sysinfo`), generated at open, so
+   `uptime` works; `/proc/stat` and `/proc/vmstat` stay refused, since no syscall
+   gives their numbers and inventing them would be a lie -- `top` and `vmstat`
+   degrade (top still counts the tasks from `/proc/*/stat`);
 4. capabilities (E), then cgroup/rlimit/`/proc/sys` (F).
 
 ## Open

@@ -494,16 +494,100 @@ static int uitoa(char *p, unsigned v)
 	return i;
 }
 
+/* write a synthetic file under var/lib/deb-native and set `out` to its host path
+ * (a memfd cannot be handed to the child across the ptrace boundary) */
+static int put_synth(const char *name, const char *buf, size_t n, char *out, size_t cap)
+{
+	const char *root = policy_root();
+	char fp[600];
+	int fd;
+
+	if (!root || policy_root_len() == 0)
+		return 0;
+	if (cat2(fp, sizeof fp, root, "/var/lib/deb-native/") < 0 || cat2(fp, sizeof fp, fp, name) < 0)
+		return 0;
+	fd = (int) sc(56, -100, (i64) fp, 0101 | 01000, 0600, 0, 0);   /* O_WRONLY|O_CREAT|O_TRUNC */
+	if (fd < 0)
+		return 0;
+	sys_write(fd, buf, n);
+	sys_close(fd);
+	return scpy(out, cap, fp) < 0 ? 0 : 1;
+}
+
+/* "/proc/uptime": the boot time is real (CLOCK_BOOTTIME); the idle field, which
+ * the kernel would give too, is approximated by the boot time (the phone is
+ * mostly idle and there is no syscall for the aggregate idle). */
+static int synth_uptime(char *out, size_t cap)
+{
+	struct { i64 s, ns; } ts = { 0, 0 };
+	unsigned long sec, hh;
+	char buf[64];
+	int m = 0;
+
+	if (sc(113, 7 /* CLOCK_BOOTTIME */, (i64) &ts, 0, 0, 0, 0) != 0)
+		return 0;
+	sec = (unsigned long) ts.s;
+	hh = (unsigned long) (ts.ns / 10000000);
+	m += uitoa(buf + m, (unsigned) sec);
+	buf[m++] = '.';
+	buf[m++] = (char) ('0' + hh / 10);
+	buf[m++] = (char) ('0' + hh % 10);
+	buf[m++] = ' ';
+	m += uitoa(buf + m, (unsigned) sec);
+	buf[m++] = '.';
+	buf[m++] = (char) ('0' + hh / 10);
+	buf[m++] = (char) ('0' + hh % 10);
+	buf[m++] = '\n';
+	return put_synth("uptime", buf, (size_t) m, out, cap);
+}
+
+/* "/proc/loadavg": the three loads and the process count are real (sysinfo); the
+ * running count and the last pid have no syscall, so the current process stands
+ * in (a tool that waits on the load reads the first field). */
+static int synth_loadavg(char *out, size_t cap)
+{
+	struct {
+		i64 uptime;
+		unsigned long loads[3];
+		unsigned long totalram, freeram, sharedram, bufferram, totalswap, freeswap;
+		unsigned short procs, pad;
+		unsigned int pad2;
+		unsigned long totalhigh, freehigh;
+		unsigned int mem_unit;
+	} si;
+	char buf[80];
+	int m = 0, i;
+
+	if (sc(179 /* sysinfo */, (i64) &si, 0, 0, 0, 0, 0) != 0)
+		return 0;
+	for (i = 0; i < 3; i++) {
+		unsigned long ip = si.loads[i] >> 16, fp = ((si.loads[i] & 0xffff) * 100) >> 16;
+
+		m += uitoa(buf + m, (unsigned) ip);
+		buf[m++] = '.';
+		buf[m++] = (char) ('0' + fp / 10);
+		buf[m++] = (char) ('0' + fp % 10);
+		buf[m++] = ' ';
+	}
+	m += uitoa(buf + m, 1);
+	buf[m++] = '/';
+	m += uitoa(buf + m, si.procs);
+	buf[m++] = ' ';
+	m += uitoa(buf + m, (unsigned) sys_getpid());
+	buf[m++] = '\n';
+	return put_synth("loadavg", buf, (size_t) m, out, cap);
+}
+
 static int synth_status(struct tracee *t, const char *guest, char *out, size_t cap)
 {
-	const char *root = policy_root(), *p;
+	const char *p;
 	pid_t pid = 0;
 	char kp[64], raw[16384], buf[16384], *w;
 	size_t rn = 0;
 	ssize_t n;
 	int fd, m;
 
-	if (strncmp(guest, "/proc/", 6) != 0 || !root || policy_root_len() == 0)
+	if (strncmp(guest, "/proc/", 6) != 0 || policy_root_len() == 0)
 		return 0;
 	p = guest + 6;
 	if (strncmp(p, "self/status", 11) == 0 && p[11] == '\0') {
@@ -586,21 +670,26 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 	}
 	w[rn] = '\0';
 	{
-		char fp[600];
+		char nm[32];
+		int l = scpy(nm, sizeof nm, "status.");
 
-		if (cat2(fp, sizeof fp, root, "/var/lib/deb-native/status.") < 0)
+		if (l < 0)
 			return 0;
-		m = (int) strlen(fp);
-		m += uitoa(fp + m, (unsigned) pid);
-		fd = (int) sc(56, -100, (i64) fp, 0101 | 01000, 0600, 0, 0);   /* O_WRONLY|O_CREAT|O_TRUNC */
-		if (fd < 0)
-			return 0;
-		sys_write(fd, w, rn);
-		sys_close(fd);
-		if (scpy(out, cap, fp) < 0)
-			return 0;
+		l += uitoa(nm + l, (unsigned) pid);
+		nm[l] = '\0';
+		return put_synth(nm, w, rn, out, cap);
 	}
-	return 1;
+}
+
+/* A read-only open the tracer answers with a generated file: /proc/<pid>/status,
+ * /proc/uptime, /proc/loadavg.  1 if `out` is the host path to open instead. */
+static int synth_open(struct tracee *t, const char *guest, char *out, size_t cap)
+{
+	if (strcmp(guest, "/proc/uptime") == 0)
+		return synth_uptime(out, cap);
+	if (strcmp(guest, "/proc/loadavg") == 0)
+		return synth_loadavg(out, cap);
+	return synth_status(t, guest, out, cap);
 }
 
 static void answer_at_entry(struct tracee *t, const struct row *rw);
@@ -643,7 +732,7 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		char in[256], h[600];
 		ssize_t k = mon_read_str(t, t->r.regs[1], in, sizeof in - 1);
 
-		if (k > 0 && (in[k] = '\0', 1) && synth_status(t, in, h, sizeof h)) {
+		if (k > 0 && (in[k] = '\0', 1) && synth_open(t, in, h, sizeof h)) {
 			u64 at = mon_scratch(t, h, strlen(h) + 1);
 
 			if (at != 0) {
