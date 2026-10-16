@@ -63,6 +63,22 @@ can build on**; "does not manipulate the instruction set" (symbols) is the safe
 path for now, and when an instruction-level rule is needed, prefer the one keyed
 on the stable ISA (`instruction_pointer`) over one keyed on glibc's code.
 
+## Checked: extending the shim's site set is not free
+
+Eleven rows the tracer only maps (no link/cwd cache) — `mkdirat`, `mknodat`,
+`fchmodat`, `utimensat`, `inotify_add_watch`, `statfs`, `truncate`, and the
+set/remove xattr calls — could in principle move to the shim's fast path: the
+same syscall, its path resolved. Tried it (add the numbers to the shim's
+`hooked_nr` and the cases to `lane_hook`): **it broke libc** — `sed` (and, with
+the shim preloaded, `gcc`) got **SIGSEGV**, even before the new cases were
+reached, so merely **patching** those `svc` sites is not safe. Reverted.
+
+So the instruction-level rule (which sites) is glibc-specific and the shim's
+current set is a balance, not a knob: the `svc` encoding and the patch operation
+are stable (above), but **which** sites can be patched is not something to widen
+without care. This is the same lesson as the cancellable path (E10), a second
+time.
+
 ## Checked: the ABI net catches what the shim cannot reach
 
 A program calling `syscall(SYS_openat, AT_FDCWD, "/etc/passwd", ...)` — a raw
