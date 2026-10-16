@@ -55,7 +55,8 @@ mapped, so a program cannot find the host frame through an unmapped reader.
 
 | reader | state |
 | --- | --- |
-| `/sys`, `/dev`, `/storage` | host rows (bound as they are; a later step narrows) |
+| `/proc`, `/sys`, `/dev` | host rows (the kernel's own) |
+| `/data`, `/storage`, `/sdcard`, `/mnt`, `/system`, `/apex`, `/vendor` | the tree's now (`ENOENT`; a bind reaches one on purpose) |
 | `openat2` with `RESOLVE_*` | refused `ENOSYS` (a clear refusal; without a resolve flag it runs as `openat`, the path mapped) |
 
 ## The test

@@ -351,8 +351,7 @@ static int to_guest(const char *h, char *out, size_t cap)
  * their own names (a "keep" list; boot/binds adds more) */
 static void binds_defaults(void)
 {
-	static const char *const keep[] = { "/proc", "/sys", "/dev", "/data", "/system", "/storage",
-					    "/sdcard", "/apex", "/vendor", "/mnt", NULL };
+	static const char *const keep[] = { "/proc", "/sys", "/dev", NULL };
 	char m[600], mi[600];
 	int i;
 

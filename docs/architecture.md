@@ -117,9 +117,9 @@ the net for everything.
 
 - A guest path is the prefix's: `/usr/bin/ls` is `ROOT/usr/bin/ls`.
 - The mapping is one **table** (`policy.c`): a row per guest path. `/` is the
-  prefix root; ten host directories stay the phone's under their own names
-  (`/proc`, `/sys`, `/dev`, `/data`, `/system`, `/storage`, `/sdcard`, `/apex`,
-  `/vendor`, `/mnt`); each bind in a prefix's `boot/binds` is a row too. Guest to
+  prefix root; three host directories stay the phone's under their own names
+  (`/proc`, `/sys`, `/dev`); each bind in a prefix's `boot/binds` is a row too.
+  Guest to
   host by the longest guest row, host to guest by the longest host row.
 - The path is walked one component at a time on the **guest** path, links and
   `..` resolved there (an absolute link target is the tree's, `/etc/alternatives/
@@ -170,8 +170,8 @@ A program in the prefix sees three things, and nothing else of Android:
 - the prefix, as `/`;
 - the kernel's own truth: `/proc`, `/sys`, `/dev`, `uname`, as a Debian chroot
   on the same kernel would see them;
-- the host directories the law lets into the tree (today the ten above, under
-  their own names).
+- the host directories the law lets into the tree (today `/proc`, `/sys` and
+  `/dev` under their own names; a bind can add another on purpose).
 
 The test for a leak: a program that does not ask where it runs and still meets
 Android (in `ls -l`, in a leaky `/proc` file) is a bug. A program
@@ -203,11 +203,13 @@ prefixes can run at once, each under its own `dn-tiny`; they share nothing.
 - The copies made for hard links do not share their contents.
 - A program without the shim (static, Go) sees the real owner through `fstat`
   only, and the real link count of a copy.
-- `execveat`, `openat2` with `RESOLVE_*`, `name_to_handle_at`, AF_UNIX socket
-  paths (`bind`, `connect`) are not mapped yet.
-- `ld.so`'s own opens (the program, the shim, the libraries) happen before the
-  shim is loaded and stop in the tracer.
-- Where the boundary leaks without being asked (`TODO.md`, "The boundary"):
-  `/data`, `/storage`, `/sdcard`, `/system`
-  and the other host directories answer `stat` and `cd` (a bind is the way out,
-  `boot/binds`); `/proc/self/maps` names the libraries by their host paths.
+- `name_to_handle_at` is not mapped; `openat2` with `RESOLVE_*` answers `ENOSYS`
+  (a clear refusal, not a hole).
+- `/proc/<pid>/maps` and `smaps` still name the libraries by their host paths
+  (the one reader that needs synthesized content, not a mapping).
+- The kernel's own refusals stay: SELinux answers `EACCES` where Debian would
+  allow (`/sys/fs/selinux`, parts of `/sys`), and `PPid`/`getppid()` name the
+  tracer (a structural residue; `docs/spec/phase2.md`, "An accepted residue").
+- `ld.so`'s own opens (the program, the shim, the libraries) are removed by the
+  loader hook when a prefix ships it (`--audit`); without it they stop in the
+  tracer.

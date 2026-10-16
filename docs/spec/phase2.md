@@ -53,6 +53,16 @@ presentation (the file) while the truth is still there.  So, in order:
    tool degrades.  Or **fake, and say so** (the Debian identity) when a fake is
    forced, as `/proc/<pid>/status` must drop the runtime's own traces.
 
+## An accepted residue: PPid
+
+`PPid` and `getppid()` name dn-tiny: the tracer really is the parent, and the
+parent-child link is load-bearing (ptrace, `wait`, signal delivery).  Faking the
+reported value would not change the real one -- only break the consistency a
+program can check (`getppid()` against `/proc/1`, orphan detection) and hide one
+clue while the parent process (its `/proc/<tracerpid>/comm`, `ps`) still shows.
+So it is left the truth, like the kernel and the hardware: a program that looks
+finds the tracer, a program that does not ask does not.
+
 ## The fingerprint test
 
 `scripts/fingerprint.sh PREFIX`, the mirror of the coverage test: it reads the

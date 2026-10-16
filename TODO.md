@@ -88,12 +88,15 @@ step checked as `AGENTS.md` says, in Termux and in the app:
      dynamic pid); enforcing `ro`; then `maps`/`smaps` and `/proc/sys/*` ("Emulation").
    - Later: `mount --bind` inside the prefix adds a row (it is refused now); the
      table then has to live where the shim sees a change, not a copy read once.
-4. **Narrow the host directories**, with binds as the way out: drop `/data`,
-   `/storage`, `/sdcard` and `/mnt` from the host rows, and try `/system`,
-   `/apex`, `/vendor` (the runtime's own calls use host paths and do not go
-   through the law; to check). In the same change, `/proc/*/maps` and `smaps`
-   name files by their guest paths: gdb and the JVM open the paths they read
-   there, which works today only because `/data` is the host's.
+4. **Narrow the host directories** (done for the rows): the table keeps only
+   `/proc`, `/sys` and `/dev` as host rows; `/data`, `/storage`, `/sdcard`,
+   `/mnt` and (tried, and dropped) `/system`, `/apex`, `/vendor` are the tree's
+   now -- a path there answers `ENOENT` (a Debian has no such directory), not the
+   phone's, and a bind in `boot/binds` is the way to reach one on purpose.  The
+   runtime's own calls use host paths and do not go through the law, so they are
+   unaffected.  **Left:** `/proc/*/maps` and `/proc/*/smaps` still name the
+   libraries by their host paths (gdb and the JVM read them) -- the one piece of
+   Phase 1 that needs synthesized content, not a mapping.
 
 ## The law
 
