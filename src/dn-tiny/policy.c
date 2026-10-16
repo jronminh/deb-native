@@ -38,7 +38,9 @@ static int scpy(char *out, size_t cap, const char *s)
 #define pol_readlink sys_readlink
 #endif
 
-/* the errno values the law returns, so it needs no errno.h (kernel numbers) */
+/* the working-path buffer the law walks in, and its own errno values (so it
+ * needs no errno.h) */
+#define WORK 4096
 enum { E_NOENT = 2, E_INVAL = 22, E_NAMETOOLONG = 36, E_LOOP = 40 };
 
 static const struct row ROWS[] = {
@@ -357,6 +359,15 @@ static void binds_defaults(void)
 
 /* add one bind from boot/binds; 0, or -1 (bad: a duplicate GUEST, a GUEST under a
  * host row, a non-canonical HOST, a reserved name) */
+/* Are both guest paths on the same mount (row)?  A rename or a link between two
+ * rows is EXDEV, as between two bind mounts. */
+int policy_same_row(const char *g1, const char *g2)
+{
+	const struct bind *b1 = row_guest(g1), *b2 = row_guest(g2);
+
+	return b1 && b1 == b2;
+}
+
 int policy_binds_add(const char *g, const char *h, unsigned flags)
 {
 	size_t n = strlen(h), i;
@@ -441,7 +452,7 @@ size_t policy_root_len(void) { return root_len; }
 void policy_set_root(const char *r)
 {
 	char st[128], p[600], buf[4096];
-	int fd;
+	int fd, i;
 	ssize_t k;
 
 	policy_root_set(r);
@@ -460,6 +471,23 @@ void policy_set_root(const char *r)
 				sys_exit(1);
 			}
 		}
+	}
+	for (i = 0; i < nbinds; i++) {           /* an empty directory at each bind's GUEST */
+		char b[WORK];
+		size_t j;
+
+		if (strcmp(binds[i].g, "/") == 0 || row_is_identity(&binds[i]))
+			continue;
+		if (cat2(b, sizeof b, r, binds[i].g) < 0)
+			continue;
+		for (j = root_len; b[j]; j++) {
+			if (b[j] != '/')
+				continue;
+			b[j] = '\0';
+			sc(34, -100, (i64) b, 0755, 0, 0, 0);   /* mkdirat, AT_FDCWD */
+			b[j] = '/';
+		}
+		sc(34, -100, (i64) b, 0755, 0, 0, 0);
 	}
 	links_init();
 }
@@ -491,7 +519,6 @@ int policy_is_host(const char *p)
  * time on the *guest* path (so `..` and links are the tree's, as under a real bind
  * mount), and its host path is taken at the end through the table. -------------- */
 #define MAX_HOPS 40
-#define WORK 4096
 
 /* the part of guest path `cur` before its last '/', cut in place (never above "/") */
 static void pop_component(char *cur)

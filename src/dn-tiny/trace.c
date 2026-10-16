@@ -351,6 +351,18 @@ static void link_by_copy(struct tracee *t)
 static void answer_at_entry(struct tracee *t, const struct row *rw);
 static void unlink_copy(struct tracee *t);
 
+/* the path in register `arg`, if it is absolute (a guest path we can place in the
+ * table); 1, and the string in out, or 0 */
+static int abs_guest(struct tracee *t, int arg, char *out, size_t cap)
+{
+	ssize_t k = mon_read_str(t, t->r.regs[arg], out, cap - 1);
+
+	if (k <= 0)
+		return 0;
+	out[k] = '\0';
+	return out[0] == '/';
+}
+
 void trace_enter(struct tracee *t, const struct row *rw)
 {
 	if (rw->effect) {                               /* drop now, and again once the call is over */
@@ -364,6 +376,14 @@ void trace_enter(struct tracee *t, const struct row *rw)
 	if (rw->special == SP_EXEC) {
 		exec_enter(t);
 		return;
+	}
+	if (rw->nr == 38 || rw->nr == 276 || rw->nr == 37) {   /* rename/link: EXDEV between two rows */
+		char a[256], b[256];
+
+		if (abs_guest(t, 1, a, sizeof a) && abs_guest(t, 3, b, sizeof b) && !policy_same_row(a, b)) {
+			mon_skip(t, -18);
+			return;
+		}
 	}
 	if (rw->path_arg >= 0)
 		rewrite_path(t, rw->path_arg);

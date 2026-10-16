@@ -37,9 +37,9 @@ The mapping must be *single* and *consistent* before it is widened.
 3. **Binds are data.** Done for the table: one table in `policy.c` (the prefix
    root + the host rows: `/proc`, `/sys`, `/dev`, the shared dirs + the binds in
    `boot/binds`), read by every engine -- not re-derived in each; the walk
-   resolves in guest space and maps through it. Left: the mount point directory,
-   `EXDEV` between rows, and `/proc/self/mounts`/`mountinfo` from the table
-   (`TODO.md`, "The boundary", step 3).
+   resolves in guest space and maps through it. Left: `/proc/self/mounts`/
+   `mountinfo` from the table, and enforcing `ro` (`TODO.md`, "The boundary",
+   step 3).
 
 ## Phase 1 -- complete the mapping (the coordinates)
 

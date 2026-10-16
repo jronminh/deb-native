@@ -65,12 +65,13 @@ step checked as `AGENTS.md` says, in Termux and in the app:
      (`policy_set_root`) and the shim (`lane_init`) from the root; fixed for a
      boot. The tracer refuses to boot on a non-canonical `HOST`, a duplicate
      `GUEST`, or a `GUEST` under a host row. `ro` is parsed but not enforced yet.
-   - **The mount point** (open): an empty directory at `GUEST`, made at boot if
-     missing, so `readdir` of its parent needs nothing; it stays when the bind
-     goes, as after `umount`.
-   - **`rename` and `link` between two rows** (open): `EXDEV`, as between two
-     mounts (`prefixes/` and the app's `home/` are one file system, so the kernel
-     would allow it). `st_dev` and `statfs` stay the kernel's (true already).
+   - **The mount point** (done): `dn-tiny` makes an empty directory at each
+     bind's `GUEST` at boot (`mkdir -p` the components), so `readdir` of its
+     parent sees it; it stays when the bind goes, as after `umount`.
+   - **`rename` and `link` between two rows** (done): `EXDEV`, decided on the
+     guest paths at entry (a host-path check is ambiguous: the root may sit under
+     a host row, or a bind's host under the root). `st_dev` and `statfs` stay the
+     kernel's (true already).
    - **`/proc/self/mounts`, `/proc/self/mountinfo`** (and `/etc/mtab`) built from
      the table, generated at `open` into a memfd ("Emulation") (open).
    - Later: `mount --bind` inside the prefix adds a row (it is refused now); the

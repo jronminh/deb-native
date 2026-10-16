@@ -128,6 +128,8 @@ the net for everything.
   target, `/proc/self/fd/N`) is mapped back to the guest's.
 - A call on a real directory fd: the guest path of the directory the fd names,
   then the name from there; a host directory's paths stay.
+- A bind's mount point is an empty directory `dn-tiny` makes at boot; a `rename`
+  or `link` between two rows answers `EXDEV`, as between two mounts.
 - The law lives once, in `policy.c`, and both engines read it: the tracer links
   it as it is, the shim builds it `-DDN_LIBC` (the types, the strings and
   `pol_readlink` from libc and the lane), the loader hook builds it `-DDN_FREE`

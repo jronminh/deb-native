@@ -75,6 +75,9 @@ unsigned policy_links_gen(void);
  * non-canonical HOST; `policy_binds_parse` reads the file's text in place. */
 int policy_binds_add(const char *guest, const char *host, unsigned flags);
 int policy_binds_parse(char *buf);
+/* Are both guest paths on the same row (mount)?  A rename or a link between two
+ * rows is EXDEV, as between two bind mounts. */
+int policy_same_row(const char *g1, const char *g2);
 /* The canonical guest path for `in`, as realpath would make it: every component's
  * link followed, `..` against what is resolved, an absolute link target the
  * prefix's.  `base` is the guest working directory for a relative path.  0 and
