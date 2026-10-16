@@ -48,6 +48,7 @@ and `python3`; `--packages "..."` adds anything else. Everything is in
 | `src/dn-tiny/` | the runtime: the tracer and the shim ([`README`](src/dn-tiny/README.md)) |
 | `scripts/build-runtime.sh` | builds `dn-tiny` |
 | `scripts/build-prefix.sh` | builds a prefix in Termux |
+| `scripts/build-busybox.sh` | builds a busybox bundle, a tiny non-Debian tree ([`spec/variants.md`](docs/spec/variants.md)) |
 | `scripts/prefix/` | the prefix's `boot.sh` and `init.sh` |
 | `docs/` | [building](docs/building.md), [architecture](docs/architecture.md), [performance](docs/performance.md), [reference](docs/reference/) |
 

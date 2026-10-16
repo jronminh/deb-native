@@ -39,7 +39,8 @@ database, a shell and `perl`, but not `apt`). So the sizes step: **bundle (no
 
 ## A worked example: the busybox bundle
 
-A 6.3 MB tree, made by hand from a `dev` builder: `dn-tiny`, `busybox-static`,
+A 6.3 MB tree, made by `scripts/build-busybox.sh` from a `dev` builder:
+`dn-tiny`, `busybox-static`,
 `fastfetch` (glibc) and the loader with `libc`/`libm`/`libyyjson`. It has no
 Debian userland and no `bash` -- its `init.sh` runs under `busybox sh` -- and its
 own `boot/boot.sh` (no `/usr/bin/bash`). It runs: `uname`, `ls`, a shell with
