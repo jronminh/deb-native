@@ -19,10 +19,16 @@ path to the kernel.
   (the guest path reaches the kernel). `fexecve` also uses `execveat` (with
   `AT_EMPTY_PATH`, so no path, but it is also not gated, so the loader rewrite is
   skipped). **Fix: a row for 281, through the exec gate.**
-- **`fanotify_mark` (263): not caught** (it takes a path and a dirfd). The census
-  does not kill it, so a guest path reaches the kernel. To confirm.
-- **`pivot_root` (41)** (two paths) and **`quotactl` (60)** (a path): not caught;
-  the census does not kill them. Both are privileged, so they fail anyway; minor.
+- **`pivot_root` (41)** (two paths) and **`quotactl` (60)** (a path): not caught,
+  and Android does **not** kill them — measured: the kernel runs them with the
+  guest path (`pivot_root` -> `EPERM`, `quotactl` -> `ENOENT`). Both are
+  privileged, so they fail anyway; minor (no observable wrong result, but a guest
+  path does reach the kernel).
+- **`fanotify_mark` (263): not a gap** — checked, not assumed: the app's filter
+  **kills** it (`263` appears in the tracer's "answered for the platform's
+  filter"), so `policy_deny` answers `ENOSYS` and no path reaches the kernel. (The
+  census's "32" counts killed *and* kernel-implemented; a killed call the kernel
+  lacks, like this one, sits in the census's "224" bucket but is still killed.)
 - **AF_UNIX socket paths** (`bind`, `connect`, `sendto`, `sendmsg` with a
   `sockaddr_un`): not caught — a known gap (`TODO.md`, "The law").
 - `setxattrat`/`getxattrat`/`listxattrat`/`removexattrat` and
