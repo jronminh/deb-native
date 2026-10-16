@@ -14,6 +14,7 @@ configuration differ by 10-20%; comparisons were interleaved.
 - [In an app session](#in-an-app-session)
 - [How the stops came down](#how-the-stops-came-down)
 - [What is left](#what-is-left)
+- [A second bench](#a-second-bench)
 - [How to measure](#how-to-measure)
 
 ## The cost of a stop
@@ -85,8 +86,41 @@ The Lua build's 1.7k entry stops, by where the `svc` is:
 and 263 `SIGSYS` stops from the app's own filter (`set_robust_list`, `clone3`),
 258 fork and exec events.
 
+## A second bench
+
+The Lua build is one axis: a compile, dominated by one heavy process, with a
+few `exec`s. It hides three others: a workload that is nothing but `stat` and
+`readlink`, one that moves links, and one that spawns many short processes.
+`scripts/bench.sh PREFIX` runs such workloads, each its own run of the runtime,
+so the stops attribute to one workload:
+
+| workload | what it does | wall | entry stops |
+| --- | --- | --- | --- |
+| `find` | `find /usr -type f` (13k files) | ~140 ms | 61 |
+| `ls` | `ls -lR /usr/share` | ~510 ms | 60 |
+| `links` | `find -type l -printf`, `stat -L`, `realpath` | ~170 ms | 78 |
+| `spawn` | 300 x `/usr/bin/true` | ~3.36 s | 1548 |
+| `git` | `init`, `add`, `commit`, `status` over a cert tree | ~460 ms | 563 |
+| `py` | `os.walk` + `stat` over `python3.13` | ~150 ms | 63 |
+| `tar` | `tar czf` then `tar xzf` a cert tree | ~430 ms | 711 |
+
+Two things it shows that the Lua build hides:
+
+- **Metadata is cheap now.** `links` and `py` do thousands of `stat`, `readlink`
+  and `lstat`, in a single process, and stop under 100 times: the shim answers
+  them (a call in the shim is about 1 us, a stop about 30 us). A C loop of 2000
+  `fstatat` in one process stops **5** times.
+- **Every spawned process costs about 5 stops.** 300 x `true` stops 1548 times,
+  against 7 for the empty loop. The cost is the exec gate plus the loader's own
+  `open`s, which the shim cannot answer: they happen before it is loaded. On
+  this phone natively in Termux the same 300 `true` take 2.4 s, so the runtime
+  adds about 1 ms a spawn and the stops are about 0.05 s of it. Any
+  process-spawning workload pays this — the Lua build's ~150 `exec`s pay it too,
+  but under gcc's own work it is not seen.
+
 ## How to measure
 
+- `scripts/bench.sh PREFIX [workload ...]` runs the second bench above.
 - `dn-tiny` without `-q` prints one line at exit: entry and exit stops, events,
   signals, paths mapped, calls answered at entry, execs, `SIGSYS` answers, the
   time, and which syscalls the platform killed.
