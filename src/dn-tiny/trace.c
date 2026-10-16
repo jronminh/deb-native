@@ -6,6 +6,10 @@
 
 unsigned long trace_n_rewritten;
 
+#define EXE_LEN   128
+static char exe_now[PID_SLOTS][EXE_LEN];          /* by pid, the program each process runs */
+static char exe_next[PID_SLOTS][EXE_LEN];         /* noted at execve entry, valid once it succeeds */
+
 /* ---- the synthetic /proc mount files: the rows in the table point /proc/mounts
  * (and mountinfo, /etc/mtab) at a file under var/lib/deb-native, so this only
  * writes that file, once, at boot.  A regular file is read with no stop; a memfd
@@ -472,6 +476,133 @@ static void link_by_copy(struct tracee *t)
 	mon_skip(t, r < 0 ? r : 0);
 }
 
+/* ---- /proc/<pid>/status: the kernel's own, with the runtime's traces gone ----
+ * TracerPid is dn-tiny and Seccomp is 2; a plain process has neither.  The file
+ * is per-process and changes, so it is generated at open into a file under
+ * var/lib/deb-native and the open is pointed there. ---------------------------- */
+static int uitoa(char *p, unsigned v)
+{
+	char d[12];
+	int j = 0, i = 0;
+
+	do {
+		d[j++] = (char) ('0' + v % 10);
+		v /= 10;
+	} while (v);
+	while (j)
+		p[i++] = d[--j];
+	return i;
+}
+
+static int synth_status(struct tracee *t, const char *guest, char *out, size_t cap)
+{
+	const char *root = policy_root(), *p;
+	pid_t pid = 0;
+	char kp[64], raw[16384], buf[16384], *w;
+	size_t rn = 0;
+	ssize_t n;
+	int fd, m;
+
+	if (strncmp(guest, "/proc/", 6) != 0 || !root || policy_root_len() == 0)
+		return 0;
+	p = guest + 6;
+	if (strncmp(p, "self/status", 11) == 0 && p[11] == '\0') {
+		pid = t->pid;
+	} else {
+		const char *s = strchr(p, '/');
+
+		if (!s || strcmp(s, "/status") != 0)
+			return 0;
+		for (; p < s; p++) {
+			if (*p < '0' || *p > '9')
+				return 0;
+			pid = pid * 10 + (pid_t) (*p - '0');
+		}
+		if (p != s || pid <= 0)
+			return 0;
+	}
+	m = scpy(kp, sizeof kp, "/proc/");              /* the kernel's /proc/<pid>/status */
+	if (m < 0)
+		return 0;
+	m += uitoa(kp + m, (unsigned) pid);
+	if (scpy(kp + m, sizeof kp - m, "/status") < 0)
+		return 0;
+	fd = sys_open(kp, 0);
+	if (fd < 0)
+		return 0;
+	n = sys_read(fd, raw, sizeof raw - 1);
+	sys_close(fd);
+	if (n <= 0)
+		return 0;
+	raw[n] = '\0';
+	w = buf;
+	for (p = raw; *p; ) {                           /* TracerPid: 0; drop Seccomp lines */
+		const char *e = strchr(p, '\n');
+		size_t len = e ? (size_t) (e - p + 1) : strlen(p);
+
+		if (strncmp(p, "TracerPid:", 10) == 0) {
+			const char *s = "TracerPid:\t0\n";
+
+			if (rn + strlen(s) >= sizeof buf)
+				break;
+			memcpy(w + rn, s, strlen(s));
+			rn += strlen(s);
+		} else if (strncmp(p, "State:", 6) == 0) {
+			const char *s = "State:\tR (running)\n";   /* not "t (tracing stop)" */
+
+			if (rn + strlen(s) >= sizeof buf)
+				break;
+			memcpy(w + rn, s, strlen(s));
+			rn += strlen(s);
+		} else if (strncmp(p, "Name:", 5) == 0) {
+			const char *b = exe_now[PID_SLOT(t->pid)], *q, *sl = NULL;
+			int l;
+
+			for (q = b; *q; q++)
+				if (*q == '/')
+					sl = q;
+			b = sl ? sl + 1 : b;
+			if (rn + 8 + strlen(b) + 1 >= sizeof buf)
+				break;
+			memcpy(w + rn, "Name:\t", 6);
+			rn += 6;
+			l = (int) strlen(b);
+			if (l > 15)
+				l = 15;                        /* the kernel truncates comm to 15 */
+			memcpy(w + rn, b, (size_t) l);
+			rn += (size_t) l;
+			w[rn++] = '\n';
+		} else if (strncmp(p, "Seccomp:", 8) == 0 || strncmp(p, "Seccomp_filters:", 16) == 0) {
+			;
+		} else {
+			if (rn + len >= sizeof buf)
+				break;
+			memcpy(w + rn, p, len);
+			rn += len;
+		}
+		if (!e)
+			break;
+		p = e + 1;
+	}
+	w[rn] = '\0';
+	{
+		char fp[600];
+
+		if (cat2(fp, sizeof fp, root, "/var/lib/deb-native/status.") < 0)
+			return 0;
+		m = (int) strlen(fp);
+		m += uitoa(fp + m, (unsigned) pid);
+		fd = (int) sc(56, -100, (i64) fp, 0101 | 01000, 0600, 0, 0);   /* O_WRONLY|O_CREAT|O_TRUNC */
+		if (fd < 0)
+			return 0;
+		sys_write(fd, w, rn);
+		sys_close(fd);
+		if (scpy(out, cap, fp) < 0)
+			return 0;
+	}
+	return 1;
+}
+
 static void answer_at_entry(struct tracee *t, const struct row *rw);
 static void unlink_copy(struct tracee *t);
 
@@ -506,6 +637,19 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		if (k > 0 && (nm[k] = '\0', 1) && strcmp(nm, "security.selinux") == 0) {
 			mon_skip(t, -61);               /* ENODATA */
 			return;
+		}
+	}
+	if (rw->nr == 56 && !(t->r.regs[2] & 0x643)) {  /* a read-only open: the synthetic /proc/<pid>/status */
+		char in[256], h[600];
+		ssize_t k = mon_read_str(t, t->r.regs[1], in, sizeof in - 1);
+
+		if (k > 0 && (in[k] = '\0', 1) && synth_status(t, in, h, sizeof h)) {
+			u64 at = mon_scratch(t, h, strlen(h) + 1);
+
+			if (at != 0) {
+				mon_set_arg(t, 1, at);
+				return;
+			}
 		}
 	}
 	if (rw->fake != F_NONE) {
@@ -555,10 +699,6 @@ void trace_enter(struct tracee *t, const struct row *rw)
 }
 
 /* ---- results: what the program is told, not what the kernel returned --------- */
-
-#define EXE_LEN   128
-static char exe_now[PID_SLOTS][EXE_LEN];          /* by pid, the program each process runs */
-static char exe_next[PID_SLOTS][EXE_LEN];         /* noted at execve entry, valid once it succeeds */
 
 void trace_exe_pending(pid_t pid, const char *guest_path)
 {

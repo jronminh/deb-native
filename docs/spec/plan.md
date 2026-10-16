@@ -64,19 +64,23 @@ host frame. This is the phase's proof.
 
 ## Phase 2 -- the disguise (arm64 Linux)
 
-The values the kernel *fixes* and a mapping cannot carry. Present them as a
-stock arm64 Linux kernel would:
+The values the kernel *fixes* and a mapping cannot carry.  The revised rule
+([`phase2.md`](phase2.md)): **the kernel and the hardware are the truth and are
+shown as they are** -- the phone is a real Linux on real arm64, so `uname`,
+`/proc/version` and `/proc/cpuinfo` are not faked.  Only what Android *forces* is
+changed -- the runtime's own traces and the files the app domain denies -- and
+each such answer carries the Debian release the prefix reproduces:
 
-- **`uname`**, `/proc/version`, `/proc/cpuinfo`, `/proc/stat`, `/proc/loadavg`,
-  `/proc/uptime` -- no trace of Android.
-- **The divergent class** (the old spec's word): cgroup, rlimit, sched,
-  capabilities, `/proc/sys/*`, the W^X behaviour.
-- **id and owner** (the kernel returns the app's uid) -- the fake root and the
-  owner store, the residue of "map by default".
-- **The SELinux label** (`security.selinux` reads absent) and **netlink**.
+- **`/proc/<pid>/status`** (done): `TracerPid`, `Seccomp`, `Name`, `State` -- the
+  runtime's traces, not the kernel's.
+- **ids** (fake root, done), **the SELinux label** (done), **netlink**.
+- **the divergent class** (cgroup, rlimit, sched, capabilities, `/proc/sys/*`,
+  the W^X behaviour): the real value where the tracer can read it, else a clear
+  refusal -- never invented kernel numbers.
 
-**The fingerprint test:** a probe that asserts a normal Debian/arm64 (like a
-package's `configure` does), so a program cannot smell the platform.
+**The fingerprint test** (`scripts/fingerprint.sh`): it requires the kernel and
+hardware to be the host's, the runtime's traces to be gone, and the Debian
+identity to be the tree's.
 
 ## Cross-cutting
 

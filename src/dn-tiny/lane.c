@@ -451,11 +451,29 @@ char *__realpath_chk(const char *in, char *out, size_t outlen)
 /* ---- open ------------------------------------------------------------------ */
 static void *real_openat;
 
+/* a /proc/<pid>/status the tracer answers with the runtime's traces gone: the
+ * shim must not open the kernel's through the lane (a memfd cannot be handed to
+ * the tracee, so the tracer generates a file and points the open there) */
+static int status_file(const char *p)
+{
+	const char *s;
+
+	if (strncmp(p, "/proc/", 6) != 0)
+		return 0;
+	p += 6;
+	if (strncmp(p, "self/status", 11) == 0 && p[11] == '\0')
+		return 1;
+	s = strchr(p, '/');
+	return s && strcmp(s, "/status") == 0;
+}
+
 static int lane_open(int dirfd, const char *path, int flags, mode_t mode)
 {
 	char host[PATH_MAX];
 	int at, e;
 
+	if (path && status_file(path))
+		return REAL(openat)(dirfd, path, flags, mode);   /* the tracer's synthetic file */
 	if (flags & DN_LANE_OPEN_DENY)
 		return REAL(openat)(dirfd, path, flags, mode);
 	e = lane_at(dirfd, path, flags & O_NOFOLLOW, host, sizeof host, &at);
