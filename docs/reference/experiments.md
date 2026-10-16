@@ -20,6 +20,7 @@ and the reference pages ([`inline-hooking.md`](inline-hooking.md),
 - [E10: the cancellable-svc patch, tried and rejected](#e10-the-cancellable-svc-patch-tried-and-rejected)
 - [E11: the cost of a stop is the tracer's core waking](#e11-the-cost-of-a-stop-is-the-tracers-core-waking)
 - [E12: the in-process catcher via seccomp TRAP, and why it breaks](#e12-the-in-process-catcher-via-seccomp-trap-and-why-it-breaks)
+- [E13: the cookie replaced by a gate page and the instruction pointer](#e13-the-cookie-replaced-by-a-gate-page-and-the-instruction-pointer)
 - [What follows](#what-follows)
 
 ## Context
@@ -362,6 +363,26 @@ It does not fit the exec model as is: to use it the tracer would have to
 **answer** `openat` until the shim's handler is up and hand off after (a
 handshake), or the filter must not outlive `exec` (it always does). Reverted; the
 finding is recorded in `TODO.md`, "In-process".
+
+## E13: the cookie replaced by a gate page and the instruction pointer
+
+The lane marker was a magic value in `x5` (the cookie); the filter ALLOWed a call
+with `args[5]` equal to it. It is replaced by an **IP rule** (branch
+`in-process`): the shim maps a `svc #0; ret` gate page at `DN_GATE`
+(`0x100000000`) and issues every resolved call from it; the filter ALLOWs a call
+whose `instruction_pointer` is in that page (`seccomp_data.instruction_pointer`),
+with **no register cookie**.
+
+It works and is behaviourally the same: the Lua build is **1666 stops** (the
+cookie's number) and ~11.8 s, `true` is 5, and `sed` and the built `lua` run. So
+the marker can be a **code address** instead of a value — cheaper to reason
+about, and it fits the in-process direction (it is the old `ld-dn`'s `P_GATE`;
+SUD's allowed range is the kernel's form of the same idea). The cost is one 4 KB
+gate mapping per process, and the rule that **every resolved call must go through
+the gate** (a call that did not would be TRACEd, i.e. one stop, not wrong).
+
+Unlike SUD, it needs no kernel 5.11: `instruction_pointer` is in `seccomp_data`
+on 4.14.
 
 ## What follows
 
