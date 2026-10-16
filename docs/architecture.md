@@ -135,6 +135,10 @@ the net for everything.
   `mountinfo` and `/etc/mtab` are rows that map straight to a file built at boot
   under `var/lib/deb-native` (a memfd cannot cross the ptrace boundary), so the
   reads need no stop and the source shown is `deb-native`, never a host path.
+- An AF_UNIX socket path is a path: `bind`, `connect`, `sendto` and `sendmsg`
+  carry it in a `sockaddr_un`, and `getsockname`, `getpeername`, `accept`,
+  `recvfrom` and `recvmsg` fill one; the tracer maps `sun_path` guest<->host at
+  entry and exit (the length with it).
 - The law lives once, in `policy.c`, and both engines read it: the tracer links
   it as it is, the shim builds it `-DDN_LIBC` (the types, the strings and
   `pol_readlink` from libc and the lane), the loader hook builds it `-DDN_FREE`

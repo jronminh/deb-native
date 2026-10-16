@@ -106,13 +106,17 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   than two. A finer rule (drop the subtree of a renamed directory) is PRoot's
   issue #124 trie ([`prior-art.md`](docs/reference/prior-art.md), "Root emulation
   and path walks").
-- **Not mapped yet** (audited, [`policy-audit.md`](docs/reference/policy-audit.md)):
-  `openat2` with `RESOLVE_*` (answers `ENOSYS`), AF_UNIX socket paths
-  (`bind`, `connect`, `sendto`, `sendmsg`; `getsockname`, `getpeername`,
-  `accept`, `recvfrom`, `recvmsg` back), so a guest `bind("/tmp/x.sock")` reaches
-  the host's `/tmp`: tmux, ssh-agent, gpg-agent, dbus need it. And minor,
-  privileged (allowed, a guest path reaches the kernel): `pivot_root`,
-  `quotactl`. `execveat` is done (a row through the exec gate; `fexecve` works).
+- **AF_UNIX socket paths** (done): `bind`, `connect`, `sendto`, `sendmsg` carry a
+  `sockaddr_un`, and `getsockname`, `getpeername`, `accept`, `recvfrom`, `recvmsg`
+  fill one; the tracer maps the `sun_path` guest->host (in) and host->guest (the
+  exit stop), the length register or the `msghdr`'s `msg_namelen` adjusted. A
+  guest `bind("/tmp/x.sock")` now makes the file in the tree. tmux, ssh-agent,
+  gpg-agent and dbus can meet.
+- **Still not mapped** (audited,
+  [`policy-audit.md`](docs/reference/policy-audit.md)): `openat2` with `RESOLVE_*`
+  (answers `ENOSYS`); and minor, privileged (allowed, a guest path reaches the
+  kernel): `pivot_root`, `quotactl`. `execveat` is done (a row through the exec
+  gate; `fexecve` works).
 - **The census against the rows**: `docs/reference/device-census.md` lists the 32
   calls the app's filter kills on the S10e, and each must end in a row (or be
   answered `ENOSYS` on purpose). Check that by hand against `gen_rows.py`. Also

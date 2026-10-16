@@ -184,6 +184,68 @@ static void rewrite_path(struct tracee *t, int arg)
 	trace_n_rewritten++;
 }
 
+/* The path in an AF_UNIX sockaddr_un, mapped like any other path: guest->host on
+ * the way in, host->guest on the answer (`out`).  The sockaddr register is
+ * rw->path_arg; rw->path_arg2 is the length register (a value for bind/connect/
+ * sendto, a pointer for the calls that fill it) or -1 for a msghdr, whose
+ * msg_name is at offset 0 and msg_namelen at 8. */
+static void sock_map(struct tracee *t, const struct row *rw, int out)
+{
+	struct { unsigned short fam; char path[108]; } sa;
+	u64 nb, lp = 0, msg = 0;
+	int mlp = 0;
+
+	if (rw->path_arg2 >= 0) {
+		nb = t->r.regs[rw->path_arg];
+		lp = t->r.regs[rw->path_arg2];
+	} else {
+		u64 name;
+
+		msg = t->r.regs[rw->path_arg];
+		if (mon_read(t, msg, &name, 8) != 8 || name == 0)
+			return;
+		nb = name;
+		mlp = 1;
+	}
+	if (nb == 0 || mon_read(t, nb, &sa, sizeof sa) != sizeof sa)
+		return;
+	if (sa.fam != 1)                               /* AF_UNIX */
+		return;
+	sa.path[sizeof sa.path - 1] = '\0';
+	if (sa.path[0] == '\0')                        /* abstract or empty: no path */
+		return;
+	if (!out) {
+		char host[420];
+		unsigned nl;
+
+		if (sa.path[0] != '/' || policy_path_nf(sa.path, host, sizeof host, 0) <= 0)
+			return;                        /* already a host path */
+		if (strlen(host) + 1 > sizeof sa.path)
+			return;                        /* too long for sun_path */
+		if (mon_write(t, nb + 2, host, strlen(host) + 1) != (ssize_t) strlen(host) + 1)
+			return;
+		nl = 2 + (unsigned) strlen(host) + 1;
+		if (mlp)
+			mon_write(t, msg + 8, &nl, 4);
+		else
+			mon_set_arg(t, rw->path_arg2, nl);
+	} else {
+		char guest[120];
+		int m = policy_unpath(sa.path, guest, sizeof guest);
+		unsigned nl;
+
+		if (m == 0)                            /* not under a row: leave it */
+			return;
+		if (mon_write(t, nb + 2, guest, strlen(guest) + 1) != (ssize_t) strlen(guest) + 1)
+			return;
+		nl = 2 + (unsigned) strlen(guest) + 1;
+		if (mlp)
+			mon_write(t, msg + 8, &nl, 4);
+		else
+			mon_write(t, lp, &nl, 4);      /* the length is a pointer on the way out */
+	}
+}
+
 /* The ids a process was last given.  Everything starts as root (0); a process that
  * drops privilege, as apt's download method does, then reads back what it set. */
 struct ids { unsigned ru, eu, su, rg, eg, sg; };
@@ -431,6 +493,12 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		drop(rw->effect);
 		pending[PID_SLOT(t->pid)] |= (unsigned char) rw->effect;
 	}
+	if (rw->special == SP_SOCK_IN) {                /* an AF_UNIX path, in a sockaddr */
+		sock_map(t, rw, 0);
+		return;
+	}
+	if (rw->special == SP_SOCK_OUT)                 /* the kernel fills it; mapped at exit */
+		return;
 	if (rw->fake != F_NONE) {
 		fake_result(t, rw->fake);
 		return;
@@ -874,6 +942,10 @@ static void answer_at_entry(struct tracee *t, const struct row *rw)
 
 void trace_exit(struct tracee *t, const struct row *rw)
 {
+	if (rw->special == SP_SOCK_OUT) {               /* an AF_UNIX path the kernel wrote back */
+		sock_map(t, rw, 1);
+		return;
+	}
 	switch (rw->result) {
 	case R_CWD:   fix_cwd(t); break;
 	case R_LINK:  fix_link(t); break;

@@ -44,7 +44,7 @@ The mapping must be *single* and *consistent* before it is widened.
 ## Phase 1 -- complete the mapping (the coordinates)
 
 Map every surface a program reads a coordinate from, one by one, and keep a
-**checklist** so a hole is visible. The surfaces:
+**checklist** so a hole is visible ([`coverage.md`](coverage.md)). The surfaces:
 
 - **Path in** -- the rows the tracer already classifies (`gen_rows.py`).
 - **Path out** -- `getcwd`, `readlink`, and every place the kernel *names* a
@@ -52,7 +52,8 @@ Map every surface a program reads a coordinate from, one by one, and keep a
   `/proc/*/mounts`, `/proc/*/mountinfo`, `statx`'s name, a directory listing.
 - **fds** -- the target a descriptor names.
 - **AF_UNIX paths** -- `bind`/`connect`/`sendto`/`sendmsg` and their readbacks
-  (tmux, ssh-agent, gpg-agent, dbus).
+  (tmux, ssh-agent, gpg-agent, dbus). **Done**: the rows carry the `sockaddr_un`
+  in (`SP_SOCK_IN`, mapped at entry) and back (`SP_SOCK_OUT`, at exit).
 - **The mount view** -- the binds and the `/proc` mount files, generated from
   the table.
 - **`/sys`, `/dev`, `/storage`** -- bound or synthesized.

@@ -43,7 +43,11 @@ enum { E_LINKS = 1, E_CWD = 2 };
  * R_STAT, R_STATX: the owner in a stat buffer. */
 enum { R_NONE = 0, R_CWD = 1, R_LINK = 2, R_STAT = 3, R_STATX = 4 };
 
-enum { SP_NONE = 0, SP_EXEC = 1, SP_LINK = 2 };
+/* SP_SOCK_IN / SP_SOCK_OUT: the call's path is inside a sockaddr_un (an AF_UNIX
+ * socket), mapped guest<->host like any other path: `path_arg` is the register
+ * of the sockaddr (or of a msghdr, when `path_arg2` is -1), `path_arg2` the
+ * register of its length (or -1 for a msghdr).  OUT is mapped at exit. */
+enum { SP_NONE = 0, SP_EXEC = 1, SP_LINK = 2, SP_SOCK_IN = 3, SP_SOCK_OUT = 4 };
 /* F_ZERO: return 0.  F_RESIDS: getresuid/getresgid, write three zero ids.
  * F_GROUPS: getgroups, one group, 0. */
 enum { F_NONE = 0, F_ZERO = 1, F_RESIDS = 2, F_GROUPS = 3, F_EXDEV = 4, F_GETID = 5, F_SETID = 6 };

@@ -493,7 +493,7 @@ static int loop(pid_t root)
 				const struct row *rw = mode == M_FULL ? policy_row(cur_nr[PID_SLOT(p)]) : NULL;
 
 				n_exit++;
-				if (rw && rw->result != R_NONE && get_regs(&t) == 0) {
+				if (rw && (rw->result != R_NONE || rw->special == SP_SOCK_OUT) && get_regs(&t) == 0) {
 					t.entry_arg0 = saved0[PID_SLOT(p)];
 					trace_exit(&t, rw);
 					if (t.dirty)
