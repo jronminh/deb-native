@@ -384,6 +384,26 @@ the gate** (a call that did not would be TRACEd, i.e. one stop, not wrong).
 Unlike SUD, it needs no kernel 5.11: `instruction_pointer` is in `seccomp_data`
 on 4.14.
 
+The code, for the record (branch `in-process`):
+
+- `lane.h`: `#define DN_GATE 0x100000000UL`.
+- `lane.c`: once in the constructor, `mmap` the page at `DN_GATE`, write `svc #0`
+  (`0xd4000001`) and `ret` (`0xd65f03c0`), clear the cache, `mprotect` it RX; and
+  `lane_raw` calls it (`blr x16`, x16 the gate) instead of `mov x5, #cookie; svc`.
+- `monitor.c`: no lane list and no cookie; the filter loads the high half of
+  `instruction_pointer`, then the low half, and ALLOWs a call inside the page;
+  anything else falls to the rows' tree.
+
+Against the cookie, on the S10e: the same stops, and no measurable difference in
+a `getpid` loop or in the lane's own calls. Its gain is the filter's **size** —
+182 instructions against the cookie's 288 (199 once the cookie's per-leaf blocks
+are folded into shared ones, the same lean-filter idea applied to the cookie
+instead of dropped). Its costs: a 4 KB gate a process, and `instruction_pointer`
+is read on **every** syscall, which defeats the kernel's per-number filter cache
+(5.11+); the cookie is read only for a lane row, so every other number stays
+cacheable. So it is a lateral move — kept here, and on the branch — not on
+`main`.
+
 ## What follows
 
 The loader's startup stops can be removed by a freestanding audit module that
