@@ -18,7 +18,7 @@ building and what each costs, and it records what of the core still names Debian
 | variant | base | shim | size | use |
 | --- | --- | --- | --- | --- |
 | `bundle` | a program + its closure | static: no, glibc: yes | a few-tens MB | embed one tool |
-| `busybox` | `busybox-static` | no | ~6 MB | a tiny shell or appliance; can host services |
+| `busybox` | `busybox-static` | no | ~7 MB | 272 applets (shell, coreutils, sed/awk, tar, wget/nc/httpd/telnetd/udhcpc, crond, syslogd, init); could host services |
 | `minimal` | debootstrap | yes | ~265 MB | a real Debian, `apt` |
 | `dev` | + toolchain, git, python | yes | ~810 MB | develop on the phone |
 | `full` | `dev` + extras | yes | ~1 GB | a CLI workstation |
@@ -39,14 +39,14 @@ database, a shell and `perl`, but not `apt`). So the sizes step: **bundle (no
 
 ## A worked example: the busybox bundle
 
-A 6.3 MB tree, made by `scripts/build-busybox.sh` from a `dev` builder:
-`dn-tiny`, `busybox-static`,
-`fastfetch` (glibc) and the loader with `libc`/`libm`/`libyyjson`. It has no
-Debian userland and no `bash` -- its `init.sh` runs under `busybox sh` -- and its
-own `boot/boot.sh` (no `/usr/bin/bash`). It runs: `uname`, `ls`, a shell with
-globs and pipes, and `fastfetch`, which prints `OS: Debian GNU/Linux 13
-(trixie)` from the tree's `/etc/os-release` and the phone's real kernel, memory
-and uptime.
+A ~7 MB tree, made by `scripts/build-busybox.sh` from a `dev` builder:
+`dn-tiny`, `busybox-static` (271 applet symlinks, so a tool that calls another by
+name -- `tar` calls `gzip` -- finds it), `fastfetch` (glibc) and the loader with
+`libc`/`libm`/`libyyjson`. It has no Debian userland and no `bash` -- its
+`init.sh` runs under `busybox sh` -- and its own `boot/boot.sh` (no
+`/usr/bin/bash`). It runs: `uname`, `ls`, a shell with globs and pipes, `tar
+czf`, and `fastfetch`, which prints `OS: Debian GNU/Linux 13 (trixie)` from the
+tree's `/etc/os-release` and the phone's real kernel, memory and uptime.
 
 ## What still names Debian
 

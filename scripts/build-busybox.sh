@@ -118,4 +118,13 @@ chmod +x "$DEST/boot/boot.sh" "$DEST/boot/init.sh" \
 [ "$SHIM" = 1 ] && chmod +x "$DEST/usr/lib/deb-native/dn-lane.so" 2>/dev/null || true
 for p in $PROGRAMS; do [ -f "$DEST/usr/bin/$p" ] && chmod +x "$DEST/usr/bin/$p"; done
 
+# ---- the applets as their own names -----------------------------------------
+# One symlink per applet (sh, grep, tar, ...), so a tool that calls another by
+# name (tar calls gzip) finds it; the multi-call binary stays the only copy.
+"$BUILDER/boot/boot.sh" /bin/busybox --list 2>/dev/null | while read -r a; do
+  [ "$a" = busybox ] && continue
+  [ -e "$DEST/bin/$a" ] && continue
+  ln -sf busybox "$DEST/bin/$a"
+done
+
 printf 'build-busybox: %s (%s)\n' "$DEST" "$(du -sh "$DEST" | cut -f1)"
