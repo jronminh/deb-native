@@ -59,6 +59,12 @@ mapped, so a program cannot find the host frame through an unmapped reader.
 
 ## The test
 
-A small program that walks each surface and prints the tree's view, and a script
-that fails when the output holds a host path (or a host id, or the host's mount
-table).  To be built, run interleaved with the regression set and the bench.
+`scripts/coverage.sh PREFIX` copies `scripts/coverage/probe.sh` into the prefix,
+runs it (it prints the tree's view of each surface above), and fails on any line
+that holds the host frame -- the prefix's own path, `/data/data`, the shared
+storage, the tracer.  Run it interleaved with the regression set and the bench.
+
+What it flags today (the open holes): `/proc/self/maps` (the known one, above),
+and the **initial working directory** -- a command started from a directory
+outside the tree `pwd`s the host's path (`TODO.md`, "The boundary", step 1), which
+also shows through `readlink /proc/self/cwd` and Python's `os.getcwd`.
