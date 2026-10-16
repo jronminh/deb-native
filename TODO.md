@@ -101,7 +101,10 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   directory) is PRoot's issue #124 trie ([`prior-art.md`](docs/reference/prior-art.md),
   "Root emulation and path walks"); measure how often the global drop costs
   before building it.
-- **Not mapped yet**: `execveat` (glibc's `fexecve`), `openat2` with
+- **Not mapped yet** (audited, [`policy-audit.md`](docs/reference/policy-audit.md)):
+  `execveat` (glibc's `fexecve`) — confirmed: `execveat(AT_FDCWD, guest_path)`
+  returns `ENOENT` (the path is not mapped and the exec gate does not see it) —
+  `fanotify_mark`, `pivot_root`, `quotactl`, `openat2` with
   `RESOLVE_*` (answers `ENOSYS`), `name_to_handle_at`, AF_UNIX socket paths
   (`bind`, `connect`, `sendto`, `sendmsg`; `getsockname`, `getpeername`,
   `accept`, `recvfrom`, `recvmsg` back), so a guest `bind("/tmp/x.sock")` reaches
