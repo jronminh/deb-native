@@ -24,7 +24,9 @@ This is the contract between the two. Status: proposal.
   runs `ROOT/boot/boot.sh` (or `dn-tiny -t ROOT -- ...` directly), one prefix
   per session, with a foreground service for long work. A prefix names no
   absolute path of its own and works wherever it is put
-  ([`building.md`](../building.md), "Moving a prefix").
+  ([`building.md`](../building.md), "Moving a prefix"). Choosing among several
+  -- the list, a default, a safe boot, a banner -- is the [boot
+  manager](boot-manager.md).
 - **The boot inputs.** Before boot the host may write `boot/binds` (the host
   directories to bind, and their flags) and a boot env keep-file -- the data the
   runtime reads, never code in it; `boot/version` says what the prefix is. These
