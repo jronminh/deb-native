@@ -325,8 +325,12 @@ What it says:
   power-collapsed and pays to come back.
 - The tracer's work is tiny — one core is plenty — so **do not spam** cores.
 
-So the advice is: unpinned, with `-s`. `TODO.md`, "Who sets the floor", already
-points at CPU placement; this is what the placement measures.
+Pinning the **tracee** as well (a temporary build that pins the child, so the
+tracer on cpu0 and the tracee on cpu1) made `-s` worse: 0.78 -> 1.94 s. Left
+free, the scheduler co-locates the tracer and the tracee (one little core) and
+`-s` keeps that core awake — the best of all. So the advice is: **unpinned, with
+`-s`**. `TODO.md`, "Who sets the floor", already points at CPU placement; this is
+what the placement measures.
 
 ## What follows
 
