@@ -258,9 +258,12 @@ syscall. So the shim's adjacent `mov x8,#nr; svc` pattern cannot match it (the
 `svc` would cover all cancellable calls — `lane_hook` already reads `x8`.
 
 Locating it at run time is hard: `mov x8,x6` appears ten times in libc, and the
-function is not an exported symbol. The clean way is at **build time**: the
-prefix's libc is known, so a static disassembly (next to `gen_rows.py`) can find
-the `svc` and hand its offset to the shim, instead of a runtime pattern scan.
+function is not an exported symbol. So it is found at **build time**, from the
+known libc: [`scripts/find-cancellable.py`](../../scripts/find-cancellable.py)
+looks for the one `mov x8,x6` with an `svc` within 30 instructions (on this
+prefix's libc 2.41 it prints `offset 0x828d8`; on `ld.so` it reports none). The
+offset can be handed to the shim instead of a runtime scan.
+
 The remaining open problem is the passthrough: for a call the shim does not
 answer, the stub's own `svc` runs with the program counter outside the
 cancellation range, which is what `pthread_cancel` reads.
