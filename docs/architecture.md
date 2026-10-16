@@ -92,9 +92,10 @@ the net for everything.
 - **Symbols.** It defines `open`, `openat`, `stat`, `lstat`, `fstatat`, `fstat`,
   `statx`, `access`, `faccessat`, `euidaccess`, `readlink(at)`, `realpath`,
   `getcwd`, the `getxattr`/`listxattr` pairs, the `get*id` calls and the `set*id`
-  calls, `link(at)` and `unlink(at)`. Each resolves the path by the same law as
-  the tracer and makes the call on the lane; a case it does not handle (a write,
-  an unknown flag, a deleted directory's fd) goes to libc and the tracer.
+  calls, `link(at)` and `unlink(at)`. Each maps its path through the one law
+  (`policy.c`, linked into the shim with `-DDN_LIBC`) and makes the call on the
+  lane; a case it does not handle (a write, an unknown flag, a deleted
+  directory's fd) goes to libc and the tracer.
 - **libc's own calls.** At load the shim scans `libc.so.6`'s text for `mov x8,
   #nr; svc #0` with an `nr` it answers and replaces each `svc` with a branch to a
   stub within 120 MB. The stub saves every register and the flags, calls the hook
@@ -102,9 +103,10 @@ the net for everything.
   makes the original call. libc's cancellable path (`__syscall_cancel_arch`) is
   left alone, since `pthread_cancel` checks the program counter there. The stock
   Debian `libc6` stays as it is on disk; `DN_LANE_PATCH=0` turns this off.
-- **Copies, kept safe.** A cache of `readlink` answers (the shared generation
-  drops it), the working directory and the ids are seqlocks, the last two tagged
-  with the pid they were asked for: a `vfork` child shares its parent's memory.
+- **Copies, kept safe.** The law's cache of `readlink` answers (`policy.c`; the
+  shared generation drops it), the working directory and the ids are seqlocks,
+  the last two tagged with the pid they were asked for: a `vfork` child shares
+  its parent's memory.
 - **The cookie.** The shim issues its own `svc` with the cookie in `x5` and
   clears `x5` after it, so a later call libc makes by itself never carries it.
 
@@ -117,9 +119,12 @@ the net for everything.
   prefix's too (`/etc/alternatives/awk -> /usr/bin/mawk`).
 - What the kernel returns as a host path inside the prefix (`getcwd`, a link
   target, `/proc/self/fd/N`) is told back as the guest's.
-- A call on a real directory fd with a one-component name goes to the kernel as
-  it is when the name is not followed or is not a link; anything else is resolved
-  from the directory's guest path.
+- A call on a real directory fd resolves the name from the directory's guest
+  path (the host path the kernel names for the fd, minus the root); a directory
+  outside the prefix is a host directory, and its paths stay.
+- The law lives once, in `policy.c`, and both engines read it: the tracer links
+  it as it is, the shim builds it `-DDN_LIBC` (the types, the strings and
+  `pol_readlink` from libc and the lane). See `spec/plan.md`, Phase 0.
 
 ## Identity: fake root
 

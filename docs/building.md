@@ -159,11 +159,14 @@ After pulling a newer deb-native:
 scripts/build-runtime.sh
 cp build/dn-tiny ~/debian/usr/lib/deb-native/dn-tiny
 cp scripts/prefix/boot.sh scripts/prefix/init.sh ~/debian/boot/
-cp src/dn-tiny/lane.c src/dn-tiny/lane.h ~/debian/tmp/
-~/debian/boot/boot.sh gcc -O2 -shared -fPIC -o /usr/lib/deb-native/dn-lane.so /tmp/lane.c
+cp src/dn-tiny/lane.c src/dn-tiny/lane.h src/dn-tiny/policy.c src/dn-tiny/policy.h ~/debian/tmp/
+cp build/gen/policy-rows.inc ~/debian/tmp/
+~/debian/boot/boot.sh gcc -O2 -shared -fPIC -DDN_LIBC \
+  -o /usr/lib/deb-native/dn-lane.so /tmp/lane.c /tmp/policy.c
 ```
 
-(the last two steps need `gcc` and `libc6-dev` in the prefix).
+(the last two steps need `gcc` and `libc6-dev` in the prefix; the shim links the
+law, `policy.c`, with the generated rows).
 
 ## Building by hand
 

@@ -1,6 +1,37 @@
 /* policy.c -- the table and the law, in their smallest form. */
 #include "policy.h"
 
+#ifndef DN_LIBC
+#define pol_readlink sys_readlink
+#else
+#include <string.h>
+
+/* the two helpers sys.c gives the tracer, here from libc */
+static int cat2(char *out, size_t cap, const char *a, const char *b)
+{
+	size_t la = strlen(a), lb = strlen(b);
+
+	if (la + lb + 1 > cap)
+		return -1;
+	memcpy(out, a, la);
+	memcpy(out + la, b, lb + 1);
+	return (int) (la + lb);
+}
+
+static int scpy(char *out, size_t cap, const char *s)
+{
+	size_t n = strlen(s);
+
+	if (n + 1 > cap)
+		return -1;
+	memcpy(out, s, n + 1);
+	return (int) n;
+}
+#endif
+
+/* the errno values the law returns, so it needs no errno.h (kernel numbers) */
+enum { E_NOENT = 2, E_INVAL = 22, E_NAMETOOLONG = 36, E_LOOP = 40 };
+
 static const struct row ROWS[] = {
 #include "policy-rows.inc"        /* generated: the caught syscalls and what is done with each */
 };
@@ -14,11 +45,13 @@ static size_t root_len;
 static char loader[512], libpath[1024], preload[512], ldhook[512];
 
 /* ---- the link cache (policy.h).  An entry is valid while its generation is the
- * shared one; moving the generation drops every entry at once. ------------------ */
+ * shared one; moving the generation drops every entry at once.  A seqlock lets
+ * the shim's threads share it (the tracer is single-threaded and pays nothing). -- */
 #define LC_SLOTS 4096
 #define LC_KEY   192
 #define LC_TGT   128
 struct lc {
+	unsigned seq;                 /* odd: a writer holds the entry */
 	unsigned gen;                 /* 0: empty */
 	unsigned hash;
 	int r;                        /* what readlink returned: <= 0 not a link, else the target's length */
@@ -28,6 +61,7 @@ struct lc {
 static struct lc lcache[LC_SLOTS];
 static volatile unsigned *links_gen;  /* in the shared file; NULL: no cache */
 
+#ifndef DN_LIBC
 static void links_init(void)
 {
 	char p[600];
@@ -49,54 +83,105 @@ static void links_init(void)
 	if (links_gen && *links_gen == 0)
 		policy_links_changed();                                     /* generation 0 marks an empty slot */
 }
+#endif
 
-void policy_links_changed(void)
+void policy_links_use(volatile unsigned *g) { links_gen = g; }
+
+/* one atomic increment, inline so the tracer links no libatomic */
+static void add1(unsigned *p)
 {
-	unsigned tmp, fail;
+	unsigned v, fail;
 
-	if (!links_gen)
-		return;
 	__asm__ volatile("1: ldaxr %w0, [%2]\n"
 			 "   add   %w0, %w0, #1\n"
 			 "   stlxr %w1, %w0, [%2]\n"
 			 "   cbnz  %w1, 1b\n"
-			 : "=&r"(tmp), "=&r"(fail) : "r"(links_gen) : "memory");
+			 : "=&r"(v), "=&r"(fail) : "r"(p) : "memory");
+}
+
+void policy_links_changed(void)
+{
+	if (links_gen)
+		add1((unsigned *) links_gen);
 }
 
 unsigned policy_links_gen(void) { return links_gen ? *links_gen : 0; }
 
+/* the seqlock an entry is read and written under (lane.c's, for the same reason:
+ * a thread must never read a key or a target while another writes it). ---------- */
+static int pseq_read(unsigned *s, unsigned *v) { *v = __atomic_load_n(s, __ATOMIC_ACQUIRE); return !(*v & 1); }
+static int pseq_begin(unsigned *s)
+{
+	unsigned v, nv, fail, busy;
+
+	__asm__ volatile("1: ldaxr %w0, [%4]\n"
+			 "   and   %w3, %w0, #1\n"
+			 "   cbnz  %w3, 2f\n"
+			 "   add   %w1, %w0, #1\n"
+			 "   stlxr %w2, %w1, [%4]\n"
+			 "   cbnz  %w2, 1b\n"
+			 "2:"
+			 : "=&r"(v), "=&r"(nv), "=&r"(fail), "=&r"(busy) : "r"(s) : "memory", "cc");
+	return busy ? -1 : 0;
+}
+static void pseq_end(unsigned *s) { add1(s); }
+static int pseq_check(unsigned *s, unsigned v)
+{
+	__atomic_thread_fence(__ATOMIC_ACQUIRE);
+	return __atomic_load_n(s, __ATOMIC_RELAXED) == v;
+}
+
+static int lc_get(struct lc *e, unsigned cur, unsigned h, const char *k, size_t len, char *buf, size_t n, ssize_t *out)
+{
+	unsigned s;
+	int r;
+
+	if (!pseq_read(&e->seq, &s) || e->gen != cur || e->hash != h || len >= sizeof e->key ||
+	    memcmp(e->key, k, len + 1) != 0)
+		return 0;
+	r = e->r;
+	if (r > (int) sizeof e->tgt || (r > 0 && (size_t) r > n))
+		return 0;
+	if (r > 0)
+		memcpy(buf, e->tgt, (size_t) r);
+	if (!pseq_check(&e->seq, s))
+		return 0;
+	*out = r;
+	return 1;
+}
+
+static void lc_put(struct lc *e, unsigned cur, unsigned h, const char *k, size_t len, const char *buf, ssize_t r)
+{
+	if (len >= sizeof e->key || r >= (ssize_t) sizeof e->tgt || pseq_begin(&e->seq) < 0)
+		return;
+	e->gen = cur;
+	e->hash = h;
+	e->r = (int) r;
+	memcpy(e->key, k, len + 1);
+	if (r > 0)
+		memcpy(e->tgt, buf, (size_t) r);
+	pseq_end(&e->seq);
+}
+
 /* readlink(host path), from the cache when it holds the answer */
 static ssize_t lc_readlink(const char *p, char *buf, size_t n)
 {
-	unsigned h = 2166136261u, g;
+	unsigned h = 2166136261u, cur;
 	size_t len = 0;
 	struct lc *e;
 	ssize_t r;
 
 	if (!links_gen)
-		return sys_readlink(p, buf, n);
+		return pol_readlink(p, buf, n);
 	while (p[len]) {
 		h = (h ^ (unsigned char) p[len]) * 16777619u;
 		len++;
 	}
-	g = *links_gen;
+	cur = *links_gen;
 	e = &lcache[h % LC_SLOTS];
-	if (e->gen == g && e->hash == h && strcmp(e->key, p) == 0) {
-		if (e->r <= 0)
-			return e->r;
-		if ((size_t) e->r <= n) {
-			memcpy(buf, e->tgt, (size_t) e->r);
-			return e->r;
-		}
-	}
-	r = sys_readlink(p, buf, n);
-	if (len < LC_KEY && r < LC_TGT) {
-		e->gen = g;
-		e->hash = h;
-		e->r = (int) r;
-		memcpy(e->key, p, len + 1);
-		if (r > 0)
-			memcpy(e->tgt, buf, (size_t) r);
+	if (!lc_get(e, cur, h, p, len, buf, n, &r)) {
+		r = pol_readlink(p, buf, n);
+		lc_put(e, cur, h, p, len, buf, r);
 	}
 	return r;
 }
@@ -125,37 +210,39 @@ static void append(char *buf, size_t cap, const char *s)
 	scpy(buf + n, cap - n, s);
 }
 
-void policy_set_root(const char *r)
+void policy_root_set(const char *r)
 {
 	root = r;
 	root_len = strlen(r);
-	loader[0] = libpath[0] = '\0';
+	loader[0] = libpath[0] = preload[0] = ldhook[0] = '\0';
 	append(loader, sizeof loader, r);
 	append(loader, sizeof loader, "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1");
 	append(libpath, sizeof libpath, r);
 	append(libpath, sizeof libpath, "/usr/lib/aarch64-linux-gnu:");
 	append(libpath, sizeof libpath, r);
 	append(libpath, sizeof libpath, "/usr/lib");
-	preload[0] = '\0';
 	append(preload, sizeof preload, r);
 	append(preload, sizeof preload, "/usr/lib/deb-native/dn-lane.so");
-	{
-		char st[128];
-
-		if (sys_fstatat(preload, st, 0) != 0)
-			preload[0] = '\0';
-	}
-	ldhook[0] = '\0';
 	append(ldhook, sizeof ldhook, r);
 	append(ldhook, sizeof ldhook, "/usr/lib/deb-native/dn-ldhook.so");
-	{
-		char st[128];
+}
 
-		if (sys_fstatat(ldhook, st, 0) != 0)
-			ldhook[0] = '\0';
-	}
+const char *policy_root(void) { return root; }
+size_t policy_root_len(void) { return root_len; }
+
+#ifndef DN_LIBC
+void policy_set_root(const char *r)
+{
+	char st[128];
+
+	policy_root_set(r);
+	if (sys_fstatat(preload, st, 0) != 0)
+		preload[0] = '\0';
+	if (sys_fstatat(ldhook, st, 0) != 0)
+		ldhook[0] = '\0';
 	links_init();
 }
+#endif
 
 const char *policy_preload(void) { return preload; }
 const char *policy_ldhook(void) { return ldhook; }
@@ -170,13 +257,13 @@ int policy_is_glibc_interp(const char *interp)
 }
 
 /* what is already a host path stays */
-static int is_host_path(const char *p)
+int policy_is_host(const char *p)
 {
 	static const char *const keep[] = { "/proc", "/sys", "/dev", "/data", "/system", "/storage",
 					    "/sdcard", "/apex", "/vendor", "/mnt", NULL };
 	int i;
 
-	if (strncmp(p, root, root_len) == 0)
+	if (root_len && strncmp(p, root, root_len) == 0)
 		return 1;
 	for (i = 0; keep[i]; i++) {
 		size_t n = strlen(keep[i]);
@@ -191,7 +278,7 @@ static int is_host_path(const char *p)
  * the prefix's, so the path is walked here, one component at a time, and a link
  * met on the way is read and its target mapped the same way. -------------------- */
 #define MAX_HOPS 40
-#define WORK 1024
+#define WORK 4096
 
 /* the part of `s` before its last '/', cut in place (never above the root) */
 static void pop_component(char *cur)
@@ -209,7 +296,7 @@ static void pop_component(char *cur)
  * else the length (NUL included).  The last component is followed unless `nofollow`. */
 static int walk(const char *base, const char *in, char *out, size_t cap, int nofollow)
 {
-	char cur[512], rest[WORK], tgt[512], *p;
+	char cur[WORK], rest[WORK], tgt[WORK], *p;
 	size_t cl;
 	int hops = 0;
 
@@ -268,7 +355,7 @@ static int walk(const char *base, const char *in, char *out, size_t cap, int nof
 				if (strncmp(tgt, root, root_len) == 0 && (tgt[root_len] == '/' || tgt[root_len] == '\0')) {
 					/* already a host path inside the prefix: map from the root */
 					memmove(nrest, nrest + root_len, strlen(nrest + root_len) + 1);
-				} else if (is_host_path(tgt)) {
+				} else if (policy_is_host(tgt)) {
 					return cat2(out, cap, nrest, "") > 0 ? (int) strlen(out) + 1 : 0;
 				}
 				scpy(cur, sizeof cur, root);
@@ -288,7 +375,7 @@ plain:                                                  /* give the kernel the p
 
 int policy_path_nf(const char *in, char *out, size_t cap, int nofollow)
 {
-	if (in[0] != '/' || is_host_path(in))
+	if (in[0] != '/' || policy_is_host(in))
 		return 0;
 	return walk(root, in, out, cap, nofollow);
 }
@@ -348,7 +435,8 @@ int policy_nofollow(unsigned nr, int arg, const u64 *x)
 
 int policy_unpath(const char *host, char *out, size_t cap)
 {
-	if (strncmp(host, root, root_len) != 0 || (host[root_len] != '\0' && host[root_len] != '/'))
+	if (!root_len || strncmp(host, root, root_len) != 0 ||
+	    (host[root_len] != '\0' && host[root_len] != '/'))
 		return 0;
 	if (host[root_len] == '\0')
 		return scpy(out, cap, "/") >= 0 ? 2 : 0;       /* the prefix root is the guest's / */
@@ -357,6 +445,119 @@ int policy_unpath(const char *host, char *out, size_t cap)
 
 		return n >= 0 ? n + 1 : 0;
 	}
+}
+
+/* readlink of a guest path: on the host path, from the shared cache, an absolute
+ * link target inside the prefix told as the guest's. */
+static int guest_readlink(const char *g, char *buf, size_t n)
+{
+	char host[WORK];
+	size_t gl = strlen(g);
+	ssize_t r;
+
+	if (policy_is_host(g)) {
+		if (gl >= sizeof host)
+			return -E_NAMETOOLONG;
+		memcpy(host, g, gl + 1);
+	} else {
+		if (root_len + gl >= sizeof host)
+			return -E_NAMETOOLONG;
+		memcpy(host, root, root_len);
+		memcpy(host + root_len, g, gl + 1);
+	}
+	r = lc_readlink(host, buf, n);
+	if (r > 0 && (size_t) r >= root_len && strncmp(buf, root, root_len) == 0 &&
+	    ((size_t) r == root_len || buf[root_len] == '/')) {
+		memmove(buf, buf + root_len, (size_t) r - root_len);
+		r -= (long) root_len;
+		if (r == 0)
+			buf[r++] = '/';
+	}
+	return (int) r;
+}
+
+/* The canonical guest path, as realpath would make it: every component's link
+ * followed (an absolute target from the prefix root again), `..` against what is
+ * resolved so far.  0 and `out`, or -errno.  A missing component is ENOENT. */
+int policy_resolve(const char *base, const char *in, char *out, size_t cap)
+{
+	char rest[WORK], tgt[WORK];
+	size_t rl;
+	int links = 0;
+	char *p;
+
+	if (in[0] == '\0')
+		return -E_NOENT;
+	if (strlen(in) >= sizeof rest)
+		return -E_NAMETOOLONG;
+	if (in[0] == '/') {
+		out[0] = '\0';
+	} else if (scpy(out, cap, base) < 0) {
+		return -E_NAMETOOLONG;
+	} else if (strcmp(out, "/") == 0) {
+		out[0] = '\0';
+	}
+	rl = strlen(out);
+	if (scpy(rest, sizeof rest, in) < 0)
+		return -E_NAMETOOLONG;
+	p = rest;
+	for (;;) {
+		char *comp;
+		size_t cl;
+		int r;
+
+		while (*p == '/')
+			p++;
+		if (*p == '\0')
+			break;
+		comp = p;
+		while (*p && *p != '/')
+			p++;
+		cl = (size_t) (p - comp);
+		if (cl == 1 && comp[0] == '.')
+			continue;
+		if (cl == 2 && comp[0] == '.' && comp[1] == '.') {
+			while (rl > 0 && out[rl - 1] != '/')
+				rl--;
+			if (rl > 0)
+				rl--;
+			out[rl] = '\0';
+			continue;
+		}
+		if (rl + 1 + cl >= cap)
+			return -E_NAMETOOLONG;
+		out[rl] = '/';
+		memcpy(out + rl + 1, comp, cl);
+		out[rl + 1 + cl] = '\0';
+		r = guest_readlink(out, tgt, sizeof tgt - 1);
+		if (r == -E_INVAL) {                    /* there, and not a link */
+			rl += 1 + cl;
+			continue;
+		}
+		if (r < 0)
+			return r;
+		if (++links > MAX_HOPS)
+			return -E_LOOP;
+		tgt[r] = '\0';
+		{
+			size_t al = strlen(p);          /* the target, then what was left of the path */
+
+			if ((size_t) r + 1 + al >= sizeof rest)
+				return -E_NAMETOOLONG;
+			memmove(rest + r + 1, p, al + 1);
+			memcpy(rest, tgt, (size_t) r);
+			rest[r] = '/';
+			p = rest;
+		}
+		if (tgt[0] == '/')
+			rl = 0;                         /* an absolute target: from the root again */
+		out[rl] = '\0';
+	}
+	if (rl == 0) {
+		out[0] = '/';
+		out[1] = '\0';
+	}
+	return 0;
 }
 
 static unsigned real_uid = (unsigned) -1, real_gid = (unsigned) -1;

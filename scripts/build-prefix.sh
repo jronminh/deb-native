@@ -147,8 +147,17 @@ if [ "$SHIM" = 1 ]; then
   say "the shim: dn-lane.so, built in the tree against its glibc"
   run apt-get install -y --no-install-recommends gcc libc6-dev
   mkdir -p "$DEST/tmp/dn-lane"
-  cp "$ROOT/src/dn-tiny/lane.c" "$ROOT/src/dn-tiny/lane.h" "$DEST/tmp/dn-lane/"
-  run gcc -O2 -Wall -Wextra -shared -fPIC -o /usr/lib/deb-native/dn-lane.so /tmp/dn-lane/lane.c
+  # the shim is lane.c, and the law (policy.c) it shares with the tracer, built
+  # against the tree's glibc (-DDN_LIBC: the types, the strings and pol_readlink)
+  cp "$ROOT/src/dn-tiny/lane.c" "$ROOT/src/dn-tiny/lane.h" \
+     "$ROOT/src/dn-tiny/policy.c" "$ROOT/src/dn-tiny/policy.h" "$DEST/tmp/dn-lane/"
+  if [ ! -f "$RUNTIME/gen/policy-rows.inc" ]; then
+    mkdir -p "$RUNTIME/gen"
+    python3 "$ROOT/src/dn-tiny/gen_rows.py" "$RUNTIME/gen/policy-rows.inc"
+  fi
+  cp "$RUNTIME/gen/policy-rows.inc" "$DEST/tmp/dn-lane/"
+  run gcc -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC -o /usr/lib/deb-native/dn-lane.so \
+      /tmp/dn-lane/lane.c /tmp/dn-lane/policy.c
   rm -rf "$DEST/tmp/dn-lane"
   if [ "$KEEP_TC" = 0 ]; then
     run apt-get purge -y --autoremove gcc libc6-dev

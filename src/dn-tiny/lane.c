@@ -12,20 +12,22 @@
  *   getuid, geteuid, getresuid, ...      answered from the ids the tracer gave once
  *   euidaccess, eaccess                  access(), when the real and effective ids agree
  *
- * A path is resolved by the tracer's rules (policy.c): a guest path is the prefix's,
- * except the host directories the tracer leaves as they are; an absolute link target
- * is the prefix's too.  The call is then issued on the host path with the lane cookie
- * in x5 (lane.h; set for the svc only), which the filter lets through without a stop,
- * and only for calls that read:anything that writes, and any case this file does not handle (a path
- * on a deleted directory's fd, flags it does not know), goes to the real function and
- * through the tracer as before.  readlink answers are cached; the cache is dropped
- * when the generation in var/lib/deb-native/dn-tiny.gen moves (a symlinkat, unlinkat,
- * linkat or rename by any process of any session, seen by the tracer).
+ * A path is mapped by the one law, policy.c, which this file links in (built -DDN_LIBC):
+ * a guest path is the prefix's, except the host directories the law leaves as they
+ * are; an absolute link target is the prefix's too.  The call is then issued on the
+ * host path with the lane cookie in x5 (lane.h; set for the svc only), which the
+ * filter lets through without a stop, and only for calls that read: anything that
+ * writes, and any case this file does not handle (a path on a deleted directory's fd,
+ * flags it does not know), goes to the real function and through the tracer as before.
+ * The law's readlink goes through the lane too (pol_readlink), and its answers are
+ * cached; the cache is dropped when the generation in var/lib/deb-native/dn-tiny.gen
+ * moves (a symlinkat, unlinkat, linkat or rename by any process of any session).
  *
  * libc's own internal calls (fopen's open, the loader's) do not come through these
  * symbols and stay with the tracer.
  *
- * Built against the prefix's glibc: cc -O2 -shared -fPIC -o dn-lane.so lane.c */
+ * Built against the prefix's glibc: cc -O2 -shared -fPIC -DDN_LIBC -o dn-lane.so
+ * lane.c policy.c */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <errno.h>
@@ -41,13 +43,11 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #include "lane.h"
+#include "policy.h"                     /* the law, shared with the tracer */
 
 #define LANE (((long) DN_LANE_HI << 32) | (long) DN_LANE_LO)
-#define MAX_LINKS 40
 
-static char root[PATH_MAX];             /* the prefix root, a host path; "" = not set up */
-static size_t root_len;
-static volatile unsigned *gen;          /* the shared link generation, or NULL: no cache */
+static char rootbuf[PATH_MAX];          /* the prefix root, handed to policy_root_set */
 static char cwd[PATH_MAX];              /* the guest working directory (get_cwd) */
 static unsigned real_uid, real_gid;     /* read as root, as the tracer does (policy_map_uid) */
 
@@ -104,6 +104,13 @@ static long lane_svc(long nr, long a, long b, long c, long d, long e)
 #define lane_rawc(nr, a, b, c, d, e) \
 	lane_raw(nr, (long) (a), (long) (b), (long) (c), (long) (d), (long) (e))
 
+/* the law's one syscall (policy.h): readlink of a host path, on the lane, so the
+ * walk costs no stop.  The raw result, as the kernel would give it. */
+ssize_t pol_readlink(const char *host, char *buf, size_t n)
+{
+	return (ssize_t) lane_rawc(SYS_readlinkat, AT_FDCWD, host, buf, n, 0L);
+}
+
 static void lane_atfork(void);
 static void patch_libc(void);
 
@@ -120,7 +127,7 @@ __attribute__((constructor)) static void lane_init(void)
 	if (!dladdr((void *) lane_init, &di) || !di.dli_fname)
 		return;
 	n = strlen(di.dli_fname);
-	if (n <= t || n - t >= sizeof root || strcmp(di.dli_fname + n - t, tail) != 0)
+	if (n <= t || n - t >= sizeof rootbuf || strcmp(di.dli_fname + n - t, tail) != 0)
 		return;
 	if (lane_call(SYS_newfstatat, AT_FDCWD, "/proc/self", &st, 0, 0L) != 0)
 		return;                                 /* the lane is not there: leave it all to the tracer */
@@ -133,48 +140,32 @@ __attribute__((constructor)) static void lane_init(void)
 		void *m = mmap(NULL, 4096, PROT_READ, MAP_SHARED, (int) fd, 0);
 
 		if (m != MAP_FAILED)
-			gen = (volatile unsigned *) m;
+			policy_links_use((volatile unsigned *) m);
 		close((int) fd);
 	}
 	pthread_atfork(NULL, NULL, lane_atfork);
-	memcpy(root, di.dli_fname, n - t);
-	root[n - t] = '\0';
-	root_len = n - t;                               /* set last: until now everything falls back */
+	memcpy(rootbuf, di.dli_fname, n - t);
+	rootbuf[n - t] = '\0';
+	policy_root_set(rootbuf);               /* set last: until now everything falls back */
 	patch_libc();
 }
 
-/* ---- the tracer's law, in guest terms -------------------------------------- */
-static int is_host_path(const char *p)
+/* ---- the law, in guest terms (policy.c, shared with the tracer) ------------- */
+/* the host path of an absolute guest path, as the law maps it; a host path the
+ * law leaves alone is copied as it is.  0, or -errno. */
+static int lane_host_of(const char *in, int nofollow, char *host, size_t cap)
 {
-	static const char *const keep[] = { "/proc", "/sys", "/dev", "/data", "/system", "/storage",
-					    "/sdcard", "/apex", "/vendor", "/mnt", NULL };
-	int i;
+	int n = policy_path_nf(in, host, cap, nofollow);
 
-	for (i = 0; keep[i]; i++) {
-		size_t n = strlen(keep[i]);
-
-		if (strncmp(p, keep[i], n) == 0 && (p[n] == '\0' || p[n] == '/'))
-			return 1;
-	}
-	return 0;
-}
-
-/* the host path of a resolved guest path; 0, or -ENAMETOOLONG */
-static int to_host(const char *g, char *host, size_t cap)
-{
-	size_t gl = strlen(g);
-
-	if (is_host_path(g)) {
-		if (gl >= cap)
+	if (n > 0)
+		return 0;
+	if (n == 0 && policy_is_host(in)) {
+		if (strlen(in) >= cap)
 			return -ENAMETOOLONG;
-		memcpy(host, g, gl + 1);
+		strcpy(host, in);
 		return 0;
 	}
-	if (root_len + gl >= cap)
-		return -ENAMETOOLONG;
-	memcpy(host, root, root_len);
-	memcpy(host + root_len, g, gl + 1);
-	return 0;
+	return -ENAMETOOLONG;
 }
 
 /* Threads and vfork.  The copies below are shared by every thread of the process,
@@ -205,75 +196,7 @@ static int seq_check(unsigned *seq, unsigned s)
 	return __atomic_load_n(seq, __ATOMIC_RELAXED) == s;
 }
 
-/* readlink of a guest path: on the host path, through the lane, from the cache.
- * "Not a link" (-EINVAL) is cached as well: it is the answer most components get. */
-#define LC_SLOTS 2048
-struct lc { unsigned seq, gen, hash; int r; char key[200]; char tgt[120]; };
-static struct lc lcache[LC_SLOTS];
-
-static int lc_get(struct lc *e, unsigned cur, unsigned h, const char *host, size_t len, char *buf, size_t n, long *out)
-{
-	unsigned s;
-	int r;
-
-	if (!seq_read(&e->seq, &s) || e->gen != cur || e->hash != h || len >= sizeof e->key ||
-	    memcmp(e->key, host, len + 1) != 0)
-		return 0;
-	r = e->r;
-	if (r > (int) sizeof e->tgt || (r > 0 && (size_t) r > n))
-		return 0;
-	if (r > 0)
-		memcpy(buf, e->tgt, (size_t) r);
-	if (!seq_check(&e->seq, s))
-		return 0;
-	*out = r;
-	return 1;
-}
-
-static void lc_put(struct lc *e, unsigned cur, unsigned h, const char *host, size_t len, const char *buf, long r)
-{
-	if (len >= sizeof e->key || r >= (long) sizeof e->tgt || seq_begin(&e->seq) < 0)
-		return;
-	e->gen = cur;
-	e->hash = h;
-	e->r = (int) r;
-	memcpy(e->key, host, len + 1);
-	if (r > 0)
-		memcpy(e->tgt, buf, (size_t) r);
-	seq_end(&e->seq);
-}
-
-static int guest_readlink(const char *g, char *buf, size_t n)
-{
-	char host[PATH_MAX];
-	unsigned h = 2166136261u, cur = gen ? *gen : 0;
-	struct lc *e;
-	size_t len;
-	long r;
-
-	if (to_host(g, host, sizeof host) != 0)
-		return -ENAMETOOLONG;
-	len = strlen(host);
-	for (size_t i = 0; i < len; i++)
-		h = (h ^ (unsigned char) host[i]) * 16777619u;
-	e = &lcache[h % LC_SLOTS];
-	if (!gen || !lc_get(e, cur, h, host, len, buf, n, &r)) {
-		r = lane_call(SYS_readlinkat, AT_FDCWD, host, buf, n, 0L);
-		if (r < 0)
-			r = -errno;
-		if (gen)
-			lc_put(e, cur, h, host, len, buf, r);
-	}
-	/* a target the kernel spells as a host path inside the prefix is the guest's */
-	if (r > 0 && (size_t) r >= root_len && strncmp(buf, root, root_len) == 0 &&
-	    ((size_t) r == root_len || buf[root_len] == '/')) {
-		memmove(buf, buf + root_len, (size_t) r - root_len);
-		r -= (long) root_len;
-		if (r == 0)
-			buf[r++] = '/';
-	}
-	return (int) r;
-}
+/* the readlink cache is policy.c's now (lc_readlink), shared with the tracer */
 
 /* ---- the working directory: asked once, dropped by chdir/fchdir ---------- */
 static unsigned cwd_seq, cwd_epoch;     /* the epoch moves with every chdir */
@@ -287,7 +210,7 @@ static int cwd_same(const char *g, unsigned long dev, unsigned long ino)
 	char host[PATH_MAX];
 	struct stat a, b;
 
-	return to_host(g, host, sizeof host) == 0 &&
+	return lane_host_of(g, 0, host, sizeof host) == 0 &&
 	       lane_call(SYS_newfstatat, AT_FDCWD, ".", &a, 0, 0L) == 0 &&
 	       lane_call(SYS_newfstatat, AT_FDCWD, host, &b, 0, 0L) == 0 &&
 	       a.st_dev == b.st_dev && a.st_ino == b.st_ino && a.st_dev == dev && a.st_ino == ino;
@@ -312,7 +235,7 @@ static int get_cwd(char *out)
 	int pid = getpid();
 	unsigned s, ep;
 
-	unsigned g = gen ? *gen : 0;
+	unsigned g = policy_links_gen();
 
 	if (seq_read(&cwd_seq, &s) && __atomic_load_n(&cwd_pid, __ATOMIC_ACQUIRE) == pid) {
 		unsigned cg = cwd_gen;
@@ -338,14 +261,12 @@ static int get_cwd(char *out)
 		/* the kernel's answer is a host path: inside the prefix it is the guest's */
 		long n = lane_call(SYS_getcwd, out, PATH_MAX, 0L, 0L, 0L);
 
+		char g[PATH_MAX];
+
 		if (n < 0)
 			return -errno;
-		if (strncmp(out, root, root_len) == 0 && (out[root_len] == '/' || out[root_len] == '\0')) {
-			if (out[root_len] == '\0')
-				strcpy(out, "/");
-			else
-				memmove(out, out + root_len, strlen(out + root_len) + 1);
-		}
+		if (policy_unpath(out, g, sizeof g) > 0)
+			memcpy(out, g, strlen(g) + 1);
 	}
 	if (seq_begin(&cwd_seq) >= 0) {
 		if (__atomic_load_n(&cwd_epoch, __ATOMIC_ACQUIRE) == ep) {     /* no chdir meanwhile */
@@ -382,116 +303,7 @@ int fchdir(int fd)
 	return r;
 }
 
-/* ---- resolving ------------------------------------------------------------ */
-
-/* glibc's realpath algorithm (stdlib/canonicalize.c) on guest paths: each component
- * resolved, links included, then `..` against what is resolved so far.  With
- * `nofollow` the last component is left as it is (a link stays a link).  0, or -errno. */
-static int resolve(const char *in, int nofollow, char *res)
-{
-	char rest[PATH_MAX], tgt[PATH_MAX];
-	size_t rl;
-	int links = 0;
-	char *p;
-
-	if (in[0] == '\0')
-		return -ENOENT;
-	if (strlen(in) >= sizeof rest)
-		return -ENAMETOOLONG;
-	if (in[0] == '/') {
-		res[0] = '\0';
-	} else {
-		int e = get_cwd(res);
-
-		if (e < 0)
-			return e;
-		if (strcmp(res, "/") == 0)
-			res[0] = '\0';
-	}
-	rl = strlen(res);
-	strcpy(rest, in);
-	p = rest;
-	for (;;) {
-		char *comp;
-		size_t cl;
-		int r, last;
-
-		while (*p == '/')
-			p++;
-		if (*p == '\0')
-			break;
-		comp = p;
-		while (*p && *p != '/')
-			p++;
-		cl = (size_t) (p - comp);
-		last = *p == '\0';
-		if (cl == 1 && comp[0] == '.')
-			continue;
-		if (cl == 2 && comp[0] == '.' && comp[1] == '.') {
-			while (rl > 0 && res[rl - 1] != '/')
-				rl--;
-			if (rl > 0)
-				rl--;
-			res[rl] = '\0';
-			continue;
-		}
-		if (rl + 1 + cl >= PATH_MAX)
-			return -ENAMETOOLONG;
-		res[rl] = '/';
-		memcpy(res + rl + 1, comp, cl);
-		res[rl + 1 + cl] = '\0';
-		if (last && nofollow) {
-			rl += 1 + cl;
-			break;
-		}
-		r = guest_readlink(res, tgt, sizeof tgt - 1);
-		if (r == -EINVAL) {                     /* there, and not a link */
-			rl += 1 + cl;
-			continue;
-		}
-		if (r < 0)
-			return r;
-		if (++links > MAX_LINKS)
-			return -ELOOP;
-		tgt[r] = '\0';
-		{
-			/* the target, then what was left of the path, in place */
-			size_t al = strlen(p);
-
-			if ((size_t) r + 1 + al >= sizeof rest)
-				return -ENAMETOOLONG;
-			memmove(rest + r + 1, p, al + 1);
-			memcpy(rest, tgt, (size_t) r);
-			rest[r] = '/';
-			p = rest;
-		}
-		if (tgt[0] == '/')
-			rl = 0;                         /* an absolute target: from the root again */
-		res[rl] = '\0';
-	}
-	if (rl == 0) {
-		res[0] = '/';
-		res[1] = '\0';
-	}
-	return 0;
-}
-
-/* The host path for a path a program passes, as the tracer would map it: links in
- * the directories resolved, the last component followed or not.  A trailing slash
- * is kept, so the kernel still says ENOTDIR for a file.  0, or -errno. */
-static int host_of(const char *in, int nofollow, char *host, size_t cap)
-{
-	char res[PATH_MAX];
-	size_t n = strlen(in);
-	int r, slash = n > 0 && in[n - 1] == '/';
-
-	r = resolve(in, nofollow && !slash, res);
-	if (r == 0)
-		r = to_host(res, host, cap - 1);
-	if (r == 0 && slash && strcmp(res, "/") != 0)
-		strcat(host, "/");
-	return r;
-}
+/* ---- resolving (policy.c's law) ------------------------------------------- */
 
 /* the host path of a directory fd, as the kernel names it; its length, or 0 */
 static size_t fd_host(int fd, char *out, size_t cap)
@@ -519,56 +331,56 @@ static size_t fd_host(int fd, char *out, size_t cap)
  * on the lane as (*at, host)), 0 when this file does not handle it (the real function,
  * through the tracer), or -errno.
  *
- * An absolute path, or one relative to the working directory, is resolved here.  On
- * a real dirfd, a one-component name goes to the kernel as it is when the last
- * component is not followed, or is not a link (a link with an absolute target would
- * be followed on the host); anything else is resolved from the directory's guest
- * path.  A directory outside the prefix is a host directory: its paths stay. */
+ * The path is mapped by the law (policy.c): an absolute guest path resolved to a
+ * host path; a relative one from the working directory or from the directory fd's
+ * guest path.  A directory outside the prefix is a host directory: its paths stay. */
 static int lane_at(int dirfd, const char *path, int nofollow, char *host, size_t cap, int *at)
 {
-	char dir[PATH_MAX], guest[PATH_MAX];
-	size_t dl, pl;
+	char dir[PATH_MAX], guest[PATH_MAX], abs[PATH_MAX];
+	size_t rl = policy_root_len(), bl, pl;
+	int e;
 
-	if (!root_len || !path || path[0] == '\0')
+	if (!rl || !path || path[0] == '\0')
 		return 0;
 	*at = AT_FDCWD;
-	if (path[0] == '/' || dirfd == AT_FDCWD) {
-		int e = host_of(path, nofollow, host, cap);
-
+	if (path[0] == '/') {
+		e = lane_host_of(path, nofollow, host, cap);
+		return e < 0 ? e : 1;
+	}
+	if (dirfd == AT_FDCWD) {
+		e = get_cwd(guest);
+		if (e < 0)
+			return e;
+		bl = strcmp(guest, "/") == 0 ? 0 : strlen(guest);
+		pl = strlen(path);
+		if (bl + 1 + pl >= sizeof abs)
+			return -ENAMETOOLONG;
+		memcpy(abs, guest, bl);
+		abs[bl] = '/';
+		memcpy(abs + bl + 1, path, pl + 1);
+		e = lane_host_of(abs, nofollow, host, cap);
 		return e < 0 ? e : 1;
 	}
 	if (dirfd < 0)
 		return 0;
-	pl = strlen(path);
-	if (pl >= cap)
-		return -ENAMETOOLONG;
-	if (!strchr(path, '/') && strcmp(path, ".") != 0 && strcmp(path, "..") != 0) {
-		char t[2];
-
-		if (nofollow || lane_call(SYS_readlinkat, dirfd, path, t, sizeof t, 0L) < 0) {
-			memcpy(host, path, pl + 1);     /* not followed, not a link, or not there */
-			*at = dirfd;
-			return 1;
-		}
-	}
-	dl = fd_host(dirfd, dir, sizeof dir);
-	if (dl == 0)
+	if (fd_host(dirfd, dir, sizeof dir) == 0)
 		return 0;
-	if (strncmp(dir, root, root_len) != 0 || (dir[root_len] != '/' && dir[root_len] != '\0')) {
-		memcpy(host, path, pl + 1);             /* a host directory */
+	if (strncmp(dir, policy_root(), rl) != 0 || (dir[rl] != '/' && dir[rl] != '\0')) {
+		if (strlen(path) >= cap)
+			return -ENAMETOOLONG;
+		strcpy(host, path);                     /* a host directory */
 		*at = dirfd;
 		return 1;
 	}
-	if ((dl - root_len) + 1 + pl >= sizeof guest)
-		return -ENAMETOOLONG;
-	memcpy(guest, dir + root_len, dl - root_len);
-	guest[dl - root_len] = '/';
-	memcpy(guest + (dl - root_len) + 1, path, pl + 1);
-	{
-		int e = host_of(guest, nofollow, host, cap);
-
-		return e < 0 ? e : 1;
+	e = policy_path_at(dir, path, host, cap, nofollow);
+	if (e == 0) {
+		if (strlen(path) >= cap)
+			return -ENAMETOOLONG;
+		strcpy(host, path);
+		*at = dirfd;
+		return 1;
 	}
+	return 1;
 }
 
 /* ---- realpath ------------------------------------------------------------- */
@@ -576,16 +388,25 @@ static void *real_realpath;
 
 static char *do_realpath(const char *in, char *out)
 {
-	char res[PATH_MAX];
+	char base[PATH_MAX], res[PATH_MAX];
 	int r;
 
-	if (!root_len)
+	if (!policy_root_len())
 		return REAL(realpath)(in, out);
 	if (in == NULL) {
 		errno = EINVAL;
 		return NULL;
 	}
-	r = resolve(in, 0, res);
+	if (in[0] == '/' && policy_is_host(in))
+		return REAL(realpath)(in, out);         /* a host path: the host's own */
+	if (in[0] != '/') {
+		r = get_cwd(base);
+		if (r < 0) {
+			errno = -r;
+			return NULL;
+		}
+	}
+	r = policy_resolve(in[0] == '/' ? "/" : base, in, res, sizeof res);
 	if (r < 0) {
 		errno = -r;
 		return NULL;
@@ -683,15 +504,15 @@ static void *real_fstatat, *real_statx;
  * path inside the prefix is shortened to the guest's */
 static long link_size(int at, const char *host, long size)
 {
-	char tgt[PATH_MAX];
+	char tgt[PATH_MAX], g[PATH_MAX];
 	long r = lane_call(SYS_readlinkat, at, host, tgt, sizeof tgt - 1, 0L);
+	int m;
 
 	if (r <= 0)
 		return size;
-	if ((size_t) r >= root_len && strncmp(tgt, root, root_len) == 0 &&
-	    ((size_t) r == root_len || tgt[root_len] == '/'))
-		return (size_t) r == root_len ? 1 : r - (long) root_len;
-	return r;
+	tgt[r] = '\0';
+	m = policy_unpath(tgt, g, sizeof g);
+	return m > 0 ? m - 1 : r;              /* the guest spelling is shorter, if it is the guest's */
 }
 
 /* ---- hard links: Android refuses them; the tracer copies the file and keeps their
@@ -771,7 +592,7 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 	int nofollow = flags & AT_SYMLINK_NOFOLLOW, at, e;
 
 	if ((flags & AT_EMPTY_PATH) && path && path[0] == '\0' && dirfd >= 0) {
-		if (!root_len)
+		if (!policy_root_len())
 			return REAL(fstatat)(dirfd, path, st, flags);
 		if (lane_call(SYS_fstat, dirfd, st, 0L, 0L, 0L) != 0)
 			return -1;
@@ -812,7 +633,7 @@ int statx(int dirfd, const char *path, int flags, unsigned mask, struct statx *s
 	char host[PATH_MAX];
 	int nofollow = flags & AT_SYMLINK_NOFOLLOW, at, e;
 
-	if (!root_len || (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH | AT_STATX_SYNC_TYPE)))
+	if (!policy_root_len() || (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH | AT_STATX_SYNC_TYPE)))
 		return REAL(statx)(dirfd, path, flags, mask, stx);
 	if ((flags & AT_EMPTY_PATH) && path && path[0] == '\0') {
 		at = dirfd;
@@ -882,12 +703,16 @@ ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n)
 	r = lane_call(SYS_readlinkat, at, host, tgt, sizeof tgt, 0L);
 	if (r < 0)
 		return -1;
-	if ((size_t) r >= root_len && strncmp(tgt, root, root_len) == 0 &&
-	    ((size_t) r == root_len || tgt[root_len] == '/')) {
-		memmove(tgt, tgt + root_len, (size_t) r - root_len);
-		r -= (long) root_len;
-		if (r == 0)
-			tgt[r++] = '/';
+	if (r < PATH_MAX) {
+		char g[PATH_MAX];
+		int m;
+
+		tgt[r] = '\0';
+		m = policy_unpath(tgt, g, sizeof g);
+		if (m > 0) {
+			r = m - 1;
+			memcpy(tgt, g, (size_t) r);
+		}
 	}
 	if ((size_t) r > n)
 		r = (long) n;
@@ -953,7 +778,7 @@ char *getcwd(char *buf, size_t size)
 	size_t n;
 	int e;
 
-	if (!root_len)
+	if (!policy_root_len())
 		return real_getcwd_fn()(buf, size);
 	e = get_cwd(g);
 	if (e < 0) {
@@ -1043,16 +868,16 @@ static void lane_atfork(void)
 
 static void *real_getuid, *real_geteuid, *real_getgid, *real_getegid, *real_getresuid, *real_getresgid;
 
-uid_t getuid(void) { unsigned v[6]; return root_len && get_ids(v) ? v[0] : REAL(getuid)(); }
-uid_t geteuid(void) { unsigned v[6]; return root_len && get_ids(v) ? v[1] : REAL(geteuid)(); }
-gid_t getgid(void) { unsigned v[6]; return root_len && get_ids(v) ? v[3] : REAL(getgid)(); }
-gid_t getegid(void) { unsigned v[6]; return root_len && get_ids(v) ? v[4] : REAL(getegid)(); }
+uid_t getuid(void) { unsigned v[6]; return policy_root_len() && get_ids(v) ? v[0] : REAL(getuid)(); }
+uid_t geteuid(void) { unsigned v[6]; return policy_root_len() && get_ids(v) ? v[1] : REAL(geteuid)(); }
+gid_t getgid(void) { unsigned v[6]; return policy_root_len() && get_ids(v) ? v[3] : REAL(getgid)(); }
+gid_t getegid(void) { unsigned v[6]; return policy_root_len() && get_ids(v) ? v[4] : REAL(getegid)(); }
 
 int getresuid(uid_t *r, uid_t *e, uid_t *s)
 {
 	unsigned v[6];
 
-	if (!root_len || !get_ids(v))
+	if (!policy_root_len() || !get_ids(v))
 		return REAL(getresuid)(r, e, s);
 	*r = v[0];
 	*e = v[1];
@@ -1064,7 +889,7 @@ int getresgid(gid_t *r, gid_t *e, gid_t *s)
 {
 	unsigned v[6];
 
-	if (!root_len || !get_ids(v))
+	if (!policy_root_len() || !get_ids(v))
 		return REAL(getresgid)(r, e, s);
 	*r = v[3];
 	*e = v[4];
@@ -1098,7 +923,7 @@ int euidaccess(const char *path, int mode)
 {
 	unsigned v[6];
 
-	if (root_len && get_ids(v) && v[0] == v[1] && v[3] == v[4])
+	if (policy_root_len() && get_ids(v) && v[0] == v[1] && v[3] == v[4])
 		return lane_faccessat(AT_FDCWD, path, mode, 0);
 	return REAL(euidaccess)(path, mode);
 }
@@ -1211,14 +1036,18 @@ static int lane_hook(unsigned long *r)
 			break;
 		}
 		res = lane_rawc(SYS_readlinkat, at, host, tgt, sizeof tgt, 0L);
-		if (res > 0) {
-			if ((size_t) res >= root_len && strncmp(tgt, root, root_len) == 0 &&
-			    ((size_t) res == root_len || tgt[root_len] == '/')) {
-				memmove(tgt, tgt + root_len, (size_t) res - root_len);
-				res -= (long) root_len;
-				if (res == 0)
-					tgt[res++] = '/';
+		if (res > 0 && res < PATH_MAX) {
+			char g[PATH_MAX];
+			int m;
+
+			tgt[res] = '\0';
+			m = policy_unpath(tgt, g, sizeof g);
+			if (m > 0) {
+				res = m - 1;
+				memcpy(tgt, g, (size_t) res);
 			}
+		}
+		if (res > 0) {
 			if ((size_t) res > n)
 				res = (long) n;
 			memcpy((char *) r[2], tgt, (size_t) res);
@@ -1516,7 +1345,7 @@ int linkat(int od, const char *op, int nd, const char *np, int flags)
 	struct stat a, b;
 	int r = REAL(linkat)(od, op, nd, np, flags), e = errno;
 
-	if (r == 0 && root_len &&
+	if (r == 0 && policy_root_len() &&
 	    lane_fstatat(od, op, &a, (flags & AT_SYMLINK_FOLLOW) ? 0 : AT_SYMLINK_NOFOLLOW) == 0 &&
 	    lane_fstatat(nd, np, &b, AT_SYMLINK_NOFOLLOW) == 0 && (a.st_dev != b.st_dev || a.st_ino != b.st_ino)) {
 		int i, g;

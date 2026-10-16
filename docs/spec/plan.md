@@ -8,10 +8,10 @@ proposal.
 
 ## Where we are (the honest baseline)
 
-- The mapping works but is **partial, duplicated and seamed**: path in/out only;
-  two laws (the tracer's `policy.c`, the shim's resolver); the exec gate hands
-  the loader **host paths**, so the loader is a special case (the `LD_AUDIT`
-  hook just broke on it).
+- The mapping is **partial and seamed**: path in/out only. The law is **one**
+  now -- `policy.c`, linked into the shim (`-DDN_LIBC`) as well as the tracer --
+  but the exec gate hands the loader **host paths**, so the loader is still a
+  special case (the `LD_AUDIT` hook just broke on it).
 - The speed engines (the filter's tree, the shared cookie block, the site
   patches, the `LD_AUDIT` loader hook, the cancellable `svc`) work, but serve a
   mapping that is not yet complete.
@@ -23,9 +23,11 @@ proposal.
 
 The mapping must be *single* and *consistent* before it is widened.
 
-1. **One law.** Link `policy.c` into the shim (it has its own resolver today) and
-   into any early hook; make the link cache thread-safe. Two copies can
-   disagree, and the 0.7 runtime died of that.
+1. **One law.** Done: the shim builds `policy.c` (`-DDN_LIBC`) and calls its law
+   (`policy_path_nf`, `policy_path_at`, `policy_unpath`, `policy_resolve`,
+   `policy_is_host`); its own resolver is gone, and the link cache (now
+   `policy.c`'s) is a seqlock the shim's threads share. Two copies can disagree,
+   and the 0.7 runtime died of that.
 2. **Loader and gate uniform.** The exec gate hands the loader **guest** paths
    (the program, `--library-path`), so the loader is a program like any other
    and the host/guest seam goes. This also removes the `LD_AUDIT` hook's

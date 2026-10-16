@@ -3,7 +3,18 @@
 #ifndef POLICY_H
 #define POLICY_H
 #include <stddef.h>
+#ifdef DN_LIBC
+/* The shim (lane.c) builds this file against glibc: the types and the string
+ * helpers come from libc, and the one syscall the law makes -- readlink of a
+ * host path -- goes through the lane (pol_readlink, in lane.c). */
+#include <stdint.h>
+#include <sys/types.h>
+typedef uint64_t u64;
+typedef int64_t i64;
+ssize_t pol_readlink(const char *host, char *buf, size_t n);
+#else
 #include "sys.h"
+#endif
 
 /* One row per syscall to catch.  The monitor builds its filter from the rows
  * and knows nothing else about any syscall. */
@@ -37,7 +48,14 @@ size_t policy_count(void);
 const struct row *policy_at(size_t i);
 const struct row *policy_row(unsigned nr);     /* NULL: not caught */
 
-void policy_set_root(const char *root);
+void policy_set_root(const char *root);        /* the tracer: the root, the names and the cache */
+void policy_root_set(const char *root);        /* just the root and the names; no syscall */
+const char *policy_root(void);
+size_t policy_root_len(void);
+/* Is this path the host's -- under the prefix root, or one of the host directories? */
+int policy_is_host(const char *p);
+/* Point the link cache at the shared generation the caller has mapped (the shim). */
+void policy_links_use(volatile unsigned *g);
 
 /* The link cache: what readlink said for a host path, so that a walk costs no
  * syscall for a component already seen.  Its generation lives in a file of the
@@ -45,6 +63,11 @@ void policy_set_root(const char *root);
  * cache of all of them; without that file there is no cache. */
 void policy_links_changed(void);
 unsigned policy_links_gen(void);
+/* The canonical guest path for `in`, as realpath would make it: every component's
+ * link followed, `..` against what is resolved, an absolute link target the
+ * prefix's.  `base` is the guest working directory for a relative path.  0 and
+ * `out` (NUL-terminated), or -errno.  A host path comes back as it is. */
+int policy_resolve(const char *base, const char *in, char *out, size_t cap);
 
 /* The law for a path: 0 if `in` stays as it is, else the length of the
  * rewritten path (NUL included) written to `out`. */

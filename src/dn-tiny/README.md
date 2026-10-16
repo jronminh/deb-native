@@ -9,7 +9,7 @@ How they work together: [`docs/architecture.md`](../../docs/architecture.md).
 | `monitor.c` | the catcher: builds the seccomp filter from the policy's rows, runs the wait loop, reads and writes the tracee's registers and memory |
 | `trace.c` | the applier: carries out what a row says (map a path, fake an answer, answer at entry, copy for a link, answer a call the platform killed) |
 | `exec.c` | the exec gate: glibc programs and scripts started through the prefix's loader, with the shim preloaded |
-| `policy.c`, `policy.h` | the table and the law: which syscalls, where their paths are, how a path is resolved in the prefix, what a killed call is told |
+| `policy.c`, `policy.h` | the table and the law: which syscalls, where their paths are, how a path is resolved in the prefix, what a killed call is told. Linked into both engines -- the tracer as it is, the shim `-DDN_LIBC` |
 | `gen_rows.py` | writes the rows at build time: a syscall is caught only when the tracer acts on it, hottest first |
 | `mon.h`, `trace.h`, `exec.h` | what the parts offer each other |
 | `sys.c`, `sys.h` | raw syscalls, `_start`, the few string functions |
@@ -21,13 +21,16 @@ How they work together: [`docs/architecture.md`](../../docs/architecture.md).
 
 `scripts/build-runtime.sh` builds `dn-tiny`, `dn-substtest` and `dn-census` with
 any aarch64 C compiler. `dn-lane.so` is a glibc library, built inside a prefix
-with the prefix's own `gcc`:
+with the prefix's own `gcc`, and links the law (`policy.c`, with the generated
+rows) as well as the shim:
 
 ```sh
-gcc -O2 -Wall -Wextra -shared -fPIC -o /usr/lib/deb-native/dn-lane.so lane.c
+gcc -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC -Igen \
+    -o /usr/lib/deb-native/dn-lane.so lane.c policy.c
 ```
 
-(`scripts/build-prefix.sh` does it; [`docs/building.md`](../../docs/building.md)).
+(`gen/policy-rows.inc` is written by `build-runtime.sh`; `scripts/build-prefix.sh`
+does it all; [`docs/building.md`](../../docs/building.md)).
 
 ## Run
 

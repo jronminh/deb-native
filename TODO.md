@@ -89,16 +89,12 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 
 ## The law
 
-- **One copy of the law**: the shim has its own resolver (`resolve`,
-  `is_host_path` in `lane.c`); link `policy.c` into it instead. It needs a build
-  of `policy.c` against glibc (its `sys.h` defines `_start` and the string
-  functions) and its link cache made thread-safe. Binds need it first ("The
-  boundary", step 3).
-- **Invalidating the link cache**: the readlink cache (`policy.c`, `lane.c`)
-  drops every entry when the shared generation moves, which any link change of
-  any session does (`symlinkat`, `unlinkat`, `linkat`, `rename`). That is coarse
-  but cannot miss a change. Measured: putting the link movers in the shim, which
-  then has to move the same generation, cost the Lua build +46 stops
+- **Invalidating the link cache**: the law's readlink cache (`policy.c`, linked
+  into the shim and shared by both engines, a seqlock) drops every entry when the
+  shared generation moves, which any link change of any session does
+  (`symlinkat`, `unlinkat`, `linkat`, `rename`). That is coarse but cannot miss a
+  change. Measured: putting the link movers in the shim, which then has to move
+  the same generation, cost the Lua build +46 stops
   ([`policy-audit.md`](docs/reference/policy-audit.md)) -- one place is cheaper
   than two. A finer rule (drop the subtree of a renamed directory) is PRoot's
   issue #124 trie ([`prior-art.md`](docs/reference/prior-art.md), "Root emulation
