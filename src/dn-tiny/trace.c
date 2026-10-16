@@ -708,8 +708,137 @@ static int synth_cgroup(char *out, size_t cap)
 	return put_synth("cgroup", "0::/\n", 5, out, cap);
 }
 
+/* The pid in a "/proc/<self|pid>/<leaf>" path, or 0. */
+static pid_t proc_pid_leaf(struct tracee *t, const char *guest, const char *leaf)
+{
+	const char *s, *sl;
+	pid_t pid = 0;
+
+	if (strncmp(guest, "/proc/", 6) != 0)
+		return 0;
+	s = guest + 6;
+	sl = strchr(s, '/');
+	if (!sl || strcmp(sl + 1, leaf) != 0)
+		return 0;
+	if (sl - s == 4 && strncmp(s, "self", 4) == 0)
+		return t->pid;
+	for (; s < sl; s++) {
+		if (*s < '0' || *s > '9')
+			return 0;
+		pid = pid * 10 + (*s - '0');
+	}
+	return pid;
+}
+
+/* One /proc/<pid>/maps line into dst: the file-backed path (the last field) is
+ * mapped host->guest; a name it cannot map, an anonymous mapping and a smaps
+ * field line are copied as they are. */
+static void maps_line(char *dst, size_t cap, size_t *rn, const char *line, size_t len)
+{
+	const char *p = line, *end = line + len, *name, *nl;
+	int f;
+
+	for (f = 0; f < 5 && p < end; f++) {            /* the five fields before the name */
+		while (p < end && *p == ' ')
+			p++;
+		while (p < end && *p != ' ' && *p != '\n')
+			p++;
+	}
+	while (p < end && *p == ' ')
+		p++;
+	name = p;
+	nl = name;
+	while (nl < end && *nl != '\n')
+		nl++;
+	if (nl == name || (name[0] != '/' && name[0] != '[')) {   /* no name: the line as it is */
+		if (*rn + len < cap) {
+			memcpy(dst + *rn, line, len);
+			*rn += len;
+		}
+		return;
+	}
+	{
+		size_t namelen = (size_t) (nl - name), dl = 0;
+		char tmp[400];
+		const char *oname = name;
+		size_t olen;
+
+		if (namelen >= 10 && memcmp(name + namelen - 10, " (deleted)", 10) == 0) {
+			dl = 10;
+			namelen -= 10;
+		}
+		olen = namelen;
+		if (name[0] == '/' && namelen > 0 && namelen < sizeof tmp) {
+			char g[400];
+
+			memcpy(tmp, name, namelen);
+			tmp[namelen] = '\0';
+			if (policy_unpath(tmp, g, sizeof g) > 0)
+				memcpy(tmp, g, strlen(g) + 1);
+			olen = strlen(tmp);
+			oname = tmp;
+		}
+		if (*rn + (size_t) (name - line) + olen + dl + 2 < cap) {
+			memcpy(dst + *rn, line, (size_t) (name - line));
+			*rn += (size_t) (name - line);
+			memcpy(dst + *rn, oname, olen);
+			*rn += olen;
+			if (dl) {
+				memcpy(dst + *rn, " (deleted)", 10);
+				*rn += 10;
+			}
+			dst[(*rn)++] = '\n';
+		}
+	}
+}
+
+/* "/proc/<pid>/maps" and "/proc/<pid>/smaps": the kernel's own, with the file
+ * paths mapped to the tree's (gdb and the JVM open the names they read here). */
+static int synth_maps(struct tracee *t, const char *guest, const char *leaf, char *out, size_t cap)
+{
+	static char raw[1 << 20], buf[1 << 20];
+	pid_t pid = proc_pid_leaf(t, guest, leaf);
+	char kp[64], nm[40];
+	int fin, m;
+	ssize_t n;
+	size_t tot = 0, i, rn = 0;
+
+	if (pid <= 0)
+		return 0;
+	m = scpy(kp, sizeof kp, "/proc/");
+	m += uitoa(kp + m, (unsigned) pid);
+	kp[m++] = '/';
+	if (scpy(kp + m, sizeof kp - m, leaf) < 0)
+		return 0;
+	fin = sys_open(kp, 0);
+	if (fin < 0)
+		return 0;
+	while (tot < sizeof raw - 1) {
+		n = sys_read(fin, raw + tot, sizeof raw - 1 - tot);
+		if (n <= 0)
+			break;
+		tot += (size_t) n;
+	}
+	sys_close(fin);
+	if (tot == 0)
+		return 0;
+	for (i = 0; i < tot; ) {
+		const char *e = memchr(raw + i, '\n', tot - i);
+		size_t ll = e ? (size_t) (e - (raw + i)) + 1 : tot - i;
+
+		maps_line(buf, sizeof buf, &rn, raw + i, ll);
+		i += ll;
+	}
+	m = scpy(nm, sizeof nm, leaf);
+	nm[m++] = '.';
+	m += uitoa(nm + m, (unsigned) pid);
+	nm[m] = '\0';
+	return put_synth(nm, buf, rn, out, cap);
+}
+
 /* A read-only open the tracer answers with a generated file: /proc/<pid>/status,
- * /proc/uptime, /proc/loadavg, /proc/<pid>/cgroup.  1 if `out` is the host path. */
+ * /proc/uptime, /proc/loadavg, /proc/<pid>/cgroup, /proc/<pid>/maps, smaps.  1 if
+ * `out` is the host path to open instead. */
 static int synth_open(struct tracee *t, const char *guest, char *out, size_t cap)
 {
 	size_t gl = strlen(guest);
@@ -720,6 +849,10 @@ static int synth_open(struct tracee *t, const char *guest, char *out, size_t cap
 		return synth_loadavg(out, cap);
 	if (gl > 7 && strncmp(guest, "/proc/", 6) == 0 && strcmp(guest + gl - 7, "/cgroup") == 0)
 		return synth_cgroup(out, cap);
+	if (gl > 5 && strncmp(guest, "/proc/", 6) == 0 && strcmp(guest + gl - 5, "/maps") == 0)
+		return synth_maps(t, guest, "maps", out, cap);
+	if (gl > 6 && strncmp(guest, "/proc/", 6) == 0 && strcmp(guest + gl - 6, "/smaps") == 0)
+		return synth_maps(t, guest, "smaps", out, cap);
 	return synth_status(t, guest, out, cap);
 }
 

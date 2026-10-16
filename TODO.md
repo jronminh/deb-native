@@ -94,9 +94,8 @@ step checked as `AGENTS.md` says, in Termux and in the app:
    now -- a path there answers `ENOENT` (a Debian has no such directory), not the
    phone's, and a bind in `boot/binds` is the way to reach one on purpose.  The
    runtime's own calls use host paths and do not go through the law, so they are
-   unaffected.  **Left:** `/proc/*/maps` and `/proc/*/smaps` still name the
-   libraries by their host paths (gdb and the JVM read them) -- the one piece of
-   Phase 1 that needs synthesized content, not a mapping.
+   unaffected.  `/proc/*/maps` and `/proc/*/smaps` are generated at open too, the
+   file paths mapped host->guest (gdb and the JVM read the names they open).
 
 ## The law
 

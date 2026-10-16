@@ -205,8 +205,8 @@ prefixes can run at once, each under its own `dn-tiny`; they share nothing.
   only, and the real link count of a copy.
 - `name_to_handle_at` is not mapped; `openat2` with `RESOLVE_*` answers `ENOSYS`
   (a clear refusal, not a hole).
-- `/proc/<pid>/maps` and `smaps` still name the libraries by their host paths
-  (the one reader that needs synthesized content, not a mapping).
+- `/proc/<pid>/maps` and `smaps` are generated at open, the file paths mapped to
+  the tree's (`synth_maps`).
 - The kernel's own refusals stay: SELinux answers `EACCES` where Debian would
   allow (`/sys/fs/selinux`, parts of `/sys`), and `PPid`/`getppid()` name the
   tracer (a structural residue; `docs/spec/phase2.md`, "An accepted residue").

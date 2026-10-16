@@ -24,7 +24,7 @@ mapped, so a program cannot find the host frame through an unmapped reader.
 | `/proc/<pid>/exe` | done (`exe_now`) |
 | `/proc/<pid>/fd/<n>` (a link to its target) | done (`readlinkat`) |
 | `/proc/<pid>/mounts`, `mountinfo`, `/etc/mtab` | done (`B_SYNTH` rows) |
-| `/proc/<pid>/maps`, `/proc/<pid>/smaps` (file-backed lines) | **open**: the content names host paths |
+| `/proc/<pid>/maps`, `/proc/<pid>/smaps` (file-backed lines) | done (`synth_maps`) |
 | `getdents64` names | leaf names, fine; a host row lists the host's (intended) |
 | `statx` | no name returned (nothing to map) |
 
@@ -49,7 +49,7 @@ mapped, so a program cannot find the host frame through an unmapped reader.
 | reader | state |
 | --- | --- |
 | `mounts`, `mountinfo`, `/etc/mtab` | done |
-| `maps`, `smaps` | **open** (see path out) |
+| `maps`, `smaps` | done (see path out) |
 
 ## Other host surfaces
 
@@ -66,7 +66,6 @@ runs it (it prints the tree's view of each surface above), and fails on any line
 that holds the host frame -- the prefix's own path, `/data/data`, the shared
 storage, the tracer.  Run it interleaved with the regression set and the bench.
 
-What it flags today: `/proc/self/maps` only (the known hole above).  The
-**environment** and the **working directory** are clean since "The boundary",
-step 1, and the **SELinux label** since step 2 (`listxattr` drops
-`security.selinux`, `getxattr` answers `ENODATA`).
+It comes back **clean**: the environment and the working directory since "The
+boundary", step 1; the SELinux label since step 2; the mount view, `maps`/`smaps`
+and every other reader of the checklist above, mapped or generated.

@@ -465,6 +465,10 @@ static int dyn_file(const char *p)
 	gl = strlen(p);
 	if (gl > 7 && strncmp(p, "/proc/", 6) == 0 && strcmp(p + gl - 7, "/cgroup") == 0)
 		return 1;
+	if (gl > 5 && strncmp(p, "/proc/", 6) == 0 && strcmp(p + gl - 5, "/maps") == 0)
+		return 1;
+	if (gl > 6 && strncmp(p, "/proc/", 6) == 0 && strcmp(p + gl - 6, "/smaps") == 0)
+		return 1;
 	if (strncmp(p, "/proc/", 6) != 0)
 		return 0;
 	p += 6;
