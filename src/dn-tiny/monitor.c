@@ -56,62 +56,227 @@ static unsigned short cur_nr[PID_SLOTS];             /* by pid: the syscall to b
 static u64 saved0[PID_SLOTS];                     /* by pid: x0 as that syscall was entered */
 
 /* ---- the filter: one TRACE rule per row -------------------------------- */
+/* The program is built with labels, so no jump offset is counted by hand: a
+ * conditional jump names the label it goes to when true and when false, and
+ * resolve() turns them into offsets.  The order of the filter is the number first:
+ * a call the lane does not list, and no row, is one JGE tree away from ALLOW, and
+ * the shim's cookie (args[5]) is read only for the lane's numbers.  Reading an
+ * argument in a filter is what keeps the kernel (5.11 and later) from caching its
+ * answer per number, so the cookie is read as late as possible. */
+#define FNINS 1024                     /* BPF_MAXINSNS is 4096; this program is about 250 */
+#define FNLAB 512
+struct fjump { size_t pc; int lt, lf; int kind; };   /* kind 0: conditional, 1: JA */
+struct fprog {
+	struct sock_filter f[FNINS];
+	size_t n;
+	size_t lab[FNLAB];
+	int nlab;
+	struct fjump fx[FNINS];
+	size_t nfx;
+	int bad;
+};
+
+static int flabel(struct fprog *p)
+{
+	if (p->nlab >= FNLAB) { p->bad = 1; return 0; }
+	p->lab[p->nlab] = (size_t) -1;
+	return p->nlab++;
+}
+
+static void fplace(struct fprog *p, int l)
+{
+	p->lab[l] = p->n;
+}
+
+static void fins(struct fprog *p, unsigned short code, unsigned char jt, unsigned char jf, unsigned k)
+{
+	if (p->n >= FNINS) { p->bad = 1; return; }
+	p->f[p->n] = (struct sock_filter) { code, jt, jf, k };
+	p->n++;
+}
+
+static void fstmt(struct fprog *p, unsigned short code, unsigned k)
+{
+	fins(p, code, 0, 0, k);
+}
+
+static void fjmp(struct fprog *p, unsigned short code, unsigned k, int lt, int lf)
+{
+	if (p->nfx >= FNINS) { p->bad = 1; return; }
+	p->fx[p->nfx] = (struct fjump) { p->n, lt, lf, 0 };
+	p->nfx++;
+	fins(p, code, 0, 0, k);
+}
+
+static void fja(struct fprog *p, int l)
+{
+	if (p->nfx >= FNINS) { p->bad = 1; return; }
+	p->fx[p->nfx] = (struct fjump) { p->n, l, 0, 1 };
+	p->nfx++;
+	fins(p, BPF_JMP | BPF_JA, 0, 0, 0);
+}
+
+/* offsets are relative to the next instruction; a conditional's offset must fit in
+ * 8 bits, which the tree below keeps true for the policy's rows (checked here) */
+static int fresolve(struct fprog *p)
+{
+	size_t i;
+
+	for (i = 0; i < p->nfx; i++) {
+		struct fjump *j = &p->fx[i];
+		size_t tgt_t = p->lab[j->lt];
+
+		if (tgt_t == (size_t) -1 || tgt_t <= j->pc) return -1;
+		if (j->kind == 1) {
+			p->f[j->pc].k = (unsigned) (tgt_t - j->pc - 1);
+			continue;
+		}
+		{
+			size_t tgt_f = p->lab[j->lf];
+			size_t dt = tgt_t - j->pc - 1;
+
+			if (tgt_f == (size_t) -1 || tgt_f <= j->pc) return -1;
+			if (dt > 255 || tgt_f - j->pc - 1 > 255) return -1;
+			p->f[j->pc].jt = (unsigned char) dt;
+			p->f[j->pc].jf = (unsigned char) (tgt_f - j->pc - 1);
+		}
+	}
+	return p->bad ? -1 : 0;
+}
+
+/* the rows, sorted by number, as a tree: a node compares the number with the first
+ * number of its right half (JGE), and a leaf of at most two rows compares each */
+static const struct row *rows_by_nr[512];
+
+static void frows(struct fprog *p, size_t lo, size_t hi)
+{
+	size_t cnt = hi - lo;
+
+	if (cnt <= 2) {
+		size_t i;
+
+		for (i = lo; i < hi; i++) {
+			const struct row *rw = rows_by_nr[i];
+			int ltrue = flabel(p), lnext = flabel(p);
+
+			fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, rw->nr, ltrue, lnext);
+			fplace(p, ltrue);
+			fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_TRACE | (rw->exit_stop & SECCOMP_RET_DATA));
+			fplace(p, lnext);
+		}
+		fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+		return;
+	}
+	{
+		size_t m = lo + cnt / 2;
+		int lright = flabel(p), lleft = flabel(p);
+
+		fjmp(p, BPF_JMP | BPF_JGE | BPF_K, rows_by_nr[m]->nr, lright, lleft);
+		fplace(p, lleft);
+		frows(p, lo, m);
+		fplace(p, lright);
+		frows(p, m, hi);
+	}
+}
+
+static struct fprog fp;
+
 static int install_filter(void)
 {
-	struct sock_filter f[2 * 512 + 32];
-	struct sock_fprog prog = { 0, f };
-	size_t i, n = 0;
+	static const unsigned lane[] = DN_LANE_NRS;
+	const size_t nl = sizeof lane / sizeof lane[0];
+	struct sock_fprog prog;
+	size_t i, j;
+	int lok, lnotarch, llane, lnotlane, lc2, lc3, lopen, lanyl, lallow;
+	int lsock, lnl, lerr, lrows;
 
-	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
-	f[n++] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0);
-	f[n++] = (struct sock_filter) BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
-	/* The audit socket: Android's policy refuses it (EACCES), and libaudit gives up
-	 * on that where it accepts a kernel without audit (shadow's useradd aborts).  The
-	 * filter says what such a kernel says, with no stop. */
-	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
-	f[n++] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 198 /* socket */, 0, 5);
-	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
-	f[n++] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 16 /* AF_NETLINK */, 0, 3);
-	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2]));
-	f[n++] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 9 /* NETLINK_AUDIT */, 0, 1);
-	f[n++] = (struct sock_filter) BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | 93 /* EPROTONOSUPPORT */);
-	{
-		/* the shim's lane (lane.h): the cookie in x5 and a call from the lane's list, or
-		 * an openat that only reads */
-		static const unsigned lane[] = DN_LANE_NRS;
-		const size_t nl = sizeof lane / sizeof lane[0];
-		const size_t rows_at = n + 4 + 1 + nl + 4;       /* where the rows begin */
-		size_t k;
-
-		f[n] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]));
-		n++;
-		f[n] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_LO, 0, (unsigned char) (rows_at - n - 1));
-		n++;
-		f[n] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]) + 4);
-		n++;
-		f[n] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_HI, 0, (unsigned char) (rows_at - n - 1));
-		n++;
-		f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
-		for (k = 0; k < nl; k++) {
-			f[n] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, lane[k], (unsigned char) (rows_at - 1 - n - 1), 0);
-			n++;
+	/* the rows, sorted by number: a number in two rows would leave one unreachable */
+	if (policy_count() > 512) return -1;
+	for (i = 0; i < policy_count(); i++) rows_by_nr[i] = policy_at(i);
+	for (i = 1; i < policy_count(); i++) {
+		const struct row *x = rows_by_nr[i];
+		j = i;
+		while (j > 0 && rows_by_nr[j - 1]->nr > x->nr) {
+			rows_by_nr[j] = rows_by_nr[j - 1];
+			j--;
 		}
-		f[n] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_OPENAT, 0, (unsigned char) (rows_at - n - 1));
-		n++;
-		f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2]));
-		f[n] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, DN_LANE_OPEN_DENY, (unsigned char) (rows_at - n - 1), 0);
-		n++;
-		f[n++] = (struct sock_filter) BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+		rows_by_nr[j] = x;
 	}
-	f[n++] = (struct sock_filter) BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
-	for (i = 0; i < policy_count(); i++) {
-		const struct row *rw = policy_at(i);
+	for (i = 1; i < policy_count(); i++)
+		if (rows_by_nr[i]->nr == rows_by_nr[i - 1]->nr) return -1;
 
-		f[n++] = (struct sock_filter) BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, rw->nr, 0, 1);
-		f[n++] = (struct sock_filter) BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_TRACE | (rw->exit_stop & SECCOMP_RET_DATA));
+	fp.n = fp.nlab = fp.nfx = 0;
+	fp.bad = 0;
+
+	/* the architecture: anything else is allowed as the kernel would do */
+	lok = flabel(&fp); lnotarch = flabel(&fp);
+	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
+	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, lok, lnotarch);
+	fplace(&fp, lnotarch);
+	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+	fplace(&fp, lok);
+
+	/* the number: a lane call (or openat) goes to the cookie test, anything else on */
+	llane = flabel(&fp); lnotlane = flabel(&fp);
+	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+	for (i = 0; i < nl + 1; i++) {
+		unsigned k = i < nl ? lane[i] : DN_LANE_OPENAT;
+		int lnext = flabel(&fp);
+
+		fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, k, llane, lnext);
+		fplace(&fp, lnext);
 	}
-	f[n++] = (struct sock_filter) BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
-	prog.len = (unsigned short) n;
+	fja(&fp, lnotlane);
+
+	/* the lane: the cookie in x5 (both halves), then openat only reads */
+	fplace(&fp, llane);
+	lc2 = flabel(&fp); lc3 = flabel(&fp);
+	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]));
+	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_LO, lc2, lnotlane);
+	fplace(&fp, lc2);
+	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]) + 4);
+	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_HI, lc3, lnotlane);
+	fplace(&fp, lc3);
+	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+	lopen = flabel(&fp); lanyl = flabel(&fp);
+	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_OPENAT, lopen, lanyl);
+	fplace(&fp, lanyl);
+	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+	fplace(&fp, lopen);
+	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2]));
+	lallow = flabel(&fp);
+	fjmp(&fp, BPF_JMP | BPF_JSET | BPF_K, DN_LANE_OPEN_DENY, lnotlane, lallow);
+	fplace(&fp, lallow);
+	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+
+	/* not the lane (or the cookie is wrong): the audit socket, then the rows.  The
+	 * audit socket: Android's policy refuses it (EACCES), and libaudit gives up on that
+	 * where it accepts a kernel without audit (shadow's useradd aborts).  The filter
+	 * says what such a kernel says, with no stop. */
+	fplace(&fp, lnotlane);
+	lsock = flabel(&fp); lrows = flabel(&fp);
+	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, 198 /* socket */, lsock, lrows);
+	fplace(&fp, lsock);
+	lnl = flabel(&fp);
+	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
+	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, 16 /* AF_NETLINK */, lnl, lrows);
+	fplace(&fp, lnl);
+	lerr = flabel(&fp);
+	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2]));
+	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, 9 /* NETLINK_AUDIT */, lerr, lrows);
+	fplace(&fp, lerr);
+	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ERRNO | 93 /* EPROTONOSUPPORT */);
+
+	fplace(&fp, lrows);
+	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+	frows(&fp, 0, policy_count());
+	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+
+	if (fresolve(&fp) < 0)
+		return -1;
+	prog.len = (unsigned short) fp.n;
+	prog.filter = fp.f;
 
 	if (sys_prctl(PR_SET_NO_NEW_PRIVS, 1, 0) < 0)
 		return -1;

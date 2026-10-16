@@ -11,6 +11,8 @@ the numbers: [`docs/performance.md`](docs/performance.md).
   `mount_setattr`, `fanotify_mark`, `setxattrat`/`getxattrat`/`listxattrat`/
   `removexattrat`, `file_getattr`/`file_setattr`). Check `execmod` there too: the
   shim's libc patching needs it.
+  The S23 FE's kernel is 5.10.240 (`docs/reference/device-census.md`): no SUD,
+  no seccomp bitmap; `memfd` exec is refused in Termux's domain.
 - **Another phone**, and Termux from F-Droid as a user gets it.
 - **dn-shell**: it runs `boot/boot.sh` of a prefix under `prefixes/`, one prefix
   per session, and writes the prefix's `boot/binds` before (see "The
@@ -92,11 +94,23 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   of `policy.c` against glibc (its `sys.h` defines `_start` and the string
   functions) and its link cache made thread-safe. Binds need it first ("The
   boundary", step 3).
+- **Invalidating the link cache**: the readlink cache (`policy.c`, `lane.c`)
+  drops every entry when the shared generation moves, which any link change of
+  any session does (`symlinkat`, `unlinkat`, `linkat`, `rename`). That is coarse
+  but cannot miss a change. A finer rule (drop the subtree of a renamed
+  directory) is PRoot's issue #124 trie ([`prior-art.md`](docs/reference/prior-art.md),
+  "Root emulation and path walks"); measure how often the global drop costs
+  before building it.
 - **Not mapped yet**: `execveat` (glibc's `fexecve`), `openat2` with
   `RESOLVE_*` (answers `ENOSYS`), `name_to_handle_at`, AF_UNIX socket paths
   (`bind`, `connect`, `sendto`, `sendmsg`; `getsockname`, `getpeername`,
   `accept`, `recvfrom`, `recvmsg` back), so a guest `bind("/tmp/x.sock")` reaches
   the host's `/tmp`: tmux, ssh-agent, gpg-agent, dbus need it.
+- **The census against the rows**: `docs/reference/device-census.md` lists the 32
+  calls the app's filter kills on the S10e, and each must end in a row (or be
+  answered `ENOSYS` on purpose). Check that by hand against `gen_rows.py`. Also
+  compare the census with bionic's arm64 app policy (the googlesource path I
+  tried returned 404; find the current one).
 - **Rows from a catalog**: generate the rows from one table giving each syscall
   a class (path, result, socket, exec, identity, refused, none) instead of the
   tables in `gen_rows.py`. Termux's glibc `fakesyscall.json` is a checked
@@ -142,14 +156,18 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   6.2 us with tracer and tracee on one core, 15.5 us unpinned, 42-61 us across
   clusters (`docs/development/proot-performance.md` in Droid-Deck/DroidDeck):
   never pin the tracer away from its guests; try both on one cluster.
-- **The filter's order**: since 5.11 the kernel caches, per syscall number, a
-  filter whose answer depends on the number alone, and skips the filter for it.
-  `install_filter` (`monitor.c`) loads the lane's cookie (`args[5]`) for every
-  syscall before the rows, so no number is ever cached: `futex`, `read`,
-  `ioctl` run the whole filter on the Android 16 phone. Dispatch on `nr` first
-  (a number in no row and not in the lane: `ALLOW` at once), and test the
-  cookie only for the lane's numbers. On 4.14 (no cache) it still shortens the
-  path of every untraced call. Measure the Lua build before and after.
+- **The filter's order** (done 2026-10-16; the Lua build still to measure): the
+  filter dispatches on the number first, reads the cookie (`args[5]`) only for
+  the lane's numbers, and tests the rows as a JGE tree (`install_filter`,
+  `monitor.c`). A `getpid` loop, a number in no row, went from 465 to 355 ms
+  per million calls on the S10e (5 interleaved pairs), and a file-tree subset
+  from 3.8 to 3.5 s. Results and stop counts of a lane test (the lane's numbers
+  with and without the cookie, `openat` with write flags) and of the regression
+  set are the same. The test programs are not in the repo yet ("Keep it small",
+  above). The kernel's per-number cache (5.11 and later,
+  [`prior-art.md`](docs/reference/prior-art.md)) is not on either phone (4.14,
+  5.10): the gain is the instructions, not the cache. On a 5.11+ device, check
+  that the cache takes the calls the filter now allows.
 - **libc's generic `syscall()`**: its `svc` takes the number from a register,
   so the shim's patch (`mov x8,#nr; svc`) misses it. FEX, and programs that
   call `openat` through `syscall()`, stop in the tracer for each path call.
@@ -158,6 +176,16 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 - **A second tracer for a busy subtree**: one tracer serves every stop of a
   session; DroidDeck measured 2.5x the stops per second with two (a game tree
   apart from Steam's). Only if bursts on many threads show up after the shim.
+- **The loader's search paths** (`ld.so`'s 1082 stops): glibc's `rtld-audit`
+  `la_objsearch` hook can rewrite where `ld.so` looks for libraries, as Guix's
+  fakechroot engine does ([`prior-art.md`](docs/reference/prior-art.md), "Loader
+  and libc interposition"). It does not see `ld.so`'s own `open` of the program
+  or the shim. Test in a prefix before counting it against the stops.
+- **The shim's patched pair**: `mov x8,#nr; svc` is right only if no jump lands
+  between the two. gVisor (#13362) and ASC-Hook name the same question. Check the
+  shim's patch sites for jump targets, and whether `x8` is still the number there.
+- **Syscall User Dispatch** is a third net below the tracer, but it needs kernel
+  5.11: neither phone has it (4.14, 5.10). Keep it for a 5.11+ device.
 
 ## Emulation
 
@@ -172,6 +200,10 @@ the shim:
   `ps` and `htop` read them) are the first candidates, as Termux's
   proot-distro fakes them;
 - SysV IPC (`shmget`, `shmat`, `shmdt`, `shmctl`, then `semget`/`semop` and `msgget`),
+  two designs to choose from: a broker over a unix socket with `SCM_RIGHTS`
+  (Winlator's glibc patches), or the calls in the tracer (proot's `--sysvipc`
+  branch, msg and sem first, shm later) ([`prior-art.md`](docs/reference/prior-art.md),
+  "System V IPC"),
   killed by the platform today: a segment is a `memfd`, its key and id kept by
   a broker in the tracer that hands the fd over a unix socket, `shmat` an
   `mmap` of it, in the shim. Debian-noroot's `android-shmem` does the same
@@ -283,7 +315,12 @@ MB). What it takes, as far as known:
     Android 16 phone, from a session of the app: `execve` of a file in `files/`
     (expected: refused); `/system/bin/linker64` on a bionic binary in `files/`
     (expected: runs); `mmap(PROT_EXEC)` of a file in `files/`, and `mprotect`
-    RX of anonymous memory (`execmem`), each in a small program.
+    RX of anonymous memory (`execmem`), each in a small program; and `fexecve`
+    of a `memfd`. In Termux's domain (`untrusted_app_27`, targetSdk 28) the last
+    one already fails with `EACCES` where the same ELF from a file runs
+    (`device-census.md`, "Two more checks"); the targetSdk 34 result is the one
+    that matters. The `memfd_file` class in sepolicy (commit `d4564b29`) is the
+    rule to read for it.
 - arm64; `ptrace` of its own children and `execmod` (both allowed in
   `untrusted_app_27`).
 - The app extracts the prefix into its files directory (a prefix names no
