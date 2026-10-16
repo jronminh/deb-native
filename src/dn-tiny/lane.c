@@ -451,10 +451,11 @@ char *__realpath_chk(const char *in, char *out, size_t outlen)
 /* ---- open ------------------------------------------------------------------ */
 static void *real_openat;
 
-/* a /proc file the tracer answers with a generated one (the runtime's traces
- * gone from status, the real uptime/loadavg from a syscall): the shim must not
- * open the kernel's through the lane (a memfd cannot be handed to the tracee, so
- * the tracer generates a file and points the open there) */
+/* a /proc file the tracer answers with a generated one (the runtime's traces and
+ * the app's ids gone from status/cmdline/comm, the real uptime/loadavg from a
+ * syscall): the shim must not open the kernel's through the lane (a memfd cannot
+ * be handed to the tracee, so the tracer generates a file and points the open
+ * there) */
 static int dyn_file(const char *p)
 {
 	const char *s;
@@ -476,10 +477,14 @@ static int dyn_file(const char *p)
 	if (strncmp(p, "/proc/", 6) != 0)
 		return 0;
 	p += 6;
-	if (strncmp(p, "self/status", 11) == 0 && p[11] == '\0')
-		return 1;
+	if (strncmp(p, "self/", 5) == 0) {
+		p += 5;
+		return strcmp(p, "status") == 0 || strcmp(p, "cmdline") == 0 ||
+		       strcmp(p, "comm") == 0;
+	}
 	s = strchr(p, '/');
-	return s && strcmp(s, "/status") == 0;
+	return s && (strcmp(s, "/status") == 0 || strcmp(s, "/cmdline") == 0 ||
+		     strcmp(s, "/comm") == 0);
 }
 
 static int lane_open(int dirfd, const char *path, int flags, mode_t mode)

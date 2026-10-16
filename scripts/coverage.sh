@@ -5,8 +5,8 @@
 #   scripts/coverage.sh PREFIX
 #
 # A leak is the prefix's own path, Android's data/storage/sdcard, the tracer, or
-# any /data/... path.  /proc/self/maps is a known hole (it names the libraries by
-# their host paths) and shows up here until it is mapped.
+# any /data/... path.  The probe reads every surface the checklist names,
+# including /proc/self/cmdline and status, so a host path there fails the run.
 set -u
 P=$(CDPATH= cd -- "${1:?usage: coverage.sh PREFIX}" && pwd)
 DN=$P/usr/lib/deb-native/dn-tiny

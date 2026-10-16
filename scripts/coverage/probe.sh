@@ -30,6 +30,14 @@ echo "## ids"
 id -u 2>/dev/null
 id -g 2>/dev/null
 
+echo "## cmdline"
+tr '\0' '\n' < /proc/self/cmdline 2>/dev/null
+echo "## status"
+sed -n -e 's/^Name:[[:space:]]*//p' -e 's/^Uid:[[:space:]]*//p' -e 's/^Gid:[[:space:]]*//p' \
+	-e 's/^TracerPid:[[:space:]]*//p' -e 's/^Seccomp:[[:space:]]*//p' /proc/self/status 2>/dev/null
+echo "## comm"
+cat /proc/self/comm 2>/dev/null
+
 echo "## mounts"
 cat /proc/self/mounts 2>/dev/null
 

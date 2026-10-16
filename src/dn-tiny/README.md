@@ -1,7 +1,7 @@
 # dn-tiny and dn-lane.so
 
 The runtime: `dn-tiny`, a tracer with no libc (one static aarch64 executable of
-about 35 KB), and `dn-lane.so`, the shim it preloads into every glibc program.
+about 60 KB), and `dn-lane.so`, the shim it preloads into every glibc program.
 How they work together: [`docs/architecture.md`](../../docs/architecture.md).
 
 | file | part |

@@ -150,6 +150,8 @@ the net for everything.
   remembered per process, inherited by children; `get*id` say what was set.
 - Files owned by the app's uid read as owned by root in every `stat` the tracer
   or the shim answers. `chown` is accepted and not kept.
+- `/proc/<pid>/status`'s `Uid`/`Gid` say the same ids, so a reader that never
+  calls `get*id` (a `ps` that reads the file) also sees root.
 - The goal is no accidental identity leak (apt, dpkg and `git`'s ownership check
   see a consistent root), not isolation.
 
@@ -183,9 +185,11 @@ that looks on purpose finds out, and that is accepted:
 - SELinux: `/sys/fs/selinux`, and an `EACCES` where Debian would allow;
 - the time a call takes when it stops in the tracer.
 
-So what the runtime answers in `/proc` is what ordinary tools read (`mounts`,
-`mountinfo`, `maps`, and the links already told back: `cwd`, `exe`, `fd`), not
-`status` or `cpuinfo`.
+So the runtime answers in `/proc` what ordinary tools read: the mount view, the
+process view (`cmdline`, `comm`, `status` -- its `TracerPid`/`Seccomp`, the
+program name, and the fake root's `Uid`/`Gid`), `maps`/`smaps`, and the links
+already told back (`cwd`, `exe`, `fd`). The kernel's own truth is left alone:
+`uname`, `/proc/version`, `cpuinfo`.
 
 This is about accidental leaks only, not a sandbox. A program can always reach
 the host: it can issue a syscall with the lane cookie, or use a path the law

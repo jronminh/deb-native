@@ -514,6 +514,25 @@ static int put_synth(const char *name, const char *buf, size_t n, char *out, siz
 	return scpy(out, cap, fp) < 0 ? 0 : 1;
 }
 
+/* "Uid:\t<r>\t<e>\t<s>\t<fs>\n" (or Gid), the four fields fake root answers: the
+ * process's own ids, inherited by children.  The fourth is the effective id -- the
+ * tracer keeps no separate fs id (setfsuid returns the effective one). */
+static int id_line(char *b, const char *pfx, const struct ids *d, int group)
+{
+	unsigned r = group ? d->rg : d->ru, e = group ? d->eg : d->eu, s = group ? d->sg : d->su;
+	int m = scpy(b, 64, pfx);
+
+	m += uitoa(b + m, r);
+	b[m++] = '\t';
+	m += uitoa(b + m, e);
+	b[m++] = '\t';
+	m += uitoa(b + m, s);
+	b[m++] = '\t';
+	m += uitoa(b + m, e);
+	b[m++] = '\n';
+	return m;
+}
+
 /* "/proc/uptime": the boot time is real (CLOCK_BOOTTIME); the idle field, which
  * the kernel would give too, is approximated by the boot time (the phone is
  * mostly idle and there is no syscall for the aggregate idle). */
@@ -639,7 +658,7 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 			memcpy(w + rn, s, strlen(s));
 			rn += strlen(s);
 		} else if (strncmp(p, "Name:", 5) == 0) {
-			const char *b = exe_now[PID_SLOT(t->pid)], *q, *sl = NULL;
+			const char *b = exe_now[PID_SLOT(pid)], *q, *sl = NULL;
 			int l;
 
 			for (q = b; *q; q++)
@@ -656,6 +675,14 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 			memcpy(w + rn, b, (size_t) l);
 			rn += (size_t) l;
 			w[rn++] = '\n';
+		} else if (strncmp(p, "Uid:", 4) == 0 || strncmp(p, "Gid:", 4) == 0) {
+			char l[64];                    /* the fake ids, not the app's real */
+			int q = id_line(l, p[0] == 'U' ? "Uid:\t" : "Gid:\t", ids_of(pid), p[0] == 'G');
+
+			if (rn + (size_t) q >= sizeof buf)
+				break;
+			memcpy(w + rn, l, (size_t) q);
+			rn += (size_t) q;
 		} else if (strncmp(p, "CapInh:", 7) == 0) {
 			const char *s = "CapInh:\t0000000000000000\n";
 
@@ -895,9 +922,145 @@ static int synth_vmstat(char *out, size_t cap)
 	return put_synth("vmstat", b, sizeof b - 1, out, cap);
 }
 
+/* the pid a "/proc/<pid>/<leaf>" (or "/proc/self/<leaf>") names; 0 if it is not that */
+static pid_t proc_leaf_pid(const char *guest, const char *leaf, pid_t self)
+{
+	const char *p = guest;
+	pid_t v = 0;
+
+	if (strncmp(p, "/proc/", 6) != 0)
+		return 0;
+	p += 6;
+	if (strncmp(p, "self/", 5) == 0 && strcmp(p + 5, leaf) == 0)
+		return self;
+	if (*p < '0' || *p > '9')
+		return 0;
+	for (; *p >= '0' && *p <= '9'; p++)
+		v = v * 10 + (*p - '0');
+	if (p[0] != '/' || strcmp(p + 1, leaf) != 0)
+		return 0;
+	return v;
+}
+
+/* "/proc/<pid>/cmdline": the kernel's own, minus the loader the exec gate puts in
+ * front of a glibc program -- the loader, --library-path, --preload/--audit and
+ * their host paths, and the program token.  What is left is the argv the program
+ * was run with, its paths the tree's.  A program the gate did not rewrite (static,
+ * foreign) already reads its own argv, so its cmdline is left as it is. */
+static int synth_cmdline(struct tracee *t, const char *guest, char *out, size_t cap)
+{
+	const char *ld = policy_loader();
+	size_t ldl = strlen(ld);
+	pid_t pid = proc_leaf_pid(guest, "cmdline", t->pid);
+	char kp[64], raw[8192], buf[8192], nm[40];
+	const char *tok, *end, *argv0 = NULL, *args = NULL;
+	size_t argv0l = 0, argsl = 0, rn = 0;
+	ssize_t n;
+	int fd, m;
+
+	if (pid <= 0 || policy_root_len() == 0)
+		return 0;
+	m = scpy(kp, sizeof kp, "/proc/");
+	if (m < 0)
+		return 0;
+	m += uitoa(kp + m, (unsigned) pid);
+	if (scpy(kp + m, sizeof kp - m, "/cmdline") < 0)
+		return 0;
+	fd = sys_open(kp, 0);
+	if (fd < 0)
+		return 0;
+	n = sys_read(fd, raw, sizeof raw);
+	sys_close(fd);
+	if (n <= 0)
+		return 0;
+	if ((size_t) n < ldl + 1 || memcmp(raw, ld, ldl) != 0 || raw[ldl] != '\0')
+		return 0;                              /* not the gate's command line: leave it */
+	end = raw + n;
+	for (tok = raw; tok < end; ) {
+		const char *z = memchr(tok, 0, (size_t) (end - tok));
+		size_t tl = z ? (size_t) (z - tok) : (size_t) (end - tok);
+
+		if (tl == 7 && memcmp(tok, "--argv0", 7) == 0) {
+			const char *q = tok + 8, *r;
+			size_t al;
+
+			if (q >= end)
+				break;
+			r = memchr(q, 0, (size_t) (end - q));
+			al = r ? (size_t) (r - q) : (size_t) (end - q);
+			argv0 = q;
+			argv0l = al;
+			if (r == NULL)
+				break;                 /* argv0 is the last token: no program */
+			q = r + 1;                     /* the program token, skipped */
+			if (q >= end)
+				break;
+			r = memchr(q, 0, (size_t) (end - q));
+			if (r == NULL)
+				break;                 /* no arguments past the program */
+			args = r + 1;
+			argsl = (size_t) (end - args);
+			break;
+		}
+		tok += tl + 1;
+	}
+	if (!argv0)
+		return 0;
+	if (argv0l + 1 + argsl + 1 > sizeof buf)
+		return 0;
+	memcpy(buf, argv0, argv0l);
+	rn = argv0l;
+	buf[rn++] = '\0';
+	if (argsl > 0) {
+		memcpy(buf + rn, args, argsl);
+		rn += argsl;
+	}
+	if (buf[rn - 1] != '\0')
+		buf[rn++] = '\0';
+	m = scpy(nm, sizeof nm, "cmdline.");
+	if (m < 0)
+		return 0;
+	m += uitoa(nm + m, (unsigned) pid);
+	nm[m] = '\0';
+	return put_synth(nm, buf, rn, out, cap);
+}
+
+/* "/proc/<pid>/comm": the program, not the runtime (the loader names the process
+ * the kernel sees); a process the runtime does not know is left as it is. */
+static int synth_comm(struct tracee *t, const char *guest, char *out, size_t cap)
+{
+	pid_t pid = proc_leaf_pid(guest, "comm", t->pid);
+	const char *b, *q, *sl = NULL;
+	char buf[24], nm[40];
+	size_t l;
+	int m;
+
+	if (pid <= 0 || policy_root_len() == 0)
+		return 0;
+	b = exe_now[PID_SLOT(pid)];
+	if (!b[0])
+		return 0;
+	for (q = b; *q; q++)
+		if (*q == '/')
+			sl = q;
+	b = sl ? sl + 1 : b;
+	l = strlen(b);
+	if (l > 15)
+		l = 15;                                /* the kernel truncates comm to 15 */
+	memcpy(buf, b, l);
+	buf[l++] = '\n';
+	m = scpy(nm, sizeof nm, "comm.");
+	if (m < 0)
+		return 0;
+	m += uitoa(nm + m, (unsigned) pid);
+	nm[m] = '\0';
+	return put_synth(nm, buf, l, out, cap);
+}
+
 /* A read-only open the tracer answers with a generated file: /proc/<pid>/status,
- * /proc/uptime, /proc/loadavg, /proc/<pid>/cgroup, /proc/<pid>/maps, smaps,
- * /proc/stat, /proc/vmstat.  1 if `out` is the host path to open instead. */
+ * /proc/<pid>/cmdline, /proc/<pid>/comm, /proc/uptime, /proc/loadavg,
+ * /proc/<pid>/cgroup, /proc/<pid>/maps, smaps, /proc/stat, /proc/vmstat.  1 if
+ * `out` is the host path to open instead. */
 static int synth_open(struct tracee *t, const char *guest, char *out, size_t cap)
 {
 	size_t gl = strlen(guest);
@@ -924,6 +1087,10 @@ static int synth_open(struct tracee *t, const char *guest, char *out, size_t cap
 		return synth_maps(t, guest, "maps", out, cap);
 	if (gl > 6 && strncmp(guest, "/proc/", 6) == 0 && strcmp(guest + gl - 6, "/smaps") == 0)
 		return synth_maps(t, guest, "smaps", out, cap);
+	if (proc_leaf_pid(guest, "cmdline", t->pid) > 0)
+		return synth_cmdline(t, guest, out, cap);
+	if (proc_leaf_pid(guest, "comm", t->pid) > 0)
+		return synth_comm(t, guest, out, cap);
 	return synth_status(t, guest, out, cap);
 }
 

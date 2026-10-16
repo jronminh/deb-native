@@ -28,7 +28,13 @@ telling you which Debian it is, not pretending to be another kernel.
 
 - **`/proc/<pid>/status`**: `TracerPid` is `dn-tiny` and `Seccomp` is 2 -- traces
   of *our* runtime, not the kernel.  Both are answered as a plain process's
-  (0 and none).
+  (0 and none); `Name`/`State` are the program's, and `Uid`/`Gid` are the fake
+  root's, so a `ps` that reads the file sees the same root the syscalls report.
+- **`/proc/<pid>/cmdline`**: the kernel's line names the loader the exec gate
+  adds (`ld.so ... --preload <host path> ...`); it is answered with the argv the
+  program was run with (the gate's prefix dropped), so no host path shows.
+- **`/proc/<pid>/comm`**: the kernel's names the loader; it is answered with the
+  program.
 - **ids**: fake root (done).
 - **the SELinux label**: absent (done, boundary 2).
 - **`/etc/os-release`, `dpkg --print-architecture`**: the tree's own Debian files,
@@ -76,7 +82,8 @@ still find the phone; this is about what a program finds *without asking*.
 
 1. the fingerprint test (A) -- done;
 2. `/proc/<pid>/status` (D) -- done: TracerPid 0, no Seccomp, State running, Name
-   the program;
+   the program, Uid/Gid root's; and the process view beside it (`cmdline` with
+   the gate's loader dropped, `comm` the program);
 3. the denied files (C) -- `/proc/uptime` and `/proc/loadavg` are answered with
    the real values (`CLOCK_BOOTTIME` and `sysinfo`), generated at open, so
    `uptime` works; `/proc/stat` and `/proc/vmstat` get a **fixed placeholder**

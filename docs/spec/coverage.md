@@ -51,6 +51,18 @@ mapped, so a program cannot find the host frame through an unmapped reader.
 | `mounts`, `mountinfo`, `/etc/mtab` | done |
 | `maps`, `smaps` | done (see path out) |
 
+## The process view
+
+| reader | state |
+| --- | --- |
+| `/proc/<pid>/status`: `Name`, `State` | done (`synth_status`) |
+| `/proc/<pid>/status`: `TracerPid`, `Seccomp` (the runtime's traces) | done (`synth_status`) |
+| `/proc/<pid>/status`: `Uid`, `Gid` (fake root) | done (`synth_status`) |
+| `/proc/<pid>/status`: `CapPrm/Eff/Bnd` (root's set, as the fake id is root) | done (`synth_status`) |
+| `/proc/<pid>/cmdline` (the loader the gate adds, and its host paths) | done (`synth_cmdline`) |
+| `/proc/<pid>/comm` (the loader, not the program) | done (`synth_comm`) |
+| `PPid`, `getppid()` | the tracer: a structural residue (`phase2.md`, "An accepted residue") |
+
 ## Other host surfaces
 
 | reader | state |
@@ -67,5 +79,6 @@ that holds the host frame -- the prefix's own path, `/data/data`, the shared
 storage, the tracer.  Run it interleaved with the regression set and the bench.
 
 It comes back **clean**: the environment and the working directory since "The
-boundary", step 1; the SELinux label since step 2; the mount view, `maps`/`smaps`
+boundary", step 1; the SELinux label since step 2; the mount view, `maps`/`smaps`,
+the process view (`cmdline`, `comm`, and `status`'s `Uid`/`Gid`/`Name`/`TracerPid`)
 and every other reader of the checklist above, mapped or generated.
