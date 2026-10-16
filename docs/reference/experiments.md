@@ -18,6 +18,7 @@ and the reference pages ([`inline-hooking.md`](inline-hooking.md),
 - [E8: the Lua build's stops, by syscall](#e8-the-lua-builds-stops-by-syscall)
 - [E9: locating the cancellable path](#e9-locating-the-cancellable-path)
 - [E10: the cancellable-svc patch, tried and rejected](#e10-the-cancellable-svc-patch-tried-and-rejected)
+- [E11: the cost of a stop is the tracer's core waking](#e11-the-cost-of-a-stop-is-the-tracers-core-waking)
 - [What follows](#what-follows)
 
 ## Context
@@ -291,6 +292,41 @@ It does work. The Lua build's stops fall **1666 -> 1463 (-203)** and the wall
 `scripts/find-cancellable.py` keeps the build-time way (it fails loudly when the
 libc does not match) if the ~1% is ever wanted; the run-time heuristic is
 reverted. The decision sits in `TODO.md`, "libc's cancellable path".
+
+## E11: the cost of a stop is the tracer's core waking
+
+A stop is the tracer's core waking to handle it. `stopbench` (40k `mkdirat`
+stops), `-c N` pins the tracer (the tracee inherits, so both land on N):
+
+| config | time |
+| --- | --- |
+| no `-s`, unpinned | 4272 ms |
+| no `-s`, pin cpu0-3 (little) | 2397-2580 ms |
+| no `-s`, pin cpu4/5 | 2382-2399 ms |
+| no `-s`, pin cpu6/7 (big) | 6333-6461 ms |
+| **`-s 500`, unpinned** | **695-737 ms** |
+| `-s 500`, pin cpu1 | 2473-2487 ms |
+
+And over 200k stops: idle no-`-s` 23.6 s vs `-s 500` 3.4 s (7x). Spamming all
+eight cores with busy threads made it **worse** (no-`-s` 25.3 s, `-s` 18.9 s):
+the load contends with the tracer. Only at `nice 19` did the spam help the
+sleeping case (no-`-s` 23.6 -> 18.6 s, +21%) — keeping the cores at a high clock
+— while still ruining `-s` (3.4 -> 15.5 s).
+
+What it says:
+
+- The lever is **keeping the tracer's own core awake**: `-s` (poll) does it and
+  is the best measured (17 us/stop). Nothing else comes close.
+- Pinning **hurts** the `-s` case (0.70 -> 2.5 s): it takes away the scheduler's
+  freedom to place the tracer well.
+- On this big.LITTLE (S10e: cpu0-3 little 1.78 GHz, cpu4-6 2.42, cpu7 prime
+  2.84), a **big core is the worst** place to wake a sleeping tracer (6.4 s vs
+  2.4 s on a little): the little cluster is always on, a big core is
+  power-collapsed and pays to come back.
+- The tracer's work is tiny — one core is plenty — so **do not spam** cores.
+
+So the advice is: unpinned, with `-s`. `TODO.md`, "Who sets the floor", already
+points at CPU placement; this is what the placement measures.
 
 ## What follows
 
