@@ -59,6 +59,15 @@ static void *real_fn(const char *name, void **slot)
 	return *slot;
 }
 
+/* The shared cancellable svc (glibc's __syscall_cancel_arch, the number in x6):
+ * its offset in libc is found at build time (scripts/find-cancellable.py) and
+ * handed here as -DDN_CANCEL_OFF, because at run time `mov x8, x6` is not unique.
+ * One patch covers every cancellable call (open, read, write, ...); the stub reads
+ * x8 at call time, so lane_hook answers the ones it knows and passes the rest. */
+#ifndef DN_CANCEL_OFF
+#define DN_CANCEL_OFF 0
+#endif
+
 /* A call on the lane: the cookie is in x5 for the svc only.  libc's syscall() would
  * leave it there, and the next call libc makes on its own (opendir's openat, say)
  * would pass the filter unmapped and look for the guest path on the host. */
@@ -1425,6 +1434,8 @@ static int catch_site(const unsigned *lo, const unsigned *p)
 {
 	int k;
 
+	if (DN_CANCEL_OFF && p == (const unsigned *) ((const char *) lo + DN_CANCEL_OFF))
+		return 1;                    /* the cancellable svc, at its build-time offset */
 	if (*p != 0xd4000001u)
 		return 0;
 	for (k = 1; k <= 8 && p - k >= lo; k++)
