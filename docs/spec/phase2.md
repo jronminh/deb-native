@@ -89,7 +89,9 @@ still find the phone; this is about what a program finds *without asking*.
    with no capabilities is the inconsistency.  `/proc/<pid>/cgroup` is answered
    `0::/` -- Android's line leaks the app's uid and pid.  The rlimits and the
    readable `/proc/sys` are the kernel's own (left as they are); the denied ones
-   (`/proc/sys/kernel/pid_max`, `/proc/sys/vm/max_map_count`, ...) stay refused.
+   (`/proc/sys/kernel/pid_max` 4194304, `/proc/sys/vm/max_map_count` 65530,
+   `/proc/sys/kernel/cap_last_cap` 40 -- the Debian kernel's defaults, a constant
+   each, not the phone's live value) are answered from a fixed value.
 
 ## Open
 

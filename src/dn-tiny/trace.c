@@ -906,6 +906,14 @@ static int synth_open(struct tracee *t, const char *guest, char *out, size_t cap
 		return synth_stat(out, cap);
 	if (strcmp(guest, "/proc/vmstat") == 0)
 		return synth_vmstat(out, cap);
+	if (strcmp(guest, "/proc/sys/kernel/pid_max") == 0)              /* the denied /proc/sys: a
+									  * fixed Debian default, not the
+									  * phone's live value */
+		return put_synth("pid_max", "4194304\n", 8, out, cap);
+	if (strcmp(guest, "/proc/sys/vm/max_map_count") == 0)
+		return put_synth("max_map_count", "65530\n", 6, out, cap);
+	if (strcmp(guest, "/proc/sys/kernel/cap_last_cap") == 0)
+		return put_synth("cap_last_cap", "40\n", 3, out, cap);
 	if (strcmp(guest, "/proc/uptime") == 0)
 		return synth_uptime(out, cap);
 	if (strcmp(guest, "/proc/loadavg") == 0)

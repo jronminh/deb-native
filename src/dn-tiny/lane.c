@@ -461,7 +461,10 @@ static int dyn_file(const char *p)
 	size_t gl;
 
 	if (strcmp(p, "/proc/uptime") == 0 || strcmp(p, "/proc/loadavg") == 0 ||
-	    strcmp(p, "/proc/stat") == 0 || strcmp(p, "/proc/vmstat") == 0)
+	    strcmp(p, "/proc/stat") == 0 || strcmp(p, "/proc/vmstat") == 0 ||
+	    strcmp(p, "/proc/sys/kernel/pid_max") == 0 ||
+	    strcmp(p, "/proc/sys/vm/max_map_count") == 0 ||
+	    strcmp(p, "/proc/sys/kernel/cap_last_cap") == 0)
 		return 1;
 	gl = strlen(p);
 	if (gl > 7 && strncmp(p, "/proc/", 6) == 0 && strcmp(p + gl - 7, "/cgroup") == 0)
