@@ -16,6 +16,7 @@ and the reference pages ([`inline-hooking.md`](inline-hooking.md),
 - [E6: is there a hook early enough?](#e6-is-there-a-hook-early-enough)
 - [E7: patching the loader, a proof of concept](#e7-patching-the-loader-a-proof-of-concept)
 - [E8: the Lua build's stops, by syscall](#e8-the-lua-builds-stops-by-syscall)
+- [E9: locating the cancellable path](#e9-locating-the-cancellable-path)
 - [What follows](#what-follows)
 
 ## Context
@@ -234,14 +235,35 @@ to ~119.
 **Improvement points (fewer stops):**
 
 1. **The cancellable-path stub** (`TODO.md`, "libc's cancellable path"), ~324-341
-   stops a build. Tried to place it: glibc's `__syscall_cancel_arch` is not an
-   exported symbol, and its `svc` is preceded by neither a `mov x8,#nr` (the
-   shim's pattern) nor a `mov x8,xN` (a scan found none) — the caller sets `x8`
-   and branches in. So the fix needs the function located another way, and its
-   stub must keep the program counter in the cancellation range. Not a one-line
-   change.
+   stops a build. Located in E9; its stub must keep the program counter in the
+   cancellation range. Not a one-line change.
 2. E7 (the loader) — done.
 3. `faccessat` (127) is the same libc-internal family.
+
+## E9: locating the cancellable path
+
+Disassembled the prefix's `libc.so.6` (`llvm-objdump -d`). The cancellable
+wrappers set the number in **x6** and branch to one function:
+
+| symbol | does |
+| --- | --- |
+| `open64` (0xe3540) | `mov x6, #56`, args, `bl 0x828ec` |
+| `read` (0xe3e00) | `mov x6, #63`, args, `b 0x828ec` |
+| `write` (0xe48e0) | `mov x6, #64`, ... |
+
+`0x828ec` is `__syscall_cancel_arch`; inside, at `0x82868`, `mov x8, x6`
+(`0xaa0603e8`), and a single `svc #0` at `0x828d8` serves **every** cancellable
+syscall. So the shim's adjacent `mov x8,#nr; svc` pattern cannot match it (the
+`mov` is from `x6`, and instructions sit in between), and one patch of that one
+`svc` would cover all cancellable calls — `lane_hook` already reads `x8`.
+
+Locating it at run time is hard: `mov x8,x6` appears ten times in libc, and the
+function is not an exported symbol. The clean way is at **build time**: the
+prefix's libc is known, so a static disassembly (next to `gen_rows.py`) can find
+the `svc` and hand its offset to the shim, instead of a runtime pattern scan.
+The remaining open problem is the passthrough: for a call the shim does not
+answer, the stub's own `svc` runs with the program counter outside the
+cancellation range, which is what `pthread_cancel` reads.
 
 ## What follows
 
