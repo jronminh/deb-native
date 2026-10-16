@@ -29,12 +29,14 @@ shim costs about 1 us.
 So what matters is the number of stops, and the runtime is built to have few.
 
 A call that stops for no one still runs the filter. On the S10e (kernel 4.14),
-a million `getpid` (in no row, not in the lane) took 465 ms with the filter
-that scanned the rows in order and 355 ms with the one that dispatches on the
-number and tests the rows as a tree: about 110 ns less per call. A file-tree
-subset (`find`, `ls -lR`) went from 3.8 s to 3.5 s. The kernel's per-number
-filter cache (5.11 and later) is not on this device, so these are instruction
-counts, not cache hits.
+a million `getpid` (in no row, not in the lane): 465 ms with the filter that
+scanned the rows in order, 355 ms with one that dispatches on the number and
+tests the rows as a tree, and 317 ms with the lane folded into that same tree --
+the lane list is no longer scanned first, so a call in no row and no lane is a
+few comparisons from `ALLOW` (interleaved, the last step is about 57 ns a call).
+A file-tree subset (`find`) moves with it. The kernel's per-number filter cache
+(5.11 and later) is not on this device, so these are instruction counts, not
+cache hits.
 
 ## In an app session
 

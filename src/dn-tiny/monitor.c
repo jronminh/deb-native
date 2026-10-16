@@ -58,14 +58,13 @@ static u64 saved0[PID_SLOTS];                     /* by pid: x0 as that syscall 
 /* ---- the filter: one TRACE rule per row -------------------------------- */
 /* The program is built with labels, so no jump offset is counted by hand: a
  * conditional jump names the label it goes to when true and when false, and
- * resolve() turns them into offsets.  The order of the filter is the number first:
- * a call the lane does not list, and no row, is one JGE tree away from ALLOW, and
- * the shim's cookie (args[5]) is read only for the lane's numbers.  Reading an
- * argument in a filter is what keeps the kernel (5.11 and later) from caching its
- * answer per number, so the cookie is read as late as possible. */
-#define FNINS 1024                     /* BPF_MAXINSNS is 4096; this program is about 250 */
+ * resolve() turns them into offsets.  One JGE tree holds the rows: a number no row
+ * lists is one tree away from ALLOW, and a row the lane also lists tests the shim's
+ * cookie (args[5]) in its own leaf.  Only those rows read an argument, which is what
+ * keeps the kernel (5.11 and later) from caching its answer per number. */
+#define FNINS 1024                     /* BPF_MAXINSNS is 4096; this program is about 400 */
 #define FNLAB 512
-struct fjump { size_t pc; int lt, lf; int kind; };   /* kind 0: conditional, 1: JA */
+struct fjump { size_t pc; int lt, lf; };
 struct fprog {
 	struct sock_filter f[FNINS];
 	size_t n;
@@ -103,17 +102,9 @@ static void fstmt(struct fprog *p, unsigned short code, unsigned k)
 static void fjmp(struct fprog *p, unsigned short code, unsigned k, int lt, int lf)
 {
 	if (p->nfx >= FNINS) { p->bad = 1; return; }
-	p->fx[p->nfx] = (struct fjump) { p->n, lt, lf, 0 };
+	p->fx[p->nfx] = (struct fjump) { p->n, lt, lf };
 	p->nfx++;
 	fins(p, code, 0, 0, k);
-}
-
-static void fja(struct fprog *p, int l)
-{
-	if (p->nfx >= FNINS) { p->bad = 1; return; }
-	p->fx[p->nfx] = (struct fjump) { p->n, l, 0, 1 };
-	p->nfx++;
-	fins(p, BPF_JMP | BPF_JA, 0, 0, 0);
 }
 
 /* offsets are relative to the next instruction; a conditional's offset must fit in
@@ -127,10 +118,6 @@ static int fresolve(struct fprog *p)
 		size_t tgt_t = p->lab[j->lt];
 
 		if (tgt_t == (size_t) -1 || tgt_t <= j->pc) return -1;
-		if (j->kind == 1) {
-			p->f[j->pc].k = (unsigned) (tgt_t - j->pc - 1);
-			continue;
-		}
 		{
 			size_t tgt_f = p->lab[j->lf];
 			size_t dt = tgt_t - j->pc - 1;
@@ -148,6 +135,44 @@ static int fresolve(struct fprog *p)
  * number of its right half (JGE), and a leaf of at most two rows compares each */
 static const struct row *rows_by_nr[512];
 
+/* a row the shim also answers, and so must test the lane's cookie: 1 lane,
+ * 2 openat (a write in its flags still reaches the tracer) */
+static unsigned char lane_kind[512];
+
+/* the decision for a row the tree matched: the lane's cookie first, for a row the
+ * shim answers, then TRACE (the cookie is wrong, or openat asks to write), or ALLOW */
+static void emit_row(struct fprog *p, const struct row *rw)
+{
+	unsigned kind = rw->nr < 512 ? lane_kind[rw->nr] : 0;
+	int lc2, lc3, lrow, lallow, lopend;
+
+	if (!kind) {
+		fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_TRACE | (rw->exit_stop & SECCOMP_RET_DATA));
+		return;
+	}
+	lc2 = flabel(p); lrow = flabel(p);
+	fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]));
+	fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_LO, lc2, lrow);
+	fplace(p, lc2);
+	lc3 = flabel(p);
+	fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]) + 4);
+	fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_HI, lc3, lrow);
+	fplace(p, lc3);
+	lallow = flabel(p);
+	if (kind == 2) {
+		fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+		lopend = flabel(p);
+		fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_OPENAT, lopend, lallow);
+		fplace(p, lopend);
+		fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2]));
+		fjmp(p, BPF_JMP | BPF_JSET | BPF_K, DN_LANE_OPEN_DENY, lrow, lallow);
+	}
+	fplace(p, lallow);
+	fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+	fplace(p, lrow);
+	fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_TRACE | (rw->exit_stop & SECCOMP_RET_DATA));
+}
+
 static void frows(struct fprog *p, size_t lo, size_t hi)
 {
 	size_t cnt = hi - lo;
@@ -161,7 +186,7 @@ static void frows(struct fprog *p, size_t lo, size_t hi)
 
 			fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, rw->nr, ltrue, lnext);
 			fplace(p, ltrue);
-			fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_TRACE | (rw->exit_stop & SECCOMP_RET_DATA));
+			emit_row(p, rw);
 			fplace(p, lnext);
 		}
 		fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
@@ -187,8 +212,7 @@ static int install_filter(void)
 	const size_t nl = sizeof lane / sizeof lane[0];
 	struct sock_fprog prog;
 	size_t i, j;
-	int lok, lnotarch, llane, lnotlane, lc2, lc3, lopen, lanyl, lallow;
-	int lsock, lnl, lerr, lrows;
+	int lok, lnotarch, lsock, lnl, lerr, lrows;
 
 	/* the rows, sorted by number: a number in two rows would leave one unreachable */
 	if (policy_count() > 512) return -1;
@@ -205,6 +229,12 @@ static int install_filter(void)
 	for (i = 1; i < policy_count(); i++)
 		if (rows_by_nr[i]->nr == rows_by_nr[i - 1]->nr) return -1;
 
+	/* which rows the shim also answers, and so must test the cookie */
+	for (i = 0; i < 512; i++) lane_kind[i] = 0;
+	for (i = 0; i < nl; i++)
+		if (lane[i] < 512) lane_kind[lane[i]] = 1;
+	if (DN_LANE_OPENAT < 512) lane_kind[DN_LANE_OPENAT] = 2;
+
 	fp.n = fp.nlab = fp.nfx = 0;
 	fp.bad = 0;
 
@@ -216,46 +246,11 @@ static int install_filter(void)
 	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 	fplace(&fp, lok);
 
-	/* the number: a lane call (or openat) goes to the cookie test, anything else on */
-	llane = flabel(&fp); lnotlane = flabel(&fp);
+	/* the audit socket: Android's policy refuses it (EACCES), and libaudit gives up on
+	 * that where it accepts a kernel without audit (shadow's useradd aborts).  The
+	 * filter says what such a kernel says, with no stop. */
 	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
-	for (i = 0; i < nl + 1; i++) {
-		unsigned k = i < nl ? lane[i] : DN_LANE_OPENAT;
-		int lnext = flabel(&fp);
-
-		fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, k, llane, lnext);
-		fplace(&fp, lnext);
-	}
-	fja(&fp, lnotlane);
-
-	/* the lane: the cookie in x5 (both halves), then openat only reads */
-	fplace(&fp, llane);
-	lc2 = flabel(&fp); lc3 = flabel(&fp);
-	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]));
-	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_LO, lc2, lnotlane);
-	fplace(&fp, lc2);
-	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]) + 4);
-	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_HI, lc3, lnotlane);
-	fplace(&fp, lc3);
-	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
-	lopen = flabel(&fp); lanyl = flabel(&fp);
-	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_OPENAT, lopen, lanyl);
-	fplace(&fp, lanyl);
-	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
-	fplace(&fp, lopen);
-	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2]));
-	lallow = flabel(&fp);
-	fjmp(&fp, BPF_JMP | BPF_JSET | BPF_K, DN_LANE_OPEN_DENY, lnotlane, lallow);
-	fplace(&fp, lallow);
-	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
-
-	/* not the lane (or the cookie is wrong): the audit socket, then the rows.  The
-	 * audit socket: Android's policy refuses it (EACCES), and libaudit gives up on that
-	 * where it accepts a kernel without audit (shadow's useradd aborts).  The filter
-	 * says what such a kernel says, with no stop. */
-	fplace(&fp, lnotlane);
 	lsock = flabel(&fp); lrows = flabel(&fp);
-	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 	fjmp(&fp, BPF_JMP | BPF_JEQ | BPF_K, 198 /* socket */, lsock, lrows);
 	fplace(&fp, lsock);
 	lnl = flabel(&fp);
@@ -268,6 +263,7 @@ static int install_filter(void)
 	fplace(&fp, lerr);
 	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ERRNO | 93 /* EPROTONOSUPPORT */);
 
+	/* the rows: one JGE tree, a leaf testing the cookie for a row the lane lists */
 	fplace(&fp, lrows);
 	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 	frows(&fp, 0, policy_count());

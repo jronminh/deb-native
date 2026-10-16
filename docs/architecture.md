@@ -62,10 +62,11 @@ the net for everything.
 
 - **The filter.** A classic BPF program built from the policy's rows
   (`src/dn-tiny/gen_rows.py` generates them): a syscall is caught only when the
-  tracer does something with it, the rows met most often are tested first, and
-  only a row whose result is rewritten asks for the exit stop. Everything else is
-  `ALLOW`. A few answers need no tracer at all: a `NETLINK_AUDIT` socket gets
-  `EPROTONOSUPPORT` from the filter itself.
+  tracer does something with it, and only a row whose result is rewritten asks
+  for the exit stop. One JGE tree holds every row: a number no row lists is a few
+  comparisons from `ALLOW`, and a row the lane also lists tests the cookie in its
+  own leaf. Everything else is `ALLOW`. A few answers need no tracer at all: a
+  `NETLINK_AUDIT` socket gets `EPROTONOSUPPORT` from the filter itself.
 - **The lane.** A call carrying the lane cookie in `x5` (`src/dn-tiny/lane.h`)
   passes the filter without a stop, if it is one of the shim's read-only calls
   (`readlinkat`, `newfstatat`, `fstat`, `faccessat`, `statx`, the `getxattr` and
