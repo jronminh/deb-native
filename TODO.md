@@ -226,9 +226,11 @@ carry it, so a row costs no stop.
      second filter that `TRAP`s the rows (higher precedence than the tracer's
      `TRACE`, so the tracer is not woken) and a `SIGSYS` handler that does what
      `trace_enter`/`trace_denied` do, re-issuing with the cookie. Reaches any
-     site. Risks: seccomp layering with Android's filter, and the filter
-     survives `exec` **into a static program** with no handler (`SIGSYS`'s
-     default action kills it).
+     site. **Tried, blocked** ([`experiments.md`](docs/reference/experiments.md),
+     E12): a seccomp filter survives `exec` but the handler resets, so a program
+     exec'd from a shimmed parent traps the loader's own `openat` with no
+     handler and is killed. It needs a handshake (the tracer answers until the
+     shim's handler is up) or another route.
 - **What stays the tracer's:** static and raw-`svc` programs (blind spots 4-5),
   and the boot (install the filter, the first exec gate).
 - **Phases:** (1) one row (`openat`) in-process in a dynamic program; measure

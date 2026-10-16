@@ -19,6 +19,7 @@ and the reference pages ([`inline-hooking.md`](inline-hooking.md),
 - [E9: locating the cancellable path](#e9-locating-the-cancellable-path)
 - [E10: the cancellable-svc patch, tried and rejected](#e10-the-cancellable-svc-patch-tried-and-rejected)
 - [E11: the cost of a stop is the tracer's core waking](#e11-the-cost-of-a-stop-is-the-tracers-core-waking)
+- [E12: the in-process catcher via seccomp TRAP, and why it breaks](#e12-the-in-process-catcher-via-seccomp-trap-and-why-it-breaks)
 - [What follows](#what-follows)
 
 ## Context
@@ -338,6 +339,29 @@ free, the scheduler co-locates the tracer and the tracee (one little core) and
 `-s` keeps that core awake — the best of all. So the advice is: **unpinned, with
 `-s`**. `TODO.md`, "Who sets the floor", already points at CPU placement; this is
 what the placement measures.
+
+## E12: the in-process catcher via seccomp TRAP, and why it breaks
+
+Mechanism 2 of the `in-process` branch (`TODO.md`): the shim installs its own
+seccomp filter that `TRAP`s a read-only `openat` not from the lane, with a
+`SIGSYS` handler that resolves the path and answers it in-process (writing the
+result into the ucontext); the tracer delivers the `SIGSYS(nr=56)` instead of
+answering it.
+
+A dynamic program started **directly** works (`sed`, `true`, `openat` answered
+in-process), but the **Lua build dies at once** (`mkdir` killed by `SIGSYS`,
+"Bad system call"). The cause is the risk the charter named: a seccomp filter
+**survives `exec`**, a signal handler does **not** (`exec` resets it to the
+default). So a program exec'd from a shimmed parent (`bash` -> `mkdir`) inherits
+the `TRAP(56)` filter, but the shim installs its handler only in its
+constructor — **after** ld.so has opened libc. The loader's read-only `openat` in
+that window traps with no handler, and `SIGSYS`'s default action kills the
+process.
+
+It does not fit the exec model as is: to use it the tracer would have to
+**answer** `openat` until the shim's handler is up and hand off after (a
+handshake), or the filter must not outlive `exec` (it always does). Reverted; the
+finding is recorded in `TODO.md`, "In-process".
 
 ## What follows
 
