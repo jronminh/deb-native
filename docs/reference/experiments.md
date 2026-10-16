@@ -163,8 +163,23 @@ adds the cookie. Stops, `dn-tiny -t ROOT -- PROG`, the shim present:
 | `python3 -c pass` | 15 | 11 |
 
 The net is the loader's opens removed (two for `true`, four to five for `git`)
-minus one for loading the module itself. The `newfstatat` and `fstat` sites are
-not patched yet.
+minus one for loading the module itself. Patching the `newfstatat` and `fstat`
+sites as well changed nothing on these three small programs.
+
+**On a real build** (the Lua 5.4.7 build, `make -j1 linux`, 152-159 execs, three
+interleaved pairs):
+
+| | stops | wall |
+| --- | --- | --- |
+| before | 1666 (every run) | 11.41-11.49 s |
+| after | 834 (every run) | 10.62-11.01 s |
+
+The loader's stops fall by exactly 832 — its startup floor (E4) removed for
+every one of the build's execs — and the wall time drops ~5%. The stop reduction
+is deterministic; the wall gain is smaller than 832 stops at ~19 us would
+explain, so part of it is the tracer's per-stop work (path mapping, the context
+switches) rather than the stop itself. This is the "many small gains" case: each
+exec saves a few stops, and a build has hundreds of execs.
 
 Two bugs were found and fixed on the way, both worth remembering:
 
