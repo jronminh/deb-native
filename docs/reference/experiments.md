@@ -325,6 +325,13 @@ What it says:
   power-collapsed and pays to come back.
 - The tracer's work is tiny — one core is plenty — so **do not spam** cores.
 
+Tuning on the same axis (40k stops): the `-s` value is near-optimal at **500**
+(`off` 8.5 s; `-s 50` 0.86, `100` 1.18, `250` 0.81, **`500` 0.74**, `1000` 0.76,
+`2000` 0.96 s). And `nice` on the tracer (0 to -20) changed nothing (~0.77 s):
+the scheduler's placement dominates, not the niceness. So the shape and its value
+are settled: **unpinned, `-s` around 500**; the only untried lever is an ADPF
+hint session from the app (below the tracer).
+
 Pinning the **tracee** as well (a temporary build that pins the child, so the
 tracer on cpu0 and the tracee on cpu1) made `-s` worse: 0.78 -> 1.94 s. Left
 free, the scheduler co-locates the tracer and the tracee (one little core) and
