@@ -45,9 +45,15 @@ mount API (`open_tree`/`move_mount`/`fsopen`/`fsconfig`/`fsmount`/`fspick`/
 
 ## FAKE
 
-Asked of the man pages (next): the `F_*` semantics (`F_GETID`=5, `F_SETID`=6,
-`F_RESIDS`=2, `F_GROUPS`=3, `F_ZERO`=1), and any fake-root call the rows miss
-(`capget`, `getgroups` variants, `getresuid` set).
+A subtle point checked in the source: `trace_denied` **also** applies a row's
+fake (`if (rw && rw->fake != F_NONE) fake_result(...)`), so a call Android
+*kills* still gets its fake. That matters for the `set*id` family, which is
+killed: measured, `setuid(1000)` then `getuid()` returns 1000 (the value is
+remembered, `F_SETID`), and `setresuid(1,2,3)` reads back 1,2,3. So those rows
+are live, not dead.
+
+Still to check: any fake-root call the rows miss (`capget` and the capability
+calls are not caught, so a program that probes capabilities sees the real set).
 
 ## RESULT
 
@@ -63,10 +69,12 @@ dropping the cache (`pivot_root`, a `mount` if it were allowed).
 
 ## deny vs the census
 
-`device-census.md` lists the 32 calls the app's filter really kills on the S10e.
-Each should be answered by a row or by `policy_deny` (the defaults return
-`ENOSYS`, which a program that probes for a newer call expects). To do: go
-through the 32 and mark each.
+Checked: `device-census.md`'s 32 real denials on the S10e each have an answer.
+The `set*id` family and `setgroups` -> succeed (or fake, above); `mount`,
+`umount2`, `chroot`, `swapon`, `swapoff`, the clock and hostname setters, the
+module and `bpf` calls -> `EPERM`; `accept` -> `accept4`, `faccessat2` ->
+`faccessat`, `fchmodat2` -> `fchmodat`, `openat2` -> `openat`; the rest ->
+`ENOSYS`, which a program that probes for a newer call expects. Consistent.
 
 ## What is already right
 
