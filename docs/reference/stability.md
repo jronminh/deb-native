@@ -62,3 +62,14 @@ In short: the **syscall ABI and the A64 base instructions are the two things we
 can build on**; "does not manipulate the instruction set" (symbols) is the safe
 path for now, and when an instruction-level rule is needed, prefer the one keyed
 on the stable ISA (`instruction_pointer`) over one keyed on glibc's code.
+
+## Checked: the ABI net catches what the shim cannot reach
+
+A program calling `syscall(SYS_openat, AT_FDCWD, "/etc/passwd", ...)` — a raw
+syscall, bypassing the shim's `openat` symbol — opens the file correctly under
+`dn-tiny`: the tracer's filter catches `nr 56` and maps the path (measured
+`fd=3`, read `root:x:0:0:ro`). The cost is one stop. So the stable ABI net
+(seccomp by number) covers the calls the shim cannot reach — the raw `syscall()`
+path, and anything without a symbol — with no instruction-level trick. This is
+the design's floor: correctness from the ABI, speed from answering in-process
+where a symbol exists.
