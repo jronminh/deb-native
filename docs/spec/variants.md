@@ -46,7 +46,10 @@ name -- `tar` calls `gzip` -- finds it), `fastfetch` (glibc) and the loader with
 `init.sh` runs under `busybox sh` -- and its own `boot/boot.sh` (no
 `/usr/bin/bash`). It runs: `uname`, `ls`, a shell with globs and pipes, `tar
 czf`, and `fastfetch`, which prints `OS: Debian GNU/Linux 13 (trixie)` from the
-tree's `/etc/os-release` and the phone's real kernel, memory and uptime.
+tree's `/etc/os-release` and the phone's real kernel, memory and uptime. It is an
+appliance too: `busybox httpd` serves a file that `busybox wget` fetches back,
+and -- once its `init.sh` writes `/etc/resolv.conf`, the tree ships none -- the
+network works (`busybox wget` over HTTP).
 
 ## What still names Debian
 

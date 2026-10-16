@@ -89,6 +89,9 @@ cat > "$DEST/boot/init.sh" <<'INIT'
 PATH=/bin:/usr/bin; export PATH
 HOME=/root; export HOME
 LANG=C.UTF-8; export LANG
+# a resolver: busybox's wget and friends read /etc/resolv.conf, and the tree
+# ships none (Android supplies none either)
+[ -e /etc/resolv.conf ] || printf 'nameserver 8.8.8.8\n' > /etc/resolv.conf
 [ -d /tmp ] || mkdir -p /tmp
 [ -d /root ] || mkdir -p /root
 if [ $# -gt 0 ]; then exec "$@"; fi
