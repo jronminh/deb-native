@@ -78,6 +78,11 @@ int policy_binds_parse(char *buf);
 /* Are both guest paths on the same row (mount)?  A rename or a link between two
  * rows is EXDEV, as between two bind mounts. */
 int policy_same_row(const char *g1, const char *g2);
+/* Is the row a guest path is in mounted read-only? */
+int policy_row_ro(const char *guest);
+/* Does this syscall change the tree at a path argument?  (openat is a write only
+ * with a write flag, so the caller adds it.) */
+int policy_writes(unsigned nr);
 /* The mount table from the rows: /proc/self/mounts (mountinfo=0) or mountinfo
  * (mountinfo=1) into `buf`; the length. */
 int policy_mounts(char *buf, size_t cap, int mountinfo);

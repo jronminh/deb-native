@@ -387,6 +387,29 @@ int policy_same_row(const char *g1, const char *g2)
 	return b1 && b1 == b2;
 }
 
+/* Is the row a guest path is in mounted read-only? */
+int policy_row_ro(const char *guest)
+{
+	const struct bind *b = row_guest(guest);
+
+	return b && (b->flags & 1);
+}
+
+/* Does this syscall change the tree at a path argument?  (a write under a `ro` row
+ * is EROFS; openat is a write only with a write flag, checked by the caller) */
+int policy_writes(unsigned nr)
+{
+	switch (nr) {
+	case 5: case 6: case 14: case 15:              /* set/lset/remove/lremove xattr */
+	case 33: case 34: case 35: case 36:            /* mknodat mkdirat unlinkat symlinkat */
+	case 37: case 38: case 276:                    /* linkat renameat renameat2 */
+	case 45:                                       /* truncate */
+	case 53: case 54: case 88:                     /* fchmodat fchownat utimensat */
+		return 1;
+	}
+	return 0;
+}
+
 /* ---- the mount view: /proc/self/mounts and mountinfo from the table ---------- */
 static int ap(char *b, size_t cap, size_t *n, const char *s)
 {

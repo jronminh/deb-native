@@ -38,8 +38,8 @@ The mapping must be *single* and *consistent* before it is widened.
    root + the host rows: `/proc`, `/sys`, `/dev`, the shared dirs + the binds in
    `boot/binds`), read by every engine -- not re-derived in each; the walk
    resolves in guest space and maps through it; the mount point, `EXDEV` between
-   rows, and the `/proc` mount view (`mounts`, `mountinfo`, `/etc/mtab`) from the
-   table are in. Left: enforcing `ro` (`TODO.md`, "The boundary", step 3).
+   rows, the `/proc` mount view (`mounts`, `mountinfo`, `/etc/mtab`) from the
+   table and `ro` -> `EROFS` are all in. The step is done.
 
 ## Phase 1 -- complete the mapping (the coordinates)
 

@@ -1102,11 +1102,13 @@ static int lane_hook(unsigned long *r)
 		break;
 	}
 	case SYS_mkdirat: case SYS_mknodat:              /* create: the last component must not exist */
+		if (path && path[0] == '/' && policy_row_ro(path)) { done = 1; res = -30; break; }
 		e = lane_at((int) r[0], path, 1, host, sizeof host, &at);
 		if (e <= 0) { done = e < 0; res = e; break; }
 		res = lane_rawc(nr, at, host, r[2], r[3], 0L);
 		break;
 	case SYS_fchmodat: case SYS_utimensat:
+		if (path && path[0] == '/' && policy_row_ro(path)) { done = 1; res = -30; break; }
 		e = lane_at((int) r[0], path, (int) r[3] & 0x100, host, sizeof host, &at);
 		if (e <= 0) { done = e < 0; res = e; break; }
 		res = lane_rawc(nr, at, host, r[2], r[3], 0L);
@@ -1117,11 +1119,14 @@ static int lane_hook(unsigned long *r)
 		res = lane_rawc(nr, r[0], host, r[2], 0L, 0L);
 		break;
 	case SYS_statfs: case SYS_truncate: case SYS_setxattr: case SYS_removexattr:
+		if (nr != SYS_statfs && r[0] && ((const char *) r[0])[0] == '/' &&
+		    policy_row_ro((const char *) r[0])) { done = 1; res = -30; break; }
 		e = lane_at(AT_FDCWD, (const char *) r[0], 0, host, sizeof host, &at);
 		if (e <= 0) { done = e < 0; res = e; break; }
 		res = lane_rawc(nr, host, r[1], r[2], r[3], r[4]);
 		break;
 	case SYS_lsetxattr: case SYS_lremovexattr:
+		if (r[0] && ((const char *) r[0])[0] == '/' && policy_row_ro((const char *) r[0])) { done = 1; res = -30; break; }
 		e = lane_at(AT_FDCWD, (const char *) r[0], 1, host, sizeof host, &at);
 		if (e <= 0) { done = e < 0; res = e; break; }
 		res = lane_rawc(nr, host, r[1], r[2], r[3], r[4]);

@@ -48,7 +48,7 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 2. **The SELinux label**: `security.selinux` reads as absent (`ENODATA`, and left
    out of `listxattr`), in the tracer and the shim. The `.` that `ls -l` prints
    after the mode is that label; a Debian without SELinux shows none.
-3. **Binds: the law becomes a table.** Done except enforcing `ro`.
+3. **Binds: the law becomes a table.** Done (the one leftover, `ro`, is in).
    - **The table** (done): one row per guest path. `/` is the prefix's root;
      `/proc`, `/sys`, `/dev` and the other host directories are rows of their own
      name; binds are rows too. Guest to host by the longest guest row, host to
@@ -63,7 +63,10 @@ step checked as `AGENTS.md` says, in Termux and in the app:
      Written by the host before `boot.sh` and read by the tracer
      (`policy_set_root`) and the shim (`lane_init`) from the root; fixed for a
      boot. The tracer refuses to boot on a non-canonical `HOST`, a duplicate
-     `GUEST`, or a `GUEST` under a host row. `ro` is parsed but not enforced yet.
+     `GUEST`, or a `GUEST` under a host row. A `ro` row answers `EROFS` on a
+     write: the tracer for a path argument (`openat` with a write flag,
+     `unlinkat`, `rename`, `linkat`, ...) and the shim for the calls it takes on
+     the lane (`mkdirat`, `[l]setxattr`, `truncate`, `fchmodat`, `utimensat`).
    - **The mount point** (done): `dn-tiny` makes an empty directory at each
      bind's `GUEST` at boot (`mkdir -p` the components), so `readdir` of its
      parent sees it; it stays when the bind goes, as after `umount`.

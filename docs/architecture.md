@@ -129,7 +129,8 @@ the net for everything.
 - A call on a real directory fd: the guest path of the directory the fd names,
   then the name from there; a host directory's paths stay.
 - A bind's mount point is an empty directory `dn-tiny` makes at boot; a `rename`
-  or `link` between two rows answers `EXDEV`, as between two mounts.
+  or `link` between two rows answers `EXDEV`, as between two mounts; a write to a
+  `ro` row answers `EROFS`.
 - The mount view is the table too: `/proc/mounts`, `/proc/self/mounts`,
   `mountinfo` and `/etc/mtab` are rows that map straight to a file built at boot
   under `var/lib/deb-native` (a memfd cannot cross the ptrace boundary), so the

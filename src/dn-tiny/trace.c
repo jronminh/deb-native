@@ -100,9 +100,67 @@ static ssize_t cwd_of(pid_t pid, const char *link, char *buf, size_t n)
 	return b;
 }
 
+/* The host path of the directory a name in register `arg` is taken from: its
+ * directory fd, or the working directory.  1, or 0 (it can't be named). */
+static int base_of(struct tracee *t, int arg, char *base, size_t cap)
+{
+	char link[48] = "/proc/";
+	int da = policy_dirfd_arg((unsigned) t->r.regs[8], arg);
+	int fd = da < 0 ? -100 : (int) t->r.regs[da];
+	size_t i = 6;
+	pid_t pid = t->pid;
+	char dig[12];
+	int nd = 0;
+	ssize_t b;
+
+	do { dig[nd++] = (char) ('0' + pid % 10); pid /= 10; } while (pid);
+	while (nd)
+		link[i++] = dig[--nd];
+	if (fd == -100) {
+		scpy(link + i, sizeof link - i, "/cwd");
+	} else {
+		unsigned f = (unsigned) fd;
+
+		scpy(link + i, sizeof link - i, "/fd/");
+		i += 4;
+		do { dig[nd++] = (char) ('0' + f % 10); f /= 10; } while (f);
+		while (nd)
+			link[i++] = dig[--nd];
+		link[i] = 0;
+	}
+	b = fd == -100 ? cwd_of(t->pid, link, base, cap) : sys_readlink(link, base, cap);
+	if (b <= 0)
+		return 0;
+	base[b] = 0;
+	return 1;
+}
+
+/* The guest absolute path a name in register `arg` would be, for the row rules
+ * (EXDEV, `ro`) that are decided on the guest path before it is mapped.  1, or 0. */
+static int guest_abs(struct tracee *t, int arg, char *out, size_t cap)
+{
+	char in[256], base[256], g[256];
+	ssize_t k = mon_read_str(t, t->r.regs[arg], in, sizeof in - 1);
+
+	if (k <= 0)
+		return 0;
+	in[k] = '\0';
+	if (in[0] == '/') {
+		scpy(out, cap, in);
+		return 1;
+	}
+	if (in[0] == '\0' || !base_of(t, arg, base, sizeof base - 1))
+		return 0;
+	if (policy_unpath(base, g, sizeof g) == 0)
+		return 0;
+	if (cat2(out, cap, g, "/") < 0)
+		return 0;
+	return cat2(out, cap, out, in) >= 0 ? 1 : 0;
+}
+
 static void rewrite_path(struct tracee *t, int arg)
 {
-	char in[256], out[512];
+	char in[256], out[512], base[256];
 	ssize_t k = mon_read_str(t, t->r.regs[arg], in, sizeof in);
 	u64 at;
 	int n, nf;
@@ -113,35 +171,8 @@ static void rewrite_path(struct tracee *t, int arg)
 	if (in[0] == '/' || in[0] == 0) {
 		n = policy_path_nf(in, out, sizeof out, nf);
 	} else {                                        /* from the cwd or a directory fd: ask the kernel where that is */
-		char base[256], link[48] = "/proc/";
-		int da = policy_dirfd_arg((unsigned) t->r.regs[8], arg);
-		int fd = da < 0 ? -100 : (int) t->r.regs[da];
-		size_t i = 6;
-		pid_t pid = t->pid;
-		char dig[12];
-		int nd = 0;
-		ssize_t b;
-
-		do { dig[nd++] = (char) ('0' + pid % 10); pid /= 10; } while (pid);
-		while (nd)
-			link[i++] = dig[--nd];
-		if (fd == -100) {
-			scpy(link + i, sizeof link - i, "/cwd");
-		} else {
-			unsigned f = (unsigned) fd;
-
-			scpy(link + i, sizeof link - i, "/fd/");
-			i += 4;
-			do { dig[nd++] = (char) ('0' + f % 10); f /= 10; } while (f);
-			while (nd)
-				link[i++] = dig[--nd];
-			link[i] = 0;
-		}
-		b = fd == -100 ? cwd_of(t->pid, link, base, sizeof base - 1)
-			       : sys_readlink(link, base, sizeof base - 1);
-		if (b <= 0)
+		if (!base_of(t, arg, base, sizeof base - 1))
 			return;
-		base[b] = 0;
 		n = policy_path_at(base, in, out, sizeof out, nf);
 	}
 	if (n == 0)
@@ -413,6 +444,23 @@ void trace_enter(struct tracee *t, const struct row *rw)
 
 		if (abs_guest(t, 1, a, sizeof a) && abs_guest(t, 3, b, sizeof b) && !policy_same_row(a, b)) {
 			mon_skip(t, -18);
+			return;
+		}
+	}
+	if (rw->path_arg >= 0 &&
+	    (policy_writes(rw->nr) || (rw->nr == 56 && (t->r.regs[2] & 0x643)))) {   /* write to a `ro` row */
+		char g[512];
+
+		if (guest_abs(t, rw->path_arg, g, sizeof g) && policy_row_ro(g)) {
+			mon_skip(t, -30);
+			return;
+		}
+	}
+	if (rw->path_arg2 >= 0 && policy_writes(rw->nr)) {
+		char g[512];
+
+		if (guest_abs(t, rw->path_arg2, g, sizeof g) && policy_row_ro(g)) {
+			mon_skip(t, -30);
 			return;
 		}
 	}
