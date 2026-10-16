@@ -5,16 +5,6 @@
 #include <string.h>
 
 /* the two helpers sys.c gives the tracer, here from libc */
-static int cat2(char *out, size_t cap, const char *a, const char *b)
-{
-	size_t la = strlen(a), lb = strlen(b);
-
-	if (la + lb + 1 > cap)
-		return -1;
-	memcpy(out, a, la);
-	memcpy(out + la, b, lb + 1);
-	return (int) (la + lb);
-}
 
 static int scpy(char *out, size_t cap, const char *s)
 {
@@ -29,21 +19,12 @@ static int scpy(char *out, size_t cap, const char *s)
 /* Freestanding (ldhook.c): the law carries the few string helpers it needs, so
  * the loader hook links no libc (it loads before the loader opens libc). */
 static size_t strlen(const char *s) { size_t n = 0; while (s[n]) n++; return n; }
+static char *strchr(const char *s, int c) { for (; *s; s++) if (*s == (char) c) return (char *) s; return c == 0 ? (char *) s : 0; }
 static int strcmp(const char *a, const char *b) { while (*a && *a == *b) { a++; b++; } return (unsigned char) *a - (unsigned char) *b; }
 static int strncmp(const char *a, const char *b, size_t n) { while (n && *a && *a == *b) { a++; b++; n--; } return n ? (unsigned char) *a - (unsigned char) *b : 0; }
 static void *memcpy(void *d, const void *s, size_t n) { unsigned char *a = d; const unsigned char *b = s; while (n--) *a++ = *b++; return d; }
 static void *memmove(void *d, const void *s, size_t n) { unsigned char *a = d; const unsigned char *b = s; if (a < b) while (n--) *a++ = *b++; else while (n--) a[n] = b[n]; return d; }
 static int memcmp(const void *a, const void *b, size_t n) { const unsigned char *x = a, *y = b; for (; n; n--, x++, y++) if (*x != *y) return *x - *y; return 0; }
-static int cat2(char *out, size_t cap, const char *a, const char *b)
-{
-	size_t la = strlen(a), lb = strlen(b);
-
-	if (la + lb + 1 > cap)
-		return -1;
-	memcpy(out, a, la);
-	memcpy(out + la, b, lb + 1);
-	return (int) (la + lb);
-}
 static int scpy(char *out, size_t cap, const char *s)
 {
 	size_t n = strlen(s);
@@ -238,10 +219,210 @@ static void append(char *buf, size_t cap, const char *s)
 	scpy(buf + n, cap - n, s);
 }
 
+/* ---- the binds: the one table that maps a guest path to a host path.  `/` is
+ * the prefix root, and each directory the tree keeps (or a bind the host wrote in
+ * boot/binds) is a row.  Guest to host by the longest guest row, host to guest by
+ * the longest host row. ------------------------------------------------------- */
+#define MAXBINDS 32
+#define BIND_G   256
+#define BIND_H   512
+struct bind {
+	char g[BIND_G], h[BIND_H];
+	unsigned gl, hl, flags;
+};
+static struct bind binds[MAXBINDS];
+static int nbinds;
+
+/* `pre` is a prefix of `p` at a component boundary */
+static int under(const char *p, const char *pre, size_t pl)
+{
+	if (pl == 0 || strncmp(p, pre, pl) != 0)
+		return 0;
+	if (pre[pl - 1] == '/')
+		return 1;                              /* a prefix ending in '/' is already at a boundary */
+	return p[pl] == '/' || p[pl] == '\0';
+}
+
+static int binds_add(const char *g, const char *h, unsigned flags)
+{
+	struct bind *b;
+
+	if (nbinds >= MAXBINDS)
+		return -1;
+	b = &binds[nbinds];
+	if (scpy(b->g, sizeof b->g, g) < 0 || scpy(b->h, sizeof b->h, h) < 0)
+		return -1;
+	b->gl = (unsigned) strlen(b->g);
+	b->hl = (unsigned) strlen(b->h);
+	b->flags = flags;
+	nbinds++;
+	return 0;
+}
+
+static const struct bind *row_guest(const char *g)
+{
+	const struct bind *best = NULL;
+	int i;
+
+	for (i = 0; i < nbinds; i++)
+		if (under(g, binds[i].g, binds[i].gl) && (!best || binds[i].gl > best->gl))
+			best = &binds[i];
+	return best;
+}
+
+static const struct bind *row_host(const char *h)
+{
+	const struct bind *best = NULL;
+	int i;
+
+	for (i = 0; i < nbinds; i++)
+		if (under(h, binds[i].h, binds[i].hl) && (!best || binds[i].hl > best->hl))
+			best = &binds[i];
+	return best;
+}
+
+static int row_is_identity(const struct bind *b)
+{
+	return b && b->gl == b->hl && strncmp(b->g, b->h, b->gl) == 0;
+}
+
+/* a guest path under a host row: it stays the host's, told as it is */
+static int is_host_row(const char *g)
+{
+	return row_is_identity(row_guest(g));
+}
+
+/* a, then b, with one '/' where they meet (a '/' row's remainder keeps its own) */
+static int join(char *out, size_t cap, const char *a, const char *b)
+{
+	size_t la = strlen(a), lb = strlen(b);
+
+	if (la && a[la - 1] == '/' && b[0] == '/')
+		la--;
+	if (la + lb + 1 > cap)
+		return -1;
+	memcpy(out, a, la);
+	memcpy(out + la, b, lb + 1);
+	return (int) (la + lb);
+}
+
+/* where the remainder of `p` starts past prefix `pre` (keeping a leading '/' when
+ * `pre` ends with one) */
+static const char *rest_after(const char *p, const char *pre, size_t pl)
+{
+	return p + pl - (pl >= 1 && pre[pl - 1] == '/' ? 1 : 0);
+}
+
+/* the host path of guest path g, into out; 0, or -1 (too long) */
+static int to_host(const char *g, char *out, size_t cap)
+{
+	const struct bind *b = row_guest(g);
+
+	if (!b)
+		return scpy(out, cap, g) < 0 ? -1 : 0;
+	if (strlen(g) == b->gl)
+		return scpy(out, cap, b->h) < 0 ? -1 : 0;
+	return join(out, cap, b->h, rest_after(g, b->g, b->gl)) < 0 ? -1 : 0;
+}
+
+/* the guest path of host path h; 1 if it differs, 0 if not under a row or identity */
+static int to_guest(const char *h, char *out, size_t cap)
+{
+	const struct bind *b = row_host(h);
+
+	if (!b)
+		return 0;
+	if (strlen(h) == b->hl) {
+		if (scpy(out, cap, b->g) < 0)
+			return 0;
+	} else if (join(out, cap, b->g, rest_after(h, b->h, b->hl)) < 0) {
+		return 0;
+	}
+	return strcmp(out, h) != 0;
+}
+
+/* the rows a boot starts with: `/` is the root, and the host directories under
+ * their own names (a "keep" list; boot/binds adds more) */
+static void binds_defaults(void)
+{
+	static const char *const keep[] = { "/proc", "/sys", "/dev", "/data", "/system", "/storage",
+					    "/sdcard", "/apex", "/vendor", "/mnt", NULL };
+	int i;
+
+	nbinds = 0;
+	binds_add("/", root_len ? root : "/", 0);
+	for (i = 0; keep[i]; i++)
+		binds_add(keep[i], keep[i], 0);
+}
+
+/* add one bind from boot/binds; 0, or -1 (bad: a duplicate GUEST, a GUEST under a
+ * host row, a non-canonical HOST, a reserved name) */
+int policy_binds_add(const char *g, const char *h, unsigned flags)
+{
+	size_t n = strlen(h), i;
+
+	if (g[0] != '/' || h[0] != '/' || g[1] == '\0')
+		return -1;                              /* the root is not a bind */
+	if (n > 1 && h[n - 1] == '/')
+		return -1;
+	{                                               /* HOST must be canonical: no empty, "." or ".." component */
+		const char *p = h + 1;
+
+		while (*p) {
+			const char *c = p;
+			size_t cl;
+
+			while (*p && *p != '/')
+				p++;
+			cl = (size_t) (p - c);
+			if (cl == 0 || (cl == 1 && c[0] == '.') || (cl == 2 && c[0] == '.' && c[1] == '.'))
+				return -1;
+			if (*p == '/')
+				p++;
+		}
+	}
+	for (i = 0; i < (size_t) nbinds; i++)
+		if (strcmp(binds[i].g, g) == 0)
+			return -1;                      /* a duplicate GUEST */
+	if (is_host_row(g))
+		return -1;                              /* a GUEST under a host directory */
+	return binds_add(g, h, flags);
+}
+
+/* parse boot/binds text (in place): one line per bind, GUEST<TAB>HOST<TAB>FLAGS.
+ * 0, or -1 on a bad line. */
+int policy_binds_parse(char *buf)
+{
+	char *line = buf;
+
+	while (line && *line) {
+		char *nl = strchr(line, '\n');
+		char *g, *h, *f = NULL;
+
+		if (nl)
+			*nl = '\0';
+		if (*line && *line != '#') {
+			g = line;
+			h = strchr(g, '\t');
+			if (!h)
+				return -1;
+			*h++ = '\0';
+			f = strchr(h, '\t');
+			if (f)
+				*f++ = '\0';
+			if (policy_binds_add(g, h, f && strcmp(f, "ro") == 0 ? 1 : 0) < 0)
+				return -1;
+		}
+		line = nl ? nl + 1 : NULL;
+	}
+	return 0;
+}
+
 void policy_root_set(const char *r)
 {
 	root = r;
 	root_len = strlen(r);
+	binds_defaults();
 	loader[0] = libpath[0] = preload[0] = ldhook[0] = '\0';
 	append(loader, sizeof loader, "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1");
 	append(libpath, sizeof libpath, "/usr/lib/aarch64-linux-gnu:/usr/lib");
@@ -259,13 +440,27 @@ size_t policy_root_len(void) { return root_len; }
 #if !defined(DN_LIBC) && !defined(DN_FREE)
 void policy_set_root(const char *r)
 {
-	char st[128];
+	char st[128], p[600], buf[4096];
+	int fd;
+	ssize_t k;
 
 	policy_root_set(r);
 	if (sys_fstatat(preload, st, 0) != 0)
 		preload[0] = '\0';
 	if (sys_fstatat(ldhook, st, 0) != 0)
 		ldhook[0] = '\0';
+	/* the binds the host wrote before boot; a bad line refuses the boot */
+	if (cat2(p, sizeof p, r, "/boot/binds") > 0 && (fd = sys_open(p, 0)) >= 0) {
+		k = sys_read(fd, buf, sizeof buf - 1);
+		sys_close(fd);
+		if (k > 0) {
+			buf[k] = '\0';
+			if (policy_binds_parse(buf) < 0) {
+				put(2, "dn-tiny: bad boot/binds\n");
+				sys_exit(1);
+			}
+		}
+	}
 	links_init();
 }
 #endif
@@ -282,141 +477,167 @@ int policy_is_glibc_interp(const char *interp)
 	return n >= m && strcmp(interp + n - m, "ld-linux-aarch64.so.1") == 0;
 }
 
-/* what is already a host path stays */
+/* what is already a host path stays: under the prefix root (a host spelling), or
+ * under one of the host directories (a row that maps to itself) */
 int policy_is_host(const char *p)
 {
-	static const char *const keep[] = { "/proc", "/sys", "/dev", "/data", "/system", "/storage",
-					    "/sdcard", "/apex", "/vendor", "/mnt", NULL };
-	int i;
-
-	if (root_len && strncmp(p, root, root_len) == 0)
+	if (under(p, root, root_len))
 		return 1;
-	for (i = 0; keep[i]; i++) {
-		size_t n = strlen(keep[i]);
-
-		if (strncmp(p, keep[i], n) == 0 && (p[n] == '\0' || p[n] == '/'))
-			return 1;
-	}
-	return 0;
+	return is_host_row(p);
 }
 
-/* ---- symlinks: the kernel would follow an absolute target from the host's /, not
- * the prefix's, so the path is walked here, one component at a time, and a link
- * met on the way is read and its target mapped the same way. -------------------- */
+/* ---- symlinks, in the guest's frame.  The kernel would follow an absolute target
+ * from the host's /, not the tree's, so the path is walked here one component at a
+ * time on the *guest* path (so `..` and links are the tree's, as under a real bind
+ * mount), and its host path is taken at the end through the table. -------------- */
 #define MAX_HOPS 40
 #define WORK 4096
 
-/* the part of `s` before its last '/', cut in place (never above the root) */
+/* the part of guest path `cur` before its last '/', cut in place (never above "/") */
 static void pop_component(char *cur)
 {
 	size_t n = strlen(cur);
 
-	while (n > root_len && cur[n - 1] != '/')
+	while (n > 0 && cur[n - 1] != '/')
 		n--;
-	if (n > root_len)
+	if (n > 0)
 		n--;
 	cur[n] = '\0';
 }
 
-/* the host path for guest path `in`, links resolved; 0 if `in` is left as it is,
- * else the length (NUL included).  The last component is followed unless `nofollow`. */
+/* the host path for guest path `in` (relative to guest directory `base`), links
+ * resolved in guest space; 0 if it cannot be mapped.  The last component is
+ * followed unless `nofollow`.  It is the length (NUL included) written to `out`. */
 static int walk(const char *base, const char *in, char *out, size_t cap, int nofollow)
 {
-	char cur[WORK], rest[WORK], tgt[WORK], *p;
-	size_t cl;
+	char res[WORK], rest[WORK], tgt[WORK], host[WORK], *p;
+	size_t rl;
 	int hops = 0;
 
-	if (scpy(rest, sizeof rest, in) < 0 || scpy(cur, sizeof cur, base) < 0)
-		goto plain;
+	if (in[0] == '/') {
+		res[0] = '\0';
+	} else if (scpy(res, sizeof res, base) < 0) {
+		return 0;
+	} else if (strcmp(res, "/") == 0) {
+		res[0] = '\0';
+	}
+	rl = strlen(res);
+	if (scpy(rest, sizeof rest, in) < 0)
+		return 0;
 	if (in[0] && in[strlen(in) - 1] == '/')
 		nofollow = 0;                                  /* a trailing slash follows the link, as the kernel does */
 	p = rest;
 	for (;;) {
-		char *comp, *after;
-		int last;
+		char comp[WORK], after[WORK], *q, *afterp;
+		size_t cl;
 		ssize_t r;
 
 		while (*p == '/')
 			p++;
 		if (*p == '\0')
 			break;
-		comp = p;
-		while (*p && *p != '/')
-			p++;
-		after = p;                                     /* what follows the component */
-		while (*after == '/')
-			after++;
-		last = (*after == '\0');
-		if (comp[0] == '.' && p - comp == 1)
+		q = p;
+		while (*q && *q != '/')
+			q++;
+		cl = (size_t) (q - p);
+		if (cl >= sizeof comp)
+			break;
+		memcpy(comp, p, cl);
+		comp[cl] = '\0';
+		afterp = q;
+		while (*afterp == '/')
+			afterp++;
+		if (scpy(after, sizeof after, afterp) < 0)
+			break;
+		p = q;
+		if (cl == 1 && comp[0] == '.')
 			continue;
-		if (comp[0] == '.' && comp[1] == '.' && p - comp == 2) {
-			pop_component(cur);
+		if (cl == 2 && comp[0] == '.' && comp[1] == '.') {
+			pop_component(res);
+			rl = strlen(res);
 			continue;
 		}
-		cl = strlen(cur);
-		if (cl + 1 + (size_t) (p - comp) + 1 > sizeof cur)
-			goto plain;
-		cur[cl] = '/';
-		memcpy(cur + cl + 1, comp, (size_t) (p - comp));
-		cur[cl + 1 + (size_t) (p - comp)] = '\0';
-		if (last && nofollow)
+		if (rl + 1 + cl + 1 > sizeof res)
+			break;                                 /* too long: give up, keep */
+		res[rl] = '/';
+		memcpy(res + rl + 1, comp, cl);
+		res[rl + 1 + cl] = '\0';
+		if (nofollow && after[0] == '\0') {
+			rl += 1 + cl;
 			continue;                              /* a name to create, remove or read as a link */
-		r = lc_readlink(cur, tgt, sizeof tgt - 1);
-		if (r <= 0)
+		}
+		if (to_host(res, host, sizeof host) < 0)
+			break;
+		r = lc_readlink(host, tgt, sizeof tgt - 1);
+		if (r <= 0) {
+			rl += 1 + cl;
 			continue;                              /* not a link (or not there): it stays */
+		}
 		tgt[r] = '\0';
-		if (++hops > MAX_HOPS)
-			goto plain;                            /* the kernel will say ELOOP */
-		cur[cl] = '\0';                                /* back to the directory holding the link */
-		{
-			char nrest[WORK];
+		if (++hops > MAX_HOPS) {
+			rl += 1 + cl;
+			break;                                 /* the kernel will say ELOOP */
+		}
+		{                                              /* the target, then what was left of the path */
 			size_t tl = (size_t) r, al = strlen(after);
 
-			if (tl + 1 + al + 1 > sizeof nrest)
-				goto plain;
-			memcpy(nrest, tgt, tl);
-			nrest[tl] = '/';
-			memcpy(nrest + tl + 1, after, al + 1);
-			if (tgt[0] == '/') {
-				if (strncmp(tgt, root, root_len) == 0 && (tgt[root_len] == '/' || tgt[root_len] == '\0')) {
-					/* already a host path inside the prefix: map from the root */
-					memmove(nrest, nrest + root_len, strlen(nrest + root_len) + 1);
-				} else if (policy_is_host(tgt)) {
-					return cat2(out, cap, nrest, "") > 0 ? (int) strlen(out) + 1 : 0;
-				}
-				scpy(cur, sizeof cur, root);
-			}
-			scpy(rest, sizeof rest, nrest);
+			if (tl + 1 + al + 1 > sizeof rest)
+				break;
+			memmove(rest + tl + 1, after, al + 1);
+			memcpy(rest, tgt, tl);
+			rest[tl] = '/';
 			p = rest;
 		}
+		if (tgt[0] == '/') {
+			if (under(tgt, root, root_len)) {
+				/* a host-spelled path inside the prefix: back to the guest's */
+				memmove(rest, rest + root_len, strlen(rest + root_len) + 1);
+				p = rest;
+				res[0] = '\0';
+			} else if (is_host_row(tgt)) {
+				/* a link to a host path: the result leaves the tree */
+				return scpy(out, cap, rest) >= 0 ? (int) strlen(out) + 1 : 0;
+			} else {
+				res[0] = '\0';                 /* an absolute target: from the tree's root */
+			}
+			rl = 0;
+		} else {
+			res[rl] = '\0';                        /* back to the directory holding the link */
+		}
 	}
-	if (in[strlen(in) - 1] == '/' && strlen(cur) + 2 <= sizeof cur)
-		memcpy(cur + strlen(cur), "/", 2);
-	return scpy(out, cap, cur) >= 0 ? (int) strlen(out) + 1 : 0;
-plain:                                                  /* give the kernel the path, mapped but not resolved */
-	if (cat2(out, cap, base, in[0] == '/' ? "" : "/") < 0)
+	if (res[0] == '\0')
+		scpy(res, sizeof res, "/");            /* "" is the tree's root */
+	if (to_host(res, out, cap) < 0)
 		return 0;
-	return cat2(out, cap, out, in) > 0 ? (int) strlen(out) + 1 : 0;
+	if (in[0] && in[strlen(in) - 1] == '/' && strlen(out) + 2 <= cap)
+		memcpy(out + strlen(out), "/", 2);
+	return (int) strlen(out) + 1;
 }
 
 int policy_path_nf(const char *in, char *out, size_t cap, int nofollow)
 {
 	if (in[0] != '/' || policy_is_host(in))
 		return 0;
-	return walk(root, in, out, cap, nofollow);
+	return walk("/", in, out, cap, nofollow);
 }
 
-/* a relative path, from a directory the kernel names (a host path): it is walked the
- * same way; 0 if that directory is outside the prefix, where nothing is mapped */
+/* a relative path, from a directory the kernel names (a host path): its guest path
+ * is found in the table and the name is walked from there; 0 if that directory is
+ * a host one (its paths stay) or is outside every row */
 int policy_path_at(const char *base, const char *in, char *out, size_t cap, int nofollow)
 {
+	char gbase[WORK];
 	size_t n = strlen(base);
+	const struct bind *b;
 
-	if (in[0] == '/' || strncmp(base, root, root_len) != 0 || (base[root_len] != '/' && base[root_len] != 0))
+	if (in[0] == '/' || n == 0 || base[n - 1] == '/')
 		return 0;
-	if (n > 0 && base[n - 1] == '/')
+	b = row_host(base);                     /* base is a host path: classify it as one */
+	if (!b || row_is_identity(b))
+		return 0;                       /* a host directory: its paths stay */
+	if (!to_guest(base, gbase, sizeof gbase))
 		return 0;
-	return walk(base, in, out, cap, nofollow);
+	return walk(gbase, in, out, cap, nofollow);
 }
 
 /* The register holding the directory fd for the path in register `arg`, or -1 when the
@@ -459,18 +680,13 @@ int policy_nofollow(unsigned nr, int arg, const u64 *x)
 	return 0;
 }
 
+/* the guest spelling of host path `host`: 0 if it is not under a row, or is the
+ * same string (a host row), where the caller keeps it as it is */
 int policy_unpath(const char *host, char *out, size_t cap)
 {
-	if (!root_len || strncmp(host, root, root_len) != 0 ||
-	    (host[root_len] != '\0' && host[root_len] != '/'))
+	if (!to_guest(host, out, cap))
 		return 0;
-	if (host[root_len] == '\0')
-		return scpy(out, cap, "/") >= 0 ? 2 : 0;       /* the prefix root is the guest's / */
-	{
-		int n = scpy(out, cap, host + root_len);
-
-		return n >= 0 ? n + 1 : 0;
-	}
+	return (int) strlen(out) + 1;
 }
 
 /* readlink of a guest path: on the host path, from the shared cache, an absolute
@@ -478,19 +694,10 @@ int policy_unpath(const char *host, char *out, size_t cap)
 static int guest_readlink(const char *g, char *buf, size_t n)
 {
 	char host[WORK];
-	size_t gl = strlen(g);
 	ssize_t r;
 
-	if (policy_is_host(g)) {
-		if (gl >= sizeof host)
-			return -E_NAMETOOLONG;
-		memcpy(host, g, gl + 1);
-	} else {
-		if (root_len + gl >= sizeof host)
-			return -E_NAMETOOLONG;
-		memcpy(host, root, root_len);
-		memcpy(host + root_len, g, gl + 1);
-	}
+	if (to_host(g, host, sizeof host) < 0)
+		return -E_NAMETOOLONG;
 	r = lc_readlink(host, buf, n);
 	if (r > 0 && (size_t) r >= root_len && strncmp(buf, root, root_len) == 0 &&
 	    ((size_t) r == root_len || buf[root_len] == '/')) {

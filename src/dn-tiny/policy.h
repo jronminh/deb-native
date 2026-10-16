@@ -9,11 +9,13 @@
  * -DDN_FREE).  Both give it their own types, strings, and the one syscall the
  * law makes -- readlink of a host path, through the lane (pol_readlink). */
 #include <stdint.h>
-typedef uint64_t u64;
-typedef int64_t i64;
-#ifndef DN_LIBC
+#ifdef DN_LIBC
+#include <sys/types.h>
+#else
 typedef long ssize_t;
 #endif
+typedef uint64_t u64;
+typedef int64_t i64;
 ssize_t pol_readlink(const char *host, char *buf, size_t n);
 #else
 #include "sys.h"
@@ -66,6 +68,13 @@ void policy_links_use(volatile unsigned *g);
  * cache of all of them; without that file there is no cache. */
 void policy_links_changed(void);
 unsigned policy_links_gen(void);
+
+/* The binds (the table that maps guest paths to host paths).  The rows a boot
+ * starts with are set by policy_set_root/policy_root_set; boot/binds adds more.
+ * `policy_binds_add` refuses a duplicate GUEST, a GUEST under a host row, or a
+ * non-canonical HOST; `policy_binds_parse` reads the file's text in place. */
+int policy_binds_add(const char *guest, const char *host, unsigned flags);
+int policy_binds_parse(char *buf);
 /* The canonical guest path for `in`, as realpath would make it: every component's
  * link followed, `..` against what is resolved, an absolute link target the
  * prefix's.  `base` is the guest working directory for a relative path.  0 and

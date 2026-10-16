@@ -48,36 +48,31 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 2. **The SELinux label**: `security.selinux` reads as absent (`ENODATA`, and left
    out of `listxattr`), in the tracer and the shim. The `.` that `ls -l` prints
    after the mode is that label; a Debian without SELinux shows none.
-3. **Binds: the law becomes a table.**
-   - First, **one copy of the law** (under "The law"): without it a bind is
-     written twice, and the 0.7 runtime's two path models disagreed in exactly
-     this way.
-   - The table: one row per guest path. `/` is the prefix's root; `/proc`,
-     `/sys`, `/dev` and the other host directories are rows of their own name;
-     binds are rows too. Guest to host by the longest guest prefix; host to guest
-     (`policy_unpath`: `getcwd`, `readlink`, `/proc/self/{cwd,exe,fd/N}`) by the
-     longest host prefix.
-   - `walk` resolves `.`, `..` and links on the guest path and maps at the end:
-     `cd /mnt/sdcard/..` is `/mnt`, not `/storage/emulated`, and an absolute
-     link inside a bind is the guest's, as under a real bind mount.
-   - `boot/binds`: one line per bind, `GUEST<TAB>HOST<TAB>FLAGS` (`rw`; `ro`
-     later, answered `EROFS`). Written by the host (dn-shell from its settings,
-     a user by hand in Termux) before `boot.sh`; read by the tracer and the shim
-     from the root; fixed for a boot. `HOST` must be canonical
-     (`/storage/emulated/0`, not `/sdcard`): the shim cannot canonicalize (its
-     `realpath` goes through its own hooks), so `dn-tiny` refuses to boot on a
-     non-canonical `HOST`, a duplicate `GUEST`, or a `GUEST` under a host row.
-   - The mount point: an empty directory at `GUEST`, made at boot if missing, so
-     `readdir` of its parent needs nothing; it stays when the bind goes, as after
-     `umount`.
-   - `rename` and `link` between two rows: `EXDEV`, as between two mounts
-     (`prefixes/` and the app's `home/` are one file system, so the kernel would
-     allow it). `st_dev` and `statfs` stay the kernel's, as for a bind mount.
-   - `/proc/self/mounts`, `/proc/self/mountinfo` (and `/etc/mtab`, a link to the
-     first) built from the table, generated at `open` into a memfd ("Emulation").
-   - Done when `stat`, `open`, `read`, `readdir`, `readlink`, `getcwd`,
-     `realpath` and `pwd -P` agree inside a bind for a dynamic and a static
-     program, and `mount`, `df`, `findmnt` list it.
+3. **Binds: the law becomes a table.** Partly done (the table, the walk and the
+   file; the mount view and the cross-row rules are open).
+   - **The table** (done): one row per guest path. `/` is the prefix's root;
+     `/proc`, `/sys`, `/dev` and the other host directories are rows of their own
+     name; binds are rows too. Guest to host by the longest guest row, host to
+     guest (`policy_unpath`: `getcwd`, `readlink`, `/proc/self/{cwd,exe,fd/N}`)
+     by the longest host row. `policy_is_host` is the identity rows, not a
+     keep-list.
+   - **`walk` in guest space** (done): it resolves `.`, `..` and links on the
+     *guest* path and maps at the end, so `cd /host/..` is `/`, not the host
+     parent, and an absolute link inside a bind is the guest's. (A bind under a
+     host row is refused, so `/mnt/...` must wait for step 4 to drop `/mnt`.)
+   - **`boot/binds`** (done): one line per bind, `GUEST<TAB>HOST<TAB>FLAGS`.
+     Written by the host before `boot.sh` and read by the tracer
+     (`policy_set_root`) and the shim (`lane_init`) from the root; fixed for a
+     boot. The tracer refuses to boot on a non-canonical `HOST`, a duplicate
+     `GUEST`, or a `GUEST` under a host row. `ro` is parsed but not enforced yet.
+   - **The mount point** (open): an empty directory at `GUEST`, made at boot if
+     missing, so `readdir` of its parent needs nothing; it stays when the bind
+     goes, as after `umount`.
+   - **`rename` and `link` between two rows** (open): `EXDEV`, as between two
+     mounts (`prefixes/` and the app's `home/` are one file system, so the kernel
+     would allow it). `st_dev` and `statfs` stay the kernel's (true already).
+   - **`/proc/self/mounts`, `/proc/self/mountinfo`** (and `/etc/mtab`) built from
+     the table, generated at `open` into a memfd ("Emulation") (open).
    - Later: `mount --bind` inside the prefix adds a row (it is refused now); the
      table then has to live where the shim sees a change, not a copy read once.
 4. **Narrow the host directories**, with binds as the way out: drop `/data`,

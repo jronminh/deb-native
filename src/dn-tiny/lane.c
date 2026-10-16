@@ -147,6 +147,25 @@ __attribute__((constructor)) static void lane_init(void)
 	memcpy(rootbuf, di.dli_fname, n - t);
 	rootbuf[n - t] = '\0';
 	policy_root_set(rootbuf);               /* set last: until now everything falls back */
+	{                                       /* the binds the host wrote before boot */
+		char bp[PATH_MAX + 16], b[4096];
+		long bfd;
+
+		if (strlen(rootbuf) + 12 < sizeof bp) {
+			strcpy(bp, rootbuf);
+			strcat(bp, "/boot/binds");
+			bfd = lane_call(SYS_openat, AT_FDCWD, bp, O_RDONLY | O_CLOEXEC, 0, 0L);
+			if (bfd >= 0) {
+				long k = lane_call(SYS_read, (int) bfd, b, sizeof b - 1, 0L, 0L);
+
+				lane_call(SYS_close, (int) bfd, 0, 0, 0, 0L);
+				if (k > 0) {
+					b[k] = '\0';
+					policy_binds_parse(b);
+				}
+			}
+		}
+	}
 	patch_libc();
 }
 

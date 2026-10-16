@@ -116,18 +116,22 @@ the net for everything.
 ## The law: guest paths and host paths
 
 - A guest path is the prefix's: `/usr/bin/ls` is `ROOT/usr/bin/ls`.
-- Ten host directories stay the phone's: `/proc`, `/sys`, `/dev`, `/data`,
-  `/system`, `/storage`, `/sdcard`, `/apex`, `/vendor`, `/mnt`.
-- Links are resolved component by component: an absolute link target is the
-  prefix's too (`/etc/alternatives/awk -> /usr/bin/mawk`).
-- What the kernel returns as a host path inside the prefix (`getcwd`, a link
-  target, `/proc/self/fd/N`) is told back as the guest's.
-- A call on a real directory fd resolves the name from the directory's guest
-  path (the host path the kernel names for the fd, minus the root); a directory
-  outside the prefix is a host directory, and its paths stay.
+- The mapping is one **table** (`policy.c`): a row per guest path. `/` is the
+  prefix root; ten host directories stay the phone's under their own names
+  (`/proc`, `/sys`, `/dev`, `/data`, `/system`, `/storage`, `/sdcard`, `/apex`,
+  `/vendor`, `/mnt`); each bind in a prefix's `boot/binds` is a row too. Guest to
+  host by the longest guest row, host to guest by the longest host row.
+- The path is walked one component at a time on the **guest** path, links and
+  `..` resolved there (an absolute link target is the tree's, `/etc/alternatives/
+  awk -> /usr/bin/mawk`; `..` at a bind is the tree's parent), and its host path
+  taken at the end. What the kernel returns as a host path (`getcwd`, a link
+  target, `/proc/self/fd/N`) is mapped back to the guest's.
+- A call on a real directory fd: the guest path of the directory the fd names,
+  then the name from there; a host directory's paths stay.
 - The law lives once, in `policy.c`, and both engines read it: the tracer links
   it as it is, the shim builds it `-DDN_LIBC` (the types, the strings and
-  `pol_readlink` from libc and the lane). See `spec/plan.md`, Phase 0.
+  `pol_readlink` from libc and the lane), the loader hook builds it `-DDN_FREE`
+  (own strings). See `spec/plan.md`, Phase 0.
 
 ## Identity: fake root
 

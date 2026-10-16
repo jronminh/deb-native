@@ -212,6 +212,22 @@ __attribute__((visibility("default"))) unsigned int la_version(unsigned int v) {
         root[n - t] = 0;
     }
     policy_root_set(root);
+    {   /* the binds the host wrote before boot, so the loader maps through the table */
+        char bp[600], b[4096];
+        size_t ri = 0, rj;
+        const char *s = "/boot/binds";
+        long fd, k;
+
+        while (root[ri] && ri + 12 < sizeof bp) { bp[ri] = root[ri]; ri++; }
+        for (rj = 0; s[rj]; rj++) bp[ri + rj] = s[rj];
+        bp[ri + rj] = '\0';
+        fd = openat_c(bp);
+        if (fd >= 0) {
+            k = sc6(63, fd, (long) b, sizeof b - 1, 0, 0, 0);
+            sc6(57, fd, 0, 0, 0, 0, 0);
+            if (k > 0) { b[k] = '\0'; policy_binds_parse(b); }
+        }
+    }
 
     for (unsigned *q = (unsigned *) lo + 1; q < (unsigned *) hi && ns < 64; q++) {
         if (*q != 0xd4000001u) continue;

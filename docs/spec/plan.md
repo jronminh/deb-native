@@ -34,9 +34,12 @@ The mapping must be *single* and *consistent* before it is widened.
    opens them through the law like any program. Left: the `LD_AUDIT` hook, whose
    stub now meets those tree paths and so must call the one law, not just add the
    cookie.
-3. **Binds are data.** One table (the prefix root + the host rows: `/proc`,
-   `/sys`, `/dev`, the shared dirs), read by every engine -- not re-derived in
-   each. This is the model's "binds are data".
+3. **Binds are data.** Done for the table: one table in `policy.c` (the prefix
+   root + the host rows: `/proc`, `/sys`, `/dev`, the shared dirs + the binds in
+   `boot/binds`), read by every engine -- not re-derived in each; the walk
+   resolves in guest space and maps through it. Left: the mount point directory,
+   `EXDEV` between rows, and `/proc/self/mounts`/`mountinfo` from the table
+   (`TODO.md`, "The boundary", step 3).
 
 ## Phase 1 -- complete the mapping (the coordinates)
 
