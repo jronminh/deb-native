@@ -62,7 +62,11 @@ by taking the path the fd names (so `fexecve` works). Measured: the path form an
 fake_result(...)`), so a call Android *kills* still gets its fake. That matters
 for the `set*id` family, which is killed: measured, `setuid(1000)` then `getuid()`
 returns 1000 (`F_SETID`), and `setresuid(1,2,3)` reads back 1,2,3. So those rows
-are live. `capget` is the gap (above).
+are live. The rest measured too: `getgroups` -> one group 0, `getresgid` ->
+0,0,0, `fchown(0,0,0)` -> 0. Complete; `capget` (not faked) is the one gap.
+
+**The audit is complete** (PATH_ARG, FAKE, RESULT, EFFECT, deny); the outcome
+below is the summary.
 
 ## RESULT
 
