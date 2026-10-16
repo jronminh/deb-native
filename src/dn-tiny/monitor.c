@@ -64,7 +64,7 @@ static u64 saved0[PID_SLOTS];                     /* by pid: x0 as that syscall 
  * keeps the kernel (5.11 and later) from caching its answer per number. */
 #define FNINS 1024                     /* BPF_MAXINSNS is 4096; this program is about 400 */
 #define FNLAB 512
-struct fjump { size_t pc; int lt, lf; };
+struct fjump { size_t pc; int lt, lf; int kind; };   /* kind 0: conditional, 1: JA */
 struct fprog {
 	struct sock_filter f[FNINS];
 	size_t n;
@@ -102,9 +102,17 @@ static void fstmt(struct fprog *p, unsigned short code, unsigned k)
 static void fjmp(struct fprog *p, unsigned short code, unsigned k, int lt, int lf)
 {
 	if (p->nfx >= FNINS) { p->bad = 1; return; }
-	p->fx[p->nfx] = (struct fjump) { p->n, lt, lf };
+	p->fx[p->nfx] = (struct fjump) { p->n, lt, lf, 0 };
 	p->nfx++;
 	fins(p, code, 0, 0, k);
+}
+
+static void fja(struct fprog *p, int l)
+{
+	if (p->nfx >= FNINS) { p->bad = 1; return; }
+	p->fx[p->nfx] = (struct fjump) { p->n, l, 0, 1 };
+	p->nfx++;
+	fins(p, BPF_JMP | BPF_JA, 0, 0, 0);
 }
 
 /* offsets are relative to the next instruction; a conditional's offset must fit in
@@ -118,6 +126,10 @@ static int fresolve(struct fprog *p)
 		size_t tgt_t = p->lab[j->lt];
 
 		if (tgt_t == (size_t) -1 || tgt_t <= j->pc) return -1;
+		if (j->kind == 1) {
+			p->f[j->pc].k = (unsigned) (tgt_t - j->pc - 1);
+			continue;
+		}
 		{
 			size_t tgt_f = p->lab[j->lf];
 			size_t dt = tgt_t - j->pc - 1;
@@ -139,38 +151,59 @@ static const struct row *rows_by_nr[512];
  * 2 openat (a write in its flags still reaches the tracer) */
 static unsigned char lane_kind[512];
 
-/* the decision for a row the tree matched: the lane's cookie first, for a row the
- * shim answers, then TRACE (the cookie is wrong, or openat asks to write), or ALLOW */
+/* What a matched row does.  A row the lane does not list is one TRACE, right in
+ * the leaf.  A row the lane lists branches (a JA, a far jump) to one shared block:
+ * the cookie is tested once for every lane row, not once per leaf, so the filter
+ * stays small.  Two plain blocks (only getcwd, readlinkat, newfstatat and statx
+ * have a result to rewrite, so they stop again at exit and the others do not) and
+ * one for openat, whose write flags must reach the tracer. */
+struct lane_blk { int lc0, lc1, lop; };
+static struct lane_blk lb;
+
 static void emit_row(struct fprog *p, const struct row *rw)
 {
 	unsigned kind = rw->nr < 512 ? lane_kind[rw->nr] : 0;
-	int lc2, lc3, lrow, lallow, lopend;
 
 	if (!kind) {
 		fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_TRACE | (rw->exit_stop & SECCOMP_RET_DATA));
 		return;
 	}
-	lc2 = flabel(p); lrow = flabel(p);
+	fja(p, kind == 2 ? lb.lop : (rw->exit_stop & SECCOMP_RET_DATA) ? lb.lc1 : lb.lc0);
+}
+
+/* the lane: the cookie in x5 (both halves); a match ALLOWs the call, else the row's
+ * TRACE.  openat, too, only to read: a flag that writes falls back to the tracer. */
+static void emit_cookie(struct fprog *p, int stop)
+{
+	int lc2 = flabel(p), lc3 = flabel(p), lf = flabel(p);
+
 	fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]));
-	fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_LO, lc2, lrow);
+	fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_LO, lc2, lf);
 	fplace(p, lc2);
-	lc3 = flabel(p);
 	fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]) + 4);
-	fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_HI, lc3, lrow);
+	fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_HI, lc3, lf);
 	fplace(p, lc3);
-	lallow = flabel(p);
-	if (kind == 2) {
-		fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
-		lopend = flabel(p);
-		fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_OPENAT, lopend, lallow);
-		fplace(p, lopend);
-		fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2]));
-		fjmp(p, BPF_JMP | BPF_JSET | BPF_K, DN_LANE_OPEN_DENY, lrow, lallow);
-	}
+	fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+	fplace(p, lf);
+	fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_TRACE | (stop & SECCOMP_RET_DATA));
+}
+
+static void emit_openat(struct fprog *p)
+{
+	int lc2 = flabel(p), lc3 = flabel(p), lallow = flabel(p), lf = flabel(p);
+
+	fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]));
+	fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_LO, lc2, lf);
+	fplace(p, lc2);
+	fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[5]) + 4);
+	fjmp(p, BPF_JMP | BPF_JEQ | BPF_K, DN_LANE_HI, lc3, lf);
+	fplace(p, lc3);
+	fstmt(p, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[2]));
+	fjmp(p, BPF_JMP | BPF_JSET | BPF_K, DN_LANE_OPEN_DENY, lf, lallow);
 	fplace(p, lallow);
 	fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
-	fplace(p, lrow);
-	fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_TRACE | (rw->exit_stop & SECCOMP_RET_DATA));
+	fplace(p, lf);
+	fstmt(p, BPF_RET | BPF_K, SECCOMP_RET_TRACE);
 }
 
 static void frows(struct fprog *p, size_t lo, size_t hi)
@@ -263,11 +296,16 @@ static int install_filter(void)
 	fplace(&fp, lerr);
 	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ERRNO | 93 /* EPROTONOSUPPORT */);
 
-	/* the rows: one JGE tree, a leaf testing the cookie for a row the lane lists */
+	/* the rows: one JGE tree; a leaf of a row the lane lists branches to one of
+	 * the shared cookie blocks, emitted after the tree */
 	fplace(&fp, lrows);
 	fstmt(&fp, BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+	lb.lc0 = flabel(&fp); lb.lc1 = flabel(&fp); lb.lop = flabel(&fp);
 	frows(&fp, 0, policy_count());
 	fstmt(&fp, BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+	fplace(&fp, lb.lc0); emit_cookie(&fp, 0);
+	fplace(&fp, lb.lc1); emit_cookie(&fp, 1);
+	fplace(&fp, lb.lop); emit_openat(&fp);
 
 	if (fresolve(&fp) < 0)
 		return -1;
