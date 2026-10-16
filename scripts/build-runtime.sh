@@ -1,8 +1,10 @@
 #!/bin/sh
-# Build the runtime: dn-tiny, the tracer (src/dn-tiny), with the two programs that
-# test and measure it, dn-substtest and dn-census.  All three are static aarch64
-# executables with no libc and no imports, so any C compiler that emits aarch64
-# code will do: Termux's clang, gcc on an arm64 Linux, or a cross compiler.
+# Build the runtime: dn-tiny, the tracer (src/dn-tiny); dn-ldhook.so, the loader
+# hook (an LD_AUDIT module, freestanding); and the two programs that test and
+# measure it, dn-substtest and dn-census.  All are aarch64 with no libc and no
+# imports, so any C compiler that emits aarch64 code will do: Termux's clang, gcc
+# on an arm64 Linux, or a cross compiler.  A prefix ships dn-ldhook.so only when
+# it is copied into usr/lib/deb-native/ (see docs/reference/syscall-patching.md).
 #
 # The shim, dn-lane.so, is not built here: it is linked against the prefix's own
 # glibc, so build-prefix.sh compiles it inside the prefix.
@@ -48,10 +50,13 @@ python3 "$SRC/gen_rows.py" "$OUT/gen/policy-rows.inc"
 "$CC" $FLAGS -I"$SRC" -I"$OUT/gen" -o "$OUT/dn-tiny" \
   "$SRC/sys.c" "$SRC/monitor.c" "$SRC/trace.c" "$SRC/exec.c" "$SRC/policy.c"
 # shellcheck disable=SC2086
-# the LD_AUDIT module (the loader hook): freestanding and shared, no libc
+# the LD_AUDIT module (the loader hook): freestanding and shared, no libc.  It
+# links the law too (policy.c, -DDN_FREE), so its stub maps the loader's guest
+# paths to host paths before the lane call.
 # shellcheck disable=SC2086
 "$CC" -O2 -Wall -Wextra -shared -nostdlib -ffreestanding -fno-builtin -fno-stack-protector \
-  -fno-asynchronous-unwind-tables -fPIC -Wl,-z,noexecstack -o "$OUT/dn-ldhook.so" "$SRC/ldhook.c"
+  -fno-asynchronous-unwind-tables -fPIC -DDN_FREE -I"$SRC" -I"$OUT/gen" -Wl,-z,noexecstack \
+  -o "$OUT/dn-ldhook.so" "$SRC/ldhook.c" "$SRC/policy.c"
 "$CC" $FLAGS -o "$OUT/dn-substtest" "$SRC/substtest.c"
 # shellcheck disable=SC2086
 "$CC" $FLAGS -o "$OUT/dn-census" "$SRC/census.c"

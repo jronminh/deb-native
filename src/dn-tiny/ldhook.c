@@ -1,25 +1,32 @@
-/* ldhook: an LD_AUDIT module.  At la_version -- before the loader opens libc, the
- * shim and the program's libraries -- it patches the loader's own syscall sites
- * (`openat`, `faccessat`) to a stub that sets the lane cookie in x5 and re-issues
- * the call, so the tracer's filter lets it through with no stop.
+/* ldhook: an LD_AUDIT module.  At la_version -- before the loader opens the shim,
+ * libc or the program's libraries -- it patches the loader's own path syscalls
+ * (`openat`, `faccessat`) to a stub that maps the path through the one law
+ * (policy.c, built -DDN_FREE) and sets the lane cookie in x5, so the tracer's
+ * filter lets the mapped call through with no stop.
  *
  * The loader is what the shim cannot reach: its opens happen before any preloaded
  * object's constructor runs (E4-E6), and they are the biggest block of stops a
- * build has (the loader's startup, one per process).  The loader's paths are host
- * paths (the exec gate passes host paths), so the stub needs no path law, only the
- * cookie -- except its `faccessat` on `/etc/ld.so.preload`, a guest path; that one
- * is allowed by luck (neither the host's nor the prefix's file exists).
+ * build has (the loader's startup, one per process).  Its paths are the tree's own
+ * now (the exec gate hands the program and --library-path as guest paths), so the
+ * stub cannot just add the cookie: it must resolve each path to a host path, the
+ * same law the tracer and the shim use.
  *
- * Freestanding: it must not link libc, or it would pull it in before the loader
- * means to.  See docs/reference/syscall-patching.md and experiments.md, E5-E7. */
+ * Freestanding: it links no libc (it would be pulled in before the loader means
+ * to), so the law brings its own string helpers (DN_FREE) and readlink goes
+ * through the lane (pol_readlink).  The prefix root is found the same way ld.so's
+ * text is: from /proc/self/maps, by this module's own host path.
+ *
+ * See docs/reference/syscall-patching.md and experiments.md, E5-E7. */
 #define _GNU_SOURCE
 #include <link.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include "policy.h"                     /* the law (u64/i64, policy_path_nf, ...) */
 
 #define COOKIE 0x9e1ab6c3d7f2a541UL
+#define TAIL   "/usr/lib/deb-native/dn-ldhook.so"
 #ifndef LAV_CURRENT
 #define LAV_CURRENT 1          /* the audit interface version (glibc's link.h) */
 #endif
@@ -44,20 +51,39 @@ static long openat_c(const char *p) {
     __asm__ volatile("svc 0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x5) : "memory");
     return x0;
 }
+
+/* the law's one syscall (policy.h): readlink of a host path, on the lane, so the
+ * walk costs no stop */
+ssize_t pol_readlink(const char *host, char *buf, size_t n) {
+    register long x8 __asm__("x8") = 78;
+    register long x0 __asm__("x0") = -100;
+    register long x1 __asm__("x1") = (long) host;
+    register long x2 __asm__("x2") = (long) buf;
+    register long x3 __asm__("x3") = (long) n;
+    register long x5 __asm__("x5") = (long) COOKIE;
+    __asm__ volatile("svc 0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x5) : "memory");
+    return x0;
+}
+
 static int has(const char *hay, long hn, const char *pat) {
     long pn = 0, i, j; while (pat[pn]) pn++;
     for (i = 0; i + pn <= hn; i++) { for (j = 0; j < pn && hay[i + j] == pat[j]; j++) { } if (j == pn) return 1; }
     return 0;
 }
-/* find ld.so's r-xp segment from /proc/self/maps */
-static int ld_text(unsigned long *lo, unsigned long *hi) {
-    static char b[32768];
-    long fd = openat_c("/proc/self/maps"), n, tot = 0, i;
-    if (fd < 0) return 0;
-    while ((n = sc6(63, fd, (long) (b + tot), sizeof b - 1 - tot, 0, 0, 0)) > 0) tot += n;
+
+/* read /proc/self/maps once, into b; the length, or -1 */
+static long read_maps(char *b, long cap) {
+    long fd = openat_c("/proc/self/maps"), n, tot = 0;
+    if (fd < 0) return -1;
+    while (tot < cap - 1 && (n = sc6(63, fd, (long) (b + tot), cap - 1 - tot, 0, 0, 0)) > 0) tot += n;
     sc6(57, fd, 0, 0, 0, 0, 0);
     b[tot] = 0;
-    for (i = 0; i < tot; ) {
+    return tot;
+}
+
+/* find ld.so's r-xp segment, and this module's own host path, in maps */
+static int ld_text(const char *b, long tot, unsigned long *lo, unsigned long *hi) {
+    for (long i = 0; i < tot; ) {
         long j = i; while (j < tot && b[j] != '\n') j++;
         long L = j - i;
         if (has(b + i, L, "ld-linux") && has(b + i, L, "r-xp")) {
@@ -70,10 +96,61 @@ static int ld_text(unsigned long *lo, unsigned long *hi) {
     }
     return 0;
 }
-static unsigned movz(int rd, unsigned i16) { return 0xd2800000u | (i16 << 5) | (unsigned) rd; }
-static unsigned movk(int rd, unsigned i16, int hw) { return 0xf2800000u | ((unsigned) hw << 21) | (i16 << 5) | (unsigned) rd; }
-static unsigned svc0(void) { return 0xd4000001u; }
+/* the module's own host path, into out; 1 if found */
+static int self_path(const char *b, long tot, char *out, long cap) {
+    for (long i = 0; i < tot; ) {
+        long j = i; while (j < tot && b[j] != '\n') j++;
+        if (has(b + i, j - i, TAIL)) {
+            long k = i; long sp = -1;                 /* the path is the last field */
+            for (; k < j; k++) if (b[k] == ' ') sp = k;
+            if (sp < 0 || sp + 1 >= j) { i = j + 1; continue; }
+            long n = j - (sp + 1);
+            if (n >= cap) n = cap - 1;
+            for (long m = 0; m < n; m++) out[m] = b[sp + 1 + m];
+            out[n] = 0;
+            return 1;
+        }
+        i = j + 1;
+    }
+    return 0;
+}
+
+/* the stub's frame: x0..x28 (0..231), nzcv (248), x30 (256), then room for the
+ * mapped path (272..).  The hook runs on the calling thread's stack (saved below
+ * the frame), and writes the host path into that room. */
+#define FRAME 272
+#define PBUF  512
+#define SITE  (FRAME + PBUF)            /* the per-site stub's frame (16-aligned) */
+
+/* Map a call's path through the law and set the lane cookie, in the saved frame
+ * r (r[0]=x0 ... r[8]=x8).  Only the loader's path calls are patched, so r[8] is
+ * openat or faccessat, both with the path in x1. */
+static void dh_hook(unsigned long *r) {
+    long nr = (long) r[8];
+
+    if (wanted((unsigned) nr)) {
+        const char *path = (const char *) r[1];
+
+        if (path && path[0] == '/') {
+            char *host = (char *) r + FRAME;
+            int n = policy_path_nf(path, host, PBUF, 0);
+
+            if (n > 0)
+                r[1] = (unsigned long) host;    /* a guest path: the tracer sees the host's */
+        }
+        r[5] = (unsigned long) COOKIE;          /* the filter lets the mapped call through */
+    }
+}
+
 static unsigned b_enc(void *from, void *to) { long d = ((char *) to - (char *) from) >> 2; return 0x14000000u | ((unsigned) d & 0x3ffffffu); }
+static unsigned sub_sp(unsigned imm) { return 0xd1000000u | ((imm & 0xfffu) << 10) | (31u << 5) | 31u; }
+static unsigned add_sp(unsigned imm) { return 0x91000000u | ((imm & 0xfffu) << 10) | (31u << 5) | 31u; }
+static unsigned stp(int a, int b, int off) { return 0xa9000000u | ((unsigned) (off / 8) & 0x7fu) << 15 | (unsigned) b << 10 | 31u << 5 | (unsigned) a; }
+static unsigned ldp(int a, int b, int off) { return 0xa9400000u | ((unsigned) (off / 8) & 0x7fu) << 15 | (unsigned) b << 10 | 31u << 5 | (unsigned) a; }
+static unsigned strx(int t, int off) { return 0xf9000000u | ((unsigned) (off / 8) << 10) | (31u << 5) | (unsigned) t; }
+static unsigned ldrx(int t, int off) { return 0xf9400000u | ((unsigned) (off / 8) << 10) | (31u << 5) | (unsigned) t; }
+static unsigned branch(unsigned op, const void *from, const void *to) { long d = ((const char *) to - (const char *) from) / 4; return op | ((unsigned) d & 0x3ffffffu); }
+
 static void flush(void *lo, void *hi) {
     __asm__ volatile("dsb ish" ::: "memory");
     for (char *p = (char *) ((unsigned long) lo & ~63UL); p < (char *) hi; p += 64)
@@ -85,19 +162,64 @@ static void flush(void *lo, void *hi) {
     __asm__ volatile("isb" ::: "memory");
 }
 
+/* The shared block: save x0..x28, nzcv and x30; call the hook with x0 = the
+ * frame; restore; make the call.  The per-site stubs branch here. */
+static unsigned *emit_p;
+static void emit(unsigned i) { *emit_p++ = i; }
+static void emit_common(void) {
+    unsigned *lit;
+    int i;
+
+    for (i = 0; i < 28; i += 2)
+        emit(stp(i, i + 1, i * 8));
+    emit(strx(28, 224));
+    emit(0xd53b4209u);                          /* mrs x9, nzcv */
+    emit(strx(9, 248));
+    emit(strx(30, 256));
+    emit(0x910003e0u);                          /* mov x0, sp */
+    lit = emit_p;
+    emit(0);                                    /* ldr x16, =dh_hook (set below) */
+    emit(0xd63f0200u);                          /* blr x16 */
+    emit(ldrx(9, 248));
+    emit(0xd51b4209u);                          /* msr nzcv, x9 */
+    emit(ldrx(30, 256));
+    for (i = 0; i < 28; i += 2)
+        emit(ldp(i, i + 1, i * 8));
+    emit(ldrx(28, 224));
+    emit(0xd4000001u);                          /* svc #0 */
+    emit(0xd65f03c0u);                          /* ret */
+    if ((unsigned long) emit_p & 4)
+        emit(0xd503201fu);                      /* nop: the literal is 8-aligned */
+    *lit = 0x58000000u | ((unsigned) (emit_p - lit) & 0x7ffff) << 5 | 16u;
+    *(void **) emit_p = (void *) dh_hook;
+    emit_p += 2;
+}
+
 __attribute__((visibility("default"))) unsigned int la_version(unsigned int v) {
+    static char maps[32768], root[512];
     unsigned long lo = 0, hi = 0;
-    if (!ld_text(&lo, &hi)) return v ? v : LAV_CURRENT;
-    unsigned *p = (unsigned *) lo, *end = (unsigned *) hi;
-    unsigned *sites[64]; int ns = 0;
-    for (unsigned *q = p + 1; q < end && ns < 64; q++) {
+    long tot = read_maps(maps, sizeof maps);
+    char *page = MAP_FAILED;
+    unsigned *common, *stubs, *sites[64];
+    int ns = 0, i;
+
+    if (tot <= 0 || !ld_text(maps, tot, &lo, &hi) || !self_path(maps, tot, root, sizeof root))
+        return v ? v : LAV_CURRENT;
+    {   /* the root is this module's host path minus the tail */
+        size_t n = 0, t = 0; while (TAIL[t]) t++;
+        while (root[n]) n++;
+        if (n <= t || n - t >= sizeof root) return v ? v : LAV_CURRENT;
+        root[n - t] = 0;
+    }
+    policy_root_set(root);
+
+    for (unsigned *q = (unsigned *) lo + 1; q < (unsigned *) hi && ns < 64; q++) {
         if (*q != 0xd4000001u) continue;
-        for (int k = 1; k <= 8 && q - k >= p; k++)     /* the mov is not always adjacent */
+        for (int k = 1; k <= 8 && q - k >= (unsigned *) lo; k++)     /* the mov is not always adjacent */
             if ((q[-k] & 0xffe0001fu) == 0xd2800008u && wanted((q[-k] >> 5) & 0xffff)) { sites[ns++] = q; break; }
     }
     if (ns == 0) return v ? v : LAV_CURRENT;
     /* a stub page within a B's reach of the text */
-    char *page = MAP_FAILED;
     for (int k = 1; k <= 8 && page == MAP_FAILED; k++) {
         char *hint = (char *) (((unsigned long) hi + ((unsigned long) k << 21)) & ~0xfffffUL);
         void *m = (void *) sc6(222, (long) hint, 4096 * 4, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -105,24 +227,27 @@ __attribute__((visibility("default"))) unsigned int la_version(unsigned int v) {
         else if (m != MAP_FAILED) sc6(215, (long) m, 4096 * 4, 0, 0, 0, 0);
     }
     if (page == MAP_FAILED) return v ? v : LAV_CURRENT;
-    unsigned *stub = (unsigned *) page;
-    for (int i = 0; i < ns; i++) {
-        unsigned *br;
-        *stub++ = movz(5, 0xa541);
-        *stub++ = movk(5, 0xd7f2, 1);
-        *stub++ = movk(5, 0xb6c3, 2);
-        *stub++ = movk(5, 0x9e1a, 3);
-        *stub++ = svc0();
-        br = stub; *stub++ = b_enc(br, (char *) sites[i] + 4);   /* back to the instruction after the svc */
+
+    emit_p = common = (unsigned *) page;
+    emit_common();
+    stubs = emit_p;
+    for (i = 0; i < ns; i++) {
+        emit(sub_sp(SITE));
+        emit(stp(29, 30, 232));
+        emit(branch(0x94000000u, emit_p, common));      /* bl common */
+        emit(ldp(29, 30, 232));
+        emit(add_sp(SITE));
+        emit(branch(0x14000000u, emit_p, (char *) sites[i] + 4));   /* b site+4 */
     }
-    flush(page, stub);
-    sc6(226, (long) page, 4096 * 4, PROT_READ | PROT_EXEC, 0, 0, 0);   /* execmem */
+    flush(page, emit_p);
+    if (sc6(226, (long) page, 4096 * 4, PROT_READ | PROT_EXEC, 0, 0, 0) != 0)   /* execmem */
+        return v ? v : LAV_CURRENT;
     /* patch the loader's text (execmod), then restore RX */
     unsigned long tlo = lo & ~4095UL, thi = (hi + 4095) & ~4095UL;
     if (sc6(226, (long) tlo, thi - tlo, PROT_READ | PROT_WRITE | PROT_EXEC, 0, 0, 0) != 0)
         return v ? v : LAV_CURRENT;
-    for (int i = 0; i < ns; i++)
-        *sites[i] = b_enc(sites[i], (char *) page + (unsigned long) i * 24);
+    for (i = 0; i < ns; i++)
+        *sites[i] = b_enc(sites[i], (char *) stubs + (unsigned long) i * 24);
     flush((void *) tlo, (void *) thi);
     sc6(226, (long) tlo, thi - tlo, PROT_READ | PROT_EXEC, 0, 0, 0);
     return v ? v : LAV_CURRENT;

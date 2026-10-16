@@ -109,26 +109,29 @@ Writing code needs both, in this order (`flush`):
    (E3); a targetSdk 29+ app is the open question (`TODO.md`, "A prefix in any
    app").
 
-## The minimal variant (the loader)
+## The loader hook (the same shape as the shim)
 
-When E7 was measured the loader's paths were **host paths** (the exec gate passed
-host paths then), so its stub needed no path law and no hook call -- only the
-cookie (E7):
+The loader's text is found from `/proc/self/maps` (`LD_AUDIT` runs at
+`la_version`, before `dl_iterate_phdr` would know libc), and a stub page is mapped
+within `B` reach.  Each `mov x8,#nr; svc` site (nr `openat` 56, `faccessat` 48)
+becomes a `B` to a per-site stub that reserves a frame, branches to one shared
+block, and returns to the instruction after the `svc`.
 
-```
-stub: movz x5,#0xa541; movk hw=1..3 ...; svc #0; b site+4
-```
+The shared block saves `x0`-`x28`, `nzcv` and `x30`, calls the hook with `x0` =
+the frame, restores, and makes the call.  The hook maps the path in `x1` through
+the one law (`policy_path_nf`, the law built `-DDN_FREE` into the module and
+given the root from the module's own host path in maps), writes the host path
+into the frame (past the saved registers), points `x1` at it, and sets the lane
+cookie in `x5`.  So the call is made on the mapped host path and the filter lets
+it through with no stop -- the loader is a program like any other, with the same
+stub shape as the shim's libc patch.
 
-Six words, no register save, no separate block. The loader's text is found from
-`/proc/self/maps` (`LD_AUDIT` runs at `la_version`, before `dl_iterate_phdr`
-would know libc), and the stub page is mapped within `B` reach the same way.
-
-**But this is no longer the loader's case.** The exec gate now hands the program
-and `--library-path` as the tree's own paths (Phase 0 step 2), so *every* path the
-loader opens is a guest path and the cookie-only stub is wrong for all of them:
-the stub must map each through the one law (`policy.c`), the same as the shim.
-The loader had already shown the shape of this with its `faccessat` on
-`/etc/ld.so.preload` and its `dlopen`s of plugins.
+Measured (the Lua 5.4.7 build, the module at `usr/lib/deb-native/dn-ldhook.so`):
+1670 -> 848 entry stops (`paths` 1355 -> 533: the loader's opens no longer reach
+the tracer).  The module is built by `build-runtime.sh`; a prefix ships it only
+if the file is copied into `usr/lib/deb-native/` (`policy_set_root` looks for it,
+and the gate adds `--audit`).  It patches the loader, which needs `execmod`, and
+maps its stub page with `execmem`.
 
 ## What can go wrong
 
@@ -136,8 +139,8 @@ The loader had already shown the shape of this with its `faccessat` on
   straight-line. gVisor (#13362) and ASC-Hook raise the same. Check the sites.
 - **A wrong site pick**: harmless -- the hook reads `x8` and passes through.
 - **Reach**: a site outside ±120 MB of the stub page is skipped.
-- **`x8` not the number at entry**: the minimal (loader) stub assumes it is; the
-  full hook reads it, so it is safe there.
+- **`x8` not the number at entry**: both hooks read `x8` at run time and only
+  act on their own numbers, so a wrong pick costs a plain call.
 - **Cancellable path**: not patched (the number is in `x6`).
 - **Concurrency**: a site is patched while other threads may run it -- the
   write is one aligned word (atomic on A64) plus the cache maintenance.

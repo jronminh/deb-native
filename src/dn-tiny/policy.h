@@ -3,14 +3,17 @@
 #ifndef POLICY_H
 #define POLICY_H
 #include <stddef.h>
-#ifdef DN_LIBC
-/* The shim (lane.c) builds this file against glibc: the types and the string
- * helpers come from libc, and the one syscall the law makes -- readlink of a
- * host path -- goes through the lane (pol_readlink, in lane.c). */
+#if defined(DN_LIBC) || defined(DN_FREE)
+/* The law is lifted out of the tracer into other builds: the shim (lane.c, a
+ * glibc library, -DDN_LIBC) and the loader hook (ldhook.c, freestanding,
+ * -DDN_FREE).  Both give it their own types, strings, and the one syscall the
+ * law makes -- readlink of a host path, through the lane (pol_readlink). */
 #include <stdint.h>
-#include <sys/types.h>
 typedef uint64_t u64;
 typedef int64_t i64;
+#ifndef DN_LIBC
+typedef long ssize_t;
+#endif
 ssize_t pol_readlink(const char *host, char *buf, size_t n);
 #else
 #include "sys.h"

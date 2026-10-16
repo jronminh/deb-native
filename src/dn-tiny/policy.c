@@ -1,9 +1,7 @@
 /* policy.c -- the table and the law, in their smallest form. */
 #include "policy.h"
 
-#ifndef DN_LIBC
-#define pol_readlink sys_readlink
-#else
+#ifdef DN_LIBC
 #include <string.h>
 
 /* the two helpers sys.c gives the tracer, here from libc */
@@ -27,6 +25,36 @@ static int scpy(char *out, size_t cap, const char *s)
 	memcpy(out, s, n + 1);
 	return (int) n;
 }
+#elif defined(DN_FREE)
+/* Freestanding (ldhook.c): the law carries the few string helpers it needs, so
+ * the loader hook links no libc (it loads before the loader opens libc). */
+static size_t strlen(const char *s) { size_t n = 0; while (s[n]) n++; return n; }
+static int strcmp(const char *a, const char *b) { while (*a && *a == *b) { a++; b++; } return (unsigned char) *a - (unsigned char) *b; }
+static int strncmp(const char *a, const char *b, size_t n) { while (n && *a && *a == *b) { a++; b++; n--; } return n ? (unsigned char) *a - (unsigned char) *b : 0; }
+static void *memcpy(void *d, const void *s, size_t n) { unsigned char *a = d; const unsigned char *b = s; while (n--) *a++ = *b++; return d; }
+static void *memmove(void *d, const void *s, size_t n) { unsigned char *a = d; const unsigned char *b = s; if (a < b) while (n--) *a++ = *b++; else while (n--) a[n] = b[n]; return d; }
+static int memcmp(const void *a, const void *b, size_t n) { const unsigned char *x = a, *y = b; for (; n; n--, x++, y++) if (*x != *y) return *x - *y; return 0; }
+static int cat2(char *out, size_t cap, const char *a, const char *b)
+{
+	size_t la = strlen(a), lb = strlen(b);
+
+	if (la + lb + 1 > cap)
+		return -1;
+	memcpy(out, a, la);
+	memcpy(out + la, b, lb + 1);
+	return (int) (la + lb);
+}
+static int scpy(char *out, size_t cap, const char *s)
+{
+	size_t n = strlen(s);
+
+	if (n + 1 > cap)
+		return -1;
+	memcpy(out, s, n + 1);
+	return (int) n;
+}
+#else
+#define pol_readlink sys_readlink
 #endif
 
 /* the errno values the law returns, so it needs no errno.h (kernel numbers) */
@@ -61,7 +89,7 @@ struct lc {
 static struct lc lcache[LC_SLOTS];
 static volatile unsigned *links_gen;  /* in the shared file; NULL: no cache */
 
-#ifndef DN_LIBC
+#if !defined(DN_LIBC) && !defined(DN_FREE)
 static void links_init(void)
 {
 	char p[600];
@@ -228,7 +256,7 @@ void policy_root_set(const char *r)
 const char *policy_root(void) { return root; }
 size_t policy_root_len(void) { return root_len; }
 
-#ifndef DN_LIBC
+#if !defined(DN_LIBC) && !defined(DN_FREE)
 void policy_set_root(const char *r)
 {
 	char st[128];

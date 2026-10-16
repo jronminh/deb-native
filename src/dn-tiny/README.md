@@ -14,6 +14,7 @@ How they work together: [`docs/architecture.md`](../../docs/architecture.md).
 | `mon.h`, `trace.h`, `exec.h` | what the parts offer each other |
 | `sys.c`, `sys.h` | raw syscalls, `_start`, the few string functions |
 | `lane.c`, `lane.h` | the shim, and the lane cookie the filter and the shim share |
+| `ldhook.c` | the loader hook (an `LD_AUDIT` module): patches the loader's own path calls to the lane, mapping through the law (`-DDN_FREE`) so the loader's startup costs no stop |
 | `substtest.c` | a guest program that calls the faked and substituted syscalls and prints what it is told |
 | `census.c` | tries every syscall number and reports which ones the platform kills ([`docs/reference/device-census.md`](../../docs/reference/device-census.md)) |
 

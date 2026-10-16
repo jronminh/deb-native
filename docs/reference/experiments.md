@@ -199,10 +199,14 @@ Two bugs were found and fixed on the way, both worth remembering:
   sequence (`0x9e1ab6c3d7f2a541` needs `movk hw=2 = 0xb6c3, hw=3 = 0x9e1a`), so
   the filter never matched and the calls still stopped.
 
-The module is a proof of concept (`src/dn-tiny/ldhook.c`, E7's commit): it assumes
-the loader's paths are host paths and that each site is entered with `x8` already
-the number, and it has no fallback. The gate now hands those paths as the tree's
-own, so the module is broken until its stub calls the law.
+E7's module assumed the loader's paths were host paths, so it only added the
+cookie.  The gate now hands those paths as the tree's own (Phase 0 step 2), so
+`src/dn-tiny/ldhook.c` grew into the shim's shape: a shared block that saves the
+registers, calls a hook which maps the path through the one law (`policy.c`, built
+`-DDN_FREE`) and sets the cookie, restores, and makes the call.  Measured: the Lua
+build falls from 1670 entry stops to 848 (`paths` 1355 -> 533), and `true` from 46
+to 28; the regression set, threads/vfork, `substtest` and `git` stay clean.  It
+needs `execmod` and maps its stub page with `execmem`.
 
 ## E8: the Lua build's stops, by syscall
 

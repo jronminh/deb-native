@@ -144,8 +144,12 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   with one script that prints the rows of `docs/performance.md`, "In an app
   session", and run it before and after each runtime change, interleaved.
 - **`ld.so`'s own calls** (about 1,100 of the Lua build's 1,700 stops): the
-  program, the shim and the libraries are opened before the shim is loaded. The
-  exec gate could patch the loader's `svc` sites as the shim does libc's.
+  program, the shim and the libraries are opened before the shim is loaded. Done
+  by the loader hook (`src/dn-tiny/ldhook.c`, an `LD_AUDIT` module): it patches
+  the loader's `svc` sites and now maps the loader's guest paths through the one
+  law -- the Lua build drops from 1670 to 848 stops. Not shipped by default (a
+  prefix ships it only when `usr/lib/deb-native/dn-ldhook.so` is present); it
+  needs `execmod`/`execmem`, so confirm on the Android 16 phone before it ships.
 - **libc's cancellable path** (324): its `svc` is left alone for
   `pthread_cancel`; a stub that keeps the program counter inside
   `__syscall_cancel_arch`'s range would allow it. Measured
@@ -183,22 +187,6 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 - **A second tracer for a busy subtree**: one tracer serves every stop of a
   session; DroidDeck measured 2.5x the stops per second with two (a game tree
   apart from Steam's). Only if bursts on many threads show up after the shim.
-- **The loader's startup opens** (`ld.so`'s 1082 stops): glibc's `rtld-audit`
-  `la_objsearch` hook can rewrite where `ld.so` looks for libraries, as Guix's
-  fakechroot engine does ([`prior-art.md`](docs/reference/prior-art.md), "Loader
-  and libc interposition"). Measured
-  ([`experiments.md`](docs/reference/experiments.md), E4-E6): the loader opens
-  the program, the shim and the libraries before the shim's constructor, ~4-9
-  stops a process; its `openat`/`newfstatat` sites are patchable and a stub page
-  is in range; and `LD_AUDIT`'s `la_version` runs before those opens. So the way
-  to remove them is a freestanding audit module that patches the loader, not a
-  change to the shim. E7 proved it: a freestanding `LD_AUDIT` module patching
-  the loader's `openat` sites at `la_version` drops the stops (`true` 5->4,
-  `git --version` 9->6, `python3 -c pass` 15->11). Left: patch `newfstatat` and
-  `fstat` too, and measure a full build. And the stub must now map the loader's
-  paths through the one law, not only add the cookie: the gate hands the loader
-  the tree's own paths (Phase 0 step 2), so E7's cookie-only stub broke on a
-  guest `dlopen` (its "713 stops" was that failed build, not a gain).
 - **The shim's patched pair**: `mov x8,#nr; svc` is right only if no jump lands
   between the two. gVisor (#13362) and ASC-Hook name the same question. Check the
   shim's patch sites for jump targets, and whether `x8` is still the number there.
