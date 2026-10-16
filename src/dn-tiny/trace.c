@@ -836,13 +836,76 @@ static int synth_maps(struct tracee *t, const char *guest, const char *leaf, cha
 	return put_synth(nm, buf, rn, out, cap);
 }
 
+/* "/proc/stat": Android denies it and no syscall gives the aggregate, so it is a
+ * fixed placeholder -- every counter 0, btime 0 -- and a reader sees at once that
+ * it is not the kernel's (a running system has non-zero counters). */
+static int synth_stat(char *out, size_t cap)
+{
+	static char b[4096];
+	int n = 0, i, cpus = 8;
+	char rb[64];
+	int fd = sys_open("/sys/devices/system/cpu/online", 0);   /* the real cpu count */
+
+	if (fd >= 0) {
+		ssize_t k = sys_read(fd, rb, sizeof rb - 1);
+
+		sys_close(fd);
+		if (k > 0) {
+			const char *p = rb, *q;
+			int v = 0;
+
+			rb[k] = '\0';
+			for (q = rb; *q; q++)
+				if (*q == '-')
+					p = q + 1;
+			for (; *p >= '0' && *p <= '9'; p++)
+				v = v * 10 + (*p - '0');
+			if (v >= 0 && v < 32)
+				cpus = v + 1;
+		}
+	}
+	n = scpy(b, sizeof b, "cpu  0 0 0 0 0 0 0 0 0 0\n");
+	for (i = 0; i < cpus && n > 0; i++) {
+		char t[16];
+		int m = scpy(t, sizeof t, "cpu");
+
+		m += uitoa(t + m, (unsigned) i);
+		t[m] = '\0';
+		if (scpy(b + n, sizeof b - n, t) < 0)
+			break;
+		n += m;
+		n += scpy(b + n, sizeof b - n, " 0 0 0 0 0 0 0 0 0 0\n");
+	}
+	scpy(b + n, sizeof b - n,
+	     "intr 0\nctxt 0\nbtime 0\nprocesses 0\nprocs_running 0\nprocs_blocked 0\n"
+	     "softirq 0 0 0 0 0 0 0 0 0 0\n");
+	return put_synth("stat", b, strlen(b), out, cap);
+}
+
+/* "/proc/vmstat": denied too; a fixed placeholder with a marker key so a reader
+ * knows it is not the kernel's. */
+static int synth_vmstat(char *out, size_t cap)
+{
+	static const char b[] =
+		"nr_free_pages 0\nnr_zone_inactive_anon 0\nnr_zone_active_anon 0\n"
+		"nr_zone_inactive_file 0\nnr_zone_active_file 0\n"
+		"pgpgin 0\npgpgout 0\npswpin 0\npswpout 0\npgfault 0\npgmajfault 0\n"
+		"dn_not_faked 1\n";
+
+	return put_synth("vmstat", b, sizeof b - 1, out, cap);
+}
+
 /* A read-only open the tracer answers with a generated file: /proc/<pid>/status,
- * /proc/uptime, /proc/loadavg, /proc/<pid>/cgroup, /proc/<pid>/maps, smaps.  1 if
- * `out` is the host path to open instead. */
+ * /proc/uptime, /proc/loadavg, /proc/<pid>/cgroup, /proc/<pid>/maps, smaps,
+ * /proc/stat, /proc/vmstat.  1 if `out` is the host path to open instead. */
 static int synth_open(struct tracee *t, const char *guest, char *out, size_t cap)
 {
 	size_t gl = strlen(guest);
 
+	if (strcmp(guest, "/proc/stat") == 0)
+		return synth_stat(out, cap);
+	if (strcmp(guest, "/proc/vmstat") == 0)
+		return synth_vmstat(out, cap);
 	if (strcmp(guest, "/proc/uptime") == 0)
 		return synth_uptime(out, cap);
 	if (strcmp(guest, "/proc/loadavg") == 0)

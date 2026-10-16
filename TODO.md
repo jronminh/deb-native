@@ -253,10 +253,11 @@ the shim:
   (`docs/architecture.md`, "The boundary"). The files Android 8+ denies to apps
   (`/proc/stat`, `loadavg`, `uptime`, `vmstat`): `/proc/uptime` and
   `/proc/loadavg` are answered with the **real** values (`CLOCK_BOOTTIME` and
-  `sysinfo`; `uptime` works) and generated at open; `/proc/stat` and
-  `/proc/vmstat` stay refused -- no syscall gives their numbers, and inventing
-  them is a lie (`docs/spec/phase2.md`), so `top`/`vmstat` degrade. Solve them
-  only if a real source is found (a cgroup or a perf counter).
+  `sysinfo`; `uptime` works) and generated at open. `/proc/stat` and
+  `/proc/vmstat` have no real source, so they get a **fixed placeholder** (all
+  counters 0, `btime 0`; a `dn_not_faked 1` key) -- readable, and clearly not the
+  kernel's, instead of a refused `EACCES`. Replace the placeholder if a real
+  source is ever found.
 - SysV IPC (`shmget`, `shmat`, `shmdt`, `shmctl`, then `semget`/`semop` and `msgget`),
   two designs to choose from: a broker over a unix socket with `SCM_RIGHTS`
   (Winlator's glibc patches), or the calls in the tracer (proot's `--sysvipc`
