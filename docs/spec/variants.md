@@ -32,10 +32,15 @@ building and what each costs, and it records what of the core still names Debian
 
 `apt` is the heavy, networked part; it does not belong in a small image. Split
 the roles: a **builder** (a full Debian prefix, or Termux + `debootstrap`) runs
-`apt` and produces `.deb`s or a closure; the **image** consumes them, with
+`apt` and produces `.deb`s or a closure; the **image** consumes them with
 `dpkg-deb -x` (extract: no database, no `perl`) or `dpkg -i` (install: the
 database, a shell and `perl`, but not `apt`). So the sizes step: **bundle (no
 `dpkg`) -- mini (`dpkg`) -- minimal (`apt`)**.
+
+A builder need not use Debian's `.deb`s at all: a **source** builder (LFS's
+toolchain bootstrap, Buildroot's package data) is the other kind, and the one
+that drops the distro's fingerprints -- a tree with its *own* glibc names Debian
+nowhere ([`../reference/from-scratch.md`](../reference/from-scratch.md)).
 
 ## A worked example: the busybox bundle
 
