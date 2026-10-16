@@ -207,8 +207,7 @@ prefixes can run at once, each under its own `dn-tiny`; they share nothing.
   paths (`bind`, `connect`) are not mapped yet.
 - `ld.so`'s own opens (the program, the shim, the libraries) happen before the
   shim is loaded and stop in the tracer.
-- Where the boundary leaks without being asked (`TODO.md`, "The boundary"): `ls
-  -l` shows the SELinux label as a `.` after the mode; `/data`, `/storage`,
-  `/sdcard`, `/system`
+- Where the boundary leaks without being asked (`TODO.md`, "The boundary"):
+  `/data`, `/storage`, `/sdcard`, `/system`
   and the other host directories answer `stat` and `cd` (a bind is the way out,
   `boot/binds`); `/proc/self/maps` names the libraries by their host paths.

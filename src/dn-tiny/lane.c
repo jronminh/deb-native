@@ -742,6 +742,11 @@ ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t n)
 ssize_t readlink(const char *path, char *buf, size_t n) { return readlinkat(AT_FDCWD, path, buf, n); }
 
 /* ---- xattr by path (ls -l asks two for every name) -------------------------- */
+/* Android labels every file security.selinux; a Debian without SELinux has no
+ * such attribute, so the label is read as absent and left out of a listing.  The
+ * "security.selinux" name is 16 bytes, its entry 17 with the NUL. */
+#define SELINUX_XATTR "security.selinux"
+
 static void *real_getxattr, *real_lgetxattr, *real_listxattr, *real_llistxattr;
 
 static ssize_t lane_xattr(long nr, const char *path, int nofollow, long a, long b, long c, int *handled)
@@ -757,19 +762,47 @@ static ssize_t lane_xattr(long nr, const char *path, int nofollow, long a, long 
 	return e ? lane_call(nr, host, a, b, c, 0L) : 0;
 }
 
+/* drop the SELinux entry from a list of NUL-terminated names; the new length */
+static ssize_t strip_selinux(char *list, ssize_t n)
+{
+	ssize_t i = 0, m = 0;
+
+	while (i < n) {
+		size_t len = strlen(list + i);
+
+		if (strcmp(list + i, SELINUX_XATTR) != 0) {
+			if (m != i)
+				memmove(list + m, list + i, len + 1);
+			m += (ssize_t) len + 1;
+		}
+		i += (ssize_t) len + 1;
+	}
+	return m;
+}
+
 ssize_t getxattr(const char *path, const char *name, void *v, size_t size)
 {
 	int h;
-	ssize_t r = lane_xattr(SYS_getxattr, path, 0, (long) name, (long) v, (long) size, &h);
+	ssize_t r;
 
+	if (name && strcmp(name, SELINUX_XATTR) == 0) {
+		errno = ENODATA;
+		return -1;
+	}
+	r = lane_xattr(SYS_getxattr, path, 0, (long) name, (long) v, (long) size, &h);
 	return h ? r : REAL(getxattr)(path, name, v, size);
 }
 
 ssize_t lgetxattr(const char *path, const char *name, void *v, size_t size)
 {
 	int h;
-	ssize_t r = lane_xattr(SYS_lgetxattr, path, 1, (long) name, (long) v, (long) size, &h);
+	ssize_t r;
 
+	if (name && strcmp(name, SELINUX_XATTR) == 0) {
+		errno = ENODATA;
+		return -1;
+	}
+	r = lane_xattr(SYS_lgetxattr, path, 1, (long) name, (long) v, (long) size, &h);
 	return h ? r : REAL(lgetxattr)(path, name, v, size);
 }
 
@@ -778,7 +811,11 @@ ssize_t listxattr(const char *path, char *list, size_t size)
 	int h;
 	ssize_t r = lane_xattr(SYS_listxattr, path, 0, (long) list, (long) size, 0L, &h);
 
-	return h ? r : REAL(listxattr)(path, list, size);
+	if (!h)
+		return REAL(listxattr)(path, list, size);
+	if (r > 0)
+		r = size == 0 ? (r > 17 ? r - 17 : 0) : strip_selinux(list, r);
+	return r;
 }
 
 ssize_t llistxattr(const char *path, char *list, size_t size)
@@ -786,7 +823,11 @@ ssize_t llistxattr(const char *path, char *list, size_t size)
 	int h;
 	ssize_t r = lane_xattr(SYS_llistxattr, path, 1, (long) list, (long) size, 0L, &h);
 
-	return h ? r : REAL(llistxattr)(path, list, size);
+	if (!h)
+		return REAL(llistxattr)(path, list, size);
+	if (r > 0)
+		r = size == 0 ? (r > 17 ? r - 17 : 0) : strip_selinux(list, r);
+	return r;
 }
 
 /* ---- the working directory, as getcwd says it -------------------------------- */

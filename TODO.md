@@ -44,9 +44,11 @@ step checked as `AGENTS.md` says, in Termux and in the app:
      `boot/binds`); today only `TERM`/`COLORTERM` are kept.
    - The coverage test (`scripts/coverage.sh`) no longer flags the working
      directory or the environment.
-2. **The SELinux label**: `security.selinux` reads as absent (`ENODATA`, and left
-   out of `listxattr`), in the tracer and the shim. The `.` that `ls -l` prints
-   after the mode is that label; a Debian without SELinux shows none.
+2. **The SELinux label** (done): `security.selinux` reads as absent -- `getxattr`
+   answers `ENODATA` (`-61`), `listxattr`/`llistxattr` drop it and report the
+   shorter length, in the tracer (answered at entry) and the shim. `ls -l` no
+   longer prints the `.` after the mode. (The `fgetxattr`/`flistxattr` fd forms
+   are not rows yet; add them the same way if a program needs them.)
 3. **Binds: the law becomes a table.** Done (the one leftover, `ro`, is in).
    - **The table** (done): one row per guest path. `/` is the prefix's root;
      `/proc`, `/sys`, `/dev` and the other host directories are rows of their own

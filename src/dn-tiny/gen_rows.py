@@ -72,7 +72,8 @@ FAKE = {174: 5, 175: 5, 176: 5, 177: 5,          # getuid geteuid getgid getegid
 RESULT = {17: (1, -1),                           # getcwd
           78: (2, -1),                           # readlinkat
           79: (3, 2),                            # newfstatat (buf in x2)
-          291: (4, 4)}                           # statx (buf in x4)
+          291: (4, 4),                           # statx (buf in x4)
+          11: (5, 1), 12: (5, 1)}                # listxattr llistxattr: drop the SELinux label
 # fstat (80) has no path: it would be caught only for the owner read as root.  The
 # shim fixes the owner of the fstat a program calls; libc's own (fopen, opendir, the
 # loader) read sizes and modes, and a program without the shim sees the real owner

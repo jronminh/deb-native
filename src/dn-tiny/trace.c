@@ -499,6 +499,15 @@ void trace_enter(struct tracee *t, const struct row *rw)
 	}
 	if (rw->special == SP_SOCK_OUT)                 /* the kernel fills it; mapped at exit */
 		return;
+	if (rw->nr == 8 || rw->nr == 9 || rw->nr == 10) {   /* getxattr: the SELinux label is absent */
+		char nm[64];
+		ssize_t k = mon_read_str(t, t->r.regs[1], nm, sizeof nm - 1);
+
+		if (k > 0 && (nm[k] = '\0', 1) && strcmp(nm, "security.selinux") == 0) {
+			mon_skip(t, -61);               /* ENODATA */
+			return;
+		}
+	}
 	if (rw->fake != F_NONE) {
 		fake_result(t, rw->fake);
 		return;
@@ -540,7 +549,8 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		link_by_copy(t);
 	if (rw->nr == 35 && n_copies && !(t->r.regs[2] & 0x200))   /* unlinkat, not AT_REMOVEDIR */
 		unlink_copy(t);
-	if (rw->result == R_LINK || rw->result == R_STAT || rw->result == R_STATX)
+	if (rw->result == R_LINK || rw->result == R_STAT || rw->result == R_STATX ||
+	    rw->result == R_XLIST)
 		answer_at_entry(t, rw);         /* skipped when answered: no exit stop */
 }
 
@@ -926,6 +936,50 @@ static void unlink_copy(struct tracee *t)
 		cl_drop(st[0], st[1]);
 }
 
+/* listxattr(dirfd, list, size) and llistxattr: the list with the SELinux label
+ * dropped, a Debian without SELinux having none.  Answered here (the syscall is
+ * not run), so the length it reports is the filtered one.  The path in x0 is
+ * already mapped by rewrite_path. */
+static int answer_xlist(struct tracee *t, const struct row *rw)
+{
+	char host[300], tmp[8192];
+	ssize_t k = mon_read_str(t, t->r.regs[0], host, sizeof host - 1);
+	ssize_t n, i = 0, m = 0;
+	u64 size;
+
+	if (k <= 0)
+		return 0;
+	host[k] = '\0';
+	if (host[0] != '/')
+		return 0;                              /* a relative name: leave it to the kernel */
+	n = (ssize_t) sc(rw->nr, (i64) host, (i64) tmp, (i64) sizeof tmp, 0, 0, 0);
+	if (n < 0) {
+		mon_skip(t, n);
+		return 1;
+	}
+	while (i < n) {                                /* entries are NUL-terminated */
+		size_t len = strlen(tmp + i);
+
+		if (strcmp(tmp + i, "security.selinux") != 0) {
+			if (m != i)
+				memmove(tmp + m, tmp + i, len + 1);
+			m += (ssize_t) len + 1;
+		}
+		i += (ssize_t) len + 1;
+	}
+	size = t->r.regs[2];
+	if (size == 0) {
+		mon_skip(t, m);
+		return 1;
+	}
+	if (m > (ssize_t) size) {
+		mon_skip(t, -34);                      /* ERANGE */
+		return 1;
+	}
+	mon_skip(t, mon_write(t, t->r.regs[1], tmp, (size_t) m) == m ? m : -14);
+	return 1;
+}
+
 static void answer_at_entry(struct tracee *t, const struct row *rw)
 {
 	int done = 0;
@@ -936,6 +990,8 @@ static void answer_at_entry(struct tracee *t, const struct row *rw)
 		done = answer_stat(t, rw);
 	else if (rw->result == R_STATX)
 		done = answer_statx(t, rw);
+	else if (rw->result == R_XLIST)
+		done = answer_xlist(t, rw);
 	if (done)
 		trace_n_answered++;
 }

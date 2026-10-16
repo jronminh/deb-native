@@ -66,5 +66,5 @@ storage, the tracer.  Run it interleaved with the regression set and the bench.
 
 What it flags today: `/proc/self/maps` only (the known hole above).  The
 **environment** and the **working directory** are clean since "The boundary",
-step 1 (`boot.sh` starts the command in the tree's root, under `umask 022`, with
-an empty, rebuilt environment).
+step 1, and the **SELinux label** since step 2 (`listxattr` drops
+`security.selinux`, `getxattr` answers `ENODATA`).
