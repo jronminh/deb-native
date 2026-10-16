@@ -97,10 +97,12 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 - **Invalidating the link cache**: the readlink cache (`policy.c`, `lane.c`)
   drops every entry when the shared generation moves, which any link change of
   any session does (`symlinkat`, `unlinkat`, `linkat`, `rename`). That is coarse
-  but cannot miss a change. A finer rule (drop the subtree of a renamed
-  directory) is PRoot's issue #124 trie ([`prior-art.md`](docs/reference/prior-art.md),
-  "Root emulation and path walks"); measure how often the global drop costs
-  before building it.
+  but cannot miss a change. Measured: putting the link movers in the shim, which
+  then has to move the same generation, cost the Lua build +46 stops
+  ([`policy-audit.md`](docs/reference/policy-audit.md)) -- one place is cheaper
+  than two. A finer rule (drop the subtree of a renamed directory) is PRoot's
+  issue #124 trie ([`prior-art.md`](docs/reference/prior-art.md), "Root emulation
+  and path walks").
 - **Not mapped yet** (audited, [`policy-audit.md`](docs/reference/policy-audit.md)):
   `openat2` with `RESOLVE_*` (answers `ENOSYS`), AF_UNIX socket paths
   (`bind`, `connect`, `sendto`, `sendmsg`; `getsockname`, `getpeername`,
@@ -139,12 +141,12 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 
 - **Keep it small and fast as it grows**: the runtime is 33 KB (`dn-tiny`) and
   77 KB (`dn-lane.so`), and a program in it feels native. Every feature to come
-  (binds, SysV, `/proc` files) must leave that so. Move the measuring kit into
-  the repo (`tests/bench/`: the regression set, the file-tree set, the Lua
-  build, the stop counts; today in a work prefix's `tmp/lane/`), one script that
-  prints the rows of `docs/performance.md`, "In an app session", and run it
-  before and after each runtime change, interleaved. The filter's order (below)
-  is the first change to measure with it.
+  (binds, SysV, `/proc` files) must leave that so. `scripts/bench.sh` runs real
+  workloads (a stat storm, links, a git workflow, Python, a tar round trip, a
+  spawn loop); the lane test, the regression set and the Lua build's wall are
+  still in a work prefix's `tmp/lane/`. Move them in too, into `tests/bench/`,
+  with one script that prints the rows of `docs/performance.md`, "In an app
+  session", and run it before and after each runtime change, interleaved.
 - **`ld.so`'s own calls** (about 1,100 of the Lua build's 1,700 stops): the
   program, the shim and the libraries are opened before the shim is loaded. The
   exec gate could patch the loader's `svc` sites as the shim does libc's.
@@ -170,18 +172,13 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   6.2 us with tracer and tracee on one core, 15.5 us unpinned, 42-61 us across
   clusters (`docs/development/proot-performance.md` in Droid-Deck/DroidDeck):
   never pin the tracer away from its guests; try both on one cluster.
-- **The filter's order** (done 2026-10-16; the Lua build still to measure): the
-  filter dispatches on the number first, reads the cookie (`args[5]`) only for
-  the lane's numbers, and tests the rows as a JGE tree (`install_filter`,
-  `monitor.c`). A `getpid` loop, a number in no row, went from 465 to 355 ms
-  per million calls on the S10e (5 interleaved pairs), and a file-tree subset
-  from 3.8 to 3.5 s. Results and stop counts of a lane test (the lane's numbers
-  with and without the cookie, `openat` with write flags) and of the regression
-  set are the same. The test programs are not in the repo yet ("Keep it small",
-  above). The kernel's per-number cache (5.11 and later,
-  [`prior-art.md`](docs/reference/prior-art.md)) is not on either phone (4.14,
-  5.10): the gain is the instructions, not the cache. On a 5.11+ device, check
-  that the cache takes the calls the filter now allows.
+- **On a 5.11+ device, check the filter's per-number cache**: the filter reads an
+  argument (`args[5]`, the cookie) only for a row the lane also answers, and is
+  one JGE tree otherwise (`install_filter`, `monitor.c`; the numbers are in
+  [`performance.md`](docs/performance.md)), so a call in no row and no lane
+  should take the kernel's per-number cache (5.11 and later,
+  [`prior-art.md`](docs/reference/prior-art.md)). Neither phone has it (4.14,
+  5.10); confirm on a 5.11+ device that the calls the filter allows are cached.
 - **libc's generic `syscall()`**: its `svc` takes the number from a register,
   so the shim's patch (`mov x8,#nr; svc`) misses it. FEX, and programs that
   call `openat` through `syscall()`, stop in the tracer for each path call.
