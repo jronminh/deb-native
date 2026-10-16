@@ -248,3 +248,6 @@ none of them what it is. What the variant decides is whether there is a shim (a
 static tree, busybox or Go, needs only `dn-tiny`) and how it boots. Two places
 of the core still lean Debian -- the loader named in `policy.c` and `boot.sh`'s
 `/usr/bin/bash` -- and both are open (`TODO.md`, "Beyond Debian, and bundles").
+What the app around a prefix supplies -- the session, the boot inputs, the
+Android bridge, display and input, the services -- is the **host contract**
+([`spec/host.md`](spec/host.md)).
