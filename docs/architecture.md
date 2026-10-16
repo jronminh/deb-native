@@ -130,6 +130,9 @@ the net for everything.
   then the name from there; a host directory's paths stay.
 - A bind's mount point is an empty directory `dn-tiny` makes at boot; a `rename`
   or `link` between two rows answers `EXDEV`, as between two mounts.
+- `/proc/self/mounts`, `mountinfo` and `/etc/mtab` are built from the table at
+  boot (a file under `var/lib/deb-native`, the `open` rewritten there, so the
+  reads need no stop); the source shown is `deb-native`, never a host path.
 - The law lives once, in `policy.c`, and both engines read it: the tracer links
   it as it is, the shim builds it `-DDN_LIBC` (the types, the strings and
   `pol_readlink` from libc and the lane), the loader hook builds it `-DDN_FREE`
@@ -202,7 +205,6 @@ prefixes can run at once, each under its own `dn-tiny`; they share nothing.
   host's environment passes through (`ANDROID_*`, `BOOTCLASSPATH`, the host's
   `PATH`-like variables), and so do its umask (077) and, for a command, its
   working directory; `ls -l` shows the SELinux label as a `.` after the mode;
-  `/proc/self/mounts` is Android's; `/data`, `/storage`, `/sdcard`, `/system`
-  and the other host directories answer `stat` and `cd`; `/proc/self/maps`
-  names the libraries by their host paths. There is no way to bind a host
-  directory at a guest path of one's choosing.
+  `/data`, `/storage`, `/sdcard`, `/system`
+  and the other host directories answer `stat` and `cd` (a bind is the way out,
+  `boot/binds`); `/proc/self/maps` names the libraries by their host paths.

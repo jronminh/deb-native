@@ -576,6 +576,8 @@ int main(int argc, char **argv)
 		put(2, "usage: dn-tiny [-m bare|regs|full] [-t ROOT] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]\n");
 		return 2;
 	}
+	if (root != NULL)
+		trace_synth_init();              /* the synthetic /proc files, before the tracee exists */
 
 	{                                        /* the per-process tables (mon.h) and this kernel's pids */
 		char b[16] = { 0 };

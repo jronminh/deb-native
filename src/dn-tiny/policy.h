@@ -78,6 +78,9 @@ int policy_binds_parse(char *buf);
 /* Are both guest paths on the same row (mount)?  A rename or a link between two
  * rows is EXDEV, as between two bind mounts. */
 int policy_same_row(const char *g1, const char *g2);
+/* The mount table from the rows: /proc/self/mounts (mountinfo=0) or mountinfo
+ * (mountinfo=1) into `buf`; the length. */
+int policy_mounts(char *buf, size_t cap, int mountinfo);
 /* The canonical guest path for `in`, as realpath would make it: every component's
  * link followed, `..` against what is resolved, an absolute link target the
  * prefix's.  `base` is the guest working directory for a relative path.  0 and

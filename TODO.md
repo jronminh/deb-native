@@ -48,8 +48,7 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 2. **The SELinux label**: `security.selinux` reads as absent (`ENODATA`, and left
    out of `listxattr`), in the tracer and the shim. The `.` that `ls -l` prints
    after the mode is that label; a Debian without SELinux shows none.
-3. **Binds: the law becomes a table.** Partly done (the table, the walk and the
-   file; the mount view and the cross-row rules are open).
+3. **Binds: the law becomes a table.** Done except enforcing `ro`.
    - **The table** (done): one row per guest path. `/` is the prefix's root;
      `/proc`, `/sys`, `/dev` and the other host directories are rows of their own
      name; binds are rows too. Guest to host by the longest guest row, host to
@@ -72,8 +71,14 @@ step checked as `AGENTS.md` says, in Termux and in the app:
      guest paths at entry (a host-path check is ambiguous: the root may sit under
      a host row, or a bind's host under the root). `st_dev` and `statfs` stay the
      kernel's (true already).
-   - **`/proc/self/mounts`, `/proc/self/mountinfo`** (and `/etc/mtab`) built from
-     the table, generated at `open` into a memfd ("Emulation") (open).
+   - **The mount view** (done): `/proc/self/mounts`, `/proc/mounts`,
+     `/proc/<pid>/mounts`, `mountinfo` and `/etc/mtab` are built from the table
+     at boot into a file under `var/lib/deb-native` (a memfd cannot be read by
+     the child across the ptrace boundary: `/proc/<tracerpid>/fd/N` answers
+     `EACCES`), and a read-only `open` of them is rewritten there, so the reads
+     need no stop. `mount`, `df` and `findmnt` list the root and each bind; the
+     source is `deb-native`, never a host path. Enforcing `ro` (`EROFS`) is left;
+     `maps`/`smaps` and `/proc/sys/*` are the rest of "Emulation".
    - Later: `mount --bind` inside the prefix adds a row (it is refused now); the
      table then has to live where the shim sees a change, not a copy read once.
 4. **Narrow the host directories**, with binds as the way out: drop `/data`,
@@ -227,8 +232,10 @@ carry it, so a row costs no stop.
 Answer what Android refuses in place of the kernel, the same in the tracer and
 the shim:
 
-- `/proc` files generated at `open` into a memfd so `read` needs no stop: the
-  mount table and `maps` first ("The boundary"); `/proc/sys/*` where a program
+- `/proc` files answered from the table so `read` needs no stop: the **mount
+  table** (`mounts`, `mountinfo`, `/etc/mtab`) is done (a file under
+  `var/lib/deb-native`, the open rewritten there -- "The boundary", step 3);
+  `maps` next ("The boundary"); `/proc/sys/*` where a program
   needs an answer Android hides. `/proc/version`, `cpuinfo` and `status` stay
   the kernel's (`docs/architecture.md`, "The boundary"); the files Android 8+
   denies to apps (`/proc/stat`, `loadavg`, `uptime`, `vmstat`: `top`, `uptime`,

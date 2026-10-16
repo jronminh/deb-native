@@ -7,6 +7,9 @@
 extern unsigned long trace_n_rewritten;
 extern unsigned long trace_n_answered;   /* calls answered at entry, with no exit stop */
 
+/* build the synthetic /proc files (the mount view) once, at boot */
+void trace_synth_init(void);
+
 /* at syscall entry; may change the tracee's argument registers */
 void trace_enter(struct tracee *t, const struct row *rw);
 /* at the SIGSYS stop of a syscall the platform's filter killed: set the registers */

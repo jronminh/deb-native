@@ -368,6 +368,75 @@ int policy_same_row(const char *g1, const char *g2)
 	return b1 && b1 == b2;
 }
 
+/* ---- the mount view: /proc/self/mounts and mountinfo from the table ---------- */
+static int ap(char *b, size_t cap, size_t *n, const char *s)
+{
+	int r = scpy(b + *n, cap - *n, s);
+
+	if (r < 0)
+		return -1;
+	*n += (size_t) r;
+	return 0;
+}
+
+static int apu(char *b, size_t cap, size_t *n, unsigned v)
+{
+	char t[12];
+	int i = 0;
+
+	if (v == 0)
+		t[i++] = '0';
+	while (v) {
+		t[i++] = (char) ('0' + v % 10);
+		v /= 10;
+	}
+	while (i) {
+		if (*n + 1 >= cap)
+			return -1;
+		b[(*n)++] = t[--i];
+	}
+	return 0;
+}
+
+/* The mount table the tree sees: `/` (the prefix) and one line per other row.  A
+ * row's flags `ro` shows in the options.  mountinfo (`man proc`) or mounts (`fstab`
+ * shape).  The length, or 0. */
+int policy_mounts(char *buf, size_t cap, int mountinfo)
+{
+	size_t n = 0;
+	int i, id = 1;
+
+	if (!mountinfo) {
+		if (ap(buf, cap, &n, "deb-native / deb-native rw,relatime 0 0\n") < 0)
+			goto out;
+	} else {
+		if (ap(buf, cap, &n, "1 0 0:1 / / rw,relatime - deb-native deb-native rw\n") < 0)
+			goto out;
+	}
+	for (i = 0; i < nbinds; i++) {
+		const struct bind *b = &binds[i];
+
+		if (strcmp(b->g, "/") == 0)
+			continue;
+		id++;
+		if (!mountinfo) {
+			if (ap(buf, cap, &n, "deb-native ") < 0 || ap(buf, cap, &n, b->g) < 0 ||
+			    ap(buf, cap, &n, (b->flags & 1) ? " deb-native ro,relatime 0 0\n"
+							    : " deb-native rw,relatime 0 0\n") < 0)
+				goto out;
+		} else {
+			if (apu(buf, cap, &n, (unsigned) id) < 0 || ap(buf, cap, &n, " 1 0:1 / ") < 0 ||
+			    ap(buf, cap, &n, b->g) < 0 ||
+			    ap(buf, cap, &n, (b->flags & 1) ? " ro,relatime - deb-native deb-native ro\n"
+							    : " rw,relatime - deb-native deb-native rw\n") < 0)
+				goto out;
+		}
+	}
+out:
+	buf[n] = '\0';
+	return (int) n;
+}
+
 int policy_binds_add(const char *g, const char *h, unsigned flags)
 {
 	size_t n = strlen(h), i;
@@ -488,6 +557,12 @@ void policy_set_root(const char *r)
 			b[j] = '/';
 		}
 		sc(34, -100, (i64) b, 0755, 0, 0, 0);
+	}
+	{
+		char v[600];                             /* the runtime's own directory */
+
+		if (cat2(v, sizeof v, r, "/var/lib/deb-native") > 0)
+			sc(34, -100, (i64) v, 0755, 0, 0, 0);
 	}
 	links_init();
 }
