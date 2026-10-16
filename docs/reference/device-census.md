@@ -156,6 +156,19 @@ stock files were not modified.
 - A freestanding binary (this one) starts and runs in the app, since it never
   makes the startup calls.
 
+## Two more checks, 2026-10-16
+
+Run from Termux on the S10e, so in `untrusted_app_27` (targetSdk 28), not in a
+targetSdk 29+ app; the domain's policy is the same one the census above used.
+
+- **Syscall User Dispatch.** `prctl(PR_SET_SYSCALL_USER_DISPATCH, 0, 0, 0, 0)`
+  returns `EINVAL` on kernel 4.14.190: the kernel has no SUD (it came in 5.11).
+  The Android 16 phone's kernel is 5.10.240, so it has none either.
+- **`memfd` exec.** A static aarch64 ELF (`exit 1`) written to a `memfd_create`
+  fd and run by `execveat(fd, "", ..., AT_EMPTY_PATH)` fails with `EACCES`. The
+  same bytes written to a file in the app data directory and run by `execve` exit
+  with status 1. So the kernel accepts the file and the domain refuses the memfd.
+
 ## Open items
 
 - Two devices, one Android version each. Samsung may change the policy between
