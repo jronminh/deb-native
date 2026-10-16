@@ -99,9 +99,12 @@ hook reads `x8` ([`stability.md`](stability.md)). Over the 52 rows:
   and the path-only writes (`mkdirat`, `mknodat`, `fchmodat`, `utimensat`,
   `inotify_add_watch`, `statfs`, `truncate`, `set`/`lset`/`remove`/`lremove`
   xattr). Pure mapping: no state, no cache.
-- **With the shared link-cache bump (5).** `unlinkat`, `symlinkat`, `linkat`,
-  `renameat`, `renameat2` change links, so the shim must drop the link cache too;
-  it can move the shared generation the tracer and the shim both read. Not done.
+- **Tried and rejected: the link movers (4).** `unlinkat`, `symlinkat`,
+  `renameat`, `renameat2` (and `linkat`, which needs the copy the tracer does) —
+  moved to the shim with a bump of the shared link-cache generation. It **hurt**:
+  the Lua build went from **1662 to 1708 stops**, because dropping the shared
+  cache on every link move makes the tracer re-resolve paths elsewhere. Reverted.
+  (The generation is cheaper to drop from one place than from two.)
 - **The working directory (2).** `chdir`, `fchdir` change the cwd the tracer keeps
   per process; the shim would have to make that change visible. Not done.
 - **Not this trick.** `execve`/`execveat` (the exec gate rewrites the call), the
