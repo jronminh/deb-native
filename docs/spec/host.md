@@ -45,6 +45,12 @@ This is the contract between the two. Status: proposal.
   the input translated from `InputEvent` to Wayland. The GPU is the kernel's:
   render is Turnip on `/dev/kgsl-3d0` ([`../architecture.md`](../architecture.md),
   "Inherited from Android"; [`../../TODO.md`](../../TODO.md), "Graphics").
+- **Audio.** Android's audio is the framework's (AAudio/OpenSL ES); a Debian
+  program reaches ALSA or PulseAudio. The host bridges it the way it bridges
+  display: an ALSA or Pulse plugin in the tree talking to the app over a socket,
+  the app owning the stream and the audio focus (Winlator's `android_alsa` is a
+  worked example). Same shape, same "the runtime only keeps the channel
+  reachable".
 - **The services.** A package's `postinst` does not start a daemon in the
   prefix (`init.sh` writes `policy-rc.d` to stop that); a service a program
   needs is the host's to keep -- from a `boot/services` file, or left to the
@@ -75,7 +81,11 @@ This is the contract between the two. Status: proposal.
 ## Prior art
 
 DroidDeck is the closest host: a Wayland compositor on a `SurfaceView`, and its
-KGSL preloads (`tools/linuxfs/preload/`). dn-shell is the reference container.
+KGSL preloads (`tools/linuxfs/preload/`). Winlator is the fullest instance of the
+contract -- its `GPUImage` (an `AHardwareBuffer`, an EGL image, and a dma-buf fd
+handed to the app) is the buffer path to a Surface, and it runs the whole
+Android glue -- though it also translates the CPU and the graphics API, which a
+native arm64 tree does not. dn-shell is the reference container.
 The model behind it all is [`pelya/debian-noroot`](https://github.com/pelya/debian-noroot):
 a real Debian tree with no root and no `chroot` -- what this project keeps --
 run with `fakeroot-tcp` and a set of preloads where deb-native puts the shim and
