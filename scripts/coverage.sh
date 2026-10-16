@@ -21,7 +21,7 @@ rm -f "$P/tmp/dn-coverage-probe.sh"
 echo
 echo "== leak check =="
 # the host frame: the prefix path, Android's app data and shared storage, the tracer
-leaks=$(printf '%s\n' "$out" | grep -nE "$P|/data/data/|/data/user/|/storage/emulated|/sdcard/|termux|dn-tiny" || true)
+leaks=$(printf '%s\n' "$out" | grep -nE "$P|/data/data/|/data/user/|/storage/emulated|/sdcard/|termux|dn-tiny|ANDROID_|BOOTCLASSPATH|EXTERNAL_STORAGE|LD_PRELOAD|LD_LIBRARY_PATH" || true)
 if [ -n "$leaks" ]; then
 	printf '%s\n' "$leaks"
 	echo "LEAKS: the lines above show the host (maps is the known hole)"

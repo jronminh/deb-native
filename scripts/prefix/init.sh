@@ -6,6 +6,7 @@
 # Everything here uses guest paths: to the runtime the tree is "/".  It sets up
 # the environment, then runs the command (default: an interactive shell).
 set -eu
+umask 022                          # as on Debian; the app's is 077
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 # The host's environment reaches the tree through dn-tiny: drop the host's

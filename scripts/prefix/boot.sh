@@ -13,5 +13,23 @@ root=$(CDPATH= cd -- "${0%/*}/.." && pwd) || exit 1
 # The host's loader knobs are for its own libc: Termux's LD_PRELOAD is a bionic
 # library, and the prefix's glibc loader fails on it before init.sh could drop it.
 unset LD_PRELOAD LD_LIBRARY_PATH
+# A command starts in the tree's root and under Debian's umask: the host's
+# working directory (which pwd and /proc/self/cwd would show) and its 077 umask
+# must not reach it.
+cd "$root" || exit 1
+umask 022
+# A clean environment, as login builds it: the host's PATH, ANDROID_* and the
+# rest do not pass.  TERM and COLORTERM are kept (a terminal the host made);
+# TZ is the phone's.
+tz=$(getprop persist.sys.timezone 2>/dev/null)
 # shellcheck disable=SC2086
-exec "$root/usr/lib/deb-native/dn-tiny" -q ${DN_TINY_FLAGS:-} -t "$root" -- /usr/bin/bash /boot/init.sh "$@"
+exec env -i \
+  PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+  HOME=/root \
+  SHELL=/usr/bin/bash \
+  LANG=C.UTF-8 \
+  TMPDIR=/tmp \
+  TERM="${TERM:-dumb}" \
+  COLORTERM="$COLORTERM" \
+  TZ="${tz:-UTC}" \
+  "$root/usr/lib/deb-native/dn-tiny" -q ${DN_TINY_FLAGS:-} -t "$root" -- /usr/bin/bash /boot/init.sh "$@"

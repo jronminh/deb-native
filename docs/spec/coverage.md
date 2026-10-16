@@ -64,7 +64,7 @@ runs it (it prints the tree's view of each surface above), and fails on any line
 that holds the host frame -- the prefix's own path, `/data/data`, the shared
 storage, the tracer.  Run it interleaved with the regression set and the bench.
 
-What it flags today (the open holes): `/proc/self/maps` (the known one, above),
-and the **initial working directory** -- a command started from a directory
-outside the tree `pwd`s the host's path (`TODO.md`, "The boundary", step 1), which
-also shows through `readlink /proc/self/cwd` and Python's `os.getcwd`.
+What it flags today: `/proc/self/maps` only (the known hole above).  The
+**environment** and the **working directory** are clean since "The boundary",
+step 1 (`boot.sh` starts the command in the tree's root, under `umask 022`, with
+an empty, rebuilt environment).

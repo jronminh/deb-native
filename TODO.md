@@ -29,22 +29,21 @@ Close what a program meets without asking (`docs/architecture.md`, "The
 boundary"; the leaks are listed under "Known gaps" there). In this order, each
 step checked as `AGENTS.md` says, in Termux and in the app:
 
-1. **The environment, the umask, the working directory** (`init.sh` and
+1. **The environment, the umask, the working directory** (done; `init.sh` and
    `boot.sh` only, no runtime change).
-   - Start from an empty environment, as `login` does: `PATH`, `HOME`, `LANG`,
-     `TMPDIR`, `TERM` and `COLORTERM`, and what the host asks to keep. **(open)**
-     how the host names those: (a) an argument to `boot.sh` (`--keep-env
-     TERM,DISPLAY -- CMD`), or (b) a file `boot/env` (a name per line, or
-     `NAME=value`), written by the host like `boot/binds`. Leaning to (b): the
-     same shape as `boot/binds`, and a Termux user can edit it.
-   - `TZ` from the phone (`getprop persist.sys.timezone`). Debian-noroot's
-     launcher keeps the same few: `HOME`, `SHELL`, a Debian `PATH`, `TZ`
-     (`boot.sh` already drops the host's `LD_PRELOAD` and `LD_LIBRARY_PATH`).
-   - `umask 022`, as on Debian (the app's is 077: every new file reads
-     `-rw-------`).
-   - A command started from a directory outside the tree and its binds starts
-     at `/` (`boot.sh` knows the root); today `pwd -P` and `/proc/self/cwd` show
-     the host's path.
+   - `boot.sh` starts the command from an empty environment (`env -i`) with
+     `PATH`, `HOME`, `SHELL`, `LANG`, `TMPDIR`, `TERM`, `COLORTERM` and `TZ`
+     (the phone's, `getprop persist.sys.timezone`); the host's `PATH`,
+     `ANDROID_*` and the rest do not pass.
+   - `umask 022` (`boot.sh` and `init.sh`), as on Debian (the app's 077 made
+     every new file `-rw-------`).
+   - A command starts in the tree's root (`cd "$root"` in `boot.sh`), so `pwd -P`
+     and `/proc/self/cwd` read `/` -- before, the host's working directory was
+     shown.
+   - **Open:** the `boot/env` keep-file (the host naming what to keep, like
+     `boot/binds`); today only `TERM`/`COLORTERM` are kept.
+   - The coverage test (`scripts/coverage.sh`) no longer flags the working
+     directory or the environment.
 2. **The SELinux label**: `security.selinux` reads as absent (`ENODATA`, and left
    out of `listxattr`), in the tracer and the shim. The `.` that `ls -l` prints
    after the mode is that label; a Debian without SELinux shows none.

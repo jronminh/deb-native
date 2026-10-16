@@ -3,6 +3,8 @@
 # coordinate from (docs/spec/coverage.md).  Run by scripts/coverage.sh inside a
 # prefix; every line is compared against the host frame there.
 
+echo "## env"
+env | sort 2>/dev/null
 echo "## getcwd"
 pwd -P 2>/dev/null
 pwd 2>/dev/null

@@ -174,7 +174,7 @@ A program in the prefix sees three things, and nothing else of Android:
   their own names).
 
 The test for a leak: a program that does not ask where it runs and still meets
-Android (in its environment, in `ls -l`, in `df`, in `pwd`) is a bug. A program
+Android (in `ls -l`, in a leaky `/proc` file) is a bug. A program
 that looks on purpose finds out, and that is accepted:
 
 - `uname`, `/proc/version`, `/proc/cpuinfo`: the phone's kernel;
@@ -207,10 +207,8 @@ prefixes can run at once, each under its own `dn-tiny`; they share nothing.
   paths (`bind`, `connect`) are not mapped yet.
 - `ld.so`'s own opens (the program, the shim, the libraries) happen before the
   shim is loaded and stop in the tracer.
-- Where the boundary leaks without being asked (`TODO.md`, "The boundary"): the
-  host's environment passes through (`ANDROID_*`, `BOOTCLASSPATH`, the host's
-  `PATH`-like variables), and so do its umask (077) and, for a command, its
-  working directory; `ls -l` shows the SELinux label as a `.` after the mode;
-  `/data`, `/storage`, `/sdcard`, `/system`
+- Where the boundary leaks without being asked (`TODO.md`, "The boundary"): `ls
+  -l` shows the SELinux label as a `.` after the mode; `/data`, `/storage`,
+  `/sdcard`, `/system`
   and the other host directories answer `stat` and `cd` (a bind is the way out,
   `boot/binds`); `/proc/self/maps` names the libraries by their host paths.
