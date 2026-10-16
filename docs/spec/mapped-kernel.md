@@ -74,3 +74,6 @@ The mapping must be *complete* and *single* before it is fast. So, in order:
 The speed work already done (the filter's tree, the shared cookie block, the
 loader hook, the cancellable patch) is that fourth step: not wasted, just not
 the root.
+
+The roadmap that carries this out -- the two phases, mapping then disguising --
+is [`plan.md`](plan.md).
