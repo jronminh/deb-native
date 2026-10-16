@@ -63,21 +63,28 @@ can build on**; "does not manipulate the instruction set" (symbols) is the safe
 path for now, and when an instruction-level rule is needed, prefer the one keyed
 on the stable ISA (`instruction_pointer`) over one keyed on glibc's code.
 
-## Checked: extending the shim's site set is not free
+## Checked: extending the shim's site set is safe but inert
 
 Eleven rows the tracer only maps (no link/cwd cache) — `mkdirat`, `mknodat`,
 `fchmodat`, `utimensat`, `inotify_add_watch`, `statfs`, `truncate`, and the
 set/remove xattr calls — could in principle move to the shim's fast path: the
-same syscall, its path resolved. Tried it (add the numbers to the shim's
-`hooked_nr` and the cases to `lane_hook`): **it broke libc** — `sed` (and, with
-the shim preloaded, `gcc`) got **SIGSEGV**, even before the new cases were
-reached, so merely **patching** those `svc` sites is not safe. Reverted.
+same syscall, its path resolved. Tried it (the numbers in `hooked_nr`, the cases
+in `lane_hook`): it **installs and runs** — added one at a time, each was safe.
+(An earlier attempt seemed to break libc with `SIGSEGV`; that was a **build
+artifact**: once a broken shim is installed, `gcc` has it preloaded too, so
+`gcc` dies and the rebuild fails **silently**, leaving the broken shim — build
+to a scratch path and keep a good shim installed.) So the site set **can** be
+widened.
 
-So the instruction-level rule (which sites) is glibc-specific and the shim's
-current set is a balance, not a knob: the `svc` encoding and the patch operation
-are stable (above), but **which** sites can be patched is not something to widen
-without care. This is the same lesson as the cancellable path (E10), a second
-time.
+But it **did nothing**: `mkdir` called 1000 times still stops 1005 — every call
+reached the tracer. `libc` does carry a `mov x8,#34; svc` site, but it is not on
+the path `mkdir()` takes. So the number of `svc` sites is not the number of
+reachable calls: **which site a call goes through is glibc's**, and a present
+site can be off the path. Reverted (no gain).
+
+The lesson is unchanged from the cancellable path (E10): the `svc` **encoding**
+and the patch **operation** are stable, but the shim's **coverage** is glibc's,
+and widening it needs per-call evidence, not a count.
 
 ## Checked: the ABI net catches what the shim cannot reach
 
