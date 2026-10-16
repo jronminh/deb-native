@@ -278,6 +278,17 @@ the shim:
 - a clear refusal (`EPERM` or `ENOSYS`, with the reason) for what cannot be
   faked: real isolation, TUN, anything an LSM sees.
 
+## Android, inherited (later)
+
+The kernel is the phone's, not an emulated one, so its own facilities are
+reachable on purpose -- not only the calls Android refuses, but what it adds
+over a PC's kernel: `binder` and `ashmem`, the GPU nodes (`/dev/kgsl-3d0`,
+`/dev/ion`/`/dev/dma_heap` -- "Graphics"), the Android netlink families. A bind
+(`boot/binds`) exposes a node and `ioctl` is never stopped, so a glibc program
+can drive it from the tree. Worth reaching for when a program wants one (a GPU;
+an IPC or shared-memory client); today they are only what a prober finds
+([`docs/architecture.md`](docs/architecture.md), "Inherited from Android").
+
 ## Graphics (later)
 
 What the Steam-on-Android projects of 2026 do (Droid-Deck/DroidDeck,

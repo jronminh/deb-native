@@ -16,7 +16,9 @@ mapped into the prefix -- is [`spec/mapped-kernel.md`](spec/mapped-kernel.md).
 - [Identity: fake root](#identity-fake-root)
 - [What Android refuses](#what-android-refuses)
 - [The boundary: what a program sees](#the-boundary-what-a-program-sees)
+- [Inherited from Android](#inherited-from-android)
 - [Known gaps](#known-gaps)
+- [The core and the variants](#the-core-and-the-variants)
 
 ## The problem
 
@@ -200,6 +202,22 @@ from inside another prefix: a seccomp filter cannot be removed, so a tree
 started under another tree's `dn-tiny` would carry that tree's filter. Several
 prefixes can run at once, each under its own `dn-tiny`; they share nothing.
 
+## Inherited from Android
+
+The runtime maps the Android kernel, it does not emulate one: the kernel a
+program reaches is the phone's, real. The boundary above lists what that leaks
+by accident; the same rule is an opportunity to take on purpose. Everything the
+kernel adds over a stock Debian's is there to be reached -- `binder` and
+`ashmem` (Android's IPC and shared memory, with no Debian analog), the GPU nodes
+`/dev/kgsl-3d0` and `/dev/ion`/`/dev/dma_heap` ([`../TODO.md`](../TODO.md),
+"Graphics"), the Android netlink families. A Debian on a PC has none of them;
+here they are a bind away (`boot/binds`) and an `ioctl` that is never stopped. It
+is the flip side of "the kernel is the truth" (`spec/phase2.md`): the rule that
+shows the phone's `uname` and `cpuinfo` shows its devices too, and a program
+that wants one finds it. (In the app domain SELinux may still refuse a node;
+whether to expose it is the host's decision, a bind and a grant, not the
+runtime's.)
+
 ## Known gaps
 
 - `chown` is not kept: a file's owner reads as root or as its real uid's
@@ -217,3 +235,16 @@ prefixes can run at once, each under its own `dn-tiny`; they share nothing.
 - `ld.so`'s own opens (the program, the shim, the libraries) are removed by the
   loader hook when a prefix ships it (`--audit`); without it they stop in the
   tracer.
+
+## The core and the variants
+
+The runtime is the **core**: `dn-tiny`, the shim, and the law. It is the
+invariant, and it knows nothing of dpkg, apt or Debian -- a tree with a loader,
+its libraries and a program is enough ([`spec/mapped-kernel.md`](spec/mapped-kernel.md)).
+A **variant** is a tree and its boot glue. The Debian a `build-prefix.sh` makes
+is the reference, and a busybox image, a single-program bundle or a "bare app"
+are others on the same axis: the core takes no part in choosing one and asks
+none of them what it is. What the variant decides is whether there is a shim (a
+static tree, busybox or Go, needs only `dn-tiny`) and how it boots. Two places
+of the core still lean Debian -- the loader named in `policy.c` and `boot.sh`'s
+`/usr/bin/bash` -- and both are open (`TODO.md`, "Beyond Debian, and bundles").
