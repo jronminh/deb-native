@@ -88,6 +88,31 @@ caught (its comment in `gen_rows.py`). Complete.
 -> `EPERM`; `accept` -> `accept4`, `faccessat2` -> `faccessat`, `fchmodat2` ->
 `fchmodat`, `openat2` -> `openat`; the rest -> `ENOSYS`. Consistent.
 
+## Which rows the shim can take in-process
+
+The shim's fast path answers a call in the process (the same syscall, its path
+resolved) when nothing else is needed; the site is found by a window scan and the
+hook reads `x8` ([`stability.md`](stability.md)). Over the 52 rows:
+
+- **Directly (25).** The read-only path calls (`openat` read, `faccessat`,
+  `newfstatat`, `statx`, `readlinkat`, `getcwd`, `[l]getxattr`, `[l]listxattr`)
+  and the path-only writes (`mkdirat`, `mknodat`, `fchmodat`, `utimensat`,
+  `inotify_add_watch`, `statfs`, `truncate`, `set`/`lset`/`remove`/`lremove`
+  xattr). Pure mapping: no state, no cache.
+- **With the shared link-cache bump (5).** `unlinkat`, `symlinkat`, `linkat`,
+  `renameat`, `renameat2` change links, so the shim must drop the link cache too;
+  it can move the shared generation the tracer and the shim both read. Not done.
+- **The working directory (2).** `chdir`, `fchdir` change the cwd the tracer keeps
+  per process; the shim would have to make that change visible. Not done.
+- **Not this trick.** `execve`/`execveat` (the exec gate rewrites the call), the
+  `set*id` family and `getres*`/`getgroups`/`fchown`/`fchownat` (a per-process id
+  store), `openat2`/`faccessat2`/`fchmodat2` (Android kills them; the tracer
+  substitutes), `chroot` (refused). `get*id` are already answered by the shim from
+  the tracer's copy.
+
+So the same trick could take **7 more** (the link and cwd calls) once the shim and
+the tracer share cache invalidation; the rest need the gate or the id store.
+
 ## Outcome
 
 - **One real bug found and fixed: `execveat`** (a row for 281 through the exec
