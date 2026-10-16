@@ -17,6 +17,7 @@ and the reference pages ([`inline-hooking.md`](inline-hooking.md),
 - [E7: patching the loader, a proof of concept](#e7-patching-the-loader-a-proof-of-concept)
 - [E8: the Lua build's stops, by syscall](#e8-the-lua-builds-stops-by-syscall)
 - [E9: locating the cancellable path](#e9-locating-the-cancellable-path)
+- [E10: the cancellable-svc patch, tried and rejected](#e10-the-cancellable-svc-patch-tried-and-rejected)
 - [What follows](#what-follows)
 
 ## Context
@@ -267,6 +268,29 @@ offset can be handed to the shim instead of a runtime scan.
 The remaining open problem is the passthrough: for a call the shim does not
 answer, the stub's own `svc` runs with the program counter outside the
 cancellation range, which is what `pthread_cancel` reads.
+
+## E10: the cancellable-svc patch, tried and rejected
+
+The fix E9 points at: patch the loader's cancellable `svc` as well, found at run
+time by the `mov x8,x6` + `svc`-within-30 heuristic (the shim already reads `x8`
+at call time, so the same stub works).
+
+It does work. The Lua build's stops fall **1666 -> 1463 (-203)** and the wall
+~14.25 -> ~14.15 s (interleaved); a minimal `fopen` program loses one stop
+(`op2` 6->5, `sed` 12->11); and a `pthread_cancel` test still cancels
+(`cancelled=1`). It is **not shipped**, for three reasons:
+
+- The site is glibc's **internal** `__syscall_cancel_arch` (the number in `x6`),
+  with no stable contract. A heuristic that mis-identifies it could patch the
+  wrong `svc`; the shim's other sites degrade to a plain `svc` when picked
+  wrongly, but a shared generic one does not.
+- That `svc` is shared, so every cancellable call (`read`, `write`, ...) now runs
+  through `lane_hook`, a small tax on the calls it does not answer.
+- The win is ~1% of one build.
+
+`scripts/find-cancellable.py` keeps the build-time way (it fails loudly when the
+libc does not match) if the ~1% is ever wanted; the run-time heuristic is
+reverted. The decision sits in `TODO.md`, "libc's cancellable path".
 
 ## What follows
 

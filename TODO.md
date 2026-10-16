@@ -156,7 +156,11 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   for every cancellable call; in the prefix's libc 2.41 it is `bl 0x828ec`,
   `mov x8,x6` at `0x82868`, `svc` at `0x828d8`). One patch covers all of them.
   Find the offset at **build time** (the prefix's libc is known), not at run
-  time (`mov x8,x6` is not unique and the function is unexported).
+  time (`mov x8,x6` is not unique and the function is unexported). Tried and
+  rejected at run time (E10): a `mov x8,x6` heuristic patch works (Lua stops
+  -203, ~1%) and cancellation still works, but it patches a glibc-internal site
+  with no stable contract and taxes every cancellable call, for ~1%. If ever
+  wanted, do it at build time via `scripts/find-cancellable.py`.
 - **Who sets the floor of a stop**: on this phone the tracer's big core sits at a
   low clock while the guest runs on the little cluster. Try the tracer and the
   guest on one cluster, a priority raised with `nice` (no privilege needed down to
