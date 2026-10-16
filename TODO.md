@@ -176,11 +176,16 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 - **A second tracer for a busy subtree**: one tracer serves every stop of a
   session; DroidDeck measured 2.5x the stops per second with two (a game tree
   apart from Steam's). Only if bursts on many threads show up after the shim.
-- **The loader's search paths** (`ld.so`'s 1082 stops): glibc's `rtld-audit`
+- **The loader's startup opens** (`ld.so`'s 1082 stops): glibc's `rtld-audit`
   `la_objsearch` hook can rewrite where `ld.so` looks for libraries, as Guix's
   fakechroot engine does ([`prior-art.md`](docs/reference/prior-art.md), "Loader
-  and libc interposition"). It does not see `ld.so`'s own `open` of the program
-  or the shim. Test in a prefix before counting it against the stops.
+  and libc interposition"). Measured
+  ([`experiments.md`](docs/reference/experiments.md), E4-E6): the loader opens
+  the program, the shim and the libraries before the shim's constructor, ~4-9
+  stops a process; its `openat`/`newfstatat` sites are patchable and a stub page
+  is in range; and `LD_AUDIT`'s `la_version` runs before those opens. So the way
+  to remove them is a freestanding audit module that patches the loader, not a
+  change to the shim. E7 is a proof of concept.
 - **The shim's patched pair**: `mov x8,#nr; svc` is right only if no jump lands
   between the two. gVisor (#13362) and ASC-Hook name the same question. Check the
   shim's patch sites for jump targets, and whether `x8` is still the number there.
