@@ -48,6 +48,10 @@ python3 "$SRC/gen_rows.py" "$OUT/gen/policy-rows.inc"
 "$CC" $FLAGS -I"$SRC" -I"$OUT/gen" -o "$OUT/dn-tiny" \
   "$SRC/sys.c" "$SRC/monitor.c" "$SRC/trace.c" "$SRC/exec.c" "$SRC/policy.c"
 # shellcheck disable=SC2086
+# the LD_AUDIT module (the loader hook): freestanding and shared, no libc
+# shellcheck disable=SC2086
+"$CC" -O2 -Wall -Wextra -shared -nostdlib -ffreestanding -fno-builtin -fno-stack-protector \
+  -fno-asynchronous-unwind-tables -fPIC -Wl,-z,noexecstack -o "$OUT/dn-ldhook.so" "$SRC/ldhook.c"
 "$CC" $FLAGS -o "$OUT/dn-substtest" "$SRC/substtest.c"
 # shellcheck disable=SC2086
 "$CC" $FLAGS -o "$OUT/dn-census" "$SRC/census.c"

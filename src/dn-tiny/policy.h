@@ -75,6 +75,9 @@ const char *policy_libpath(void);
 /* the shim the exec gate preloads into a glibc program: usr/lib/deb-native/dn-lane.so
  * when the prefix has it, else "" */
 const char *policy_preload(void);
+/* the loader hook the exec gate audits with: usr/lib/deb-native/dn-ldhook.so
+ * (empty when the prefix ships none); see docs/reference/syscall-patching.md */
+const char *policy_ldhook(void);
 /* Is this PT_INTERP the Debian glibc loader (a path that does not exist here)? */
 int policy_is_glibc_interp(const char *interp);
 

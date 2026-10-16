@@ -214,6 +214,10 @@ static void resolve(const char *cur_in, struct vec *a, char *final, size_t cap, 
 				vpush(out, "--preload");
 				vpush(out, policy_preload());
 			}
+			if (policy_ldhook()[0]) {                 /* the loader hook, when the prefix ships one */
+				vpush(out, "--audit");
+				vpush(out, policy_ldhook());
+			}
 			vpush(out, "--argv0");
 			vpush(out, a->n > 0 ? a->s[0] : cur);
 			vpush(out, host);

@@ -11,7 +11,7 @@ static int indexed;
 
 static const char *root;
 static size_t root_len;
-static char loader[512], libpath[1024], preload[512];
+static char loader[512], libpath[1024], preload[512], ldhook[512];
 
 /* ---- the link cache (policy.h).  An entry is valid while its generation is the
  * shared one; moving the generation drops every entry at once. ------------------ */
@@ -145,10 +145,20 @@ void policy_set_root(const char *r)
 		if (sys_fstatat(preload, st, 0) != 0)
 			preload[0] = '\0';
 	}
+	ldhook[0] = '\0';
+	append(ldhook, sizeof ldhook, r);
+	append(ldhook, sizeof ldhook, "/usr/lib/deb-native/dn-ldhook.so");
+	{
+		char st[128];
+
+		if (sys_fstatat(ldhook, st, 0) != 0)
+			ldhook[0] = '\0';
+	}
 	links_init();
 }
 
 const char *policy_preload(void) { return preload; }
+const char *policy_ldhook(void) { return ldhook; }
 const char *policy_loader(void) { return loader; }
 const char *policy_libpath(void) { return libpath; }
 
