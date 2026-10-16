@@ -23,6 +23,37 @@ applies it. `dn-tiny` (the tracer) and `dn-lane.so` (the shim) are *engines*
 that run the mapping; they can be replaced without changing it. The map is the
 invariant.
 
+## Why it can be complete
+
+Everything a program observes of the operating system crosses the syscall
+boundary: an action large or small ends in a call to the kernel. So the set of
+coordinates a program can read -- paths, ids, fds, the mount view, the process
+view -- lives in the syscall surface. That surface is finite (the arm64 set, a
+few hundred calls) and enumerable, so the mapping can be *completed*: there is
+an end to the work, unlike emulating a machine.
+
+Three interfaces do not cross it, and none carries a coordinate, so none breaks
+the completeness:
+
+- the **vDSO** (user code the kernel maps) and the **vvar** page it reads;
+- the cycle counter (`cntvct_el0`, `rdtsc`), a register;
+- shared-memory rings (`io_uring`, `perf`), mostly refused on Android.
+
+But completeness of the *surface* is not success. Three conditions decide it:
+
+1. **Classify, do not special-case.** Each syscall belongs to a class (path,
+   result, socket, exec, id, refused, none) answered by one rule; a few hundred
+   separate answers contradict each other and a program finds the seam.
+2. **Every reader.** A value is handled only when *every* place that reads it is
+   mapped -- the path in and the path named out.
+3. **The honest residue.** A mapping cannot carry a value the kernel fixes (the
+   app's uid, a refused operation); a fake or a refusal stands in, and a fake
+   must cover every reader or it is a lie. Map over fake, fake over nothing.
+
+So covering every syscall is *sufficient for the surface* and makes success
+possible; it is not automatic, and it holds only with **one law** -- which is
+why Phase 0 comes first.
+
 ## The rules
 
 1. **Map by default; fake is the residue; refuse when a fake would be a lie.**
