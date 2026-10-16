@@ -15,6 +15,7 @@ and the reference pages ([`inline-hooking.md`](inline-hooking.md),
 - [E5: patching the loader — sites and reach](#e5-patching-the-loader--sites-and-reach)
 - [E6: is there a hook early enough?](#e6-is-there-a-hook-early-enough)
 - [E7: patching the loader, a proof of concept](#e7-patching-the-loader-a-proof-of-concept)
+- [E8: the Lua build's stops, by syscall](#e8-the-lua-builds-stops-by-syscall)
 - [What follows](#what-follows)
 
 ## Context
@@ -194,6 +195,53 @@ Two bugs were found and fixed on the way, both worth remembering:
 The module is a proof of concept: it assumes the loader's paths are host paths
 and that each site is entered with `x8` already the number, and it has no
 fallback. It runs in `~/work/p-dev`; the source is not committed.
+
+## E8: the Lua build's stops, by syscall
+
+A temporary counter in the tracer (the syscall number at each entry stop; the
+`mon_read` the tracer already has, to name the path), then reverted. The Lua
+build, 1666 stops:
+
+| syscall | stops | |
+| --- | --- | --- |
+| `openat` (56) | 1265 | 1146 read, 119 write |
+| `execve` (221) | 159 | one per exec, the gate |
+| `faccessat` (48) | 127 | |
+| `unlinkat` (35) | 79 | writes |
+| rest | 36 | `getresuid`/`getresgid`, `chdir`, `statfs`, `fchmodat`, `mkdirat` |
+
+With E7 (the loader patched, 834 stops): `openat` 452 (341 read, 111 write),
+`execve` 152, `faccessat` 121, `unlinkat` 75.
+
+What the reads are, from the paths (a `open` read stop named its path):
+
+- **The loader's opens** — the program, the shim, each library, `cc1`, `as`,
+  `ld`, as **host paths**. E7 removes ~805 of them.
+- **The program's own opens** — as **guest paths** (`/etc/hostname`). These split
+  by how the call is made: `open()` (the symbol) is interposed by the shim and
+  answered in-process, **no stop**; `fopen()` (glibc's internal cancellable path)
+  is **not** patched by the shim, so it **stops**. A minimal `open()` program
+  shows no stop for its file; a minimal `fopen()` program shows one.
+
+So the ~341 program read stops left after E7 are the shim's unpatched
+**cancellable path** — the number `performance.md` gives (324). The shim leaves
+it because `pthread_cancel` reads the program counter there.
+
+**The ceiling:** of `openat`, only the writes (119) must stop (they change the
+tree); the rest are reads, answerable in-process. So `openat` could go from 1265
+to ~119.
+
+**Improvement points (fewer stops):**
+
+1. **The cancellable-path stub** (`TODO.md`, "libc's cancellable path"), ~324-341
+   stops a build. Tried to place it: glibc's `__syscall_cancel_arch` is not an
+   exported symbol, and its `svc` is preceded by neither a `mov x8,#nr` (the
+   shim's pattern) nor a `mov x8,xN` (a scan found none) — the caller sets `x8`
+   and branches in. So the fix needs the function located another way, and its
+   stub must keep the program counter in the cancellation range. Not a one-line
+   change.
+2. E7 (the loader) — done.
+3. `faccessat` (127) is the same libc-internal family.
 
 ## What follows
 

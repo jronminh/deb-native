@@ -148,7 +148,12 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   exec gate could patch the loader's `svc` sites as the shim does libc's.
 - **libc's cancellable path** (324): its `svc` is left alone for
   `pthread_cancel`; a stub that keeps the program counter inside
-  `__syscall_cancel_arch`'s range would allow it.
+  `__syscall_cancel_arch`'s range would allow it. Measured
+  ([`experiments.md`](docs/reference/experiments.md), E8): on the Lua build this
+  is ~341 of the `openat` reads (`open()` through the shim's symbol is answered;
+  `fopen()` through this path stops). The site is hard to find: the function is
+  not an exported symbol, and its `svc` follows neither `mov x8,#nr` nor
+  `mov x8,xN` — the caller sets `x8` and branches in.
 - **Who sets the floor of a stop**: on this phone the tracer's big core sits at a
   low clock while the guest runs on the little cluster. Try the tracer and the
   guest on one cluster, a priority raised with `nice` (no privilege needed down to
