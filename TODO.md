@@ -338,7 +338,9 @@ when a prefix should draw with the GPU:
 ## Beyond Debian, and bundles (later; the focus is Debian)
 
 The runtime knows nothing of dpkg or apt: a tree with a loader, its libraries
-and a program is enough. What still assumes Debian:
+and a program is enough. The variants worth building, a worked busybox bundle and
+what each still names Debian: [`spec/variants.md`](docs/spec/variants.md). What
+still assumes Debian:
 
 - `policy.c` names the loader by Debian's multiarch path
   (`/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`) and gives it a
