@@ -39,6 +39,20 @@ telling you which Debian it is, not pretending to be another kernel.
 - **the mount view**: its source is the runtime, `deb-native` -- the one string
   that says "this is a deb-native tree" (a Debian `<suite>`).
 
+## The order of answering: map, ask the kernel, refuse
+
+Every `/proc` file is one *presentation* of a kernel truth; Android may block the
+presentation (the file) while the truth is still there.  So, in order:
+
+1. **Map** -- a coordinate (a path): the law, guest to host (Phase 1).
+2. **Ask the kernel by another call** -- the file is denied but the truth has a
+   syscall: `/proc/uptime` is `clock_gettime(CLOCK_BOOTTIME)`, `/proc/loadavg` is
+   `sysinfo`.  Nothing is invented.
+3. **Refuse** -- no syscall gives the truth (`/proc/stat`, `/proc/vmstat`: no
+   aggregate CPU or VM counters outside the file), so it stays refused and the
+   tool degrades.  Or **fake, and say so** (the Debian identity) when a fake is
+   forced, as `/proc/<pid>/status` must drop the runtime's own traces.
+
 ## The fingerprint test
 
 `scripts/fingerprint.sh PREFIX`, the mirror of the coverage test: it reads the
@@ -58,7 +72,12 @@ still find the phone; this is about what a program finds *without asking*.
    `uptime` works; `/proc/stat` and `/proc/vmstat` stay refused, since no syscall
    gives their numbers and inventing them would be a lie -- `top` and `vmstat`
    degrade (top still counts the tasks from `/proc/*/stat`);
-4. capabilities (E), then cgroup/rlimit/`/proc/sys` (F).
+4. capabilities and cgroup (E), then rlimit/`/proc/sys` (F).  Capabilities come
+   with the fake root: `/proc/<pid>/status` shows root's set (not 0), since a root
+   with no capabilities is the inconsistency.  `/proc/<pid>/cgroup` is answered
+   `0::/` -- Android's line leaks the app's uid and pid.  The rlimits and the
+   readable `/proc/sys` are the kernel's own (left as they are); the denied ones
+   (`/proc/sys/kernel/pid_max`, `/proc/sys/vm/max_map_count`, ...) stay refused.
 
 ## Open
 

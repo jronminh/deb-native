@@ -656,6 +656,26 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 			memcpy(w + rn, b, (size_t) l);
 			rn += (size_t) l;
 			w[rn++] = '\n';
+		} else if (strncmp(p, "CapInh:", 7) == 0) {
+			const char *s = "CapInh:\t0000000000000000\n";
+
+			if (rn + strlen(s) >= sizeof buf) break;
+			memcpy(w + rn, s, strlen(s)); rn += strlen(s);
+		} else if (strncmp(p, "CapAmb:", 7) == 0) {
+			const char *s = "CapAmb:\t0000000000000000\n";
+
+			if (rn + strlen(s) >= sizeof buf) break;
+			memcpy(w + rn, s, strlen(s)); rn += strlen(s);
+		} else if (strncmp(p, "CapPrm:", 7) == 0 || strncmp(p, "CapEff:", 7) == 0 ||
+			   strncmp(p, "CapBnd:", 7) == 0) {
+			const char *s = "\t000001ffffffffff\n";         /* root's set, as the fake id is root */
+			size_t sl = strlen(s);
+
+			if (rn + 7 + sl >= sizeof buf) break;
+			memcpy(w + rn, p, 7);                           /* the field name as it is */
+			rn += 7;
+			memcpy(w + rn, s, sl);
+			rn += sl;
 		} else if (strncmp(p, "Seccomp:", 8) == 0 || strncmp(p, "Seccomp_filters:", 16) == 0) {
 			;
 		} else {
@@ -681,14 +701,25 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 	}
 }
 
+/* "/proc/<pid>/cgroup": Android's leaks the app's uid and pid in the path; a tree
+ * in no cgroup of its own says nothing (a plain v2 root). */
+static int synth_cgroup(char *out, size_t cap)
+{
+	return put_synth("cgroup", "0::/\n", 5, out, cap);
+}
+
 /* A read-only open the tracer answers with a generated file: /proc/<pid>/status,
- * /proc/uptime, /proc/loadavg.  1 if `out` is the host path to open instead. */
+ * /proc/uptime, /proc/loadavg, /proc/<pid>/cgroup.  1 if `out` is the host path. */
 static int synth_open(struct tracee *t, const char *guest, char *out, size_t cap)
 {
+	size_t gl = strlen(guest);
+
 	if (strcmp(guest, "/proc/uptime") == 0)
 		return synth_uptime(out, cap);
 	if (strcmp(guest, "/proc/loadavg") == 0)
 		return synth_loadavg(out, cap);
+	if (gl > 7 && strncmp(guest, "/proc/", 6) == 0 && strcmp(guest + gl - 7, "/cgroup") == 0)
+		return synth_cgroup(out, cap);
 	return synth_status(t, guest, out, cap);
 }
 

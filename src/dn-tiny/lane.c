@@ -458,8 +458,12 @@ static void *real_openat;
 static int dyn_file(const char *p)
 {
 	const char *s;
+	size_t gl;
 
 	if (strcmp(p, "/proc/uptime") == 0 || strcmp(p, "/proc/loadavg") == 0)
+		return 1;
+	gl = strlen(p);
+	if (gl > 7 && strncmp(p, "/proc/", 6) == 0 && strcmp(p + gl - 7, "/cgroup") == 0)
 		return 1;
 	if (strncmp(p, "/proc/", 6) != 0)
 		return 0;
