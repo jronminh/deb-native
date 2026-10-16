@@ -339,8 +339,10 @@ when a prefix should draw with the GPU:
 
 The runtime knows nothing of dpkg or apt: a tree with a loader, its libraries
 and a program is enough. The variants worth building, a worked busybox bundle and
-what each still names Debian: [`spec/variants.md`](docs/spec/variants.md). What
-still assumes Debian:
+what each still names Debian: [`spec/variants.md`](docs/spec/variants.md). A
+from-source tree (LFS native), built by a prefix as its host: that and the
+from-scratch references are in [`reference/from-scratch.md`](docs/reference/from-scratch.md).
+What still assumes Debian:
 
 - `policy.c` names the loader by Debian's multiarch path
   (`/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`) and gives it a

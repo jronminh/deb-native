@@ -55,6 +55,37 @@ and **mkroot**, a script that builds a small bootable root filesystem. The
 spirit of a `build-busybox.sh`: a tiny tree from a short recipe. (Aboriginal
 Linux is its ancestor.)
 
+## A from-source tree on this runtime
+
+This is ready now: LFS needs a Linux host with a toolchain, and a deb-native
+prefix *is* that host. So a **builder** prefix (the `dev` set) runs the LFS book
+-- the toolchain bootstrap, then the base system -- and the result is a tree that
+boots under `dn-tiny` like any other variant: a Linux built from source, native
+on Android, naming no distro.
+
+LFS is a guide and has **no package manager**; the manager is the variant's
+choice, not the core's, and one can start without one:
+
+- **A fixed image, no manager** -- what the busybox bundle already is ("an image,
+  not upgraded in place"; TODO, "Beyond Debian, and bundles"): build once, ship.
+- **A source manager** -- **kiss** (KISS Linux: POSIX sh, a few hundred lines,
+  the spirit of a small tree), or `pkgsrc` (portable, larger).
+- **A binary manager** -- `dpkg` (the "mini" step), or `apk` (musl).
+
+Besides the tree, it gives the project two things:
+
+- It **forces the last core coupling to go**: a tree with its *own* glibc has its
+  loader at a path this core does not know, so `policy.c` must take it from the
+  program's `PT_INTERP` and let the tree's `ld.so.cache` find the libraries
+  (TODO, "Beyond Debian, and bundles").
+- It **names no distro**: built from source, it drops the builder fingerprints
+  of [`../spec/variants.md`](../spec/variants.md), "What still names Debian".
+
+The cost is real: an LFS build is several `gcc`/`glibc` passes -- hours, disk and
+heat on a phone. So it is a **one-time, offline builder step** whose output is an
+image, not something done on the device daily. The core does not change: this is
+a variant and a builder recipe, the tree and its manager being the variant's.
+
 ## What to take
 
 - **A source builder** (LFS's bootstrap, or Buildroot's data) as an alternative
