@@ -216,6 +216,11 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   things" learns a site from a **real trap** instead of guessing it from the
   codegen -- which is what E12 tried; its block (a handler that does not survive
   `exec`) is the thing to solve.
+- **Kernel mechanisms to lean on, and what the platform takes away**:
+  [`reference/kernel-mechanisms.md`](docs/reference/kernel-mechanisms.md) --
+  seccomp user notification (+ `ADDFD`), `pidfd`, `process_vm_*`, `inotify`,
+  vDSO. The useful ones are 5.0+/5.9+, so today the S23 FE; the S10e (4.14) has
+  only `ptrace` and `RET_TRAP`.
 
 ## In-process: the catcher into the tracee
 
