@@ -6,32 +6,11 @@
 
 unsigned long trace_n_rewritten;
 
-/* ---- the synthetic /proc files: the mount view, generated from the table at
- * boot into a file under var/lib/deb-native (a memfd cannot be read by the child
- * across the ptrace boundary: /proc/<tracerpid>/fd/N answers EACCES), and opened
- * by rewriting the path there, so the program's own reads need no stop ---------- */
-static char synth_path[2][600];                /* mounts, mountinfo (host paths) */
-static int synth_ready;
-
-/* 0 mounts, 1 mountinfo, -1 not a synthetic file */
-static int synth_kind(const char *p)
-{
-	if (strcmp(p, "/proc/mounts") == 0 || strcmp(p, "/proc/self/mounts") == 0 ||
-	    strcmp(p, "/etc/mtab") == 0)
-		return 0;
-	if (strcmp(p, "/proc/mountinfo") == 0 || strcmp(p, "/proc/self/mountinfo") == 0)
-		return 1;
-	if (strncmp(p, "/proc/", 6) == 0) {            /* /proc/<pid>/mounts|mountinfo */
-		const char *s = strchr(p + 6, '/');
-
-		if (s && strcmp(s, "/mounts") == 0)
-			return 0;
-		if (s && strcmp(s, "/mountinfo") == 0)
-			return 1;
-	}
-	return -1;
-}
-
+/* ---- the synthetic /proc mount files: the rows in the table point /proc/mounts
+ * (and mountinfo, /etc/mtab) at a file under var/lib/deb-native, so this only
+ * writes that file, once, at boot.  A regular file is read with no stop; a memfd
+ * would do too, but it cannot be reached by the child across the ptrace boundary
+ * (/proc/<tracerpid>/fd/N answers EACCES). ------------------------------------ */
 void trace_synth_init(void)
 {
 	static const char *const name[2] = { "mounts", "mountinfo" };
@@ -55,9 +34,7 @@ void trace_synth_init(void)
 			return;
 		sys_write(fd, b, (size_t) len);
 		sys_close(fd);
-		scpy(synth_path[i], sizeof synth_path[i], p);
 	}
-	synth_ready = 1;
 }
 
 /* ---- copies the tracer keeps, and what drops them ---------------------------- */
@@ -437,25 +414,6 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		if (abs_guest(t, 1, a, sizeof a) && abs_guest(t, 3, b, sizeof b) && !policy_same_row(a, b)) {
 			mon_skip(t, -18);
 			return;
-		}
-	}
-	if (rw->nr == 56 && synth_ready && !(t->r.regs[2] & 0x643)) {   /* a read-only open of a mount file */
-		char in[256];
-		ssize_t k = mon_read_str(t, t->r.regs[1], in, sizeof in - 1);
-
-		if (k > 0) {
-			int kind;
-
-			in[k] = '\0';
-			kind = synth_kind(in);
-			if (kind >= 0) {
-				u64 at = mon_scratch(t, synth_path[kind], strlen(synth_path[kind]) + 1);
-
-				if (at != 0) {
-					mon_set_arg(t, 1, at);      /* open the tracer's memfd, as a host path */
-					return;
-				}
-			}
 		}
 	}
 	if (rw->path_arg >= 0)

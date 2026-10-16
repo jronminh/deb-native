@@ -451,30 +451,11 @@ char *__realpath_chk(const char *in, char *out, size_t outlen)
 /* ---- open ------------------------------------------------------------------ */
 static void *real_openat;
 
-/* a mount file the tracer answers from the table (/proc/self/mounts, mountinfo,
- * /etc/mtab): the shim must not open the host's through the lane */
-static int mount_file(const char *p)
-{
-	if (strcmp(p, "/proc/mounts") == 0 || strcmp(p, "/proc/self/mounts") == 0 ||
-	    strcmp(p, "/etc/mtab") == 0 || strcmp(p, "/proc/mountinfo") == 0 ||
-	    strcmp(p, "/proc/self/mountinfo") == 0)
-		return 1;
-	if (strncmp(p, "/proc/", 6) == 0) {
-		const char *s = strchr(p + 6, '/');
-
-		if (s && (strcmp(s, "/mounts") == 0 || strcmp(s, "/mountinfo") == 0))
-			return 1;
-	}
-	return 0;
-}
-
 static int lane_open(int dirfd, const char *path, int flags, mode_t mode)
 {
 	char host[PATH_MAX];
 	int at, e;
 
-	if (path && mount_file(path))
-		return REAL(openat)(dirfd, path, flags, mode);   /* the tracer's synthetic file */
 	if (flags & DN_LANE_OPEN_DENY)
 		return REAL(openat)(dirfd, path, flags, mode);
 	e = lane_at(dirfd, path, flags & O_NOFOLLOW, host, sizeof host, &at);

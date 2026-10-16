@@ -232,6 +232,10 @@ struct bind {
 	char g[BIND_G], h[BIND_H];
 	unsigned gl, hl, flags;
 };
+/* A synthesized file (the mount view): the path maps straight to the file, with
+ * no walk -- /proc/self is a magic symlink the kernel resolves (to the tracee's
+ * own pid), so walking it would leave the /proc/self/mounts row behind. */
+#define B_SYNTH 0x80000000u
 static struct bind binds[MAXBINDS];
 static int nbinds;
 
@@ -349,12 +353,27 @@ static void binds_defaults(void)
 {
 	static const char *const keep[] = { "/proc", "/sys", "/dev", "/data", "/system", "/storage",
 					    "/sdcard", "/apex", "/vendor", "/mnt", NULL };
+	char m[600], mi[600];
 	int i;
 
 	nbinds = 0;
 	binds_add("/", root_len ? root : "/", 0);
 	for (i = 0; keep[i]; i++)
 		binds_add(keep[i], keep[i], 0);
+	/* The mount view: a few names inside /proc (and /etc/mtab, which Debian links
+	 * to /proc/mounts) are the tree's own files, not the host's.  They are rows,
+	 * so the longest-guest-row rule overrides the /proc host row for exactly these
+	 * names and nothing else; the rest of /proc stays the kernel's. */
+	m[0] = mi[0] = '\0';
+	append(m, sizeof m, root);
+	append(m, sizeof m, "/var/lib/deb-native/mounts");
+	append(mi, sizeof mi, root);
+	append(mi, sizeof mi, "/var/lib/deb-native/mountinfo");
+	binds_add("/proc/mounts", m, B_SYNTH);
+	binds_add("/proc/self/mounts", m, B_SYNTH);
+	binds_add("/proc/mountinfo", mi, B_SYNTH);
+	binds_add("/proc/self/mountinfo", mi, B_SYNTH);
+	binds_add("/etc/mtab", m, B_SYNTH);
 }
 
 /* add one bind from boot/binds; 0, or -1 (bad: a duplicate GUEST, a GUEST under a
@@ -416,7 +435,7 @@ int policy_mounts(char *buf, size_t cap, int mountinfo)
 	for (i = 0; i < nbinds; i++) {
 		const struct bind *b = &binds[i];
 
-		if (strcmp(b->g, "/") == 0)
+		if (strcmp(b->g, "/") == 0 || (b->flags & B_SYNTH))
 			continue;
 		id++;
 		if (!mountinfo) {
@@ -545,7 +564,7 @@ void policy_set_root(const char *r)
 		char b[WORK];
 		size_t j;
 
-		if (strcmp(binds[i].g, "/") == 0 || row_is_identity(&binds[i]))
+		if (strcmp(binds[i].g, "/") == 0 || row_is_identity(&binds[i]) || (binds[i].flags & B_SYNTH))
 			continue;
 		if (cat2(b, sizeof b, r, binds[i].g) < 0)
 			continue;
@@ -718,8 +737,15 @@ static int walk(const char *base, const char *in, char *out, size_t cap, int nof
 
 int policy_path_nf(const char *in, char *out, size_t cap, int nofollow)
 {
-	if (in[0] != '/' || policy_is_host(in))
+	const struct bind *b;
+
+	if (in[0] != '/')
 		return 0;
+	if (policy_is_host(in))
+		return 0;
+	b = row_guest(in);
+	if (b && (b->flags & B_SYNTH))                   /* a synthesized file: straight to it */
+		return to_host(in, out, cap) < 0 ? 0 : (int) strlen(out) + 1;
 	return walk("/", in, out, cap, nofollow);
 }
 

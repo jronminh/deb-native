@@ -71,14 +71,17 @@ step checked as `AGENTS.md` says, in Termux and in the app:
      guest paths at entry (a host-path check is ambiguous: the root may sit under
      a host row, or a bind's host under the root). `st_dev` and `statfs` stay the
      kernel's (true already).
-   - **The mount view** (done): `/proc/self/mounts`, `/proc/mounts`,
-     `/proc/<pid>/mounts`, `mountinfo` and `/etc/mtab` are built from the table
-     at boot into a file under `var/lib/deb-native` (a memfd cannot be read by
-     the child across the ptrace boundary: `/proc/<tracerpid>/fd/N` answers
-     `EACCES`), and a read-only `open` of them is rewritten there, so the reads
-     need no stop. `mount`, `df` and `findmnt` list the root and each bind; the
-     source is `deb-native`, never a host path. Enforcing `ro` (`EROFS`) is left;
-     `maps`/`smaps` and `/proc/sys/*` are the rest of "Emulation".
+   - **The mount view** (done): `policy_mounts` builds the table once, at boot,
+     into a file under `var/lib/deb-native` (a memfd cannot be read by the child
+     across the ptrace boundary: `/proc/<tracerpid>/fd/N` answers `EACCES`). The
+     names `/proc/mounts`, `/proc/self/mounts`, `mountinfo`, `/proc/self/mountinfo`
+     and `/etc/mtab` are **rows** (`B_SYNTH`) that map straight to that file, with
+     no walk -- `/proc/self` is a magic symlink the kernel resolves to the
+     tracee's own pid, so walking it would miss the row. A regular file is read
+     with no stop. `mount`, `df` and `findmnt` list the root and each bind; the
+     source is `deb-native`, never a host path. Left: `/proc/<pid>/mounts` for an
+     explicit **other** pid still shows the kernel's (no static row can name a
+     dynamic pid); enforcing `ro`; then `maps`/`smaps` and `/proc/sys/*` ("Emulation").
    - Later: `mount --bind` inside the prefix adds a row (it is refused now); the
      table then has to live where the shim sees a change, not a copy read once.
 4. **Narrow the host directories**, with binds as the way out: drop `/data`,
@@ -233,8 +236,8 @@ Answer what Android refuses in place of the kernel, the same in the tracer and
 the shim:
 
 - `/proc` files answered from the table so `read` needs no stop: the **mount
-  table** (`mounts`, `mountinfo`, `/etc/mtab`) is done (a file under
-  `var/lib/deb-native`, the open rewritten there -- "The boundary", step 3);
+  table** (`mounts`, `mountinfo`, `/etc/mtab`) is done (rows mapping to a file
+  under `var/lib/deb-native` -- "The boundary", step 3);
   `maps` next ("The boundary"); `/proc/sys/*` where a program
   needs an answer Android hides. `/proc/version`, `cpuinfo` and `status` stay
   the kernel's (`docs/architecture.md`, "The boundary"); the files Android 8+
