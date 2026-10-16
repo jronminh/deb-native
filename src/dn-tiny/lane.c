@@ -1244,6 +1244,31 @@ static int lane_hook(unsigned long *r)
 		res = v[nr == SYS_getuid ? 0 : nr == SYS_geteuid ? 1 : nr == SYS_getgid ? 3 : 4];
 		break;
 	}
+	case SYS_mkdirat: case SYS_mknodat:              /* create: the last component must not exist */
+		e = lane_at((int) r[0], path, 1, host, sizeof host, &at);
+		if (e <= 0) { done = e < 0; res = e; break; }
+		res = lane_rawc(nr, at, host, r[2], r[3], 0L);
+		break;
+	case SYS_fchmodat: case SYS_utimensat:
+		e = lane_at((int) r[0], path, (int) r[3] & 0x100, host, sizeof host, &at);
+		if (e <= 0) { done = e < 0; res = e; break; }
+		res = lane_rawc(nr, at, host, r[2], r[3], 0L);
+		break;
+	case SYS_inotify_add_watch:
+		e = lane_at(AT_FDCWD, path, 0, host, sizeof host, &at);
+		if (e <= 0) { done = e < 0; res = e; break; }
+		res = lane_rawc(nr, r[0], host, r[2], 0L, 0L);
+		break;
+	case SYS_statfs: case SYS_truncate: case SYS_setxattr: case SYS_removexattr:
+		e = lane_at(AT_FDCWD, (const char *) r[0], 0, host, sizeof host, &at);
+		if (e <= 0) { done = e < 0; res = e; break; }
+		res = lane_rawc(nr, host, r[1], r[2], r[3], r[4]);
+		break;
+	case SYS_lsetxattr: case SYS_lremovexattr:
+		e = lane_at(AT_FDCWD, (const char *) r[0], 1, host, sizeof host, &at);
+		if (e <= 0) { done = e < 0; res = e; break; }
+		res = lane_rawc(nr, host, r[1], r[2], r[3], r[4]);
+		break;
 	default:
 		done = 0;
 	}
@@ -1362,6 +1387,9 @@ static int hooked_nr(unsigned nr)
 	switch (nr) {
 	case SYS_openat: case SYS_faccessat: case SYS_newfstatat: case SYS_statx: case SYS_readlinkat:
 	case SYS_getcwd: case SYS_getuid: case SYS_geteuid: case SYS_getgid: case SYS_getegid:
+	case SYS_mkdirat: case SYS_mknodat: case SYS_fchmodat: case SYS_utimensat:
+	case SYS_inotify_add_watch: case SYS_statfs: case SYS_truncate:
+	case SYS_setxattr: case SYS_lsetxattr: case SYS_removexattr: case SYS_lremovexattr:
 		return 1;
 	}
 	return 0;
@@ -1390,6 +1418,21 @@ static int find_libc(struct dl_phdr_info *info, size_t size, void *data)
 	return 0;
 }
 
+/* The `svc` of a caught call: its `mov x8, #nr` is not always immediately before
+ * it (glibc's mkdir is `mov x8,#34; mov x1,x0; mov x0,#-100; svc`), so look back a
+ * window.  A wrong pick costs only the hook reading `x8` at call time. */
+static int catch_site(const unsigned *lo, const unsigned *p)
+{
+	int k;
+
+	if (*p != 0xd4000001u)
+		return 0;
+	for (k = 1; k <= 8 && p - k >= lo; k++)
+		if ((p[-k] & 0xffe0001fu) == 0xd2800008u)
+			return hooked_nr((p[-k] >> 5) & 0xffff);
+	return 0;
+}
+
 static void patch_libc(void)
 {
 	struct text t = { 0, 0 };
@@ -1404,7 +1447,7 @@ static void patch_libc(void)
 	if (pthread_key_create(&hook_key, hook_stack_free) != 0)
 		return;
 	for (p = t.lo + 1; p < t.hi; p++)
-		if (*p == 0xd4000001u && (p[-1] & 0xffe0001fu) == 0xd2800008u && hooked_nr((p[-1] >> 5) & 0xffff))
+		if (catch_site(t.lo, p))
 			sites++;
 	if (sites == 0 || 128 + sites * 6 > len / 4)
 		return;
@@ -1427,7 +1470,7 @@ static void patch_libc(void)
 		unsigned *stubs = emit_p;
 
 		for (p = t.lo + 1; p < t.hi; p++) {
-			if (!(*p == 0xd4000001u && (p[-1] & 0xffe0001fu) == 0xd2800008u && hooked_nr((p[-1] >> 5) & 0xffff)))
+			if (!catch_site(t.lo, p))
 				continue;
 			emit(0xd10443ffu);                              /* sub sp, sp, #272 */
 			emit(stp(29, 30, 232));
@@ -1444,7 +1487,7 @@ static void patch_libc(void)
 		    plain_svc(SYS_mprotect, (long) lo, (long) (hi - lo), PROT_READ | PROT_WRITE) != 0)
 			return;
 		for (p = t.lo + 1; p < t.hi; p++) {
-			if (!(*p == 0xd4000001u && (p[-1] & 0xffe0001fu) == 0xd2800008u && hooked_nr((p[-1] >> 5) & 0xffff)))
+			if (!catch_site(t.lo, p))
 				continue;
 			*p = branch(0x14000000u, p, stubs);
 			stubs += 6;

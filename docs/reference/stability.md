@@ -63,28 +63,37 @@ can build on**; "does not manipulate the instruction set" (symbols) is the safe
 path for now, and when an instruction-level rule is needed, prefer the one keyed
 on the stable ISA (`instruction_pointer`) over one keyed on glibc's code.
 
-## Checked: extending the shim's site set is safe but inert
+## Checked: extending the shim's site set — three places to get right
 
 Eleven rows the tracer only maps (no link/cwd cache) — `mkdirat`, `mknodat`,
 `fchmodat`, `utimensat`, `inotify_add_watch`, `statfs`, `truncate`, and the
-set/remove xattr calls — could in principle move to the shim's fast path: the
-same syscall, its path resolved. Tried it (the numbers in `hooked_nr`, the cases
-in `lane_hook`): it **installs and runs** — added one at a time, each was safe.
+set/remove xattr calls — moved to the shim's fast path. It needs **three** things
+in step, and each alone looks like "the site is not there":
+
+1. **The scan needs a window.** glibc's `mkdir` is
+   `mov x8,#34; mov x1,x0; mov x0,#-100; svc` — the `mov` and the `svc` are **three
+   instructions apart**. The original scan looked only at `p[-1]` and missed it.
+   `catch_site` now looks back a small window; a wrong pick only costs the hook
+   reading `x8` at call time.
+2. **`lane_hook` needs the cases** (else the hook passes the call back to the
+   tracer).
+3. **The filter's lane list (`DN_LANE_NRS`) needs the numbers**, or the shim's
+   own re-issued call stops in the tracer.
+
+With all three: `mkdir` 1000 times goes from **1005 stops to 5**; `mkdir`,
+`chmod`, `statfs`, `setxattr` all return 0. The Lua build barely moves
+(1666 -> 1662: it does few of these), but a `mkdir`/xattr-heavy workload (a
+package install) would see it.
+
 (An earlier attempt seemed to break libc with `SIGSEGV`; that was a **build
-artifact**: once a broken shim is installed, `gcc` has it preloaded too, so
-`gcc` dies and the rebuild fails **silently**, leaving the broken shim — build
-to a scratch path and keep a good shim installed.) So the site set **can** be
-widened.
+artifact**: once a broken shim is installed, `gcc` has it preloaded too, so `gcc`
+dies and the rebuild fails **silently** — build to a scratch path with a good shim
+installed.)
 
-But it **did nothing**: `mkdir` called 1000 times still stops 1005 — every call
-reached the tracer. `libc` does carry a `mov x8,#34; svc` site, but it is not on
-the path `mkdir()` takes. So the number of `svc` sites is not the number of
-reachable calls: **which site a call goes through is glibc's**, and a present
-site can be off the path. Reverted (no gain).
-
-The lesson is unchanged from the cancellable path (E10): the `svc` **encoding**
-and the patch **operation** are stable, but the shim's **coverage** is glibc's,
-and widening it needs per-call evidence, not a count.
+So the lesson holds and sharpens: the `svc` **encoding** and the patch
+**operation** are stable; **which** calls to catch is a **policy** choice; but
+realizing it is glibc's business — the site is found with a window and read at
+runtime, and the filter must agree.
 
 ## Checked: the ABI net catches what the shim cannot reach
 
