@@ -17,7 +17,7 @@ prebuilt: users build the runtime and their prefix themselves
   stage, the second stage under `dn-tiny`, apt, the shim, packages.
 - `scripts/prefix/` — `boot.sh` (the entry) and `init.sh` (the tree's init),
   copied into a prefix's `boot/`.
-- `docs/` — building, architecture, performance, reference.
+- `docs/` — building, architecture, performance, spec (the model), reference.
 
 The 0.7 runtime (`dn-monitor`, a PRoot fork, shipped prefixes, CI) is at tag
 `legacy-dn-monitor`; nothing in the tree depends on it.

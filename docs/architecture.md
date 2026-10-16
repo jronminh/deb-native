@@ -3,7 +3,8 @@
 How a Debian program runs in a prefix on Android, unprivileged: what is caught,
 where it is answered, and what it costs. Building and booting a prefix is in
 [`building.md`](building.md); the measurements are in
-[`performance.md`](performance.md).
+[`performance.md`](performance.md). The model it serves -- the Android kernel
+mapped into the prefix -- is [`spec/mapped-kernel.md`](spec/mapped-kernel.md).
 
 ## Contents
 
