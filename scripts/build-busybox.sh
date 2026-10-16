@@ -130,4 +130,16 @@ for p in $PROGRAMS; do [ -f "$DEST/usr/bin/$p" ] && chmod +x "$DEST/usr/bin/$p";
   ln -sf busybox "$DEST/bin/$a"
 done
 
+# ---- what the bundle is (so a boot menu can name it) ------------------------
+VER=$(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)
+{
+  echo "# deb-native bundle (docs/spec/variants.md)"
+  echo "format=2"
+  echo "name=busybox"
+  echo "desc=busybox bundle ($PROGRAMS) for deb-native $VER"
+  echo "version=$VER"
+  echo "arch=aarch64"
+  echo "shim=$SHIM"
+} > "$DEST/boot/version"
+
 printf 'build-busybox: %s (%s)\n' "$DEST" "$(du -sh "$DEST" | cut -f1)"
