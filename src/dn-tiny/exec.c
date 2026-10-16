@@ -264,20 +264,87 @@ static void absolute_from_cwd(struct tracee *t, char *path, size_t cap)
 	scpy(path, cap, full);
 }
 
+#define AT_FDCWD_      (-100)
+#define AT_EMPTY_PATH_ 0x1000
+
+/* the guest path a file descriptor names (execveat's AT_EMPTY_PATH, or a relative
+ * name's directory fd): the length, or <= 0 */
+static ssize_t fd_guest(struct tracee *t, int fd, char *out, size_t cap)
+{
+	char link[48] = "/proc/", host[512], guest[512], dig[12];
+	size_t i = 6, n;
+	int nd = 0;
+	pid_t pid = t->pid;
+	unsigned f = (unsigned) fd;
+	ssize_t r;
+
+	do { dig[nd++] = (char) ('0' + pid % 10); pid /= 10; } while (pid);
+	while (nd) link[i++] = dig[--nd];
+	scpy(link + i, sizeof link - i, "/fd/");
+	i += 4;
+	do { dig[nd++] = (char) ('0' + f % 10); f /= 10; } while (f);
+	while (nd) link[i++] = dig[--nd];
+	link[i] = '\0';
+	r = sys_readlink(link, host, sizeof host - 1);
+	if (r <= 0)
+		return -1;
+	host[r] = '\0';
+	n = policy_unpath(host, guest, sizeof guest);
+	if (n == 0 || n > cap + 1)
+		return -1;
+	memcpy(out, guest, n);
+	return (ssize_t) n - 1;
+}
+
+/* execveat's pathname (x1) relative to its dirfd (x0): the dirfd's guest path and
+ * the name; an absolute name, AT_FDCWD, or a dirfd outside the prefix falls back to
+ * the cwd */
+static void execveat_relative(struct tracee *t, int dirfd, char *path, size_t cap)
+{
+	char base[512], full[1024];
+	size_t n, pl;
+
+	if (path[0] == '/' || dirfd == AT_FDCWD_ || fd_guest(t, dirfd, base, sizeof base) <= 0) {
+		absolute_from_cwd(t, path, cap);
+		return;
+	}
+	n = strlen(base);
+	pl = strlen(path);
+	if (n + 1 + pl + 1 > sizeof full)
+		return;
+	memcpy(full, base, n);
+	if (n > 0 && full[n - 1] != '/')
+		full[n++] = '/';
+	memcpy(full + n, path, pl + 1);
+	scpy(path, cap, full);
+}
+
 void exec_enter(struct tracee *t)
 {
 	struct vec a = { .n = 0, .used = 0 }, out = { .n = 0, .used = 0 };
 	static u64 ptrs[MAXORIG + MAXARGS + 8];
 	u64 pa, pp;
 	char path[512], final[512], prog[512], guest[512];
-	ssize_t k = mon_read_str(t, t->r.regs[0], path, sizeof path - 1);
+	unsigned nr = (unsigned) t->r.regs[8];
+	int parg = nr == 281 ? 1 : 0, aarg = nr == 281 ? 2 : 1;
+	ssize_t k;
 	int i;
 
+	if (nr == 281 && ((unsigned) t->r.regs[4] & AT_EMPTY_PATH_)) {
+		k = fd_guest(t, (int) t->r.regs[0], path, sizeof path - 1);
+	} else {
+		k = mon_read_str(t, t->r.regs[parg], path, sizeof path - 1);
+		if (k > 0) {
+			path[k] = '\0';
+			if (nr == 281)
+				execveat_relative(t, (int) t->r.regs[0], path, sizeof path);
+			else
+				absolute_from_cwd(t, path, sizeof path);
+		}
+	}
 	if (k <= 0)
 		return;
-	path[k] = '\0';
-	absolute_from_cwd(t, path, sizeof path);
-	if (read_argv(t, t->r.regs[1], &a) < 0 || a.n == 0)
+	if (read_argv(t, t->r.regs[aarg], &a) < 0 || a.n == 0)
 		return;
 	resolve(path, &a, final, sizeof final, &out, prog, sizeof prog);
 	/* what /proc/<pid>/exe will say once the exec succeeds */
@@ -295,7 +362,14 @@ void exec_enter(struct tracee *t)
 	pp = mon_scratch(t, final, strlen(final) + 1);
 	if (pa == 0 || pp == 0)
 		return;
-	mon_set_arg(t, 0, pp);
-	mon_set_arg(t, 1, pa);
+	if (nr == 281) {                                /* execveat(dirfd, path, argv, envp, flags) */
+		mon_set_arg(t, 0, (u64) -100);          /* AT_FDCWD */
+		mon_set_arg(t, 1, pp);
+		mon_set_arg(t, 2, pa);
+		mon_set_arg(t, 4, 0);
+	} else {
+		mon_set_arg(t, 0, pp);
+		mon_set_arg(t, 1, pa);
+	}
 	exec_n_rewritten++;
 }

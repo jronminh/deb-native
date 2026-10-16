@@ -22,21 +22,22 @@ to the kernel. Every arm64 syscall that takes a path argument, and its status:
 | --- | --- |
 | openat, openat2, faccessat, faccessat2, fchmodat, fchmodat2, fchownat, newfstatat, statx, readlinkat, linkat, symlinkat, unlinkat, mkdirat, mknodat, renameat, renameat2, utimensat, chdir, [l]setxattr, [l]getxattr, [l]listxattr, [l]removexattr, inotify_add_watch | a row (maps the path) |
 | execve | a row (the exec gate) |
-| **execveat (281)** | **MISSING — the one real gap** |
+| execveat (281) | a row (the exec gate; reads the dirfd, flags, and AT_EMPTY_PATH) |
 | mount, umount2, swapon, swapoff, chroot, init_module, delete_module, finit_module, name_to_handle_at, open_by_handle_at, open_tree, move_mount, fsopen, fsconfig, fsmount, fspick, mount_setattr, acct, kexec_file_load, kexec_load | killed off the app's filter -> answered (`EPERM`/`ENOSYS`); no path reaches the kernel |
 | pivot_root (41), quotactl (60) | **allowed, not caught**: the kernel runs them with the guest path |
 | fanotify_mark (263) | killed -> `ENOSYS` (checked, not assumed) |
 | AF_UNIX `bind`/`connect`/`sendto`/`sendmsg` paths | not caught (known, `TODO.md`, "The law") |
 | setxattrat/getxattrat/listxattrat/removexattrat, statmount, listmount | newer than either device |
 
-### The one real gap: `execveat` (281)
+### `execveat` (281) — the one real gap, now fixed
 
-Android **allows** it and the policy does not catch it, so the guest path reaches
-the kernel. Measured: a program calling
-`execveat(AT_FDCWD, "/usr/bin/true", ...)` under `dn-tiny` gets **`-1 ENOENT`**.
-`fexecve` also uses `execveat` (with `AT_EMPTY_PATH`, so no path, but it is also
-not gated, so the loader rewrite is skipped). **Fix: a row for 281, through the
-exec gate.**
+It was allowed by Android and not caught, so the guest path reached the kernel: a
+program calling `execveat(AT_FDCWD, "/usr/bin/true", ...)` got **`-1 ENOENT`**,
+and `fexecve` skips the loader rewrite. Fixed with a row for 281 through the exec
+gate, which now reads execveat's `dirfd` (x0), `pathname` (x1), `argv` (x2) and
+`flags` (x4), resolves a relative name from the dirfd, and handles `AT_EMPTY_PATH`
+by taking the path the fd names (so `fexecve` works). Measured: the path form and
+`fexecve` both run; the Lua build is unchanged (1666 stops).
 
 ### The minor ones
 
@@ -85,7 +86,8 @@ caught (its comment in `gen_rows.py`). Complete.
 
 ## Outcome
 
-- **One real bug: `execveat`.** Fix: a row for 281 through the exec gate.
+- **One real bug found and fixed: `execveat`** (a row for 281 through the exec
+gate; the path form and `fexecve` now run).
 - Minor: `pivot_root`/`quotactl` (allowed, unmapped, privileged), `capget` (not
   faked).
 - Cleanup: the dead `chroot` row and `fchownat` `path_arg`.

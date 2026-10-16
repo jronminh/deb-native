@@ -102,13 +102,12 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   "Root emulation and path walks"); measure how often the global drop costs
   before building it.
 - **Not mapped yet** (audited, [`policy-audit.md`](docs/reference/policy-audit.md)):
-  `execveat` (glibc's `fexecve`) — confirmed: `execveat(AT_FDCWD, guest_path)`
-  returns `ENOENT` (the path is not mapped and the exec gate does not see it) —
-  `fanotify_mark`, `pivot_root`, `quotactl`, `openat2` with
-  `RESOLVE_*` (answers `ENOSYS`), `name_to_handle_at`, AF_UNIX socket paths
+  `openat2` with `RESOLVE_*` (answers `ENOSYS`), AF_UNIX socket paths
   (`bind`, `connect`, `sendto`, `sendmsg`; `getsockname`, `getpeername`,
   `accept`, `recvfrom`, `recvmsg` back), so a guest `bind("/tmp/x.sock")` reaches
-  the host's `/tmp`: tmux, ssh-agent, gpg-agent, dbus need it.
+  the host's `/tmp`: tmux, ssh-agent, gpg-agent, dbus need it. And minor,
+  privileged (allowed, a guest path reaches the kernel): `pivot_root`,
+  `quotactl`. `execveat` is done (a row through the exec gate; `fexecve` works).
 - **The census against the rows**: `docs/reference/device-census.md` lists the 32
   calls the app's filter kills on the S10e, and each must end in a row (or be
   answered `ENOSYS` on purpose). Check that by hand against `gen_rows.py`. Also

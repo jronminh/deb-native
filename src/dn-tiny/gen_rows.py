@@ -24,6 +24,7 @@ PATH_ARG = {
     291: (1,),      # statx
     78: (1,),       # readlinkat
     221: (0,),      # execve
+    281: (1,),      # execveat (its pathname; the exec gate reads the dirfd and flags)
     35: (1,),       # unlinkat
     34: (1,),       # mkdirat
     33: (1,),       # mknodat
@@ -74,8 +75,8 @@ order = HOT + sorted(n for n in set(PATH_ARG) | set(FAKE) | set(RESULT) | set(EF
 with open(out, "w") as f:
     for n in order:
         a = PATH_ARG.get(n, ())
-        sp = "SP_EXEC" if n == 221 else "SP_LINK" if n == 37 else "SP_NONE"       # execve has its own part: the exec gate
-        if n == 221:
+        sp = "SP_EXEC" if n in (221, 281) else "SP_LINK" if n == 37 else "SP_NONE"  # execve and execveat share the gate
+        if n in (221, 281):
             a = ()                                       # its path is mapped by the gate, not generically
         fk = FAKE.get(n, 0)
         rs, ra = RESULT.get(n, (0, -1))
