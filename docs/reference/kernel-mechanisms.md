@@ -67,7 +67,10 @@ interesting ones here are 5.0+/5.9+ and, today, the S23 FE only: on the S10e
 
 1. **seccomp user notification + `ADDFD`**, on a 5.10 phone: catch the calls the
    shim cannot reach without a `ptrace` wake, and hand back an fd instead of
-   writing a file and pointing the open at it.
+   writing a file and pointing the open at it. It is a *supervisor*, not a
+   sandbox -- the man page is explicit that it is not a security policy, that a
+   `CONTINUE` response is a TOCTOU race, and that every read of the target's
+   memory needs a `SECCOMP_IOCTL_NOTIF_ID_VALID` check (`seccomp_unotify(2)`).
 2. **`pidfd` + `epoll`** in the tracer's loop: a race-free wait (no pid reuse),
    one poll for the tracee and its fds.
 3. **`process_vm_readv`/`writev`** for the big copies (a `stat`, a `sockaddr`).

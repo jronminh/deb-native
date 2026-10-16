@@ -6,7 +6,8 @@ None of them combines the three parts deb-native rests on
 a shim that patches the `svc` sites in the process, and a tracer as the net
 under it, both answering by one law. Checked 2026-10-15 and 2026-10-16; the
 claims about a project's own behavior come from its README or paper, and are
-not checked on this phone unless the text says so.
+not checked on this phone unless the text says so. The long ideas behind them,
+with their papers, are in [`research.md`](research.md).
 
 ## Contents
 
