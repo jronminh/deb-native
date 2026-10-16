@@ -18,7 +18,7 @@ refuses".
 ## Method
 
 `src/dn-tiny/census.c`, a freestanding aarch64 program (no libc, 88 lines, 2.5 KB;
-built by `scripts/build/build-tiny.sh` as `dn-census`) forks, with a raw
+built by `scripts/build-runtime.sh` as `dn-census`) forks, with a raw
 `clone`, once per syscall; the child makes the call with zero arguments and exits
 with the errno, and the parent reports how the child ended. Zero arguments make
 the call fail harmlessly (`EFAULT`, `EINVAL`). A death by signal 31 is the
@@ -176,4 +176,6 @@ targetSdk 29+ app; the domain's policy is the same one the census above used.
 - The census reports only the death; that the action is `SECCOMP_RET_TRAP` (a
   catchable `SIGSYS`) is known from `dn-tiny` answering these calls at the signal
   stop.
-- 62 numbers is a sample, not the whole table.
+- The first run was a sample of 62 numbers; the program in the tree now tries
+  every number from 0 to 470 ("The whole range"), and the numbers above are from
+  that run.

@@ -14,7 +14,7 @@ body:
     attributes:
       label: deb-native version / commit
       description: The release tag, or the output of `git rev-parse --short HEAD`.
-      placeholder: 0.8.0-pre-alpha, or a commit
+      placeholder: 0.9.0-pre-alpha, or a commit
     validations:
       required: true
   - type: input

@@ -4,7 +4,7 @@ Debian `arm64`, unmodified, in a directory on an Android phone: `apt`, `dpkg`,
 `gcc`, `python3`, `git` running as they do on Debian, with no root, no `chroot`,
 no namespaces and no emulation.
 
-> **Pre-alpha** (0.8.0). AI-assisted and not independently audited
+> **Pre-alpha** (0.9.0). AI-assisted and not independently audited
 > ([`SECURITY.md`](SECURITY.md)). The threat model is accidental leaks, not
 > isolation: this is not a sandbox.
 

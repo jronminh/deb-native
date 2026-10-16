@@ -149,8 +149,8 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 
 ## Speed
 
-- **Keep it small and fast as it grows**: the runtime is 33 KB (`dn-tiny`) and
-  77 KB (`dn-lane.so`), and a program in it feels native. Every feature to come
+- **Keep it small and fast as it grows**: the runtime is about 61 KB (`dn-tiny`)
+  and 77 KB (`dn-lane.so`), and a program in it feels native. Every feature to come
   (binds, SysV, `/proc` files) must leave that so. `scripts/bench.sh` runs real
   workloads (a stat storm, links, a git workflow, Python, a tar round trip, a
   spawn loop); the lane test, the regression set and the Lua build's wall are
