@@ -54,6 +54,30 @@ So covering every syscall is *sufficient for the surface* and makes success
 possible; it is not automatic, and it holds only with **one law** -- which is
 why Phase 0 comes first.
 
+## Three limits to cross
+
+The runtime crosses three limits, and they are independent:
+
+1. **The tree's, and the FHS's.** A Debian tree is not at the kernel's `/`, so
+   every path, id and view a program reads is mapped ([`../architecture.md`](../architecture.md)).
+   A complete mapping is indistinguishable from a stock Debian -- at best it
+   *matches* native.
+2. **The platform's.** Android's filter kills some calls and SELinux refuses
+   others; the runtime answers what the kernel is not allowed to give, honestly
+   -- map over fake, refuse rather than lie. Also at best it *matches* a kernel
+   that were not amputated.
+3. **The kernel's own cost.** The syscall trap. Here, and only here, the runtime
+   can be *better* than the reference: the kernel serves a cached answer only
+   where it concedes the corner to userland (**vDSO**: `clock_gettime`,
+   `getcpu`), and the runtime can generalise that concession to the answers it
+   can *prove* stable -- a link that has not moved, a cwd, an id -- and serve
+   them without a trap (the lane, the caches). It is bounded by what is provable
+   and kept honest by invalidation (the shared generation, `policy.c`), never by
+   guessing.
+
+So "near-native" is the floor of the first two limits; "past native" is the
+third, and the only place the project can beat the thing it imitates.
+
 ## The rules
 
 1. **Map by default; fake is the residue; refuse when a fake would be a lie.**
