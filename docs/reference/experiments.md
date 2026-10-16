@@ -14,6 +14,7 @@ and the reference pages ([`inline-hooking.md`](inline-hooking.md),
 - [E4: where the loader's stops are](#e4-where-the-loaders-stops-are)
 - [E5: patching the loader — sites and reach](#e5-patching-the-loader--sites-and-reach)
 - [E6: is there a hook early enough?](#e6-is-there-a-hook-early-enough)
+- [E7: patching the loader, a proof of concept](#e7-patching-the-loader-a-proof-of-concept)
 - [What follows](#what-follows)
 
 ## Context
@@ -141,14 +142,51 @@ loader's `openat`/`newfstatat` sites at `la_version`, before the loader makes
 those opens — the per-process startup stops the shim cannot reach. The cost is
 the module's own load (one open, one stop) against the several it could save.
 
+## E7: patching the loader, a proof of concept
+
+A freestanding `LD_AUDIT` module (`ldhook.c` in the work tree, not in the repo).
+At `la_version` it finds ld.so's `r-xp` segment in `/proc/self/maps`, scans it
+for `mov x8,#56; svc` (its three `openat` sites), maps a stub page within a
+`B`'s reach, and replaces each `svc` with a `B` to a stub that sets the lane
+cookie in `x5`, re-issues the `svc`, and branches back to the instruction after
+the original `svc`. The tracer's filter sees the cookie and lets the call
+through with no stop.
+
+The loader's paths are **host paths** — the exec gate passes the program and the
+library path as host paths (`exec.c`) — so the stub needs no path law: it only
+adds the cookie. Stops, `dn-tiny -t ROOT -- PROG`, the shim present:
+
+| program | before | after |
+| --- | --- | --- |
+| `true` | 5 | 4 |
+| `git --version` | 9 | 6 |
+| `python3 -c pass` | 15 | 11 |
+
+The net is the loader's opens removed (two for `true`, four to five for `git`)
+minus one for loading the module itself. The `newfstatat` and `fstat` sites are
+not patched yet.
+
+Two bugs were found and fixed on the way, both worth remembering:
+
+- The stub's back-branch was written as `*stub++ = b_enc(stub, ...)`; the
+  `stub` inside the expression is the **post-increment** value, so the branch
+  was four bytes short and landed on the `svc` site itself — now holding the
+  `B` — an infinite loop. Fixed with a named temporary for the origin.
+- The cookie's high two 16-bit halves were swapped in the `movz`/`movk`
+  sequence (`0x9e1ab6c3d7f2a541` needs `movk hw=2 = 0xb6c3, hw=3 = 0x9e1a`), so
+  the filter never matched and the calls still stopped.
+
+The module is a proof of concept: it assumes the loader's paths are host paths
+and that each site is entered with `x8` already the number, and it has no
+fallback. It runs in `~/work/p-dev`; the source is not committed.
+
 ## What follows
 
-The pieces line up for removing the loader's startup stops: patchable sites
-(E5), in-range stubs (E5), and a hook early enough (E6). What is missing is
-engineering: a freestanding audit module that carries the path law (a build of
-`policy.c` without libc, the "one copy of the law" in `TODO.md`) and answers the
-loader's opens in-process. E7 is a proof of concept: patch one `openat` site in
-the loader and measure the stop count.
+The loader's startup stops can be removed by a freestanding audit module that
+patches the loader (E7). Left before this is real: patch the `newfstatat` and
+`fstat` sites too; decide whether the program's own opens (not only the loader's)
+can take the same lane, which would need the path law in the module; and measure
+a full build (the Lua build's 1082 loader stops) rather than a single program.
 
 Until then, the startup stops are simply paid; they are small per process and
 become visible only across many execs.

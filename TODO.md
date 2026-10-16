@@ -185,7 +185,10 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   stops a process; its `openat`/`newfstatat` sites are patchable and a stub page
   is in range; and `LD_AUDIT`'s `la_version` runs before those opens. So the way
   to remove them is a freestanding audit module that patches the loader, not a
-  change to the shim. E7 is a proof of concept.
+  change to the shim. E7 proved it: a freestanding `LD_AUDIT` module patching
+  the loader's `openat` sites at `la_version` drops the stops (`true` 5->4,
+  `git --version` 9->6, `python3 -c pass` 15->11). Left: patch `newfstatat` and
+  `fstat` too, and measure a full build.
 - **The shim's patched pair**: `mov x8,#nr; svc` is right only if no jump lands
   between the two. gVisor (#13362) and ASC-Hook name the same question. Check the
   shim's patch sites for jump targets, and whether `x8` is still the number there.
