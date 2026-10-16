@@ -350,7 +350,7 @@ what the placement measures.
 
 ## E12: the in-process catcher via seccomp TRAP, and why it breaks
 
-Mechanism 2 of the `in-process` branch (`TODO.md`): the shim installs its own
+Mechanism 2 of the in-process idea (`TODO.md`): the shim installs its own
 seccomp filter that `TRAP`s a read-only `openat` not from the lane, with a
 `SIGSYS` handler that resolves the path and answers it in-process (writing the
 result into the ucontext); the tracer delivers the `SIGSYS(nr=56)` instead of
@@ -374,8 +374,8 @@ finding is recorded in `TODO.md`, "In-process".
 ## E13: the cookie replaced by a gate page and the instruction pointer
 
 The lane marker was a magic value in `x5` (the cookie); the filter ALLOWed a call
-with `args[5]` equal to it. It is replaced by an **IP rule** (branch
-`in-process`): the shim maps a `svc #0; ret` gate page at `DN_GATE`
+with `args[5]` equal to it. It is replaced by an **IP rule** (the in-process
+experiment): the shim maps a `svc #0; ret` gate page at `DN_GATE`
 (`0x100000000`) and issues every resolved call from it; the filter ALLOWs a call
 whose `instruction_pointer` is in that page (`seccomp_data.instruction_pointer`),
 with **no register cookie**.
@@ -391,7 +391,7 @@ the gate** (a call that did not would be TRACEd, i.e. one stop, not wrong).
 Unlike SUD, it needs no kernel 5.11: `instruction_pointer` is in `seccomp_data`
 on 4.14.
 
-The code, for the record (branch `in-process`):
+The code, for the record (its branch has been dropped; this is what it did):
 
 - `lane.h`: `#define DN_GATE 0x100000000UL`.
 - `lane.c`: once in the constructor, `mmap` the page at `DN_GATE`, write `svc #0`
@@ -408,8 +408,7 @@ are folded into shared ones, the same lean-filter idea applied to the cookie
 instead of dropped). Its costs: a 4 KB gate a process, and `instruction_pointer`
 is read on **every** syscall, which defeats the kernel's per-number filter cache
 (5.11+); the cookie is read only for a lane row, so every other number stays
-cacheable. So it is a lateral move — kept here, and on the branch — not on
-`main`.
+cacheable. So it is a lateral move — kept here as a record — not on `main`.
 
 ## What follows
 

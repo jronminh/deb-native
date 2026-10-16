@@ -207,14 +207,15 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 - **Syscall User Dispatch** is a third net below the tracer, but it needs kernel
   5.11: neither phone has it (4.14, 5.10). Keep it for a 5.11+ device.
 
-## In-process: the catcher into the tracee (branch `in-process`)
+## In-process: the catcher into the tracee
 
 Today the catcher is `dn-tiny`, a separate process reached by `ptrace`: the shim
 is the in-process fast path, the tracer the net (the five blind spots, the
 `ld-dn-shim` design; [`experiments.md`](docs/reference/experiments.md), E4-E8).
 A row the shim cannot reach costs a stop, and E11 shows the stop **is** the cost.
-This branch moves the catcher **into the process** for the programs that can
-carry it, so a row costs no stop.
+The idea is to move the catcher **into the process** for the programs that can
+carry it, so a row costs no stop. An experiment did this (E12/E13); its findings
+are kept here and in `experiments.md`, and its branch has been dropped.
 
 - **Same law, same contract.** `policy.c` and `lane.h` do not change; only
   *where* they run does. The move is a role move, not a rewrite.
