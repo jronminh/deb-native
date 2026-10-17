@@ -26,6 +26,7 @@ KIT=$P/tmp/dn-bench
 mkdir -p "$KIT"
 cp "$HERE"/reg.sh "$HERE"/fr.sh "$HERE"/lua.sh "$HERE"/t.sh "$HERE"/exec200.sh "$KIT"/ || exit 1
 cp "$HERE"/mt.c "$HERE"/xm.c "$HERE"/syscalls.c "$KIT"/ || exit 1
+cd "$P" || exit 1                        # the tracee's cwd is then the tree's /
 
 quiet() { "$DN" -q -s 500 -t "$P" -- /usr/bin/bash /boot/init.sh /usr/bin/sh -c "$1"; }
 

@@ -1,6 +1,6 @@
 o=/tmp/reg-$1; rm -rf $o; mkdir -p $o
 ls -lR /usr/share/doc > $o/ls 2>&1
-find /usr /etc -printf '%p %s %u %y %l\n' 2>&1 | sort > $o/find
+find /usr /etc -path /usr/lib/deb-native -prune -o -printf '%p %s %u %y %l\n' 2>&1 | sort > $o/find
 find -L /etc/alternatives -maxdepth 1 -printf '%p %y %s\n' 2>&1 | sort > $o/findL
 for f in /bin /bin/sh /etc/alternatives/awk /usr/lib/aarch64-linux-gnu/libc.so.6 /etc/resolv.conf /nonexist /usr/bin/../lib; do
   echo "$f: $(stat -c '%s %U %G %F' $f 2>&1) | $(stat -L -c '%s %F' $f 2>&1) | $(readlink $f 2>&1) | $(readlink -f $f 2>&1) | $(realpath -s $f 2>&1)"
