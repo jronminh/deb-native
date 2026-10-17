@@ -1054,8 +1054,8 @@ static int lane_hook(unsigned long *r)
 
 	switch (nr) {
 	case SYS_openat:
-		if (r[2] & DN_LANE_OPEN_DENY) {
-			done = 0;
+		if ((path && dyn_file(path)) || (r[2] & DN_LANE_OPEN_DENY)) {
+			done = 0;                       /* the tracer's generated file */
 			break;
 		}
 		e = lane_at((int) r[0], path, (int) r[2] & O_NOFOLLOW, host, sizeof host, &at);
