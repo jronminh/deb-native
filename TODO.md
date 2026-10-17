@@ -122,11 +122,11 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   and minor, privileged (allowed, a guest path reaches the kernel): `pivot_root`,
   `quotactl`. `execveat` is done (a row through the exec gate; `fexecve` works).
   The SELinux xattr is read absent, the fd forms (`fgetxattr`/`flistxattr`) too.
-- **The census against the rows**: `docs/reference/device-census.md` lists the 32
-  calls the app's filter kills on the S10e, and each must end in a row (or be
-  answered `ENOSYS` on purpose). Check that by hand against `gen_rows.py`. Also
-  compare the census with bionic's arm64 app policy (the googlesource path I
-  tried returned 404; find the current one).
+- **The census against the policy** (the S10e half is done): the 32 calls the
+  app's filter kills are accounted for in `docs/reference/device-census.md`
+  (8 `FAKE`, `accept` -> `accept4`, 17 `EPERM`, 6 `ENOSYS`; the default answer
+  covers a new denial). Also compare the census with bionic's arm64 app policy
+  (the googlesource path I tried returned 404; find the current one).
 - **Rows from a catalog**: generate the rows from one table giving each syscall
   a class (path, result, socket, exec, identity, refused, none) instead of the
   tables in `gen_rows.py`. Termux's glibc `fakesyscall.json` is a checked

@@ -103,6 +103,14 @@ that is implemented (`faccessat2`, `fchmodat2` and `openat2` to the older call),
 and two more could have one (`epoll_pwait2` to `epoll_pwait`, `clone3` to `clone`);
 glibc already falls back on `ENOSYS` for both.
 
+Where each answer lives (checked 2026-10-17 against `src/dn-tiny/`): the 8
+identity calls and `setresuid` are `FAKE` in `gen_rows.py`, answered at the entry
+stop or at the `SIGSYS` stop when the platform kills them first; `accept` is a
+`D_SUBST` case in `policy.c`'s `policy_deny`; the 17 `EPERM` calls are its `-1`
+cases; the 6 `ENOSYS` calls take its default (`-38`), as does every other killed
+number -- a denial the census has not seen yet is answered, not fatal, without a
+new row.  The 8 + 1 + 17 + 6 add to the 32, nothing falls through by accident.
+
 ## A second device: Android 16
 
 The same census on the owner's main phone, Samsung SM-S7110 (Galaxy S23 FE),
