@@ -6,11 +6,12 @@
  * of the target and rewrites the call:
  *
  *   script        #!interp [arg]      ->  run interp with the script as its argument
- *   glibc ELF     PT_INTERP = glibc   ->  ld.so --library-path L --argv0 A program args
+ *   glibc ELF     PT_INTERP = glibc   ->  that loader --argv0 A program args
  *   anything else                     ->  the program, its path mapped
  *
- * The rules are policy (policy_loader, policy_libpath, policy_path); this file
- * only reads, decides which rule matches, and builds the new argv.
+ * The rules are policy (policy_is_glibc_interp, policy_path); this file only
+ * reads, decides which rule matches, and builds the new argv.  The loader is the
+ * tree's own and finds the libraries through the tree's ld.so.cache.
  */
 #include <linux/elf.h>
 #include "exec.h"
@@ -187,9 +188,7 @@ static void resolve(const char *cur_in, struct vec *a, char *final, size_t cap, 
 		}
 
 		if (elf_interp(b, n, interp, sizeof interp) && policy_is_glibc_interp(interp)) {
-			vpush(out, policy_loader());
-			vpush(out, "--library-path");
-			vpush(out, policy_libpath());
+			vpush(out, interp);                       /* the tree's own loader */
 			if (policy_preload()[0]) {                /* the shim, when the prefix ships one */
 				vpush(out, "--preload");
 				vpush(out, policy_preload());
@@ -203,7 +202,7 @@ static void resolve(const char *cur_in, struct vec *a, char *final, size_t cap, 
 			vpush(out, cur);                          /* the program, as the tree names it */
 			for (i = 1; i < a->n; i++)
 				vpush(out, a->s[i]);
-			host_of(policy_loader(), final, cap);     /* the loader, a host path for the kernel */
+			host_of(interp, final, cap);              /* the loader, a host path for the kernel */
 			guest_canon(cur, prog, pcap);             /* /proc/<pid>/exe says the program */
 			return;
 		}

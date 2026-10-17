@@ -942,19 +942,29 @@ static pid_t proc_leaf_pid(const char *guest, const char *leaf, pid_t self)
 	return v;
 }
 
+/* Is this token a glibc loader path?  The gate runs the tree's own PT_INTERP, so
+ * its spelling is the tree's (Debian, Ubuntu, Arch, ...); the name is shared. */
+static int loader_token(const char *s, size_t l)
+{
+	static const char ld[] = "ld-linux-aarch64.so.1";
+	size_t m = sizeof ld - 1;
+
+	if (l < m || memcmp(s + l - m, ld, m) != 0)
+		return 0;
+	return l == m || s[l - m - 1] == '/';
+}
+
 /* "/proc/<pid>/cmdline": the kernel's own, minus the loader the exec gate puts in
- * front of a glibc program -- the loader, --library-path, --preload/--audit and
- * their host paths, and the program token.  What is left is the argv the program
- * was run with, its paths the tree's.  A program the gate did not rewrite (static,
+ * front of a glibc program -- the loader, --preload/--audit and their host
+ * paths, and the program token.  What is left is the argv the program was run
+ * with, its paths the tree's.  A program the gate did not rewrite (static,
  * foreign) already reads its own argv, so its cmdline is left as it is. */
 static int synth_cmdline(struct tracee *t, const char *guest, char *out, size_t cap)
 {
-	const char *ld = policy_loader();
-	size_t ldl = strlen(ld);
 	pid_t pid = proc_leaf_pid(guest, "cmdline", t->pid);
 	char kp[64], raw[8192], buf[8192], nm[40];
 	const char *tok, *end, *argv0 = NULL, *args = NULL;
-	size_t argv0l = 0, argsl = 0, rn = 0;
+	size_t argv0l = 0, argsl = 0, rn = 0, ldl;
 	ssize_t n;
 	int fd, m;
 
@@ -973,7 +983,12 @@ static int synth_cmdline(struct tracee *t, const char *guest, char *out, size_t 
 	sys_close(fd);
 	if (n <= 0)
 		return 0;
-	if ((size_t) n < ldl + 1 || memcmp(raw, ld, ldl) != 0 || raw[ldl] != '\0')
+	{
+		const char *z0 = memchr(raw, 0, (size_t) n);
+
+		ldl = z0 ? (size_t) (z0 - raw) : 0;
+	}
+	if (!loader_token(raw, ldl))
 		return 0;                              /* not the gate's command line: leave it */
 	end = raw + n;
 	for (tok = raw; tok < end; ) {

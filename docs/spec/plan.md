@@ -27,13 +27,13 @@ The mapping must be *single* and *consistent* before it is widened.
    `policy_is_host`); its own resolver is gone, and the link cache (now
    `policy.c`'s) is a seqlock the shim's threads share. Two copies can disagree,
    and the 0.7 runtime died of that.
-2. **Loader and gate uniform.** Done for the gate: the exec gate maps the loader
-   itself to a host path (the kernel needs a file to exec) and preloads the shim
-   by its host path (the runtime's own; the shim finds the root from it), but
-   hands the program and `--library-path` as the tree's own paths, so the loader
-   opens them through the law like any program. Left: the `LD_AUDIT` hook, whose
-   stub now meets those tree paths and so must call the one law, not just add the
-   cookie.
+2. **Loader and gate uniform.** Done: the exec gate runs the program's own
+   `PT_INTERP`, resolved in the tree and mapped to a host path (the kernel needs
+   a file to exec), with `--argv0` and the shim/loader hook preloaded by their
+   host paths (the runtime's own; the shim finds the root from it).  There is no
+   `--library-path`: the loader finds the libraries through the tree's
+   `ld.so.cache`, their paths the tree's, so the law maps them like any other.
+   The `LD_AUDIT` hook maps the loader's own opens through that same law (E7).
 3. **Binds are data.** Done for the table: one table in `policy.c` (the prefix
    root + the host rows: `/proc`, `/sys`, `/dev`, the shared dirs + the binds in
    `boot/binds`), read by every engine -- not re-derived in each; the walk

@@ -345,19 +345,14 @@ built by a prefix as its host: that and the from-scratch references are in
 [`reference/from-scratch.md`](docs/reference/from-scratch.md).
 What still assumes Debian:
 
-- `policy.c` names the loader by Debian's multiarch path
-  (`/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1`) and gives it a
-  `--library-path` of Debian's directories. Take the loader from the program's
-  `PT_INTERP`, resolved in the tree, and let it find libraries through the tree's
-  own `ld.so.cache` (its guest paths are mapped like any other): Ubuntu, Arch,
-  Fedora trees would then boot as they are.
 - `boot.sh` needs `/usr/bin/bash` and `/boot/init.sh`; a bundle writes its own
   `boot.sh` (the busybox one does), and a tree without a shell should run its
   program directly.
 - The exec gate and the shim know glibc only (`ld-linux-*`, `libc.so.6`); musl
   (Alpine) needs the gate's `ld-musl-*` case and a musl build of the shim.
 - Ubuntu through debootstrap (`--suite noble --mirror
-  http://ports.ubuntu.com/ubuntu-ports`) may work as it is; untested.
+  http://ports.ubuntu.com/ubuntu-ports`) is untested with the gate's new loader
+  path (`PT_INTERP`, `ld.so.cache`).
 
 **Bundles**: a minimal tree for one program, tens of MB instead of hundreds:
 the program, its library closure (`ld.so --list`), glibc and the loader, a few

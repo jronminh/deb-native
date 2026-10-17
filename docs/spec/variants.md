@@ -67,14 +67,12 @@ core's:
    `busybox`'s (`Debian 1:1.37.0-…`), `fastfetch`'s, and `dn-lane.so`'s
    `.comment` (`GCC: (Debian 14.2.0-19)`). Build from upstream (or clang, or
    musl) and they go.
-3. **The core's one assumption.** `dn-tiny` has no `Debian` string, but it names
-   Debian's multiarch path -- the loader
-   `/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1` and the `--library-path`,
-   in `policy.c`. This is the only Debian the core carries; it is open in
-   [`../../TODO.md`](../../TODO.md), "Beyond Debian, and bundles".
+3. **The core.** None, as of 2026-10-17: `dn-tiny` runs the program's own
+   `PT_INTERP` (resolved in the tree) and lets the tree's `ld.so.cache` find the
+   libraries, so a Debian, Ubuntu, Arch or Fedora tree boots as it is.
 
 The bundle is also the first test of that TODO item: it removed the *other* core
-coupling (`boot.sh`'s `/usr/bin/bash`) by booting `busybox sh`. What is left is
-the loader path -- fix it (take the loader from the program's `PT_INTERP`, let
-the tree's `ld.so.cache` find the libraries) and the bundle names Debian nowhere
-while the runtime is unchanged.
+coupling (`boot.sh`'s `/usr/bin/bash`) by booting `busybox sh`.  With the loader
+taken from `PT_INTERP` and the libraries through the tree's `ld.so.cache`, the
+core names Debian nowhere; what is left in the tree is its own identity and the
+builder's fingerprints.

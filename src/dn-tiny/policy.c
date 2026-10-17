@@ -53,7 +53,7 @@ static int indexed;
 
 static const char *root;
 static size_t root_len;
-static char loader[512], libpath[1024], preload[512], ldhook[512];
+static char preload[512], ldhook[512];
 
 /* ---- the link cache (policy.h).  An entry is valid while its generation is the
  * shared one; moving the generation drops every entry at once.  A seqlock lets
@@ -544,9 +544,7 @@ void policy_root_set(const char *r)
 	root = r;
 	root_len = strlen(r);
 	binds_defaults();
-	loader[0] = libpath[0] = preload[0] = ldhook[0] = '\0';
-	append(loader, sizeof loader, "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1");
-	append(libpath, sizeof libpath, "/usr/lib/aarch64-linux-gnu:/usr/lib");
+	preload[0] = ldhook[0] = '\0';
 	/* the shim and the loader hook are the runtime's own, and the shim finds the
 	 * root from its own host path: both stay host paths */
 	append(preload, sizeof preload, r);
@@ -611,8 +609,6 @@ void policy_set_root(const char *r)
 
 const char *policy_preload(void) { return preload; }
 const char *policy_ldhook(void) { return ldhook; }
-const char *policy_loader(void) { return loader; }
-const char *policy_libpath(void) { return libpath; }
 
 int policy_is_glibc_interp(const char *interp)
 {
