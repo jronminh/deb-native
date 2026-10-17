@@ -20,7 +20,9 @@ run() {
 	out=$("$DN" -t "$P" -- /usr/bin/bash /boot/init.sh \
 		/usr/bin/sh -c "$2" 2>&1 >/dev/null)
 	t1=$(date +%s%N)
-	printf '%-6s %7d ms  %s\n' "$1" "$(( (t1 - t0) / 1000000 ))" \
+	# awk: /bin/sh here is Android's, whose arithmetic is 32-bit
+	ms=$(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%d", (b - a) / 1000000 }')
+	printf '%-6s %7s ms  %s\n' "$1" "$ms" \
 		"$(printf '%s' "$out" | sed -n 's/.*\(enter=[0-9]* exit=[0-9]*\).*/\1/p' | tail -1)"
 }
 
