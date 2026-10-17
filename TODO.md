@@ -162,21 +162,16 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   law -- the Lua build drops from 1670 to 848 stops. Not shipped by default (a
   prefix ships it only when `usr/lib/deb-native/dn-ldhook.so` is present); it
   needs `execmod`/`execmem`, so confirm on the Android 16 phone before it ships.
-- **libc's cancellable path** (324): its `svc` is left alone for
-  `pthread_cancel`; a stub that keeps the program counter inside
-  `__syscall_cancel_arch`'s range would allow it. Measured
-  ([`experiments.md`](docs/reference/experiments.md), E8-E9): on the Lua build
-  this is ~341 of the `openat` reads (`open()` through the shim's symbol is
-  answered; `fopen()` through this path stops). Located: the cancellable wrappers
-  set the number in `x6` and branch to `__syscall_cancel_arch` (one shared `svc`
-  for every cancellable call; in the prefix's libc 2.41 it is `bl 0x828ec`,
-  `mov x8,x6` at `0x82868`, `svc` at `0x828d8`). One patch covers all of them.
-  Find the offset at **build time** (the prefix's libc is known), not at run
-  time (`mov x8,x6` is not unique and the function is unexported). Tried and
-  rejected at run time (E10): a `mov x8,x6` heuristic patch works (Lua stops
-  -203, ~1%) and cancellation still works, but it patches a glibc-internal site
-  with no stable contract and taxes every cancellable call, for ~1%. If ever
-  wanted, do it at build time via `scripts/find-cancellable.py`.
+- **libc's cancellable path** (324 stops, done as an option): its `svc` is left
+  alone for `pthread_cancel` (which reads the program counter there).  The
+  wrappers set the number in `x6` and branch to `__syscall_cancel_arch` (one
+  shared `svc`; in libc 2.41, `mov x8,x6` at `0x82868`, `svc` at `0x828d8`).
+  `build-prefix.sh --cancel` finds that offset at build time
+  (`scripts/find-cancellable.py`) and passes it to the shim: the Lua build falls
+  from 866 to 662 stops and cancellation still works, but the wall is ~1%
+  slower (14.2 s vs 14.1 s interleaved) because the hook taxes every
+  cancellable call.  Off by default; the runtime `mov x8,x6` heuristic stays
+  rejected (E10: no stable contract).
 - **Who sets the floor of a stop**: on this phone the tracer's big core sits at a
   low clock while the guest runs on the little cluster. Try the tracer and the
   guest on one cluster, a priority raised with `nice` (no privilege needed down to

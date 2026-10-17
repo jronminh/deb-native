@@ -78,6 +78,7 @@ Options (`scripts/build-prefix.sh --help`):
 | `--name` | the directory's name | the name in `boot/version` |
 | `--no-shim` | | no `dn-lane.so`: everything goes through the tracer (slower) |
 | `--ldhook` | | ship `dn-ldhook.so`, the loader hook (needs `execmod`/`execmem`) |
+| `--cancel` | | patch glibc's shared cancellable `svc` (204 fewer stops in the Lua build, ~1% slower) |
 | `--keep-toolchain` | | keep `gcc` and `libc6-dev` after the shim is built |
 
 The sets are suggestions, nothing depends on them:

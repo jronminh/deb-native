@@ -29,6 +29,10 @@
 #                      (slower; for comparison or a toolchain-free build)
 #   --ldhook           ship dn-ldhook.so, the loader hook: the loader's own
 #                      paths are mapped (needs execmod/execmem)
+#   --cancel           patch glibc's shared cancellable svc at its build-time
+#                      offset (find-cancellable.py): 204 fewer stops in the Lua
+#                      build, about 1% slower (the hook taxes every cancellable
+#                      call); off by default
 #   --keep-toolchain   keep gcc and libc6-dev after building the shim (the dev
 #                      and full sets keep them anyway)
 #
@@ -41,7 +45,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
 SET=minimal PACKAGES= SUITE=trixie MIRROR=http://deb.debian.org/debian VARIANT=minbase
-RUNTIME=$ROOT/build NAME= SHIM=1 LDHOOK=0 KEEP_TC=0
+RUNTIME=$ROOT/build NAME= SHIM=1 LDHOOK=0 CANCEL_PATCH=0 KEEP_TC=0
 while [ $# -gt 0 ]; do
   case $1 in
     --set) SET=$2; shift 2 ;;
@@ -53,6 +57,7 @@ while [ $# -gt 0 ]; do
     --name) NAME=$2; shift 2 ;;
     --no-shim) SHIM=0; shift ;;
     --ldhook) LDHOOK=1; shift ;;
+    --cancel) CANCEL_PATCH=1; shift ;;
     --keep-toolchain) KEEP_TC=1; shift ;;
     -h|--help) sed -n '2,/^set -eu/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
     -*) echo "build-prefix: unknown option $1" >&2; exit 2 ;;
@@ -165,7 +170,23 @@ if [ "$SHIM" = 1 ]; then
     python3 "$ROOT/src/dn-tiny/gen_rows.py" "$RUNTIME/gen/policy-rows.inc"
   fi
   cp "$RUNTIME/gen/policy-rows.inc" "$DEST/tmp/dn-lane/"
-  run gcc -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC -o /usr/lib/deb-native/dn-lane.so \
+  # the shared cancellable svc (glibc's __syscall_cancel_arch): its offset is
+  # found here, from the tree's own libc, because at run time `mov x8, x6` is
+  # not unique.  One patch covers open, read, write and the rest; without it
+  # that path stops in the tracer
+  CANCEL=
+  if [ "$CANCEL_PATCH" = 1 ]; then
+    if off=$(python3 "$ROOT/scripts/find-cancellable.py" \
+             "$DEST/usr/lib/aarch64-linux-gnu/libc.so.6" 2>/dev/null); then
+      off=${off##*offset }
+      off=${off%% *}
+      CANCEL="-DDN_CANCEL_OFF=$off"
+      say "the cancellable svc: ${off} (one patch for open, read, write, ...)"
+    else
+      say "the cancellable svc: not found; that path stays with the tracer"
+    fi
+  fi
+  run gcc -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC $CANCEL -o /usr/lib/deb-native/dn-lane.so \
       /tmp/dn-lane/lane.c /tmp/dn-lane/policy.c
   rm -rf "$DEST/tmp/dn-lane"
   if [ "$KEEP_TC" = 0 ]; then
