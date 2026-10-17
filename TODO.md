@@ -155,10 +155,10 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   and 77 KB (`dn-lane.so`), and a program in it feels native. Every feature to come
   (binds, SysV, `/proc` files) must leave that so. `scripts/bench.sh` runs real
   workloads (a stat storm, links, a git workflow, Python, a tar round trip, a
-  spawn loop); the lane test, the regression set and the Lua build's wall are
-  still in a work prefix's `tmp/lane/`. Move them in too, into `tests/bench/`,
-  with one script that prints the rows of `docs/performance.md`, "In an app
-  session", and run it before and after each runtime change, interleaved.
+  spawn loop); the lane test, the regression set and the Lua build's wall now
+  live in `tests/bench/` (`run.sh` prints the rows of `docs/performance.md`,
+  "In an app session"). Run it before and after each runtime change,
+  interleaved.
 - **`ld.so`'s own calls** (about 1,100 of the Lua build's 1,700 stops): the
   program, the shim and the libraries are opened before the shim is loaded. Done
   by the loader hook (`src/dn-tiny/ldhook.c`, an `LD_AUDIT` module): it patches

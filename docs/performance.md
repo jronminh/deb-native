@@ -126,7 +126,9 @@ Two things it shows that the Lua build hides:
 
 ## How to measure
 
-- `scripts/bench.sh PREFIX [workload ...]` runs the second bench above.
+- `tests/bench/run.sh PREFIX [bench|check|all]` prints these rows (wall and
+  stops) and runs the lane test, the regression set and the Lua build's wall;
+  `scripts/bench.sh PREFIX [workload ...]` runs the second bench above.
 - `dn-tiny` without `-q` prints one line at exit: entry and exit stops, events,
   signals, paths mapped, calls answered at entry, execs, `SIGSYS` answers, the
   time, and which syscalls the platform killed.
