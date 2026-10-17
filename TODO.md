@@ -132,10 +132,6 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   (the googlesource path I tried returned 404; find the current one).
 ## Identity and files
 
-- **An owner store**: `chown` is accepted and not kept, so a file never reads as
-  owned by another user (`userdel -r` refuses: "not owned by"). Keep the owner in
-  `user.dn.*` xattrs (user xattrs work in the app's data) and answer it in every
-  `stat`, in both the tracer and the shim.
 - **Hard links that share contents**: a link is a copy with its count
   remembered. A real `link2symlink` would keep one file; do it if a program needs
   the contents shared.

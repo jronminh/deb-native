@@ -6,6 +6,12 @@
 
 unsigned long trace_n_rewritten;
 
+/* the owner store, used by link_copy before its definition */
+static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g);
+static void own_write(const char *host, int nofollow, unsigned u, unsigned g);
+static void own_apply(char *buf, unsigned off, const char *host, int nofollow);
+static void store_owner(struct tracee *t);
+
 #define EXE_LEN   128
 static char exe_now[PID_SLOTS][EXE_LEN];          /* by pid, the program each process runs */
 static char exe_next[PID_SLOTS][EXE_LEN];         /* noted at execve entry, valid once it succeeds */
@@ -444,6 +450,12 @@ static i64 link_copy(const char *old, const char *new)
 		}
 	}
 done:
+	if (r == 0) {
+		unsigned u, g;
+
+		if (own_read(old, 0, &u, &g))             /* the copy carries the stored owner */
+			own_write(new, 0, u, g);
+	}
 	if (r == 0)
 		r = sc(52, out, mode & 07777, 0, 0, 0, 0);   /* fchmod: the umask must not narrow it */
 	if (r == 0) {
@@ -1158,6 +1170,10 @@ void trace_enter(struct tracee *t, const struct row *rw)
 			}
 		}
 	}
+	if (rw->nr == 54 || rw->nr == 55) {              /* chown: kept in user.dn.owner */
+		store_owner(t);
+		return;
+	}
 	if (rw->fake != F_NONE) {
 		fake_result(t, rw->fake);
 		return;
@@ -1332,13 +1348,23 @@ static void fix_link(struct tracee *t)
 /* the owner in a stat (uid at 24, gid at 28) or statx (uid at 20, gid at 24): the real ids read as root */
 static void fix_owner(struct tracee *t, u64 buf, unsigned off)
 {
+	char host[300];
 	unsigned id[2];
+	ssize_t k;
 
 	if (t->r.regs[0] != 0 || mon_read(t, buf + off, id, sizeof id) != (ssize_t) sizeof id)
 		return;
 	id[0] = policy_map_uid(id[0]);
 	id[1] = policy_map_gid(id[1]);
 	mon_write(t, buf + off, id, sizeof id);
+	k = mon_read_str(t, t->r.regs[1], host, sizeof host - 1);
+	if (k > 0 && host[0] == '/') {                   /* the path, mapped at entry */
+		unsigned own[2];
+
+		host[k] = '\0';
+		if (own_read(host, 0, &own[0], &own[1]))
+			mon_write(t, buf + off, own, sizeof own);
+	}
 }
 
 /* A symlink's size is the length of its target.  On an encrypted file system the kernel
@@ -1478,6 +1504,110 @@ static void link_size(const char *host, u64 *size)
 	*size = policy_unpath(link, guest, sizeof guest) != 0 ? (u64) strlen(guest) : (u64) n;
 }
 
+/* ---- the owner store: chown is kept in user.dn.owner ("UID:GID"), and every
+ * stat reads it back (the file's real owner is the app's) -------------------- */
+
+#define OWN_ATTR "user.dn.owner"
+
+static int own_parse(const char *b, unsigned *u, unsigned *g)
+{
+	unsigned v = 0, w = 0;
+	int i = 0;
+
+	if (b[i] < '0' || b[i] > '9')
+		return 0;
+	while (b[i] >= '0' && b[i] <= '9') {
+		if (v > 0x7fffffffu / 10)
+			return 0;
+		v = v * 10 + (unsigned) (b[i++] - '0');
+	}
+	if (b[i++] != ':')
+		return 0;
+	if (b[i] < '0' || b[i] > '9')
+		return 0;
+	while (b[i] >= '0' && b[i] <= '9') {
+		if (w > 0x7fffffffu / 10)
+			return 0;
+		w = w * 10 + (unsigned) (b[i++] - '0');
+	}
+	if (b[i] != '\0')
+		return 0;
+	*u = v;
+	*g = w;
+	return 1;
+}
+
+/* the stored owner of a host path (nofollow) or /proc/<pid>/fd/N; 1 if present */
+static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g)
+{
+	char b[32];
+	i64 n = sc(nofollow ? 9 : 8, (i64) host, (i64) OWN_ATTR, (i64) b, (i64) sizeof b - 1, 0, 0);
+
+	if (n <= 0)
+		return 0;
+	b[n] = '\0';
+	return own_parse(b, u, g);
+}
+
+static void own_write(const char *host, int nofollow, unsigned u, unsigned g)
+{
+	char b[32];
+	int n = uitoa(b, u);
+
+	if (u == 0 && g == 0) {                          /* the default: no xattr */
+		sc(nofollow ? 15 : 14, (i64) host, (i64) OWN_ATTR, 0, 0, 0, 0);   /* removexattr */
+		return;
+	}
+	b[n++] = ':';
+	n += uitoa(b + n, g);
+	sc(nofollow ? 6 : 5, (i64) host, (i64) OWN_ATTR, (i64) b, n, 0, 0);       /* setxattr */
+}
+
+/* read the stored owner into a stat/statx buffer at off (uid, then gid) */
+static void own_apply(char *buf, unsigned off, const char *host, int nofollow)
+{
+	unsigned id[2];
+
+	if (!own_read(host, nofollow, &id[0], &id[1]))
+		return;
+	memcpy(buf + off, id, sizeof id);
+}
+
+/* fchownat (54) and fchown (55): answer 0, as the fake root did, and remember the
+ * owner.  A symlink takes no user xattr, so its chown stays answer-only. */
+static void store_owner(struct tracee *t)
+{
+	char host[300];
+	unsigned u = (unsigned) t->r.regs[2], g = (unsigned) t->r.regs[3];
+	unsigned cu = 0, cg = 0;
+	int nofollow = 0;
+	ssize_t k;
+
+	if (t->r.regs[8] == 54) {
+		nofollow = !!(t->r.regs[4] & 0x100);     /* chown -R uses it; a symlink takes none */
+		rewrite_path(t, 1);
+		k = mon_read_str(t, t->r.regs[1], host, sizeof host - 1);
+		if (k <= 0 || host[0] != '/')
+			goto out;                        /* a relative name outside the tree */
+		host[k] = '\0';
+	} else if (!fd_name(t->pid, (int) t->r.regs[0], 0, host, sizeof host)) {
+		goto out;
+	}
+	if (u != (unsigned) -1 || g != (unsigned) -1) {
+		if (!own_read(host, nofollow, &cu, &cg)) {
+			cu = 0;
+			cg = 0;
+		}
+		if (u != (unsigned) -1)
+			cu = u;
+		if (g != (unsigned) -1)
+			cg = g;
+		own_write(host, nofollow, cu, cg);
+	}
+out:
+	mon_skip(t, 0);
+}
+
 /* the owner at buf + off (uid, then gid): the real ids read as root */
 static void map_owner(char *buf, unsigned off)
 {
@@ -1510,6 +1640,7 @@ static int answer_statx(struct tracee *t, const struct row *rw)
 		return 1;
 	}
 	map_owner(stx, 20);
+	own_apply(stx, 20, host, how == 1 && (flags & 0x100));
 	if (n_copies) {
 		u64 ino;
 		unsigned ma, mi, n;
@@ -1553,6 +1684,7 @@ static int answer_stat(struct tracee *t, const struct row *rw)
 		return 1;
 	}
 	map_owner(st, 24);
+	own_apply(st, 24, host, how == 1 && (flags & 0x100));
 	if (n_copies) {
 		u64 dev, ino;
 		unsigned n;

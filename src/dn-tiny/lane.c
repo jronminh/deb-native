@@ -643,6 +643,77 @@ static void map_owner(unsigned *uid, unsigned *gid)
 		*gid = 0;
 }
 
+/* ---- the owner store: chown is kept in user.dn.owner ("UID:GID"), and every
+ * stat reads it back (the tracer stores it; the file's real owner is the app) -- */
+
+#define OWN_ATTR "user.dn.owner"
+
+static int own_parse(const char *b, unsigned *u, unsigned *g)
+{
+	unsigned v = 0, w = 0;
+	int i = 0;
+
+	if (b[i] < '0' || b[i] > '9')
+		return 0;
+	while (b[i] >= '0' && b[i] <= '9') {
+		if (v > 0x7fffffffu / 10)
+			return 0;
+		v = v * 10 + (unsigned) (b[i++] - '0');
+	}
+	if (b[i++] != ':')
+		return 0;
+	if (b[i] < '0' || b[i] > '9')
+		return 0;
+	while (b[i] >= '0' && b[i] <= '9') {
+		if (w > 0x7fffffffu / 10)
+			return 0;
+		w = w * 10 + (unsigned) (b[i++] - '0');
+	}
+	if (b[i] != '\0')
+		return 0;
+	*u = v;
+	*g = w;
+	return 1;
+}
+
+static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g)
+{
+	char b[32];
+	long n = lane_call(nofollow ? SYS_lgetxattr : SYS_getxattr, (long) host,
+			   (long) OWN_ATTR, (long) b, (long) sizeof b - 1, 0L);
+
+	if (n <= 0)
+		return 0;
+	b[n] = '\0';
+	return own_parse(b, u, g);
+}
+
+/* the stored owner for host, or (host empty) for the fd, after map_owner */
+static void own_stat(unsigned *uid, unsigned *gid, const char *host, int fd, int nofollow)
+{
+	unsigned u, g;
+	char p[40];
+
+	if (host && host[0]) {
+		if (!own_read(host, nofollow, &u, &g))
+			return;
+	} else {
+		char d[12];
+		int k = 0, i = 14;
+		unsigned v = (unsigned) fd;
+
+		memcpy(p, "/proc/self/fd/", 14);
+		do d[k++] = (char) ('0' + v % 10); while ((v /= 10));
+		while (k)
+			p[i++] = d[--k];
+		p[i] = '\0';
+		if (!own_read(p, 0, &u, &g))
+			return;
+	}
+	*uid = u;
+	*gid = g;
+}
+
 static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 {
 	char host[PATH_MAX];
@@ -654,6 +725,7 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 		if (lane_call(SYS_fstat, dirfd, st, 0L, 0L, 0L) != 0)
 			return -1;
 		map_owner(&st->st_uid, &st->st_gid);
+		own_stat(&st->st_uid, &st->st_gid, "", dirfd, 0);
 		cl_fix(st->st_dev, st->st_ino, &st->st_nlink);
 		return 0;
 	}
@@ -669,6 +741,7 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 	if (lane_call(SYS_newfstatat, at, host, st, flags, 0L) != 0)
 		return -1;
 	map_owner(&st->st_uid, &st->st_gid);
+	own_stat(&st->st_uid, &st->st_gid, host, -1, nofollow);
 	cl_fix(st->st_dev, st->st_ino, &st->st_nlink);
 	if (nofollow && S_ISLNK(st->st_mode))
 		st->st_size = link_size(at, host, st->st_size);
@@ -708,6 +781,7 @@ int statx(int dirfd, const char *path, int flags, unsigned mask, struct statx *s
 	if (lane_call(SYS_statx, at, host, flags, mask, stx) != 0)
 		return -1;
 	map_owner(&stx->stx_uid, &stx->stx_gid);
+	own_stat(&stx->stx_uid, &stx->stx_gid, host, at, nofollow);
 	cl_fix(makedev(stx->stx_dev_major, stx->stx_dev_minor), stx->stx_ino, &stx->stx_nlink);
 	if (nofollow && host[0] && S_ISLNK(stx->stx_mode))
 		stx->stx_size = (unsigned long) link_size(at, host, (long) stx->stx_size);
@@ -1102,6 +1176,7 @@ static int lane_hook(unsigned long *r)
 			res = lane_rawc(SYS_statx, at, host, fl, r[3], x);
 			if (res == 0) {
 				map_owner(&x->stx_uid, &x->stx_gid);
+				own_stat(&x->stx_uid, &x->stx_gid, host, at, nofollow);
 				cl_fix(makedev(x->stx_dev_major, x->stx_dev_minor), x->stx_ino, &x->stx_nlink);
 				if (nofollow && host[0] && S_ISLNK(x->stx_mode))
 					x->stx_size = (unsigned long) link_size(at, host, (long) x->stx_size);
@@ -1112,6 +1187,7 @@ static int lane_hook(unsigned long *r)
 			res = lane_rawc(SYS_newfstatat, at, host, st, fl, 0L);
 			if (res == 0) {
 				map_owner(&st->st_uid, &st->st_gid);
+				own_stat(&st->st_uid, &st->st_gid, host, at, nofollow);
 				cl_fix(st->st_dev, st->st_ino, &st->st_nlink);
 				if (nofollow && host[0] && S_ISLNK(st->st_mode))
 					st->st_size = link_size(at, host, st->st_size);

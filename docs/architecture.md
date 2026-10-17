@@ -153,7 +153,9 @@ the net for everything.
 - Every process starts as root (uid and gid 0). `set*id` calls are accepted and
   remembered per process, inherited by children; `get*id` say what was set.
 - Files owned by the app's uid read as owned by root in every `stat` the tracer
-  or the shim answers. `chown` is accepted and not kept.
+  or the shim answers. `chown`/`fchownat` are accepted and kept in a
+  `user.dn.owner` xattr (`UID:GID`) on the file; every `stat` reads it back, a
+  `chown` to 0:0 removes it, and the copy a hard link makes carries it.
 - `/proc/<pid>/status`'s `Uid`/`Gid` say the same ids, so a reader that never
   calls `get*id` (a `ps` that reads the file) also sees root.
 - The goal is no accidental identity leak (apt, dpkg and `git`'s ownership check
@@ -222,8 +224,6 @@ runtime's.)
 
 ## Known gaps
 
-- `chown` is not kept: a file's owner reads as root or as its real uid's
-  number, never as another user.
 - The copies made for hard links do not share their contents.
 - A program without the shim (static, Go) sees the real owner through `fstat`
   only, and the real link count of a copy.
