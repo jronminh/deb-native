@@ -102,9 +102,9 @@ need inside it.
 in it, which sets the environment (`PATH`, `HOME=/root`, `LANG=C.UTF-8`,
 `TMPDIR=/tmp`) and runs the command.
 
-`DN_TINY_FLAGS` passes options to `dn-tiny`; `DN_TINY_FLAGS="-s 500"` makes it
-poll 500 us for the next stop before sleeping, which helps work that stops a lot
-on a phone whose cores sleep deeply, at the cost of some CPU.
+`DN_TINY_FLAGS` passes options to `dn-tiny`. `boot.sh` polls 500 us for the next
+stop by default (`-s 500`): faster when work spawns or stops a lot, a few percent
+slower on a parallel build. `DN_TINY_FLAGS="-s 0"` sleeps between stops instead.
 
 ## The prefix
 

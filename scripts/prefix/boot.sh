@@ -7,8 +7,9 @@
 # shell (there is no /bin/sh on the device); `sh boot/boot.sh` works too.  Any
 # arguments are the command to run in the prefix (default: an interactive shell).
 #
-#   DN_TINY_FLAGS   extra dn-tiny options, e.g. "-s 500" to poll 500 us for the
-#                   next stop before sleeping (faster on stop-heavy work, more CPU)
+#   DN_TINY_FLAGS   extra dn-tiny options; the default is -s 500 (poll 500 us
+#                   for the next stop: faster when work spawns or stops a lot,
+#                   a few percent slower on a parallel build).  "-s 0" sleeps.
 root=$(CDPATH= cd -- "${0%/*}/.." && pwd) || exit 1
 # The host's loader knobs are for its own libc: Termux's LD_PRELOAD is a bionic
 # library, and the prefix's glibc loader fails on it before init.sh could drop it.
@@ -32,4 +33,4 @@ exec env -i \
   TERM="${TERM:-dumb}" \
   COLORTERM="$COLORTERM" \
   TZ="${tz:-UTC}" \
-  "$root/usr/lib/deb-native/dn-tiny" -q ${DN_TINY_FLAGS:-} -t "$root" -- /usr/bin/bash /boot/init.sh "$@"
+  "$root/usr/lib/deb-native/dn-tiny" -q -s 500 ${DN_TINY_FLAGS:-} -t "$root" -- /usr/bin/bash /boot/init.sh "$@"

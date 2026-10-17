@@ -23,9 +23,6 @@ the numbers: [`docs/performance.md`](docs/performance.md).
   [`docs/spec/host.md`](docs/spec/host.md).
 - **A warning during the second stage**: Android's linker prints "failed to find
   generated linker configuration" once; find which program it is.
-- **The default for `-s`**: on in `build-prefix.sh`, off in `boot.sh`. Measure
-  `make -j` (the polling tracer competes for a core) and an app session before
-  choosing a default for `boot.sh`.
 
 ## The boundary
 

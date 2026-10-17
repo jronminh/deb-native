@@ -54,6 +54,10 @@ current one, in the same app session, interleaved:
 For reference, natively in Termux: `find` over the same tree 57 ms, `ls -lR` 31
 ms; Termux's own clang builds the same Lua tree in 9.9 s (another compiler).
 With the shim, `-s` hardly matters any more: there are too few stops left.
+Not so for spawn-heavy work: on the Termux prefix (`p-dev`, 2026-10-17), 300 x
+`true` take 3050 ms with the tracer sleeping and 2450 ms with `-s 500` (2400 ms
+natively), while a 40-file `make -j4` is 3-5% slower with `-s 500`.  `boot.sh`
+polls 500 us by default; `DN_TINY_FLAGS="-s 0"` sleeps.
 
 ## How the stops came down
 
