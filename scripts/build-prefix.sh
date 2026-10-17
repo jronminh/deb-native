@@ -27,6 +27,8 @@
 #   --name NAME        the prefix's name in boot/version (default: DEST's name)
 #   --no-shim          no dn-lane.so: every path call stops in the tracer
 #                      (slower; for comparison or a toolchain-free build)
+#   --ldhook           ship dn-ldhook.so, the loader hook: the loader's own
+#                      paths are mapped (needs execmod/execmem)
 #   --keep-toolchain   keep gcc and libc6-dev after building the shim (the dev
 #                      and full sets keep them anyway)
 #
@@ -39,7 +41,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
 SET=minimal PACKAGES= SUITE=trixie MIRROR=http://deb.debian.org/debian VARIANT=minbase
-RUNTIME=$ROOT/build NAME= SHIM=1 KEEP_TC=0
+RUNTIME=$ROOT/build NAME= SHIM=1 LDHOOK=0 KEEP_TC=0
 while [ $# -gt 0 ]; do
   case $1 in
     --set) SET=$2; shift 2 ;;
@@ -50,6 +52,7 @@ while [ $# -gt 0 ]; do
     --runtime) RUNTIME=$2; shift 2 ;;
     --name) NAME=$2; shift 2 ;;
     --no-shim) SHIM=0; shift ;;
+    --ldhook) LDHOOK=1; shift ;;
     --keep-toolchain) KEEP_TC=1; shift ;;
     -h|--help) sed -n '2,/^set -eu/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
     -*) echo "build-prefix: unknown option $1" >&2; exit 2 ;;
@@ -100,6 +103,12 @@ done
 # ---- 2. the runtime in the tree
 mkdir -p "$DEST/usr/lib/deb-native" "$DEST/boot"
 cp "$RUNTIME/dn-tiny" "$DEST/usr/lib/deb-native/dn-tiny"
+if [ "$LDHOOK" = 1 ]; then
+  [ -f "$RUNTIME/dn-ldhook.so" ] ||
+    die "no dn-ldhook.so in $RUNTIME (run scripts/build-runtime.sh)"
+  cp "$RUNTIME/dn-ldhook.so" "$DEST/usr/lib/deb-native/dn-ldhook.so"
+  chmod 755 "$DEST/usr/lib/deb-native/dn-ldhook.so"
+fi
 cp "$ROOT/scripts/prefix/boot.sh" "$ROOT/scripts/prefix/init.sh" "$DEST/boot/"
 chmod 755 "$DEST/usr/lib/deb-native/dn-tiny" "$DEST/boot/boot.sh" "$DEST/boot/init.sh"
 
@@ -182,6 +191,7 @@ version=$VER
 arch=aarch64
 suite=$SUITE
 shim=$SHIM
+ldhook=$LDHOOK
 built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 size=$(du -sm "$DEST" | cut -f1)
 V

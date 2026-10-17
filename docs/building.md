@@ -77,6 +77,7 @@ Options (`scripts/build-prefix.sh --help`):
 | `--runtime DIR` | `build/` | where `dn-tiny` is |
 | `--name` | the directory's name | the name in `boot/version` |
 | `--no-shim` | | no `dn-lane.so`: everything goes through the tracer (slower) |
+| `--ldhook` | | ship `dn-ldhook.so`, the loader hook (needs `execmod`/`execmem`) |
 | `--keep-toolchain` | | keep `gcc` and `libc6-dev` after the shim is built |
 
 The sets are suggestions, nothing depends on them:
@@ -117,7 +118,8 @@ DEST/
 │   └── version       what the prefix is (key=value)
 ├── usr/lib/deb-native/
 │   ├── dn-tiny       the tracer
-│   └── dn-lane.so    the shim (absent with --no-shim)
+│   ├── dn-lane.so    the shim (absent with --no-shim)
+│   └── dn-ldhook.so  the loader hook (only with --ldhook)
 ├── var/lib/deb-native/
 │   └── dn-tiny.gen   the shared link generation (made at the first boot)
 └── ... a Debian tree
@@ -133,13 +135,15 @@ version=0.9.0-pre-alpha
 arch=aarch64
 suite=trixie
 shim=1
+ldhook=0
 built=2026-10-15T02:10:00Z
 size=312
 ```
 
 Inside the prefix the paths are Debian's: `/usr`, `/etc`, `/var`, `/root`,
-`/tmp`. `/proc`, `/sys`, `/dev`, `/data`, `/system`, `/storage`, `/sdcard`,
-`/apex`, `/vendor` and `/mnt` are the phone's.
+`/tmp`. Only `/proc`, `/sys` and `/dev` are the phone's; `/data`, `/system`,
+`/storage`, `/sdcard`, `/apex`, `/vendor` and `/mnt` are the tree's (a bind in
+`boot/binds` is the way to reach one on purpose).
 
 ## Moving a prefix
 
