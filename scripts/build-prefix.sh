@@ -100,9 +100,16 @@ debootstrap --foreign --arch=arm64 --variant="$VARIANT" "$SUITE" "$DEST" "$MIRRO
 
 # Termux's debootstrap replaces chown, useradd, usermod, groupadd, chage, chfn,
 # dpkg-statoverride and others with empty files in the second stage (they fail
-# under proot).  They work under dn-tiny: keep them.
+# under proot).  They work under dn-tiny: keep them.  It also names its own
+# prefix absolutely (/data/data/com.termux/files/usr), a path the tree does not
+# have (the narrowed host rows): point every one at the tree's own /usr, and its
+# fallback directory at /debootstrap (where these copies are).
 for f in "$DEST"/debootstrap/*; do
-  [ -f "$f" ] && sed -i '/Replace problematic binaries with a stub/d; /^[[:space:]]*echo "" > "\$TARGET\//d' "$f"
+  [ -f "$f" ] || continue
+  sed -i -e 's|/data/data/com.termux/files/usr|/usr|g' \
+         -e 's|DEBOOTSTRAP_DIR=/usr/share/debootstrap|DEBOOTSTRAP_DIR=/debootstrap|' \
+         -e '/Replace problematic binaries with a stub/d' \
+         -e '/^[[:space:]]*echo "" > "\$TARGET\//d' "$f"
 done
 
 # ---- 2. the runtime in the tree
