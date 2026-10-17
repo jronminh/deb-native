@@ -150,8 +150,12 @@ the net for everything.
 
 ## Identity: fake root
 
-- Every process starts as root (uid and gid 0). `set*id` calls are accepted and
-  remembered per process, inherited by children; `get*id` say what was set.
+- The boot persona is root by default (`DN_PERSONA=user` boots as the real app
+  uid; see [`spec/identity.md`](spec/identity.md)).  In the root persona every
+  process starts as root (uid and gid 0); `set*id` calls are accepted and
+  remembered per process, inherited by children; `get*id` say what was set.  In
+  the user persona `get*id` are the kernel's real ids and `set*id`/`chown`
+  answer `EPERM`.
 - Files owned by the app's uid read as owned by root in every `stat` the tracer
   or the shim answers. `chown`/`fchownat` are accepted and kept in a
   `user.dn.owner` xattr (`UID:GID`) on the file; every `stat` reads it back, a

@@ -140,11 +140,11 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   the contents shared.
 - **Modes** (the model: [`docs/spec/identity.md`](docs/spec/identity.md)): one
   real principal (the app's uid) and virtual principals (`root` and service
-  users), with a user persona beside the root persona, chosen at boot or per
-  command.  The user persona needs `/etc/passwd`, `group` and `shadow` lines
-  for the app's uid (written at boot from the host's `id -u`), so `whoami`,
-  `ssh` and `$HOME` work.  The upward switch is the setuid bit (the exec gate
-  reads it and the stored owner) or small `sudo`/`su` scripts; virtual users
+  users).  The boot-scoped personas are done: root by default, `DN_PERSONA=user`
+  boots as the real uid, with `/etc/passwd`, `group`, `shadow` and `$HOME`
+  written at boot from the host's `id -u`.  Still open: a per-command switch
+  (per-process persona), the setuid-bit gate so the real `sudo`/`su`/`passwd`
+  run, and virtual service users/groups (`getgroups`, file gid).  Virtual users
   are not Android users and are not isolation.
 
 ## Speed

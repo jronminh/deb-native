@@ -106,9 +106,12 @@ as their documentation says; it must never be presented as isolation.
 
 ## Files, groups, and the owner store
 
-- One xattr, `user.dn.owner`, holds `UID:GID` for a file whose stored owner is
-  not the real id.  A chown to 0:0 removes it.  The copy `linkat` makes carries
-  it.
+- One xattr, `user.dn.owner`, holds `UID:GID` for every file that was chowned,
+  0:0 included.  The only implicit owner is the real uid: the root persona maps
+  it to 0, the user persona leaves it.  So an explicit chown is stable across
+  personas, while a file created without one can read as 0 in the root persona
+  and as the real uid in the user persona (and the reverse for a user-created
+  file); marking creations is open.  The copy `linkat` makes carries the xattr.
 - `useradd`/`groupadd` write `/etc/passwd` and `/etc/group` entries; `userdel
   -r` works because the owner store makes the home directory look owned by the
   user it removes.  These are **virtual users**: the runtime should say so,
@@ -125,10 +128,20 @@ as their documentation says; it must never be presented as isolation.
   that never chowns, is still open: a copied prefix can carry stored owners
   with no flag, so it needs a correctness story.
 
-## Current state (2026-10-17)
+## Current state (2026-10-17, phase 1)
 
-- Every process boots as the **root persona**; there is no user persona or
-  persona switch yet.
+- The boot persona is **root by default**; `DN_PERSONA=user boot/boot.sh`
+  boots the whole session as the real app uid (user persona).  The tracer
+  reads it from `--persona`, the shim from `var/lib/deb-native/persona`, which
+  `boot.sh` writes.  The persona is global for the boot; a per-command switch
+  needs per-process state (phase 3).
+- In user mode `id` is the real uid, `get*id` and `/proc/status` are real,
+  `set*id` and `chown` answer `EPERM`, `access` is the kernel's; `/etc/passwd`,
+  `group` and `shadow` get the real uid's line at boot (from `DN_REAL_UID`),
+  and `HOME` is `/home/user`.  `git`, `python`, `tar`, `git init` and `apt-get
+  update` were checked; `useradd` and `dpkg -i` need the root persona, as on a
+  normal Debian user.
+- In root mode the behaviour is as recorded below (fake root, stored owners).
 - `chown` stores `user.dn.owner` for any uid:gid; the tracer and the shim read
   it back in `stat`, through a `(dev, ino, ctime)` cache.  A hard-link copy
   carries it.
@@ -142,11 +155,11 @@ as their documentation says; it must never be presented as isolation.
 
 ## Plan
 
-1. **Persona state** in the tracer and the shim: `user`/`root` (and later any
-   virtual uid), chosen at boot (`boot/env`, or a `--persona` option) and
-   inherited through fork/exec; the exec gate propagates it through a clean
-   environment.
-2. **User persona behaviour**: real `get*id`, `set*id` -> `EPERM`, real
+1. **Persona state** (done, boot-scoped): `user`/`root`, chosen at boot
+   (`DN_PERSONA`, the `--persona` option, and `var/lib/deb-native/persona` for
+   the shim), inherited by fork/exec.  A per-process or per-command switch
+   (phase 3) still needs the exec gate to carry the persona into the child.
+2. **User persona behaviour** (done): real `get*id`, `set*id` -> `EPERM`, real
    `access`, `chown` -> `EPERM`, `stat` without the real-id-to-0 map; the
    stored owner is still read when present.
 3. **Virtual users and groups**: passwd/group entries written at boot for the

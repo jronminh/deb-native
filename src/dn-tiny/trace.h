@@ -10,6 +10,10 @@ extern unsigned long trace_n_answered;   /* calls answered at entry, with no exi
 /* build the synthetic /proc files (the mount view) once, at boot */
 void trace_synth_init(void);
 
+/* the persona for this boot: 1 = root (fake), 0 = user (the real app uid).
+ * It is global until a per-process switch exists (spec/identity.md). */
+void trace_persona(int root);
+
 /* at syscall entry; may change the tracee's argument registers */
 void trace_enter(struct tracee *t, const struct row *rw);
 /* at the SIGSYS stop of a syscall the platform's filter killed: set the registers */

@@ -156,7 +156,10 @@ Checked against the code and the census tables:
   refuses it unprivileged), which is why 42 = 32 - 1 + 11.
 - The owner store (`user.dn.owner`) is cached by `(dev, ino, ctime)` in both the
   shim and the tracer (done 2026-10-17); only the first `stat` of a file reads
-  the xattr.  A shared store-used flag is still open.
+  the xattr.  A chown is stored even for 0:0, so an explicit chown reads the same
+  in the root and the user persona; a file that was never chowned falls back to
+  the real uid (root maps it to 0, user leaves it).  A shared store-used flag is
+  still open.
 
 ## Caveats
 

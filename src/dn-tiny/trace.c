@@ -6,6 +6,10 @@
 
 unsigned long trace_n_rewritten;
 
+static int root_persona = 1;             /* the boot persona; see trace.h */
+
+void trace_persona(int root) { root_persona = root ? 1 : 0; }
+
 /* the owner store, used by link_copy before its definition */
 static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g);
 static void own_write(const char *host, int nofollow, unsigned u, unsigned g);
@@ -691,13 +695,28 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 			rn += (size_t) l;
 			w[rn++] = '\n';
 		} else if (strncmp(p, "Uid:", 4) == 0 || strncmp(p, "Gid:", 4) == 0) {
-			char l[64];                    /* the fake ids, not the app's real */
-			int q = id_line(l, p[0] == 'U' ? "Uid:\t" : "Gid:\t", ids_of(pid), p[0] == 'G');
+			char l[64];                    /* the fake ids in root, the real in user */
+			int q = root_persona ?
+				id_line(l, p[0] == 'U' ? "Uid:\t" : "Gid:\t", ids_of(pid), p[0] == 'G') : -1;
 
-			if (rn + (size_t) q >= sizeof buf)
+			if (q < 0) {
+				if (rn + len >= sizeof buf)
+					break;
+				memcpy(w + rn, p, len);
+				rn += len;
+			} else {
+				if (rn + (size_t) q >= sizeof buf)
+					break;
+				memcpy(w + rn, l, (size_t) q);
+				rn += (size_t) q;
+			}
+		} else if (!root_persona && (strncmp(p, "CapInh:", 7) == 0 || strncmp(p, "CapAmb:", 7) == 0 ||
+					     strncmp(p, "CapPrm:", 7) == 0 || strncmp(p, "CapEff:", 7) == 0 ||
+					     strncmp(p, "CapBnd:", 7) == 0)) {
+			if (rn + len >= sizeof buf)
 				break;
-			memcpy(w + rn, l, (size_t) q);
-			rn += (size_t) q;
+			memcpy(w + rn, p, len);
+			rn += len;
 		} else if (strncmp(p, "CapInh:", 7) == 0) {
 			const char *s = "CapInh:\t0000000000000000\n";
 
@@ -1178,8 +1197,11 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		return;
 	}
 	if (rw->fake != F_NONE) {
-		fake_result(t, rw->fake);
-		return;
+		if (root_persona) {
+			fake_result(t, rw->fake);
+			return;
+		}
+		/* user persona: let the kernel answer -- get*id real, set*id EPERM */
 	}
 	if (rw->special == SP_EXEC) {
 		exec_enter(t);
@@ -1566,15 +1588,14 @@ static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g)
 	return own_parse(b, u, g);
 }
 
+/* Every chown is stored, 0:0 included: the only implicit owner is the real uid,
+ * which the root persona maps to 0.  Storing 0:0 is what lets a file chowned by
+ * the root persona read as root in the user persona too. */
 static void own_write(const char *host, int nofollow, unsigned u, unsigned g)
 {
 	char b[32];
 	int n = uitoa(b, u);
 
-	if (u == 0 && g == 0) {                          /* the default: no xattr */
-		sc(nofollow ? 15 : 14, (i64) host, (i64) OWN_ATTR, 0, 0, 0, 0);   /* removexattr */
-		return;
-	}
 	b[n++] = ':';
 	n += uitoa(b + n, g);
 	sc(nofollow ? 6 : 5, (i64) host, (i64) OWN_ATTR, (i64) b, n, 0, 0);       /* setxattr */
@@ -1647,6 +1668,11 @@ static void own_apply(char *buf, unsigned off, const char *host, int nofollow,
 static void store_owner(struct tracee *t)
 {
 	char host[300];
+
+	if (!root_persona) {
+		mon_skip(t, -1);                 /* EPERM: a user cannot chown, as on Debian */
+		return;
+	}
 	unsigned u = (unsigned) t->r.regs[2], g = (unsigned) t->r.regs[3];
 	unsigned cu = 0, cg = 0;
 	int nofollow = 0;
@@ -1682,6 +1708,8 @@ static void map_owner(char *buf, unsigned off)
 {
 	unsigned id[2];
 
+	if (!root_persona)
+		return;
 	memcpy(id, buf + off, sizeof id);
 	id[0] = policy_map_uid(id[0]);
 	id[1] = policy_map_gid(id[1]);
@@ -1902,6 +1930,10 @@ void trace_denied(struct tracee *t)
 	/* A call the platform kills never reaches the entry stop (seccomp takes the strictest
 	 * answer, and TRAP outranks TRACE), so a faked call is answered here the same way. */
 	if (rw && rw->fake != F_NONE) {
+		if (!root_persona) {
+			t->r.regs[0] = (u64) -1;         /* EPERM: a user cannot setuid */
+			return;
+		}
 		fake_result(t, rw->fake);
 		return;
 	}

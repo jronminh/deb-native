@@ -48,6 +48,7 @@
 #define LANE (((long) DN_LANE_HI << 32) | (long) DN_LANE_LO)
 
 static char rootbuf[PATH_MAX];          /* the prefix root, handed to policy_root_set */
+static int root_mode = 1;               /* the boot persona (var/lib/deb-native/persona) */
 static char cwd[PATH_MAX];              /* the guest working directory (get_cwd) */
 static unsigned real_uid, real_gid;     /* read as root, as the tracer does (policy_map_uid) */
 
@@ -147,6 +148,25 @@ __attribute__((constructor)) static void lane_init(void)
 	memcpy(rootbuf, di.dli_fname, n - t);
 	rootbuf[n - t] = '\0';
 	policy_root_set(rootbuf);               /* set last: until now everything falls back */
+	{                                       /* the boot persona, written before boot.sh starts */
+		char pp[PATH_MAX + 32], b[16];
+		long pfd;
+
+		if (strlen(rootbuf) + 32 < sizeof pp) {
+			strcpy(pp, rootbuf);
+			strcat(pp, "/var/lib/deb-native/persona");
+			pfd = lane_call(SYS_openat, AT_FDCWD, pp, O_RDONLY | O_CLOEXEC, 0, 0L);
+			if (pfd >= 0) {
+				long k = lane_call(SYS_read, (int) pfd, b, sizeof b - 1, 0L, 0L);
+
+				lane_call(SYS_close, (int) pfd, 0, 0, 0, 0L);
+				if (k > 0) {
+					b[k] = '\0';
+					root_mode = b[0] != 'u';
+				}
+			}
+		}
+	}
 	{                                       /* the binds the host wrote before boot */
 		char bp[PATH_MAX + 16], b[4096];
 		long bfd;
@@ -637,6 +657,8 @@ static void cl_fix(unsigned long dev, unsigned long ino, unsigned *nlink)
 /* what the program is told: the owner read as root */
 static void map_owner(unsigned *uid, unsigned *gid)
 {
+	if (!root_mode)
+		return;
 	if (*uid == real_uid)
 		*uid = 0;
 	if (*gid == real_gid)

@@ -567,13 +567,24 @@ int main(int argc, char **argv)
 			sys_cpu_pin((int) atou(argv[++i]));
 		} else if (!strcmp(argv[i], "-s") && i + 1 < argc) {
 			spin_ns = (i64) atou(argv[++i]) * 1000;
+		} else if (!strcmp(argv[i], "--persona") && i + 1 < argc) {
+			const char *p = argv[++i];
+
+			if (!strcmp(p, "user"))
+				trace_persona(0);
+			else if (!strcmp(p, "root"))
+				trace_persona(1);
+			else {
+				put(2, "dn-tiny: --persona is user or root\n");
+				return 2;
+			}
 		} else if (!strcmp(argv[i], "-q"))
 			quiet = 1;
 	}
 	if (i < argc && !strcmp(argv[i], "--"))
 		i++;
 	if (i >= argc || (mode == M_FULL && root == NULL)) {
-		put(2, "usage: dn-tiny [-m bare|regs|full] [-t ROOT] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]\n");
+		put(2, "usage: dn-tiny [-m bare|regs|full] [-t ROOT] [--persona user|root] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]\n");
 		return 2;
 	}
 	if (root != NULL)

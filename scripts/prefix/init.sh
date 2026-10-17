@@ -9,6 +9,11 @@ set -eu
 umask 022                          # as on Debian; the app's is 077
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
+# The boot identity inputs, kept before the DN_* knobs are dropped: the boot
+# persona and the app's real uid/gid (the only real kernel identity).
+persona=${DN_PERSONA:-root}
+real_uid=${DN_REAL_UID:-}
+real_gid=${DN_REAL_GID:-}
 # The host's environment reaches the tree through dn-tiny: drop the host's
 # deb-native knobs and its locale (the tree ships no locales but C.UTF-8).
 for v in $(env | sed -n 's/^\(DN_[A-Za-z0-9_]*\)=.*/\1/p'); do
@@ -32,8 +37,30 @@ export GLIBC_TUNABLES
 # Readline and Teletype first and print a warning for each before falling back.
 DEBIAN_FRONTEND=noninteractive
 export DEBIAN_FRONTEND
-HOME=/root
+# One real uid: the app's.  Its /etc/passwd, group and shadow lines are virtual
+# identity, written once; in user mode the session starts in its home.
+if [ -n "$real_uid" ]; then
+  [ -n "$real_gid" ] || real_gid=$real_uid
+  if ! getent passwd "$real_uid" >/dev/null 2>&1; then
+    printf 'user:x:%s:%s:user:/home/user:/bin/bash\n' "$real_uid" "$real_gid" >> /etc/passwd
+  fi
+  if ! getent group "$real_gid" >/dev/null 2>&1; then
+    printf 'user:x:%s:\n' "$real_gid" >> /etc/group
+  fi
+  if [ -f /etc/shadow ] && ! getent shadow user >/dev/null 2>&1; then
+    printf 'user:!:20000:0:99999:7:::\n' >> /etc/shadow
+  fi
+fi
+if [ "$persona" = user ]; then
+  HOME=/home/user
+  USER=user
+  LOGNAME=user
+  mkdir -p "$HOME" 2>/dev/null || true
+else
+  HOME=/root
+fi
 export HOME
+[ "$persona" = user ] && export USER LOGNAME
 TMPDIR=/tmp
 export TMPDIR
 mkdir -p "$TMPDIR"
