@@ -220,6 +220,7 @@ arch=aarch64
 suite=$SUITE
 shim=$SHIM
 ldhook=$LDHOOK
+cancel=$CANCEL_PATCH
 built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 size=$(du -sm "$DEST" | cut -f1)
 V

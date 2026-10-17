@@ -140,6 +140,7 @@ arch=aarch64
 suite=trixie
 shim=1
 ldhook=0
+cancel=0
 built=2026-10-15T02:10:00Z
 size=312
 ```
