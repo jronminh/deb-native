@@ -117,18 +117,21 @@ as their documentation says; it must never be presented as isolation.
 - Supplementary groups are virtual too: `getgroups`/`initgroups` can be
   answered, the file's gid can be stored, but the kernel's access checks use
   the app's gid, so group permissions are not enforced.
-- The fast path pays for the owner store on every `stat` that reads it.  Two
-  optimisations are planned and orthogonal: an owner cache keyed by
-  `(dev, ino, ctime)` (chown changes ctime, so the cache cannot go stale), and
-  a shared "owner store has ever been used" flag so a prefix that never chowns
-  reads no xattr at all.
+- The fast path reads the owner store through a cache keyed by
+  `(dev, ino, ctime)` in both the shim and the tracer: chown changes ctime, so
+  an entry cannot go stale; a collision costs a getxattr.  Measured on p-dev,
+  5000 `stat`s of one file: 34 ms before, 22 ms after.  A shared "owner store
+  has ever been used" flag, to skip even the first xattr per file on a tree
+  that never chowns, is still open: a copied prefix can carry stored owners
+  with no flag, so it needs a correctness story.
 
 ## Current state (2026-10-17)
 
 - Every process boots as the **root persona**; there is no user persona or
   persona switch yet.
 - `chown` stores `user.dn.owner` for any uid:gid; the tracer and the shim read
-  it back in `stat`.  A hard-link copy carries it.
+  it back in `stat`, through a `(dev, ino, ctime)` cache.  A hard-link copy
+  carries it.
 - `set*id` remembers any uid in the root persona; `get*id` answers it; the shim
   answers the `get*id`/`getres*id` family in process.
 - `useradd`/`userdel -r` work against the virtual identity (checked on `p-dev`).
@@ -153,8 +156,8 @@ as their documentation says; it must never be presented as isolation.
 4. **Setuid-bit gate** (optional, after 1-3): the exec gate reads the setuid
    bit and the stored owner and starts the child in the matching persona, so
    the real `sudo`/`su`/`passwd` binaries can run.
-5. **Owner cache and the store-used flag** (independent; do early): remove the
-   per-stat xattr cost.
+5. **Owner cache** (done 2026-10-17): `(dev, ino, ctime)` in the shim and the
+   tracer.  The shared store-used flag remains open (see above).
 6. **Tests**: the matrix in `../../tests/bench/` -- a user-persona prefix with
    `git`, `python`, `tar`, `make`, `ssh-keygen` (expected to work); `apt-get`,
    `dpkg -i`, `useradd`, `passwd` (expected to need the root persona); a

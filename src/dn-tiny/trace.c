@@ -9,7 +9,10 @@ unsigned long trace_n_rewritten;
 /* the owner store, used by link_copy before its definition */
 static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g);
 static void own_write(const char *host, int nofollow, unsigned u, unsigned g);
-static void own_apply(char *buf, unsigned off, const char *host, int nofollow);
+static int own_lookup(const char *host, int nofollow, u64 dev, u64 ino, i64 sec, i64 nsec,
+		      unsigned *u, unsigned *g);
+static void own_apply(char *buf, unsigned off, const char *host, int nofollow,
+		      u64 dev, u64 ino, i64 sec, i64 nsec);
 static void store_owner(struct tracee *t);
 
 #define EXE_LEN   128
@@ -1349,7 +1352,9 @@ static void fix_link(struct tracee *t)
 static void fix_owner(struct tracee *t, u64 buf, unsigned off)
 {
 	char host[300];
-	unsigned id[2];
+	unsigned id[2], own[2], nr = (unsigned) t->r.regs[8];
+	u64 dev = 0, ino = 0;
+	i64 sec = 0, nsec = 0;
 	ssize_t k;
 
 	if (t->r.regs[0] != 0 || mon_read(t, buf + off, id, sizeof id) != (ssize_t) sizeof id)
@@ -1358,13 +1363,25 @@ static void fix_owner(struct tracee *t, u64 buf, unsigned off)
 	id[1] = policy_map_gid(id[1]);
 	mon_write(t, buf + off, id, sizeof id);
 	k = mon_read_str(t, t->r.regs[1], host, sizeof host - 1);
-	if (k > 0 && host[0] == '/') {                   /* the path, mapped at entry */
-		unsigned own[2];
+	if (k <= 0 || host[0] != '/')
+		return;                                  /* the path, mapped at entry */
+	host[k] = '\0';
+	if (nr == 79) {                                  /* struct stat */
+		if (mon_read(t, buf, &dev, 8) != 8 || mon_read(t, buf + 8, &ino, 8) != 8 ||
+		    mon_read(t, buf + 104, &sec, 8) != 8 || mon_read(t, buf + 112, &nsec, 8) != 8)
+			return;
+	} else {                                         /* struct statx */
+		unsigned ma = 0, mi = 0;
 
-		host[k] = '\0';
-		if (own_read(host, 0, &own[0], &own[1]))
-			mon_write(t, buf + off, own, sizeof own);
+		if (mon_read(t, buf + 32, &ino, 8) != 8 || mon_read(t, buf + 136, &ma, 4) != 4 ||
+		    mon_read(t, buf + 140, &mi, 4) != 4 || mon_read(t, buf + 96, &sec, 8) != 8 ||
+		    mon_read(t, buf + 104, &nsec, 8) != 8)
+			return;
+		dev = ((u64) (ma & 0xfffff000u) << 32) | ((u64) (ma & 0xfffu) << 8) |
+		      ((u64) (mi & 0xffffff00u) << 12) | (mi & 0xffu);
 	}
+	if (own_lookup(host, 0, dev, ino, sec, nsec, &own[0], &own[1]))
+		mon_write(t, buf + off, own, sizeof own);
 }
 
 /* A symlink's size is the length of its target.  On an encrypted file system the kernel
@@ -1563,12 +1580,64 @@ static void own_write(const char *host, int nofollow, unsigned u, unsigned g)
 	sc(nofollow ? 6 : 5, (i64) host, (i64) OWN_ATTR, (i64) b, n, 0, 0);       /* setxattr */
 }
 
+/* ---- the owner cache: (dev, ino, ctime) -> the stored owner.  chown changes
+ * ctime, so an entry cannot go stale; a chmod or a write only makes it miss
+ * sooner.  Direct-mapped: a collision costs a getxattr, never a wrong answer. --- */
+#define OCN 1024
+struct ownc { u64 dev, ino; i64 sec, nsec; unsigned u, g; unsigned char present, valid; };
+static struct ownc ocache[OCN];
+
+static unsigned oc_hash(u64 dev, u64 ino)
+{
+	return (unsigned) ((dev ^ (dev >> 32) ^ ino ^ (ino >> 32)) & (OCN - 1));
+}
+
+static struct ownc *oc_find(u64 dev, u64 ino, i64 sec, i64 nsec)
+{
+	struct ownc *e = &ocache[oc_hash(dev, ino)];
+
+	if (!e->valid || e->dev != dev || e->ino != ino || e->sec != sec || e->nsec != nsec)
+		return NULL;
+	return e;
+}
+
+/* the stored owner, from the cache or from the xattr; 1 if present */
+static int own_lookup(const char *host, int nofollow, u64 dev, u64 ino, i64 sec, i64 nsec,
+		      unsigned *u, unsigned *g)
+{
+	struct ownc *e = oc_find(dev, ino, sec, nsec);
+
+	if (e) {
+		if (!e->present)
+			return 0;
+		*u = e->u;
+		*g = e->g;
+		return 1;
+	}
+	e = &ocache[oc_hash(dev, ino)];
+	e->dev = dev;
+	e->ino = ino;
+	e->sec = sec;
+	e->nsec = nsec;
+	e->valid = 1;
+	if (own_read(host, nofollow, &e->u, &e->g)) {
+		e->present = 1;
+		*u = e->u;
+		*g = e->g;
+		return 1;
+	}
+	e->present = 0;
+	e->u = e->g = 0;
+	return 0;
+}
+
 /* read the stored owner into a stat/statx buffer at off (uid, then gid) */
-static void own_apply(char *buf, unsigned off, const char *host, int nofollow)
+static void own_apply(char *buf, unsigned off, const char *host, int nofollow,
+		      u64 dev, u64 ino, i64 sec, i64 nsec)
 {
 	unsigned id[2];
 
-	if (!own_read(host, nofollow, &id[0], &id[1]))
+	if (!own_lookup(host, nofollow, dev, ino, sec, nsec, &id[0], &id[1]))
 		return;
 	memcpy(buf + off, id, sizeof id);
 }
@@ -1626,7 +1695,8 @@ static int answer_statx(struct tracee *t, const struct row *rw)
 	char host[300], stx[256];
 	int flags = (int) t->r.regs[2], how, r;
 	unsigned short mode;
-	u64 size;
+	u64 size, odev, oino;
+	i64 osec, onsec;
 
 	how = name_for_tracer(t, flags & 0x1000, host, sizeof host);            /* AT_EMPTY_PATH */
 	if (how == 0)
@@ -1639,8 +1709,19 @@ static int answer_statx(struct tracee *t, const struct row *rw)
 		mon_skip(t, r);
 		return 1;
 	}
+	{
+		unsigned ma, mi;
+
+		memcpy(&oino, stx + 32, sizeof oino);
+		memcpy(&ma, stx + 136, sizeof ma);
+		memcpy(&mi, stx + 140, sizeof mi);
+		odev = ((u64) (ma & 0xfffff000u) << 32) | ((u64) (ma & 0xfffu) << 8) |
+		       ((u64) (mi & 0xffffff00u) << 12) | (mi & 0xffu);
+		memcpy(&osec, stx + 96, sizeof osec);
+		memcpy(&onsec, stx + 104, sizeof onsec);
+	}
 	map_owner(stx, 20);
-	own_apply(stx, 20, host, how == 1 && (flags & 0x100));
+	own_apply(stx, 20, host, how == 1 && (flags & 0x100), odev, oino, osec, onsec);
 	if (n_copies) {
 		u64 ino;
 		unsigned ma, mi, n;
@@ -1670,7 +1751,8 @@ static int answer_stat(struct tracee *t, const struct row *rw)
 	char host[300], st[128];
 	int at = t->r.regs[8] == 79, flags = at ? (int) t->r.regs[3] : 0, how, r;
 	unsigned mode;
-	u64 size;
+	u64 size, odev, oino;
+	i64 osec, onsec;
 
 	how = at ? name_for_tracer(t, flags & 0x1000, host, sizeof host)          /* AT_EMPTY_PATH */
 		 : (fd_name(t->pid, (int) t->r.regs[0], 0, host, sizeof host) ? 2 : 0);
@@ -1683,8 +1765,12 @@ static int answer_stat(struct tracee *t, const struct row *rw)
 		mon_skip(t, r);
 		return 1;
 	}
+	memcpy(&odev, st, sizeof odev);
+	memcpy(&oino, st + 8, sizeof oino);
+	memcpy(&osec, st + 104, sizeof osec);
+	memcpy(&onsec, st + 112, sizeof onsec);
 	map_owner(st, 24);
-	own_apply(st, 24, host, how == 1 && (flags & 0x100));
+	own_apply(st, 24, host, how == 1 && (flags & 0x100), odev, oino, osec, onsec);
 	if (n_copies) {
 		u64 dev, ino;
 		unsigned n;

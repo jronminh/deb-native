@@ -106,7 +106,7 @@ it; the runtime may still map its path.
 | transform | examples | placement | validation | fast path today |
 | --- | --- | --- | --- | --- |
 | `map` | `openat` `newfstatat` `statx` `readlinkat` `faccessat` `chdir` `mkdirat` ..., exec gate, AF_UNIX `sun_path` | shim symbol / lane, tracer entry (AF_UNIX, exec), loader hook | law | **yes** for the shim's list; **no** for AF_UNIX and exec (tracer only) |
-| `emulate` | `get*id`, `getres*id`; `/proc` synth (`status`, `cmdline`, `comm`, `cgroup`, `maps`, `smaps`, `uptime`, `loadavg`, `stat`, `vmstat`, `mounts`, `mountinfo`, `/etc/mtab`); `user.dn.owner` | shim symbol (ids), tracer entry/open (synth), xattr read (owner) | state / regenerated at open / xattr | **yes** for ids and synth reads; owner reads one xattr per stat (no cache yet) |
+| `emulate` | `get*id`, `getres*id`; `/proc` synth (`status`, `cmdline`, `comm`, `cgroup`, `maps`, `smaps`, `uptime`, `loadavg`, `stat`, `vmstat`, `mounts`, `mountinfo`, `/etc/mtab`); `user.dn.owner` | shim symbol (ids), tracer entry/open (synth), xattr read (owner) | state / regenerated at open / xattr | **yes** for ids and synth reads; owner goes through a `(dev, ino, ctime)` cache (first stat per file reads the xattr) |
 | `substitute` | `faccessat2`->`faccessat`, `fchmodat2`->`fchmodat`, `openat2`->`openat` (only when killed; `RESOLVE_*` -> `ENOSYS`) | tracer SIGSYS | explicit | no (not a hot path) |
 | `pass` | `read` `write` `close` `mmap` `futex` `epoll` `signals`, and sockets without an AF_UNIX path ... | kernel | kernel | yes (by definition) |
 
@@ -154,9 +154,9 @@ Checked against the code and the census tables:
   authoritative one.
 - `bpf` moves from the 17 `EPERM` cases (4.14) to `pass` on 5.10 (the kernel
   refuses it unprivileged), which is why 42 = 32 - 1 + 11.
-- The owner store (`user.dn.owner`) is correct but not cached: every `stat` the
-  shim/tracer answers reads the xattr; a `(dev, ino, ctime)` cache is the
-  obvious next fast path.
+- The owner store (`user.dn.owner`) is cached by `(dev, ino, ctime)` in both the
+  shim and the tracer (done 2026-10-17); only the first `stat` of a file reads
+  the xattr.  A shared store-used flag is still open.
 
 ## Caveats
 

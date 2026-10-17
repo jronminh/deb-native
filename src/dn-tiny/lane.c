@@ -688,15 +688,62 @@ static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g)
 	return own_parse(b, u, g);
 }
 
-/* the stored owner for host, or (host empty) for the fd, after map_owner */
-static void own_stat(unsigned *uid, unsigned *gid, const char *host, int fd, int nofollow)
+/* the owner cache: (dev, ino, ctime) -> the stored owner.  chown changes ctime,
+ * so an entry cannot go stale; a chmod or a write only makes it miss sooner.
+ * Direct-mapped: a collision costs a getxattr, never a wrong answer. */
+#define OCN 256
+struct ownc { unsigned long long dev, ino; long long sec; long nsec; unsigned u, g; unsigned char present, valid; };
+static struct ownc ocache[OCN];
+
+static unsigned oc_hash(unsigned long long dev, unsigned long long ino)
 {
-	unsigned u, g;
+	return (unsigned) ((dev ^ (dev >> 32) ^ ino ^ (ino >> 32)) & (OCN - 1));
+}
+
+static int oc_get(unsigned long long dev, unsigned long long ino, long long sec, long nsec,
+		  unsigned *u, unsigned *g, unsigned *present)
+{
+	struct ownc *e = &ocache[oc_hash(dev, ino)];
+
+	if (!e->valid || e->dev != dev || e->ino != ino || e->sec != sec || e->nsec != nsec)
+		return 0;
+	*u = e->u;
+	*g = e->g;
+	*present = e->present;
+	return 1;
+}
+
+static void oc_put(unsigned long long dev, unsigned long long ino, long long sec, long nsec,
+		   unsigned u, unsigned g, unsigned present)
+{
+	struct ownc *e = &ocache[oc_hash(dev, ino)];
+
+	e->dev = dev;
+	e->ino = ino;
+	e->sec = sec;
+	e->nsec = nsec;
+	e->u = u;
+	e->g = g;
+	e->present = (unsigned char) present;
+	e->valid = 1;
+}
+
+/* the stored owner for host, or (host empty) for the fd, after map_owner */
+static void own_stat(unsigned *uid, unsigned *gid, const char *host, int fd, int nofollow,
+		     unsigned long long dev, unsigned long long ino, long long sec, long nsec)
+{
+	unsigned u = 0, g = 0, present = 0;
 	char p[40];
 
+	if (oc_get(dev, ino, sec, nsec, &u, &g, &present)) {
+		if (present) {
+			*uid = u;
+			*gid = g;
+		}
+		return;
+	}
 	if (host && host[0]) {
-		if (!own_read(host, nofollow, &u, &g))
-			return;
+		present = (unsigned) own_read(host, nofollow, &u, &g);
 	} else {
 		char d[12];
 		int k = 0, i = 14;
@@ -707,11 +754,15 @@ static void own_stat(unsigned *uid, unsigned *gid, const char *host, int fd, int
 		while (k)
 			p[i++] = d[--k];
 		p[i] = '\0';
-		if (!own_read(p, 0, &u, &g))
-			return;
+		present = (unsigned) own_read(p, 0, &u, &g);
 	}
-	*uid = u;
-	*gid = g;
+	if (present) {
+		*uid = u;
+		*gid = g;
+	} else {
+		u = g = 0;
+	}
+	oc_put(dev, ino, sec, nsec, u, g, present);
 }
 
 static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
@@ -725,7 +776,9 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 		if (lane_call(SYS_fstat, dirfd, st, 0L, 0L, 0L) != 0)
 			return -1;
 		map_owner(&st->st_uid, &st->st_gid);
-		own_stat(&st->st_uid, &st->st_gid, "", dirfd, 0);
+		own_stat(&st->st_uid, &st->st_gid, "", dirfd, 0,
+			 (unsigned long long) st->st_dev, (unsigned long long) st->st_ino,
+			 (long long) st->st_ctim.tv_sec, st->st_ctim.tv_nsec);
 		cl_fix(st->st_dev, st->st_ino, &st->st_nlink);
 		return 0;
 	}
@@ -741,7 +794,9 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 	if (lane_call(SYS_newfstatat, at, host, st, flags, 0L) != 0)
 		return -1;
 	map_owner(&st->st_uid, &st->st_gid);
-	own_stat(&st->st_uid, &st->st_gid, host, -1, nofollow);
+	own_stat(&st->st_uid, &st->st_gid, host, -1, nofollow,
+		 (unsigned long long) st->st_dev, (unsigned long long) st->st_ino,
+		 (long long) st->st_ctim.tv_sec, st->st_ctim.tv_nsec);
 	cl_fix(st->st_dev, st->st_ino, &st->st_nlink);
 	if (nofollow && S_ISLNK(st->st_mode))
 		st->st_size = link_size(at, host, st->st_size);
@@ -781,7 +836,10 @@ int statx(int dirfd, const char *path, int flags, unsigned mask, struct statx *s
 	if (lane_call(SYS_statx, at, host, flags, mask, stx) != 0)
 		return -1;
 	map_owner(&stx->stx_uid, &stx->stx_gid);
-	own_stat(&stx->stx_uid, &stx->stx_gid, host, at, nofollow);
+	own_stat(&stx->stx_uid, &stx->stx_gid, host, at, nofollow,
+		 (unsigned long long) makedev(stx->stx_dev_major, stx->stx_dev_minor),
+		 (unsigned long long) stx->stx_ino,
+		 (long long) stx->stx_ctime.tv_sec, stx->stx_ctime.tv_nsec);
 	cl_fix(makedev(stx->stx_dev_major, stx->stx_dev_minor), stx->stx_ino, &stx->stx_nlink);
 	if (nofollow && host[0] && S_ISLNK(stx->stx_mode))
 		stx->stx_size = (unsigned long) link_size(at, host, (long) stx->stx_size);
@@ -1176,7 +1234,10 @@ static int lane_hook(unsigned long *r)
 			res = lane_rawc(SYS_statx, at, host, fl, r[3], x);
 			if (res == 0) {
 				map_owner(&x->stx_uid, &x->stx_gid);
-				own_stat(&x->stx_uid, &x->stx_gid, host, at, nofollow);
+				own_stat(&x->stx_uid, &x->stx_gid, host, at, nofollow,
+				 (unsigned long long) makedev(x->stx_dev_major, x->stx_dev_minor),
+				 (unsigned long long) x->stx_ino,
+				 (long long) x->stx_ctime.tv_sec, x->stx_ctime.tv_nsec);
 				cl_fix(makedev(x->stx_dev_major, x->stx_dev_minor), x->stx_ino, &x->stx_nlink);
 				if (nofollow && host[0] && S_ISLNK(x->stx_mode))
 					x->stx_size = (unsigned long) link_size(at, host, (long) x->stx_size);
@@ -1187,7 +1248,9 @@ static int lane_hook(unsigned long *r)
 			res = lane_rawc(SYS_newfstatat, at, host, st, fl, 0L);
 			if (res == 0) {
 				map_owner(&st->st_uid, &st->st_gid);
-				own_stat(&st->st_uid, &st->st_gid, host, at, nofollow);
+				own_stat(&st->st_uid, &st->st_gid, host, at, nofollow,
+				 (unsigned long long) st->st_dev, (unsigned long long) st->st_ino,
+				 (long long) st->st_ctim.tv_sec, st->st_ctim.tv_nsec);
 				cl_fix(st->st_dev, st->st_ino, &st->st_nlink);
 				if (nofollow && host[0] && S_ISLNK(st->st_mode))
 					st->st_size = link_size(at, host, st->st_size);
