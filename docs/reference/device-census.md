@@ -110,6 +110,8 @@ stop or at the `SIGSYS` stop when the platform kills them first; `accept` is a
 cases; the 6 `ENOSYS` calls take its default (`-38`), as does every other killed
 number -- a denial the census has not seen yet is answered, not fatal, without a
 new row.  The 8 + 1 + 17 + 6 add to the 32, nothing falls through by accident.
+The full transform/placement/validation map, and where its fast paths live, is
+[`syscall-classes.md`](syscall-classes.md).
 
 ## A second device: Android 16
 

@@ -128,8 +128,11 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 - **The census against the policy** (the S10e half is done): the 32 calls the
   app's filter kills are accounted for in `docs/reference/device-census.md`
   (8 `FAKE`, `accept` -> `accept4`, 17 `EPERM`, 6 `ENOSYS`; the default answer
-  covers a new denial). Also compare the census with bionic's arm64 app policy
-  (the googlesource path I tried returned 404; find the current one).
+  covers a new denial). The per-call map (transform / placement / validation,
+  and what is a fast path) is `docs/reference/syscall-classes.md`; keep it in
+  step when a row or an answer changes. Also compare the census with bionic's
+  arm64 app policy (the googlesource path I tried returned 404; find the
+  current one).
 ## Identity and files
 
 - **Hard links that share contents**: a link is a copy with its count
