@@ -160,6 +160,10 @@ the net for everything.
   calls `get*id` (a `ps` that reads the file) also sees root.
 - The goal is no accidental identity leak (apt, dpkg and `git`'s ownership check
   see a consistent root), not isolation.
+- The model that separates the one real identity from virtual principals
+  (root and service users), with personas and a setuid-bit gate, is
+  [`spec/identity.md`](spec/identity.md) (proposal); today every process is the
+  root persona.
 
 ## What Android refuses
 

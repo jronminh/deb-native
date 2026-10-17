@@ -138,13 +138,14 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 - **Hard links that share contents**: a link is a copy with its count
   remembered. A real `link2symlink` would keep one file; do it if a program needs
   the contents shared.
-- **Modes**: a user mode (real identity) beside fake root, chosen per command
-  (`sudo` turning a process tree to root), for programs that check ownership.
-  The user mode needs an `/etc/passwd`, `group` and `shadow` line for the app's
-  UID (written at boot when missing), so `whoami`, `ssh` and `$HOME` lookups
-  work; `sudo` and `su` then are small scripts that accept the common flags
-  (`-A -E -n -S -p`) and switch the tree, as debian-noroot's do with
-  `fakeroot-tcp`.
+- **Modes** (the model: [`docs/spec/identity.md`](docs/spec/identity.md)): one
+  real principal (the app's uid) and virtual principals (`root` and service
+  users), with a user persona beside the root persona, chosen at boot or per
+  command.  The user persona needs `/etc/passwd`, `group` and `shadow` lines
+  for the app's uid (written at boot from the host's `id -u`), so `whoami`,
+  `ssh` and `$HOME` work.  The upward switch is the setuid bit (the exec gate
+  reads it and the stored owner) or small `sudo`/`su` scripts; virtual users
+  are not Android users and are not isolation.
 
 ## Speed
 
