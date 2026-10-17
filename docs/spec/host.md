@@ -28,9 +28,10 @@ This is the contract between the two. Status: proposal.
   -- the list, a default, a safe boot, a banner -- is the [boot
   manager](boot-manager.md).
 - **The boot inputs.** Before boot the host may write `boot/binds` (the host
-  directories to bind, and their flags) and a boot env keep-file -- the data the
-  runtime reads, never code in it; `boot/version` says what the prefix is. These
-  are the only knobs; the runtime has no other hook for the host.
+  directories to bind, and their flags) and `boot/env` (one `NAME` a line keeps
+  the host's value, `NAME=VALUE` sets it) -- the data the runtime reads, never
+  code in it; `boot/version` says what the prefix is. These are the only knobs;
+  the runtime has no other hook for the host.
 - **The Android bridge.** The framework calls -- start an activity, raise a
   notification, read the clipboard, a sensor, an intent -- are the host's,
   because it holds the Android identity and the permissions. The host gives the

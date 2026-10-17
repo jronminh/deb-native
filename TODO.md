@@ -41,8 +41,9 @@ step checked as `AGENTS.md` says, in Termux and in the app:
    - A command starts in the tree's root (`cd "$root"` in `boot.sh`), so `pwd -P`
      and `/proc/self/cwd` read `/` -- before, the host's working directory was
      shown.
-   - **Open:** the `boot/env` keep-file (the host naming what to keep, like
-     `boot/binds`); today only `TERM`/`COLORTERM` are kept.
+   - **`boot/env`** (done): one `NAME` a line keeps the host's value, one
+     `NAME=VALUE` sets it; `boot.sh` reads it as data (never sources it) and a
+     bad name refuses the boot.  It overrides the defaults it names.
    - The coverage test (`scripts/coverage.sh`) no longer flags the working
      directory or the environment.
 2. **The SELinux label** (done): `security.selinux` reads as absent -- `getxattr`

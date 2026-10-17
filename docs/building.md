@@ -115,6 +115,9 @@ DEST/
 │   ├── init.sh       the tree's init (guest paths)
 │   ├── binds         the host directories to bind (GUEST<TAB>HOST<TAB>FLAGS;
 │   │                 optional; see docs/architecture.md, "The law")
+│   ├── env           the host's variables: NAME keeps the host's value,
+│   │                 NAME=VALUE sets it (optional; read by boot.sh, never
+│   │                 sourced)
 │   └── version       what the prefix is (key=value)
 ├── usr/lib/deb-native/
 │   ├── dn-tiny       the tracer

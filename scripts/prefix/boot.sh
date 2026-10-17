@@ -23,6 +23,52 @@ umask 022
 # rest do not pass.  TERM and COLORTERM are kept (a terminal the host made);
 # TZ is the phone's.
 tz=$(getprop persist.sys.timezone 2>/dev/null)
+# boot/env (optional): the host names a variable to keep from its own
+# environment (one NAME per line) or one to set (NAME=VALUE).  It is read as
+# data, never sourced; each line becomes an export in the clean shell, so it
+# wins over the defaults above.  A bad name refuses the boot.
+envfile=
+if [ -f "$root/boot/env" ]; then
+  envfile="$root/tmp/boot-env.$$"
+  mkdir -p "$root/tmp" 2>/dev/null
+  ( umask 077
+    while IFS= read -r line || [ -n "$line" ]; do
+      case $line in ''|'#'*) continue ;; esac
+      name=${line%%=*}
+      case $name in
+      [!A-Za-z_]*|*[!A-Za-z0-9_]*)
+        echo "boot.sh: boot/env: bad name: $name" >&2; exit 1 ;;
+      esac
+      case $line in
+      *=*) printf '%s\n' "$line" ;;
+      *)   printf '%s=%s\n' "$name" "$(printenv "$name")" ;;
+      esac
+    done < "$root/boot/env"
+  ) > "$envfile" || { rm -f "$envfile"; exit 1; }
+fi
+if [ -n "$envfile" ]; then
+  # shellcheck disable=SC2086
+  exec env -i \
+    PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+    HOME=/root \
+    SHELL=/usr/bin/bash \
+    LANG=C.UTF-8 \
+    TMPDIR=/tmp \
+    TERM="${TERM:-dumb}" \
+    COLORTERM="$COLORTERM" \
+    TZ="${tz:-UTC}" \
+    DN_BOOT_ENV="$envfile" DN_BOOT_ROOT="$root" DN_BOOT_FLAGS="${DN_TINY_FLAGS:-}" \
+    /system/bin/sh -c '
+      e=$DN_BOOT_ENV r=$DN_BOOT_ROOT f=$DN_BOOT_FLAGS
+      while IFS= read -r line || [ -n "$line" ]; do
+        export "$line" || exit 1
+      done < "$e"
+      rm -f "$e"
+      unset DN_BOOT_ENV DN_BOOT_ROOT DN_BOOT_FLAGS
+      exec "$r/usr/lib/deb-native/dn-tiny" -q -s 500 $f \
+        -t "$r" -- /usr/bin/bash /boot/init.sh "$@"
+    ' sh "$@"
+fi
 # shellcheck disable=SC2086
 exec env -i \
   PATH=/usr/sbin:/usr/bin:/sbin:/bin \
