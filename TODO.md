@@ -5,18 +5,22 @@ the numbers: [`docs/performance.md`](docs/performance.md).
 
 ## Before an alpha
 
-- **The Android 16 phone**: build a prefix there, run the checks in `AGENTS.md`.
-  Hard links, `openat2`, `faccessat2` and `clone3` behave differently there, and
-  newer syscalls have no row yet (`open_tree`, `move_mount`, `fspick`,
-  `mount_setattr`, `fanotify_mark`, `setxattrat`/`getxattrat`/`listxattrat`/
-  `removexattrat`, `file_getattr`/`file_setattr`). Check `execmod` there too: the
-  shim's libc patching needs it.
-  The S23 FE's kernel is 5.10.240 (`docs/reference/device-census.md`): no SUD,
-  no seccomp bitmap; `memfd` exec is refused in Termux's domain.
+- **The Android 16 phone**: the census is done there
+  (`docs/reference/device-census.md`: the S23 FE, kernel 5.10.240, 42 real
+  denials; stock glibc runs under `dn-tiny`), but a full prefix is not built
+  there and the checks in `AGENTS.md` are not run. `openat2`, `faccessat2` and
+  `clone3` run natively there, and newer syscalls have no row yet (`open_tree`,
+  `move_mount`, `fspick`, `mount_setattr`, `fanotify_mark`, `setxattrat`/
+  `getxattrat`/`listxattrat`/`removexattrat`, `file_getattr`/`file_setattr`).
+  Check hard links and `execmod` there too: hard links are Android's SELinux
+  rule, not the census's, and the shim's libc patching needs `execmod`. No SUD
+  and no seccomp bitmap (5.10 < 5.11); `memfd` exec is refused in Termux's
+  domain (checked on the S10e).
 - **Another phone**, and Termux from F-Droid as a user gets it.
-- **dn-shell**: it runs `boot/boot.sh` of a prefix under `prefixes/`, one prefix
-  per session, and writes the prefix's `boot/binds` before (see "The
-  boundary"); its spec still describes `.dn/contract`.
+- **dn-shell**: stage 5 (prefixes) is next -- it does not run a prefix's
+  `boot/boot.sh` yet, and will write the prefix's `boot/binds` before (see "The
+  boundary"); its spec still describes `.dn/contract`. The host contract is
+  [`docs/spec/host.md`](docs/spec/host.md).
 - **A warning during the second stage**: Android's linker prints "failed to find
   generated linker configuration" once; find which program it is.
 - **The default for `-s`**: on in `build-prefix.sh`, off in `boot.sh`. Measure
@@ -47,8 +51,8 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 2. **The SELinux label** (done): `security.selinux` reads as absent -- `getxattr`
    answers `ENODATA` (`-61`), `listxattr`/`llistxattr` drop it and report the
    shorter length, in the tracer (answered at entry) and the shim. `ls -l` no
-   longer prints the `.` after the mode. (The `fgetxattr`/`flistxattr` fd forms
-   are not rows yet; add them the same way if a program needs them.)
+   longer prints the `.` after the mode. The fd forms (`fgetxattr`, `flistxattr`)
+   are answered the same way.
 3. **Binds: the law becomes a table.** Done (the one leftover, `ro`, is in).
    - **The table** (done): one row per guest path. `/` is the prefix's root;
      `/proc`, `/sys`, `/dev` and the other host directories are rows of their own
@@ -59,7 +63,7 @@ step checked as `AGENTS.md` says, in Termux and in the app:
    - **`walk` in guest space** (done): it resolves `.`, `..` and links on the
      *guest* path and maps at the end, so `cd /host/..` is `/`, not the host
      parent, and an absolute link inside a bind is the guest's. (A bind under a
-     host row is refused, so `/mnt/...` must wait for step 4 to drop `/mnt`.)
+     host row is refused; since step 4 dropped `/mnt`, it is the tree's now.)
    - **`boot/binds`** (done): one line per bind, `GUEST<TAB>HOST<TAB>FLAGS`.
      Written by the host before `boot.sh` and read by the tracer
      (`policy_set_root`) and the shim (`lane_init`) from the root; fixed for a
@@ -85,7 +89,8 @@ step checked as `AGENTS.md` says, in Termux and in the app:
      with no stop. `mount`, `df` and `findmnt` list the root and each bind; the
      source is `deb-native`, never a host path. Left: `/proc/<pid>/mounts` for an
      explicit **other** pid still shows the kernel's (no static row can name a
-     dynamic pid); enforcing `ro`; then `maps`/`smaps` and `/proc/sys/*` ("Emulation").
+     dynamic pid), and `/proc/sys/*` where a program needs another answer
+     ("Emulation").
    - Later: `mount --bind` inside the prefix adds a row (it is refused now); the
      table then has to live where the shim sees a change, not a copy read once.
 4. **Narrow the host directories** (done for the rows): the table keeps only
@@ -262,10 +267,13 @@ Answer what Android refuses in place of the kernel, the same in the tracer and
 the shim:
 
 - `/proc` files answered from the table so `read` needs no stop: the **mount
-  table** (`mounts`, `mountinfo`, `/etc/mtab`) is done (rows mapping to a file
-  under `var/lib/deb-native` -- "The boundary", step 3);
-  `maps` next ("The boundary"); `/proc/sys/*` where a program
-  needs an answer Android hides. `/proc/version` and `cpuinfo` stay the kernel's
+  table** (`mounts`, `mountinfo`, `/etc/mtab`) and **`maps`/`smaps`** are done
+  (rows mapping to a file under `var/lib/deb-native`, and generated at open --
+  "The boundary", steps 3-4); the process view (`status`, `cmdline`, `comm`,
+  `cgroup`) is done too (`docs/spec/phase2.md`). Left: `/proc/sys/*` where a
+  program needs an answer Android hides -- three defaults are answered
+  (`kernel/pid_max`, `vm/max_map_count`, `kernel/cap_last_cap`). `/proc/version`
+  and `cpuinfo` stay the kernel's
   (`docs/architecture.md`, "The boundary"). The files Android 8+ denies to apps
   (`/proc/stat`, `loadavg`, `uptime`, `vmstat`): `/proc/uptime` and
   `/proc/loadavg` are answered with the **real** values (`CLOCK_BOOTTIME` and
@@ -289,7 +297,8 @@ the shim:
   `tools/linuxfs/preload/sysv.c` (GPL-3.0, as this repo) keeps shm, sem and msg
   as files under `/dev/shm`. Do it when a program needs it;
 - privileged ports (a bind translation, and `getsockname`/`accept` back);
-- capabilities (`capget`, `PR_CAPBSET_READ`);
+- capabilities: the `Cap*` sets in `/proc/<pid>/status` and `cap_last_cap` are
+  answered; `capget` and `PR_CAPBSET_READ` are not;
 - a clear refusal (`EPERM` or `ENOSYS`, with the reason) for what cannot be
   faked: real isolation, TUN, anything an LSM sees.
 
@@ -335,13 +344,15 @@ when a prefix should draw with the GPU:
   client over a unix socket to a bionic service using the system's
   `libvulkan.so`; compute works there, display does not yet.
 
-## Beyond Debian, and bundles (later; the focus is Debian)
+## Beyond Debian, and bundles (the focus is Debian)
 
 The runtime knows nothing of dpkg or apt: a tree with a loader, its libraries
 and a program is enough. The variants worth building, a worked busybox bundle and
-what each still names Debian: [`spec/variants.md`](docs/spec/variants.md). A
-from-source tree (LFS native), built by a prefix as its host: that and the
-from-scratch references are in [`reference/from-scratch.md`](docs/reference/from-scratch.md).
+what each still names Debian: [`spec/variants.md`](docs/spec/variants.md). The
+busybox bundle is built and runs (`scripts/build-busybox.sh`: 7 MB, no Debian
+userland, its own `boot.sh` under `busybox sh`). A from-source tree (LFS native),
+built by a prefix as its host: that and the from-scratch references are in
+[`reference/from-scratch.md`](docs/reference/from-scratch.md).
 What still assumes Debian:
 
 - `policy.c` names the loader by Debian's multiarch path
@@ -350,8 +361,9 @@ What still assumes Debian:
   `PT_INTERP`, resolved in the tree, and let it find libraries through the tree's
   own `ld.so.cache` (its guest paths are mapped like any other): Ubuntu, Arch,
   Fedora trees would then boot as they are.
-- `boot.sh` needs `/usr/bin/bash` and `/boot/init.sh`; a tree without a shell
-  should run its program directly.
+- `boot.sh` needs `/usr/bin/bash` and `/boot/init.sh`; a bundle writes its own
+  `boot.sh` (the busybox one does), and a tree without a shell should run its
+  program directly.
 - The exec gate and the shim know glibc only (`ld-linux-*`, `libc.so.6`); musl
   (Alpine) needs the gate's `ld-musl-*` case and a musl build of the shim.
 - Ubuntu through debootstrap (`--suite noble --mirror
@@ -363,6 +375,8 @@ files it reads (`/etc/ssl/certs`, `/etc/passwd`, `nsswitch.conf`,
 `resolv.conf`), `dn-tiny` and `dn-lane.so`, and no dpkg or apt. Made from a full
 prefix as a builder (`apt-get download` the package and its dependencies,
 `dpkg-deb -x` them, no maintainer scripts): an image, not upgraded in place.
+`build-busybox.sh` is that shape for one tree; a generic `build-bundle.sh` is
+not written.
 A bundle needs no fake root (fewer rows); the shim built in the builder works on
 the same or a newer glibc; a static program (Go, Rust with musl) needs only
 `dn-tiny`. For an app that embeds a tool (ffmpeg, python, node), or a glibc
@@ -420,8 +434,11 @@ MB). What it takes, as far as known:
 - Testing must happen inside the app's own process: `run-as` runs in
   `runas_app`, another domain.
 
-Open: whether to write this up as `docs/embedding.md`, and a minimal sample app
-(one activity, one button that runs a command in a prefix) to prove the path.
+The host side is written up as [`docs/spec/host.md`](docs/spec/host.md) (a
+proposal; [`docs/spec/boot-manager.md`](docs/spec/boot-manager.md) for the
+launcher). Open: a minimal sample app (one activity, one button that runs a
+command in a prefix) to prove the path, and whether it becomes
+`docs/embedding.md`.
 
 ## Building a prefix
 
