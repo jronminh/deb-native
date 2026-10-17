@@ -76,3 +76,9 @@ coupling (`boot.sh`'s `/usr/bin/bash`) by booting `busybox sh`.  With the loader
 taken from `PT_INTERP` and the libraries through the tree's `ld.so.cache`, the
 core names Debian nowhere; what is left in the tree is its own identity and the
 builder's fingerprints.
+
+Tested 2026-10-17: `--suite noble --mirror http://ports.ubuntu.com/ubuntu-ports`
+builds a 174 MB minimal prefix; it boots (the gate runs
+`/lib/ld-linux-aarch64.so.1`, and `/etc/ld.so.cache` is the tree's), `apt-get
+update` verifies against the tree's `ubuntu-keyring`, and `apt-get install hello`
+runs.

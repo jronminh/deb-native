@@ -350,9 +350,9 @@ What still assumes Debian:
   program directly.
 - The exec gate and the shim know glibc only (`ld-linux-*`, `libc.so.6`); musl
   (Alpine) needs the gate's `ld-musl-*` case and a musl build of the shim.
-- Ubuntu through debootstrap (`--suite noble --mirror
-  http://ports.ubuntu.com/ubuntu-ports`) is untested with the gate's new loader
-  path (`PT_INTERP`, `ld.so.cache`).
+- Ubuntu (`--suite noble --mirror http://ports.ubuntu.com/ubuntu-ports`)
+  builds, boots and runs apt (2026-10-17; `--distro` follows the mirror's name).
+  Arch and Fedora are untested.
 
 **Bundles**: a minimal tree for one program, tens of MB instead of hundreds:
 the program, its library closure (`ld.so --list`), glibc and the loader, a few
@@ -431,5 +431,5 @@ command in a prefix) to prove the path, and whether it becomes
   unpacks through `proot --link2symlink`. A first stage of its own (resolve the
   base set, fetch, unpack with hard links as copies) would drop proot from the
   build.
-- Suites other than Debian's (Ubuntu, Kali) and `--variant` other than `minbase`
-  are untested.
+- Ubuntu builds and boots (2026-10-17); Kali, other suites and `--variant`
+  other than `minbase` are untested.

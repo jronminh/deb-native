@@ -19,8 +19,9 @@
 #                        full     dev + openssh-client wget vim-tiny unzip
 #                                   xz-utils man-db htop
 #   --packages LIST    more packages, space-separated (any Debian package)
-#   --suite SUITE      Debian suite (default: trixie)
-#   --mirror URL       Debian mirror (default: http://deb.debian.org/debian)
+#   --suite SUITE      Debian or Ubuntu suite (default: trixie)
+#   --mirror URL       Debian or Ubuntu mirror (default: http://deb.debian.org/debian)
+#   --distro NAME      debian or ubuntu (default: from the mirror's name)
 #   --variant NAME     debootstrap variant (default: minbase)
 #   --runtime DIR      the output of build-runtime.sh (default: build/, built
 #                      when it holds no dn-tiny)
@@ -44,7 +45,7 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
-SET=minimal PACKAGES= SUITE=trixie MIRROR=http://deb.debian.org/debian VARIANT=minbase
+SET=minimal PACKAGES= SUITE=trixie MIRROR=http://deb.debian.org/debian VARIANT=minbase DISTRO=auto
 RUNTIME=$ROOT/build NAME= SHIM=1 LDHOOK=0 CANCEL_PATCH=0 KEEP_TC=0
 while [ $# -gt 0 ]; do
   case $1 in
@@ -52,6 +53,7 @@ while [ $# -gt 0 ]; do
     --packages) PACKAGES="$PACKAGES $2"; shift 2 ;;
     --suite) SUITE=$2; shift 2 ;;
     --mirror) MIRROR=$2; shift 2 ;;
+    --distro) DISTRO=$2; shift 2 ;;
     --variant) VARIANT=$2; shift 2 ;;
     --runtime) RUNTIME=$2; shift 2 ;;
     --name) NAME=$2; shift 2 ;;
@@ -83,6 +85,14 @@ say() { printf '\n== %s\n' "$*"; }
 die() { echo "build-prefix: $*" >&2; exit 1; }
 
 command -v debootstrap >/dev/null 2>&1 || die "debootstrap not found (pkg install debootstrap)"
+if [ "$DISTRO" = auto ]; then
+  case $MIRROR in *ubuntu*) DISTRO=ubuntu ;; *) DISTRO=debian ;; esac
+fi
+case $DISTRO in
+  debian) DISTRO_NAME=Debian ;;
+  ubuntu) DISTRO_NAME=Ubuntu ;;
+  *) die "--distro is debian or ubuntu" ;;
+esac
 [ -e "$DEST" ] && die "$DEST exists; give a new directory"
 mkdir -p "$DEST"
 DEST=$(CDPATH= cd -- "$DEST" && pwd)
@@ -95,8 +105,21 @@ if [ ! -x "$RUNTIME/dn-tiny" ]; then
 fi
 
 # ---- 1. the first stage
-say "debootstrap, first stage: $SUITE ($VARIANT) from $MIRROR"
-debootstrap --foreign --arch=arm64 --variant="$VARIANT" "$SUITE" "$DEST" "$MIRROR"
+say "debootstrap, first stage: $DISTRO_NAME $SUITE ($VARIANT) from $MIRROR"
+# Ubuntu's Release is signed by a key Termux does not ship; the tree gets
+# ubuntu-keyring in the second stage, which apt uses.  A host keyring, when
+# present, is used instead of skipping the check.
+KEYARG=
+if [ "$DISTRO" = ubuntu ]; then
+  if [ -f /data/data/com.termux/files/usr/share/keyrings/ubuntu-archive-keyring.gpg ]; then
+    KEYARG=--keyring=/data/data/com.termux/files/usr/share/keyrings/ubuntu-archive-keyring.gpg
+  else
+    KEYARG=--no-check-sig
+    say "Ubuntu: no keyring on the host; the Release signature is not checked here"
+  fi
+fi
+# shellcheck disable=SC2086
+debootstrap $KEYARG --foreign --arch=arm64 --variant="$VARIANT" "$SUITE" "$DEST" "$MIRROR"
 
 # Termux's debootstrap replaces chown, useradd, usermod, groupadd, chage, chfn,
 # dpkg-statoverride and others with empty files in the second stage (they fail
@@ -143,8 +166,22 @@ done
 
 # ---- 4. apt, the shim, the packages
 case $MIRROR in */) MIRROR=${MIRROR%/} ;; esac
-SECURITY=${MIRROR%/debian}/debian-security
-cat > "$DEST/etc/apt/sources.list.d/debian.sources" <<SRC
+if [ "$DISTRO" = ubuntu ]; then
+  # Ubuntu's -updates and -security are on the same mirror; the keyring is the
+  # tree's own (ubuntu-keyring), which the base system installs.
+  KEYLINE=
+  if [ -f "$DEST/usr/share/keyrings/ubuntu-archive-keyring.gpg" ]; then
+    KEYLINE="Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg"
+  fi
+  {
+    printf 'Types: deb\nURIs: %s\nSuites: %s %s-updates\nComponents: main\n' "$MIRROR" "$SUITE" "$SUITE"
+    if [ -n "$KEYLINE" ]; then printf '%s\n' "$KEYLINE"; fi
+    printf '\nTypes: deb\nURIs: %s\nSuites: %s-security\nComponents: main\n' "$MIRROR" "$SUITE"
+    if [ -n "$KEYLINE" ]; then printf '%s\n' "$KEYLINE"; fi
+  } > "$DEST/etc/apt/sources.list.d/ubuntu.sources"
+else
+  SECURITY=${MIRROR%/debian}/debian-security
+  cat > "$DEST/etc/apt/sources.list.d/debian.sources" <<SRC
 Types: deb
 URIs: $MIRROR
 Suites: $SUITE $SUITE-updates
@@ -157,6 +194,7 @@ Suites: $SUITE-security
 Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 SRC
+fi
 rm -f "$DEST/etc/apt/sources.list"
 
 run() { "$DEST/boot/boot.sh" "$@"; }
@@ -214,7 +252,7 @@ cat > "$DEST/boot/version" <<V
 # deb-native prefix (docs/building.md)
 format=2
 name=$NAME
-desc=Debian $SUITE ($VARIANT, set $SET) for deb-native $VER
+desc=$DISTRO_NAME $SUITE ($VARIANT, set $SET) for deb-native $VER
 version=$VER
 arch=aarch64
 suite=$SUITE

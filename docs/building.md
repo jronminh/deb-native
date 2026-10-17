@@ -70,9 +70,10 @@ Options (`scripts/build-prefix.sh --help`):
 | option | default | |
 | --- | --- | --- |
 | `--set minimal\|dev\|full` | `minimal` | a suggested package set (below) |
-| `--packages "a b c"` | | any more Debian packages |
-| `--suite` | `trixie` | the Debian suite |
-| `--mirror` | `http://deb.debian.org/debian` | |
+| `--packages "a b c"` | | any more packages |
+| `--suite` | `trixie` | the Debian or Ubuntu suite |
+| `--mirror` | `http://deb.debian.org/debian` | the Debian or Ubuntu mirror |
+| `--distro` | from the mirror's name | `debian` or `ubuntu` |
 | `--variant` | `minbase` | debootstrap's variant |
 | `--runtime DIR` | `build/` | where `dn-tiny` is |
 | `--name` | the directory's name | the name in `boot/version` |
@@ -80,6 +81,17 @@ Options (`scripts/build-prefix.sh --help`):
 | `--ldhook` | | ship `dn-ldhook.so`, the loader hook (needs `execmod`/`execmem`) |
 | `--cancel` | | patch glibc's shared cancellable `svc` (204 fewer stops in the Lua build, ~1% slower) |
 | `--keep-toolchain` | | keep `gcc` and `libc6-dev` after the shim is built |
+
+Ubuntu is the same command with its suite and mirror, detected from the mirror:
+
+```sh
+scripts/build-prefix.sh --set minimal --suite noble \
+  --mirror http://ports.ubuntu.com/ubuntu-ports ~/ubuntu
+```
+
+The host has no Ubuntu keyring, so debootstrap's Release signature is not
+checked there (`--no-check-sig`); the tree gets `ubuntu-keyring` and apt verifies
+every package against it.
 
 The sets are suggestions, nothing depends on them:
 
