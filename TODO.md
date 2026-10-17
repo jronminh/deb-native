@@ -127,11 +127,6 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   (8 `FAKE`, `accept` -> `accept4`, 17 `EPERM`, 6 `ENOSYS`; the default answer
   covers a new denial). Also compare the census with bionic's arm64 app policy
   (the googlesource path I tried returned 404; find the current one).
-- **Rows from a catalog**: generate the rows from one table giving each syscall
-  a class (path, result, socket, exec, identity, refused, none) instead of the
-  tables in `gen_rows.py`. Termux's glibc `fakesyscall.json` is a checked
-  list of answers to start from (`docs/reference/prior-art.md`).
-
 ## Identity and files
 
 - **An owner store**: `chown` is accepted and not kept, so a file never reads as

@@ -11,88 +11,116 @@ import sys
 
 out = sys.argv[1]
 
-# arm64 syscall number -> index of the path argument register(s); the second
-# is for the two-path calls (rename, link).  symlinkat's target (arg 0) is data,
-# not a path to map: only the link path (arg 2) is.
-PATH_ARG = {
-    56: (1,),       # openat
-    48: (1,),       # faccessat
-    439: (1,),      # faccessat2
-    437: (1,),      # openat2 (the platform allows it on newer Android; on older it is killed and substituted)
-    452: (1,),      # fchmodat2 (the same)
-    79: (1,),       # newfstatat
-    291: (1,),      # statx
-    78: (1,),       # readlinkat
-    221: (0,),      # execve
-    281: (1,),      # execveat (its pathname; the exec gate reads the dirfd and flags)
-    35: (1,),       # unlinkat
-    34: (1,),       # mkdirat
-    33: (1,),       # mknodat
-    53: (1,),       # fchmodat
-    54: (1,),       # fchownat
-    88: (1,),       # utimensat
-    36: (2,),       # symlinkat (link path)
-    37: (1, 3),     # linkat
-    38: (1, 3),     # renameat
-    276: (1, 3),    # renameat2
-    49: (0,),       # chdir
-    51: (0,),       # chroot
-    43: (0,),       # statfs
-    45: (0,),       # truncate
-    27: (1,),       # inotify_add_watch
-    5: (0,), 6: (0,), 8: (0,), 9: (0,), 11: (0,), 12: (0,), 14: (0,), 15: (0,),   # *xattr by path
+# One catalog: syscall number -> its class and the data the class needs.  Every
+# view below is derived from it; there is no second table to keep in step.
+#   path      a path argument to map          arg: the register(s)
+#   result    a result rewritten at exit      result: (R_*, buffer register)
+#   socket    an AF_UNIX sockaddr             addr, len, out
+#   exec      the exec gate                   arg: the pathname register
+#   identity  fake root, answered at entry    fake: F_*
+#   effect    caught only to drop a copy      effect: E_*
+#   none      caught only for the SELinux label
+# A path entry may also carry a result (statx, readlinkat, the xattr lists), an
+# effect (unlinkat, the link movers), or a fake (fchownat).
+# R_*: 1 cwd, 2 readlinkat, 3 stat buffer, 4 statx buffer, 5 xattr list.
+# F_*: 1 zero, 2 resids, 3 groups, 5 own ids, 6 remembered set*id.
+# E_*: 1 the link cache, 2 a cached cwd, 3 both.
+CATALOG = {
+    5:   {"cls": "path", "arg": (0,)},              # setxattr
+    6:   {"cls": "path", "arg": (0,)},              # lsetxattr
+    8:   {"cls": "path", "arg": (0,)},              # getxattr
+    9:   {"cls": "path", "arg": (0,)},              # lgetxattr
+    10:  {"cls": "none", "caught": True},           # fgetxattr: the name is checked
+    11:  {"cls": "path", "arg": (0,), "result": (5, 1)},   # listxattr
+    12:  {"cls": "path", "arg": (0,), "result": (5, 1)},   # llistxattr
+    13:  {"cls": "result", "result": (5, 1), "caught": True},   # flistxattr
+    14:  {"cls": "path", "arg": (0,)},              # removexattr
+    15:  {"cls": "path", "arg": (0,)},              # lremovexattr
+    17:  {"cls": "result", "result": (1, -1)},      # getcwd
+    27:  {"cls": "path", "arg": (1,)},              # inotify_add_watch
+    33:  {"cls": "path", "arg": (1,)},              # mknodat
+    34:  {"cls": "path", "arg": (1,)},              # mkdirat
+    35:  {"cls": "path", "arg": (1,), "effect": 3}, # unlinkat
+    36:  {"cls": "path", "arg": (2,), "effect": 1}, # symlinkat: the link path
+    37:  {"cls": "path", "arg": (1, 3), "effect": 1},   # linkat
+    38:  {"cls": "path", "arg": (1, 3), "effect": 3},   # renameat
+    43:  {"cls": "path", "arg": (0,)},              # statfs
+    45:  {"cls": "path", "arg": (0,)},              # truncate
+    48:  {"cls": "path", "arg": (1,)},              # faccessat
+    49:  {"cls": "path", "arg": (0,), "effect": 2}, # chdir
+    50:  {"cls": "effect", "effect": 2},            # fchdir
+    51:  {"cls": "path", "arg": (0,)},              # chroot
+    53:  {"cls": "path", "arg": (1,)},              # fchmodat
+    54:  {"cls": "path", "arg": (1,), "fake": 1},   # fchownat
+    55:  {"cls": "identity", "fake": 1},            # fchown
+    56:  {"cls": "path", "arg": (1,)},              # openat
+    78:  {"cls": "path", "arg": (1,), "result": (2, -1)},   # readlinkat
+    79:  {"cls": "path", "arg": (1,), "result": (3, 2)},    # newfstatat
+    88:  {"cls": "path", "arg": (1,)},              # utimensat
+    143: {"cls": "identity", "fake": 6},            # setregid
+    144: {"cls": "identity", "fake": 6},            # setgid
+    145: {"cls": "identity", "fake": 6},            # setreuid
+    146: {"cls": "identity", "fake": 6},            # setuid
+    147: {"cls": "identity", "fake": 6},            # setresuid
+    148: {"cls": "identity", "fake": 2},            # getresuid
+    149: {"cls": "identity", "fake": 6},            # setresgid
+    150: {"cls": "identity", "fake": 2},            # getresgid
+    151: {"cls": "identity", "fake": 6},            # setfsuid
+    152: {"cls": "identity", "fake": 6},            # setfsgid
+    158: {"cls": "identity", "fake": 3},            # getgroups
+    159: {"cls": "identity", "fake": 1},            # setgroups
+    174: {"cls": "identity", "fake": 5},            # getuid
+    175: {"cls": "identity", "fake": 5},            # geteuid
+    176: {"cls": "identity", "fake": 5},            # getgid
+    177: {"cls": "identity", "fake": 5},            # getegid
+    200: {"cls": "socket", "addr": 1, "len": 2, "out": 0},   # bind
+    202: {"cls": "socket", "addr": 1, "len": 2, "out": 1},   # accept
+    203: {"cls": "socket", "addr": 1, "len": 2, "out": 0},   # connect
+    204: {"cls": "socket", "addr": 1, "len": 2, "out": 1},   # getsockname
+    205: {"cls": "socket", "addr": 1, "len": 2, "out": 1},   # getpeername
+    206: {"cls": "socket", "addr": 4, "len": 5, "out": 0},   # sendto
+    207: {"cls": "socket", "addr": 4, "len": 5, "out": 1},   # recvfrom
+    211: {"cls": "socket", "addr": 1, "len": -1, "out": 0},  # sendmsg
+    212: {"cls": "socket", "addr": 1, "len": -1, "out": 1},  # recvmsg
+    221: {"cls": "exec", "arg": (0,)},              # execve
+    242: {"cls": "socket", "addr": 1, "len": 2, "out": 1},   # accept4
+    276: {"cls": "path", "arg": (1, 3), "effect": 3},        # renameat2
+    281: {"cls": "exec", "arg": (1,)},              # execveat
+    291: {"cls": "path", "arg": (1,), "result": (4, 4)},     # statx
+    437: {"cls": "path", "arg": (1,)},              # openat2
+    439: {"cls": "path", "arg": (1,)},              # faccessat2
+    452: {"cls": "path", "arg": (1,)},              # fchmodat2
 }
 
-# AF_UNIX: the path lives in a sockaddr_un (or a msghdr): nr -> (addr register,
-# its length register, or -1 for a msghdr; 1 if the kernel fills it -- map host->guest).
-# bind/connect/sendto/sendmsg carry it in, getsockname/getpeername/accept/recvfrom/
-# recvmsg carry it back.  The tracer maps the sun_path through the law.
-SOCK = {
-    200: (1, 2, 0),     # bind
-    203: (1, 2, 0),     # connect
-    206: (4, 5, 0),     # sendto
-    211: (1, -1, 0),    # sendmsg
-    204: (1, 2, 1),     # getsockname
-    205: (1, 2, 1),     # getpeername
-    202: (1, 2, 1),     # accept
-    242: (1, 2, 1),     # accept4
-    207: (4, 5, 1),     # recvfrom
-    212: (1, -1, 1),    # recvmsg
-}
+CLS = {"path", "result", "socket", "exec", "identity", "effect", "none"}
+for n, e in CATALOG.items():
+    assert 0 <= n <= 470, (n, e)
+    assert e["cls"] in CLS, (n, e)
+    if e["cls"] == "path":
+        assert "arg" in e, (n, e)
+    if e["cls"] == "result":
+        assert "result" in e, (n, e)
+    if e["cls"] == "socket":
+        assert "addr" in e and "len" in e and "out" in e, (n, e)
+    if e["cls"] == "identity":
+        assert "fake" in e, (n, e)
+    if e["cls"] == "effect":
+        assert "effect" in e, (n, e)
+    if e["cls"] == "none":
+        assert e.get("caught"), (n, e)
 
-# fake root: syscalls answered at entry without running them (F_ZERO=1, F_RESIDS=2, F_GROUPS=3)
-FAKE = {174: 5, 175: 5, 176: 5, 177: 5,          # getuid geteuid getgid getegid: the process's own
-        148: 2, 150: 2, 158: 3,                  # getresuid getresgid getgroups
-        146: 6, 144: 6, 145: 6, 143: 6, 147: 6, 149: 6, 151: 6, 152: 6,   # set*id: remembered
-        159: 1,                                  # setgroups
-        55: 1, 54: 1}                            # fchown fchownat
-
-# results rewritten at exit: nr -> (R_*, register index of the buffer)
-#   R_CWD=1 getcwd, R_LINK=2 readlinkat, R_STAT=3 stat buffer, R_STATX=4 statx buffer
-RESULT = {17: (1, -1),                           # getcwd
-          78: (2, -1),                           # readlinkat
-          79: (3, 2),                            # newfstatat (buf in x2)
-          291: (4, 4),                           # statx (buf in x4)
-          11: (5, 1), 12: (5, 1), 13: (5, 1)}    # listxattr llistxattr flistxattr: drop the SELinux label
-
-# caught only for the SELinux label (the tracer answers them specially): fgetxattr
-# (the name is checked), flistxattr (its result is rewritten; see RESULT)
-CAUGHT = {10, 13}
-# fstat (80) has no path: it would be caught only for the owner read as root.  The
-# shim fixes the owner of the fstat a program calls; libc's own (fopen, opendir, the
-# loader) read sizes and modes, and a program without the shim sees the real owner
-# there.  Not catching it is a stop less for every fstat.
-
-# what a call may change that the tracer keeps a copy of (E_LINKS=1: the link cache,
-# E_CWD=2: the working directory).  A rename or an unlink of a directory moves every
-# path below it, so they drop the cached working directories too.
-EFFECT = {35: 3, 36: 1, 37: 1, 38: 3, 276: 3,     # unlinkat symlinkat linkat renameat renameat2
-          49: 2, 50: 2}                          # chdir fchdir
+PATH_ARG = {n: e["arg"] for n, e in CATALOG.items() if "arg" in e}
+SOCK = {n: (e["addr"], e["len"], e["out"]) for n, e in CATALOG.items() if "addr" in e}
+FAKE = {n: e["fake"] for n, e in CATALOG.items() if "fake" in e}
+RESULT = {n: e["result"] for n, e in CATALOG.items() if "result" in e}
+EFFECT = {n: e["effect"] for n, e in CATALOG.items() if "effect" in e}
+CAUGHT = {n for n, e in CATALOG.items() if e.get("caught")}
+EXEC = {n for n, e in CATALOG.items() if e["cls"] == "exec"}
 
 # The filter tests the rows in order, for every syscall that reaches it, so the
 # rows met most often come first (a gcc build: readlinkat, openat, newfstatat).
 HOT = [78, 56, 79, 48, 17, 221, 35, 291, 34, 38, 276, 49]
-order = HOT + sorted(n for n in set(PATH_ARG) | set(FAKE) | set(RESULT) | set(EFFECT) | set(SOCK) | CAUGHT if n not in HOT)
+order = HOT + sorted(n for n in CATALOG if n not in HOT)
 
 with open(out, "w") as f:
     for n in order:
@@ -102,8 +130,8 @@ with open(out, "w") as f:
             pa, pa2, ex = ar, lr, (1 if o else 0)
         else:
             a = PATH_ARG.get(n, ())
-            sp = "SP_EXEC" if n in (221, 281) else "SP_LINK" if n == 37 else "SP_NONE"  # execve and execveat share the gate
-            if n in (221, 281):
+            sp = "SP_EXEC" if n in EXEC else "SP_LINK" if n == 37 else "SP_NONE"
+            if n in EXEC:
                 a = ()                                   # its path is mapped by the gate, not generically
             rs0, _ = RESULT.get(n, (0, -1))
             ex = 1 if rs0 else 0                         # only a result to rewrite needs the exit stop
