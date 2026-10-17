@@ -137,7 +137,9 @@ What changed:
   before. The additions to the list of real denials are calls this kernel now has:
   `io_uring_setup`, `io_uring_enter`, `io_uring_register`, the new mount API
   (`open_tree`, `move_mount`, `fsopen`, `fsconfig`, `fsmount`, `fspick`), `kcmp`
-  and `io_pgetevents`.
+  and `io_pgetevents`.  None needs a row: the platform kills them, and
+  `policy_deny`'s default (`ENOSYS`) answers at the `SIGSYS` stop -- a number in
+  no row is answered, not fatal (`tests/bench/syscalls.c` runs the list).
 - **Unchanged**, and what a glibc process needs answered: `rseq`,
   `set_robust_list`, `get_robust_list`, `accept`, the `set*id` family and
   `setgroups`, `mount`, `umount2`, `chroot`, `swapon`, `swapoff`, the clock and

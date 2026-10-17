@@ -9,9 +9,11 @@ the numbers: [`docs/performance.md`](docs/performance.md).
   (`docs/reference/device-census.md`: the S23 FE, kernel 5.10.240, 42 real
   denials; stock glibc runs under `dn-tiny`), but a full prefix is not built
   there and the checks in `AGENTS.md` are not run. `openat2`, `faccessat2` and
-  `clone3` run natively there, and newer syscalls have no row yet (`open_tree`,
-  `move_mount`, `fspick`, `mount_setattr`, `fanotify_mark`, `setxattrat`/
-  `getxattrat`/`listxattrat`/`removexattrat`, `file_getattr`/`file_setattr`).
+  `clone3` run natively there. The newer calls (`open_tree`, `move_mount`,
+  `fspick`, `mount_setattr`, `fanotify_mark`, `setxattrat`/`getxattrat`/
+  `listxattrat`/`removexattrat`, `file_getattr`/`file_setattr`) need no row: the
+  platform kills them and `policy_deny`'s `ENOSYS` default answers
+  (`tests/bench/syscalls.c` exercises them).
   Check hard links and `execmod` there too: hard links are Android's SELinux
   rule, not the census's, and the shim's libc patching needs `execmod`. No SUD
   and no seccomp bitmap (5.10 < 5.11); `memfd` exec is refused in Termux's

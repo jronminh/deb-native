@@ -6,7 +6,8 @@
 # bench  the regression set, the file-tree set, find, ls and (with LUA_DIR)
 #        the Lua build; each row is the wall and the tracer's entry/exit stops
 # check  fr.sh (ids, stat, setresuid, vfork/fork), mt (threads and vfork),
-#        xm (execmod/execmem), t.sh (git init and apt-get clean)
+#        xm (execmod/execmem), syscalls (a killed number with no row), and
+#        t.sh (git init and apt-get clean)
 #
 # LUA_DIR is a guest path (default: /home/bench/lua-5.4.7, skipped if absent).
 # The tracer polls 500 us, as boot.sh does.  Interleave runs before and after a
@@ -24,7 +25,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 KIT=$P/tmp/dn-bench
 mkdir -p "$KIT"
 cp "$HERE"/reg.sh "$HERE"/fr.sh "$HERE"/lua.sh "$HERE"/t.sh "$HERE"/exec200.sh "$KIT"/ || exit 1
-cp "$HERE"/mt.c "$HERE"/xm.c "$KIT"/ || exit 1
+cp "$HERE"/mt.c "$HERE"/xm.c "$HERE"/syscalls.c "$KIT"/ || exit 1
 
 quiet() { "$DN" -q -s 500 -t "$P" -- /usr/bin/bash /boot/init.sh /usr/bin/sh -c "$1"; }
 
@@ -69,6 +70,14 @@ check() {
 	rc=$?
 	printf '%s\n' "$o"
 	if [ "$rc" != 0 ]; then echo "   xm: FAIL (rc=$rc)"; fail=1; fi
+
+	echo "== syscalls (the Android 16 denials with no row answer ENOSYS)"
+	o=$(quiet 'gcc -O2 -o /tmp/dn-bench/syscalls /tmp/dn-bench/syscalls.c && /tmp/dn-bench/syscalls') || fail=1
+	printf '%s\n' "$o"
+	case "$o" in
+	*"survived 14 killed numbers"*) ;;
+	*) echo "   syscalls: FAIL"; fail=1 ;;
+	esac
 
 	echo "== t.sh (git init, apt-get clean)"
 	o=$(quiet 'sh /tmp/dn-bench/t.sh') || fail=1
