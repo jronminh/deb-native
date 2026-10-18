@@ -3,10 +3,8 @@
 #ifndef MON_H
 #define MON_H
 
-/* Per-process state is kept in tables indexed by pid.  65536 slots cover the
- * pid_max Android sets (32768); a larger pid_max is reported at start. */
-#define PID_SLOTS 65536u
-#define PID_SLOT(p) ((unsigned) (p) & (PID_SLOTS - 1))
+/* The per-process state (trace.h) is keyed by the full pid in a hash: there is
+ * no fixed slot table and no pid_max assumption. */
 #include "sys.h"
 
 struct tracee {

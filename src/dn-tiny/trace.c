@@ -17,9 +17,98 @@ static void store_owner(struct tracee *t);
 static void mark_if_new(struct tracee *t);
 static void dac_fix(struct tracee *t);
 
-#define EXE_LEN   128
-static char exe_now[PID_SLOTS][EXE_LEN];          /* by pid, the program each process runs */
-static char exe_next[PID_SLOTS][EXE_LEN];         /* noted at execve entry, valid once it succeeds */
+/* The per-pid state is a full-pid hash, not an array indexed by pid & 65535:
+ * this phone's pid_max is 4194304, so two live pids 65536 apart would share an
+ * entry.  A block is 1024 states, allocated on demand; trace_gone recycles. */
+#define PID_BUCKETS 4096u
+#define PID_BLOCK   1024u
+struct pid_block {
+	struct pid_state s[PID_BLOCK];
+	struct pid_block *next;
+};
+static struct pid_state *pid_bucket[PID_BUCKETS];
+static struct pid_state *pid_free;
+static struct pid_block *pid_blocks;
+static struct pid_state *pid_last;
+static pid_t pid_last_pid;
+static struct ids seed_ids;
+static struct pid_state pid_sink;                 /* only if mmap fails */
+
+static unsigned pid_hash(pid_t p)
+{
+	return ((unsigned) p * 2654435761u) >> (32 - 12);   /* 4096 buckets */
+}
+
+static struct pid_state *pid_new(void)
+{
+	unsigned i;
+
+	if (!pid_free) {
+		struct pid_block *b = (struct pid_block *) sc(222, 0, (i64) sizeof *b, 3, 0x22, -1, 0);
+
+		if ((i64) b < 0)
+			return &pid_sink;
+		b->next = pid_blocks;
+		pid_blocks = b;
+		for (i = 0; i < PID_BLOCK; i++) {
+			b->s[i].next = pid_free;
+			pid_free = &b->s[i];
+		}
+	}
+	{
+		struct pid_state *s = pid_free;
+
+		pid_free = s->next;
+		memset(s, 0, sizeof *s);
+		s->ids = seed_ids;
+		return s;
+	}
+}
+
+struct pid_state *pid_state_get(pid_t pid, int create)
+{
+	struct pid_state *s;
+	unsigned h;
+
+	if (pid_last && pid_last_pid == pid)
+		return pid_last;
+	h = pid_hash(pid);
+	for (s = pid_bucket[h]; s; s = s->next)
+		if (s->pid == pid) {
+			pid_last = s;
+			pid_last_pid = pid;
+			return s;
+		}
+	if (!create)
+		return 0;
+	s = pid_new();
+	if (s == &pid_sink)
+		return s;
+	s->pid = pid;
+	s->next = pid_bucket[h];
+	pid_bucket[h] = s;
+	pid_last = s;
+	pid_last_pid = pid;
+	return s;
+}
+
+static void pid_drop(pid_t pid)
+{
+	struct pid_state **pp, *s;
+	unsigned h = pid_hash(pid);
+
+	for (pp = &pid_bucket[h]; (s = *pp); pp = &s->next)
+		if (s->pid == pid) {
+			*pp = s->next;
+			if (pid_last == s) {
+				pid_last = 0;
+				pid_last_pid = 0;
+			}
+			s->next = pid_free;
+			pid_free = s;
+			return;
+		}
+}
 
 /* ---- the synthetic /proc mount files: the rows in the table point /proc/mounts
  * (and mountinfo, /etc/mtab) at a file under var/lib/deb-native, so this only
@@ -63,7 +152,6 @@ void trace_synth_init(void)
 struct cwdc { pid_t pid; unsigned gen, lgen; char path[CWD_LEN]; };
 static struct cwdc cwd_cache[CWD_SLOTS];
 static unsigned cwd_gen = 1;
-static unsigned char pending[PID_SLOTS];         /* by pid: the effects of the call in flight */
 
 static void drop(int effect)
 {
@@ -75,11 +163,11 @@ static void drop(int effect)
 
 void trace_stop(pid_t pid)
 {
-	unsigned char *e = &pending[PID_SLOT(pid)];
+	struct pid_state *s = pid_state_get(pid, 0);
 
-	if (*e) {                                       /* the call is over: what it changed is visible now */
-		drop(*e);
-		*e = 0;
+	if (s && s->pending) {                          /* the call is over: what it changed is visible now */
+		drop(s->pending);
+		s->pending = 0;
 	}
 }
 
@@ -87,6 +175,7 @@ void trace_gone(pid_t pid)
 {
 	trace_stop(pid);
 	cwd_cache[(unsigned) pid % CWD_SLOTS].pid = 0;
+	pid_drop(pid);
 }
 
 /* /proc/<pid>/cwd, from the cache when it holds it */
@@ -468,20 +557,19 @@ static void sock_map(struct tracee *t, const struct row *rw, int out)
 	}
 }
 
-/* The ids a process was last given.  The boot seeds them with the app's real
- * uid (or 0 for a root test session); a process that changes them, as root does
- * or a setuid binary will, reads back what it set. */
-struct ids { unsigned ru, eu, su, rg, eg, sg; };
-static struct ids fake_ids[PID_SLOTS];
-
-/* The supplementary groups, by pid: a virtual list for root/service users, the
- * kernel's for the real user at boot.  A process that never calls setgroups
- * shares the seed (NULL), and a list is never changed in place, so a fork may
- * share it; only setgroups allocates a new one.  No fixed cap: the kernel's
- * NGROUPS_MAX is the only limit. */
-struct grps { unsigned n; unsigned g[]; };
-static struct grps *groups[PID_SLOTS];
 static struct grps *seed_groups;
+
+static struct pid_state *state_of(pid_t pid)
+{
+	return pid_state_get(pid, 1);
+}
+
+static const char *exe_of(pid_t pid)
+{
+	struct pid_state *s = pid_state_get(pid, 0);
+
+	return s ? s->exe_now : "";
+}
 
 static struct grps *grp_new(unsigned n)
 {
@@ -497,13 +585,14 @@ static struct grps *grp_new(unsigned n)
 
 static struct grps *grp_of(pid_t pid)
 {
-	struct grps *g = groups[PID_SLOT(pid)];
+	struct grps *g = state_of(pid)->groups;
 
 	return g ? g : seed_groups;
 }
 
-static struct ids *ids_of(pid_t pid) { return &fake_ids[PID_SLOT(pid)]; }
+static struct ids *ids_of(pid_t pid) { return &state_of(pid)->ids; }
 
+#ifdef DN_HOST_ADB
 /* The placeholder is the tracer's file: mark it with the tracee's ids, as a
  * create by that process would be marked, so stat and DAC see one owner. */
 static void sock_mark_owner(struct tracee *t, const char *host)
@@ -512,6 +601,7 @@ static void sock_mark_owner(struct tracee *t, const char *host)
 
 	own_write(host, 0, id->eu, id->eg);
 }
+#endif
 
 /* capget/capset: the same virtual Cap* sets /proc/<pid>/status shows.  Root's
  * sets are full (the kernel's stay 0); everyone else has none.  The kernel's
@@ -551,16 +641,12 @@ static void answer_capset(struct tracee *t)
 }
 
 /* the setuid-bit gate's pending euid, applied on the exec event */
-static unsigned euid_next[PID_SLOTS];
-static unsigned char euid_has_next[PID_SLOTS];
 
 void trace_identity_init(unsigned uid, unsigned gid)
 {
 	struct grps *g = 0;
 	i64 k;
-	unsigned i;
 
-	memset(groups, 0, sizeof groups);
 	if (uid == 0) {
 		g = grp_new(1);
 		if (g)
@@ -579,16 +665,21 @@ void trace_identity_init(unsigned uid, unsigned gid)
 		}
 	}
 	seed_groups = g;
-	for (i = 0; i < PID_SLOTS; i++) {
-		fake_ids[i].ru = fake_ids[i].eu = fake_ids[i].su = uid;
-		fake_ids[i].rg = fake_ids[i].eg = fake_ids[i].sg = gid;
-	}
+	seed_ids.ru = seed_ids.eu = seed_ids.su = uid;
+	seed_ids.rg = seed_ids.eg = seed_ids.sg = gid;
+	pid_free = 0;
+	pid_blocks = 0;
+	pid_last = 0;
+	pid_last_pid = 0;
+	memset(pid_bucket, 0, sizeof pid_bucket);
 }
 
 void trace_euid_next(pid_t pid, unsigned euid)
 {
-	euid_next[PID_SLOT(pid)] = euid;
-	euid_has_next[PID_SLOT(pid)] = 1;
+	struct pid_state *s = state_of(pid);
+
+	s->euid_next = euid;
+	s->euid_has_next = 1;
 }
 
 void trace_ids_of(pid_t pid, unsigned out[6])
@@ -746,7 +837,7 @@ static void fake_result(struct tracee *t, int fake)
 			mon_skip(t, -14);                /* EFAULT */
 			break;
 		}
-		groups[PID_SLOT(t->pid)] = g;
+		state_of(t->pid)->groups = g;
 		mon_skip(t, 0);
 		break;
 	}
@@ -1102,7 +1193,7 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 			memcpy(w + rn, s, strlen(s));
 			rn += strlen(s);
 		} else if (strncmp(p, "Name:", 5) == 0) {
-			const char *b = exe_now[PID_SLOT(pid)], *q, *sl = NULL;
+			const char *b = exe_of(pid), *q, *sl = NULL;
 			int l;
 
 			for (q = b; *q; q++)
@@ -1512,7 +1603,7 @@ static int synth_comm(struct tracee *t, const char *guest, char *out, size_t cap
 
 	if (pid <= 0 || policy_root_len() == 0)
 		return 0;
-	b = exe_now[PID_SLOT(pid)];
+	b = exe_of(pid);
 	if (!b[0])
 		return 0;
 	for (q = b; *q; q++)
@@ -1673,7 +1764,7 @@ void trace_enter(struct tracee *t, const struct row *rw)
 {
 	if (rw->effect) {                               /* drop now, and again once the call is over */
 		drop(rw->effect);
-		pending[PID_SLOT(t->pid)] |= (unsigned char) rw->effect;
+		state_of(t->pid)->pending |= (unsigned char) rw->effect;
 	}
 	if (rw->nr == 90) {                             /* capget: the virtual sets */
 		answer_capget(t);
@@ -1795,28 +1886,32 @@ void trace_enter(struct tracee *t, const struct row *rw)
 
 void trace_exe_pending(pid_t pid, const char *guest_path)
 {
-	scpy(exe_next[PID_SLOT(pid)], EXE_LEN, guest_path);
+	scpy(state_of(pid)->exe_next, EXE_LEN, guest_path);
 }
 
 void trace_exe_commit(pid_t pid)
 {
-	unsigned i = PID_SLOT(pid);
+	struct pid_state *s = state_of(pid);
 
-	memcpy(exe_now[i], exe_next[i], EXE_LEN);
-	if (euid_has_next[i]) {
-		struct ids *d = ids_of(pid);
-
-		euid_has_next[i] = 0;
-		d->eu = d->su = euid_next[i];    /* a setuid exec: ruid stays as it was */
+	memcpy(s->exe_now, s->exe_next, EXE_LEN);
+	if (s->euid_has_next) {
+		s->euid_has_next = 0;
+		s->ids.eu = s->ids.su = s->euid_next;    /* a setuid exec: ruid stays as it was */
 	}
 }
 
 void trace_exe_fork(pid_t parent, pid_t child)
 {
-	*ids_of(child) = *ids_of(parent);
-	groups[PID_SLOT(child)] = groups[PID_SLOT(parent)];
-	euid_has_next[PID_SLOT(child)] = 0;
-	memcpy(exe_now[PID_SLOT(child)], exe_now[PID_SLOT(parent)], EXE_LEN);
+	struct pid_state *p = pid_state_get(parent, 0);
+	struct pid_state *c = state_of(child);
+
+	if (!p)
+		return;
+	c->ids = p->ids;
+	c->groups = p->groups;
+	c->euid_has_next = 0;
+	c->pending = 0;
+	memcpy(c->exe_now, p->exe_now, EXE_LEN);
 }
 
 /* "/proc/self/exe" or "/proc/<pid>/exe": the pid it names, or 0 if it is neither */
@@ -1883,7 +1978,7 @@ static void fix_link(struct tracee *t)
 	if (n <= 0 || n > (i64) sizeof b - 1)
 		return;
 	if (k > 0 && (path[k] = '\0', 1) && (who = proc_exe_pid(path, t->pid)) != 0) {
-		const char *exe = exe_now[PID_SLOT(who)];
+		const char *exe = exe_of(who);
 
 		m = (int) strlen(exe);
 		if (m == 0)
@@ -2057,8 +2152,8 @@ static int answer_link(struct tracee *t)
 		mon_skip(t, -22);                        /* EINVAL, as the kernel says */
 		return 1;
 	}
-	if ((who = proc_exe_pid(host, t->pid)) != 0 && exe_now[PID_SLOT(who)][0]) {
-		text = exe_now[PID_SLOT(who)];
+	if ((who = proc_exe_pid(host, t->pid)) != 0 && exe_of(who)[0]) {
+		text = exe_of(who);
 		m = (int) strlen(text);
 	} else {
 		r = sys_readlink(host, b, sizeof b - 1);

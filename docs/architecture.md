@@ -188,6 +188,11 @@ the net for everything.
   reader that never calls `get*id` sees the same identity; supplementary groups
   are a per-process virtual list (`{0}` for root, the app's groups for the real
   user at boot, replaced by `setgroups`/`initgroups`).
+- The per-pid state (ids, groups, the program name, the exit-stop flags) is one
+  struct keyed by the **full pid** in a 4096-bucket hash, with 1024-state blocks
+  and a free list; a one-entry cache keeps the common same-pid stop cheap.  The
+  old 65536-slot table let two live pids 65536 apart share state (this phone's
+  pid_max is 4194304); the startup warning is gone with it.
 - The goal is no accidental identity leak (apt, dpkg and `git`'s ownership check
   see what the tree's user expects), not isolation.
 

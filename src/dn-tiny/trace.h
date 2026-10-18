@@ -4,6 +4,41 @@
 #include "mon.h"
 #include "policy.h"
 
+#define EXE_LEN 128
+
+/* The ids a process was last given (the boot seeds the real uid, or 0 for a root
+ * test session); a process that changes them reads back what it set. */
+struct ids { unsigned ru, eu, su, rg, eg, sg; };
+
+/* The supplementary groups: a virtual list for root/service users, the kernel's
+ * for the real user at boot.  A process that never calls setgroups shares the
+ * seed (NULL); a list is never changed in place, so a fork may share it. */
+struct grps { unsigned n; unsigned g[]; };
+
+/* One entry per traced pid, keyed by the full pid.  The tables used to be
+ * indexed by pid & 65535, so two live pids 65536 apart shared their state; the
+ * hash has no such collision.  The pool grows by blocks; trace_gone recycles. */
+struct pid_state {
+	pid_t pid;
+	struct ids ids;
+	struct grps *groups;
+	char exe_now[EXE_LEN];
+	char exe_next[EXE_LEN];
+	unsigned euid_next;
+	unsigned char euid_has_next;
+	unsigned char pending;
+	unsigned char expect_exit;      /* the next stop is the exit stop */
+	unsigned char mark_exit;        /* a create wants its exit stop */
+	unsigned char dac_exit;         /* a fake-root mode to restore at exit */
+	unsigned dac_mode;
+	unsigned short cur_nr;          /* the syscall to see again at exit */
+	u64 saved0;                     /* x0 as that syscall was entered */
+	struct pid_state *next;         /* hash chain */
+};
+
+/* The state for `pid`; with `create`, a new entry starts from the boot seed. */
+struct pid_state *pid_state_get(pid_t pid, int create);
+
 extern unsigned long trace_n_rewritten;
 extern unsigned long trace_n_answered;   /* calls answered at entry, with no exit stop */
 

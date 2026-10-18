@@ -52,13 +52,7 @@ static unsigned long n_enter, n_exit, n_event, n_sig, n_sigsys;
 #ifndef DN_HOST_ADB
 static unsigned deny_count[512];                 /* by syscall number: killed by the platform, answered here */
 #endif
-static unsigned char expect_exit[PID_SLOTS];      /* by pid */
-static unsigned char mark_exit[PID_SLOTS];        /* by pid: a create wants its exit stop */
-static unsigned char dac_exit[PID_SLOTS];         /* by pid: a fake-root mode to restore */
-static unsigned dac_mode[PID_SLOTS];
-#define EXP(p) expect_exit[PID_SLOT(p)]
-static unsigned short cur_nr[PID_SLOTS];             /* by pid: the syscall to be seen again at exit */
-static u64 saved0[PID_SLOTS];                     /* by pid: x0 as that syscall was entered */
+#define EXP(p) (pid_state_get((p), 1)->expect_exit)
 
 /* ---- the filter: one TRACE rule per row -------------------------------- */
 /* The program is built with labels, so no jump offset is counted by hand: a
@@ -454,7 +448,6 @@ static int loop(pid_t root)
 		if (!WIFSTOPPED_(st)) {                           /* exited or killed */
 			if (p == root)
 				rc = WIFEXITED_(st) ? WEXITSTATUS_(st) : 128 + WTERMSIG_(st);
-			EXP(p) = 0;
 			if (mode == M_FULL)
 				trace_gone(p);
 			continue;
@@ -476,11 +469,12 @@ static int loop(pid_t root)
 				n_enter++;
 				if (mode == M_FULL && get_regs(&t) == 0) {
 					const struct row *rw = policy_row((unsigned) t.r.regs[8]);
+					struct pid_state *s = pid_state_get(p, 1);
 
 					/* the row says whether to stop at exit: no need for the event message */
 					msg = rw ? rw->exit_stop : 0;
-					cur_nr[PID_SLOT(p)] = (unsigned short) t.r.regs[8];
-					saved0[PID_SLOT(p)] = t.r.regs[0];
+					s->cur_nr = (unsigned short) t.r.regs[8];
+					s->saved0 = t.r.regs[0];
 					if (rw)
 						trace_enter(&t, rw);
 					if (t.dirty)
@@ -489,13 +483,13 @@ static int loop(pid_t root)
 						skip_syscall(&t);
 						msg = 0;            /* answered at entry: nothing to rewrite at exit */
 					}
-					mark_exit[PID_SLOT(p)] = (unsigned char) (t.mark_exit && !t.skip);
-					dac_exit[PID_SLOT(p)] = (unsigned char) (t.dac_exit && !t.skip);
-					if (dac_exit[PID_SLOT(p)]) {
-						dac_mode[PID_SLOT(p)] = t.dac_mode;
+					s->mark_exit = (unsigned char) (t.mark_exit && !t.skip);
+					s->dac_exit = (unsigned char) (t.dac_exit && !t.skip);
+					if (s->dac_exit) {
+						s->dac_mode = t.dac_mode;
 						msg |= 1;              /* stop at exit to restore the mode */
 					}
-					if (mark_exit[PID_SLOT(p)])
+					if (s->mark_exit)
 						msg |= 1;              /* stop at exit to mark the new file */
 				} else {
 					sys_ptrace(PTRACE_GETEVENTMSG, p, 0, (i64) &msg);
@@ -507,19 +501,20 @@ static int loop(pid_t root)
 					how = PTRACE_SYSCALL;
 				}
 			} else if (sig == (SIGTRAP_ | 0x80)) {     /* the exit stop */
-				const struct row *rw = mode == M_FULL ? policy_row(cur_nr[PID_SLOT(p)]) : NULL;
+				struct pid_state *s = mode == M_FULL ? pid_state_get(p, 1) : 0;
+				const struct row *rw = mode == M_FULL ? policy_row(s->cur_nr) : NULL;
 
 				n_exit++;
 				if (mode == M_FULL && get_regs(&t) == 0) {
 					if (rw && (rw->result != R_NONE || rw->special == SP_SOCK_OUT)) {
-						t.entry_arg0 = saved0[PID_SLOT(p)];
+						t.entry_arg0 = s->saved0;
 						trace_exit(&t, rw);
 					}
-					t.mark_exit = mark_exit[PID_SLOT(p)];
-					mark_exit[PID_SLOT(p)] = 0;
-					t.dac_exit = dac_exit[PID_SLOT(p)];
-					t.dac_mode = dac_mode[PID_SLOT(p)];
-					dac_exit[PID_SLOT(p)] = 0;
+					t.mark_exit = s->mark_exit;
+					s->mark_exit = 0;
+					t.dac_exit = s->dac_exit;
+					t.dac_mode = s->dac_mode;
+					s->dac_exit = 0;
 					if (t.mark_exit)
 						trace_mark_owner(&t);
 					if (t.dac_exit)
@@ -624,20 +619,6 @@ int main(int argc, char **argv)
 	if (root != NULL)
 		trace_synth_init();              /* the synthetic /proc files, before the tracee exists */
 
-	{                                        /* the per-process tables (mon.h) and this kernel's pids */
-		char b[16] = { 0 };
-		int fd = sys_open("/proc/sys/kernel/pid_max", 0);
-
-		if (fd >= 0) {
-			sys_read(fd, b, sizeof b - 1);
-			sys_close(fd);
-			if (atou(b) > PID_SLOTS) {
-				put(2, "dn-tiny: pid_max is ");
-				put(2, b);
-				put(2, "  two processes whose pids differ by 65536 would share their state\n");
-			}
-		}
-	}
 	pid = sys_fork();                        /* a raw clone: no libc, so no set_robust_list in the child */
 	if (pid < 0) {
 		put(2, "dn-tiny: clone failed\n");
