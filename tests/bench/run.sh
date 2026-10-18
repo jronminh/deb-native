@@ -7,8 +7,9 @@
 #        the Lua build; each row is the wall and the tracer's entry/exit stops
 # check  fr.sh (ids, stat, setresuid, vfork/fork), mt (threads and vfork),
 #        xm (execmod/execmem), syscalls (a killed number with no row), owner
-#        (chown kept in user.dn.owner), su (the setuid gate and a PAM
-#        session), and t.sh (git init and apt-get clean)
+#        (chown kept in user.dn.owner), access (the virtual ids, not the
+#        kernel's), su (the setuid gate and a PAM session), and t.sh (git init
+#        and apt-get clean)
 #
 # LUA_DIR is a guest path (default: /home/bench/lua-5.4.7, skipped if absent).
 # The tracer polls 500 us, as boot.sh does.  Interleave runs before and after a
@@ -26,7 +27,7 @@ INIT=${DN_INITIAL:-root}                 # the check set and the old rows are ro
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 KIT=$P/tmp/dn-bench
 mkdir -p "$KIT"
-cp "$HERE"/reg.sh "$HERE"/fr.sh "$HERE"/lua.sh "$HERE"/t.sh "$HERE"/exec200.sh "$KIT"/ || exit 1
+cp "$HERE"/reg.sh "$HERE"/fr.sh "$HERE"/lua.sh "$HERE"/t.sh "$HERE"/exec200.sh "$HERE"/access.sh "$KIT"/ || exit 1
 cp "$HERE"/mt.c "$HERE"/xm.c "$HERE"/syscalls.c "$KIT"/ || exit 1
 cp "$HERE"/owner.sh "$KIT"/ || exit 1
 cd "$P" || exit 1                        # the tracee's cwd is then the tree's /
@@ -90,6 +91,11 @@ check() {
 	*"owner: ok"*) ;;
 	*) echo "   owner: FAIL"; fail=1 ;;
 	esac
+
+	echo "== access (the world's answer: root's DAC override, the real user's bits)"
+	o=$(quiet 'sh /tmp/dn-bench/access.sh') || fail=1
+	printf '%s\n' "$o"
+	case "$o" in *"access: ok"*) ;; *) echo "   access: FAIL"; fail=1 ;; esac
 
 	echo "== su (the setuid gate and a PAM session; from the root seed)"
 	o=$(quiet 'su -s /bin/sh user -c "id -u" </dev/null') || fail=1

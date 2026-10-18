@@ -147,6 +147,9 @@ DEST/
 │   ├── dn-tiny       the tracer
 │   ├── dn-lane.so    the shim (absent with --no-shim)
 │   └── dn-ldhook.so  the loader hook (only with --ldhook)
+├── usr/local/sbin/
+│   ├── useradd       say that a user is virtual, then run the real one
+│   └── adduser
 ├── var/lib/deb-native/
 │   └── dn-tiny.gen   the shared link generation (made at the first boot)
 └── ... a Debian tree

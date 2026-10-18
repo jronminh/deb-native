@@ -267,17 +267,35 @@ static void sock_map(struct tracee *t, const struct row *rw, int out)
 struct ids { unsigned ru, eu, su, rg, eg, sg; };
 static struct ids fake_ids[PID_SLOTS];
 
-/* the supplementary groups, by pid; a virtual list for root/service users,
- * the kernel's for the real user at boot */
-#define MAXG 32
-struct grps { unsigned char n; unsigned g[MAXG]; };
-static struct grps groups[PID_SLOTS];
+/* The supplementary groups, by pid: a virtual list for root/service users, the
+ * kernel's for the real user at boot.  A process that never calls setgroups
+ * shares the seed (NULL), and a list is never changed in place, so a fork may
+ * share it; only setgroups allocates a new one.  No fixed cap: the kernel's
+ * NGROUPS_MAX is the only limit. */
+struct grps { unsigned n; unsigned g[]; };
+static struct grps *groups[PID_SLOTS];
+static struct grps *seed_groups;
+
+static struct grps *grp_new(unsigned n)
+{
+	size_t sz = sizeof(struct grps) + (size_t) n * sizeof(unsigned);
+	struct grps *g = (struct grps *) sc(222, 0, (i64) sz, 3, 0x22, -1, 0);  /* mmap RW, PRIVATE|ANON */
+	i64 p = (i64) g;
+
+	if (p < 0)
+		return 0;
+	g->n = n;
+	return g;
+}
+
+static struct grps *grp_of(pid_t pid)
+{
+	struct grps *g = groups[PID_SLOT(pid)];
+
+	return g ? g : seed_groups;
+}
 
 static struct ids *ids_of(pid_t pid) { return &fake_ids[PID_SLOT(pid)]; }
-
-/* the identity a process presents: real (euid is the app's), root (0), or a
- * virtual service user (any other euid).  No mode: the euid is the classifier. */
-static int fake_world(pid_t pid) { return ids_of(pid)->eu != policy_real_uid(); }
 
 /* the setuid-bit gate's pending euid, applied on the exec event */
 static unsigned euid_next[PID_SLOTS];
@@ -285,28 +303,32 @@ static unsigned char euid_has_next[PID_SLOTS];
 
 void trace_identity_init(unsigned uid, unsigned gid)
 {
-	unsigned gbuf[MAXG];
+	struct grps *g = 0;
 	i64 k;
 	unsigned i;
 
-	memset(gbuf, 0, sizeof gbuf);
+	memset(groups, 0, sizeof groups);
 	if (uid == 0) {
-		gbuf[0] = 0;
-		k = 1;
+		g = grp_new(1);
+		if (g)
+			g->g[0] = 0;
 	} else {
-		k = sc(158, MAXG, (i64) gbuf, 0, 0, 0, 0);    /* the app's real groups */
-		if (k <= 0) {
-			gbuf[0] = gid;
-			k = 1;
+		k = sc(158, 0, 0, 0, 0, 0, 0);            /* the app's real groups: count first */
+		if (k >= 0 && k <= 65536) {
+			g = grp_new((unsigned) k);
+			if (g && k > 0 && sc(158, k, (i64) g->g, 0, 0, 0, 0) != k)
+				g = 0;
 		}
-		if (k > MAXG)
-			k = MAXG;
+		if (!g) {
+			g = grp_new(1);                   /* cannot ask: the primary group */
+			if (g)
+				g->g[0] = (unsigned) gid;
+		}
 	}
+	seed_groups = g;
 	for (i = 0; i < PID_SLOTS; i++) {
 		fake_ids[i].ru = fake_ids[i].eu = fake_ids[i].su = uid;
 		fake_ids[i].rg = fake_ids[i].eg = fake_ids[i].sg = gid;
-		groups[i].n = (unsigned char) k;
-		memcpy(groups[i].g, gbuf, (size_t) k * sizeof(unsigned));
 	}
 }
 
@@ -434,7 +456,7 @@ static void fake_result(struct tracee *t, int fake)
 		break;
 	}
 	case F_GROUPS: {                                /* getgroups(size, list) */
-		struct grps *g = &groups[PID_SLOT(t->pid)];
+		struct grps *g = grp_of(t->pid);
 		unsigned size = (unsigned) t->r.regs[0];
 
 		if (size == 0) {
@@ -450,15 +472,20 @@ static void fake_result(struct tracee *t, int fake)
 		break;
 	}
 	case F_ZERO: {                                  /* setgroups: root only, remembered */
-		struct grps *g = &groups[PID_SLOT(t->pid)];
+		struct grps *g;
 		unsigned size = (unsigned) t->r.regs[0];
 
 		if (ids_of(t->pid)->eu != 0) {
 			mon_skip(t, -1);                 /* EPERM */
 			break;
 		}
-		if (size > MAXG) {
-			mon_skip(t, -22);                /* EINVAL: our virtual list is smaller */
+		if (size > 65536) {
+			mon_skip(t, -22);                /* EINVAL, the kernel's NGROUPS_MAX */
+			break;
+		}
+		g = grp_new(size);
+		if (!g) {
+			mon_skip(t, -12);                /* ENOMEM */
 			break;
 		}
 		if (size > 0 && mon_read(t, t->r.regs[1], g->g, (size_t) size * sizeof(unsigned)) !=
@@ -466,7 +493,7 @@ static void fake_result(struct tracee *t, int fake)
 			mon_skip(t, -14);                /* EFAULT */
 			break;
 		}
-		g->n = (unsigned char) size;
+		groups[PID_SLOT(t->pid)] = g;
 		mon_skip(t, 0);
 		break;
 	}
@@ -1304,6 +1331,91 @@ static int abs_guest(struct tracee *t, int arg, char *out, size_t cap)
 	return out[0] == '/';
 }
 
+/* access()/faccessat: the world's answer, not the kernel's.  The kernel always
+ * sees the app as the owner, so it would allow what the world denies and deny
+ * what the fake root's DAC override allows.  Follow the euid: root passes (X_OK
+ * still needs one execute bit on a regular file), anyone else is checked
+ * against the stored owner and the virtual group list.  Host rows and a name
+ * this cannot resolve are left to the kernel. */
+static int answer_access(struct tracee *t)
+{
+	char in[256], host[600], base[256];
+	char st[144];
+	u64 dev, ino;
+	i64 sec, nsec;
+	ssize_t k;
+	unsigned m = (unsigned) t->r.regs[2], smode, u, g, eu, eg, need, have, shift;
+	struct grps *grp;
+	int n, nf;
+
+	if (m & ~7u)
+		return 0;                        /* bits the kernel will refuse */
+	k = mon_read_str(t, t->r.regs[1], in, sizeof in - 1);
+	if (k <= 0 || memchr(in, 0, (size_t) k) == NULL)
+		return 0;
+	in[k] = '\0';
+	if (policy_is_host(in))
+		return 0;                        /* /proc, /sys, /dev, a bind: the kernel's */
+	nf = policy_nofollow((unsigned) t->r.regs[8], 1, (const u64 *) t->r.regs);
+	if (in[0] == '/')
+		n = policy_path_nf(in, host, sizeof host, nf);
+	else {
+		if (!base_of(t, 1, base, sizeof base - 1))
+			return 0;
+		n = policy_path_at(base, in, host, sizeof host, nf);
+	}
+	if (n == 0)
+		return 0;
+	{
+		const char *r = policy_root();
+		size_t rl = policy_root_len();
+
+		if (!rl || strncmp(host, r, rl) != 0 || (host[rl] != '/' && host[rl] != '\0'))
+			return 0;                /* a bind or a host row: the kernel's */
+	}
+	if (sys_fstatat(host, st, nf ? 0x100 : 0) != 0)
+		return 0;                        /* let the kernel give the error */
+
+	memcpy(&dev, st, 8);
+	memcpy(&ino, st + 8, 8);
+	memcpy(&sec, st + 104, 8);
+	memcpy(&nsec, st + 112, 8);
+	if (!own_lookup(host, nf, dev, ino, sec, nsec, &u, &g))
+		u = g = 0;                       /* unmarked: the implicit root's */
+	memcpy(&smode, st + 16, 4);
+	eu = ids_of(t->pid)->eu;
+	eg = ids_of(t->pid)->eg;
+
+	if (eu == 0) {
+		if ((m & 1) && (smode & 0170000) != 0040000 && !(smode & 0111)) {
+			mon_skip(t, -13);        /* EACCES: root still needs an x bit */
+			return 1;
+		}
+		mon_skip(t, 0);
+		return 1;
+	}
+	need = ((m & 4) ? 4u : 0) | ((m & 2) ? 2u : 0) | ((m & 1) ? 1u : 0);
+	if (need == 0) {
+		mon_skip(t, 0);                  /* F_OK: it exists */
+		return 1;
+	}
+	if (eu == u) {
+		shift = 6;
+	} else {
+		have = (eg == g);
+		if (!have && (grp = grp_of(t->pid)) != 0)
+			for (u = 0; u < grp->n; u++)
+				if (grp->g[u] == g) {
+					have = 1;
+					break;
+				}
+		shift = have ? 3 : 0;
+	}
+	have = (smode >> shift) & 7;
+	mon_skip(t, (have & need) == need ? 0 : -13);
+	return 1;
+}
+
 void trace_enter(struct tracee *t, const struct row *rw)
 {
 	if (rw->effect) {                               /* drop now, and again once the call is over */
@@ -1350,6 +1462,8 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		store_owner(t);
 		return;
 	}
+	if ((rw->nr == 48 || rw->nr == 439) && answer_access(t))
+		return;                                  /* access: the virtual view */
 	if (rw->fake != F_NONE) {
 		/* Every fake is answered here: get*id from the state, set*id with the
 		 * saved-id rules, groups from the virtual list (chown is earlier). */
@@ -1547,11 +1661,6 @@ static void fix_owner(struct tracee *t, u64 buf, unsigned off)
 
 	if (t->r.regs[0] != 0 || mon_read(t, buf + off, id, sizeof id) != (ssize_t) sizeof id)
 		return;
-	if (fake_world(t->pid)) {
-		id[0] = policy_map_uid(id[0]);
-		id[1] = policy_map_gid(id[1]);
-		mon_write(t, buf + off, id, sizeof id);
-	}
 	k = mon_read_str(t, t->r.regs[1], host, sizeof host - 1);
 	if (k <= 0 || host[0] != '/')
 		return;                                  /* the path, mapped at entry */
@@ -1570,8 +1679,9 @@ static void fix_owner(struct tracee *t, u64 buf, unsigned off)
 		dev = ((u64) (ma & 0xfffff000u) << 32) | ((u64) (ma & 0xfffu) << 8) |
 		      ((u64) (mi & 0xffffff00u) << 12) | (mi & 0xffu);
 	}
-	if (own_lookup(host, 0, dev, ino, sec, nsec, &own[0], &own[1]))
-		mon_write(t, buf + off, own, sizeof own);
+	if (!own_lookup(host, 0, dev, ino, sec, nsec, &own[0], &own[1]))
+		own[0] = own[1] = 0;             /* unmarked: the implicit root, both worlds */
+	mon_write(t, buf + off, own, sizeof own);
 }
 
 /* A symlink's size is the length of its target.  On an encrypted file system the kernel
@@ -1820,14 +1930,17 @@ static int own_lookup(const char *host, int nofollow, u64 dev, u64 ino, i64 sec,
 	return 0;
 }
 
-/* read the stored owner into a stat/statx buffer at off (uid, then gid) */
+/* read the stored owner into a stat/statx buffer at off (uid, then gid).  A file
+ * with no store is the implicit root's, in both worlds: a legacy file (or a
+ * symlink, which takes no user xattr) reads the same to root and to the real
+ * user, so the two worlds cannot disagree about it. */
 static void own_apply(char *buf, unsigned off, const char *host, int nofollow,
 		      u64 dev, u64 ino, i64 sec, i64 nsec)
 {
 	unsigned id[2];
 
 	if (!own_lookup(host, nofollow, dev, ino, sec, nsec, &id[0], &id[1]))
-		return;
+		id[0] = id[1] = 0;
 	memcpy(buf + off, id, sizeof id);
 }
 
@@ -1871,20 +1984,6 @@ out:
 	mon_skip(t, 0);
 }
 
-/* the owner at buf + off (uid, then gid): in the fake world the tree is root's,
- * so the real ids read as 0; the real user sees them as they are */
-static void map_owner(pid_t pid, char *buf, unsigned off)
-{
-	unsigned id[2];
-
-	if (!fake_world(pid))
-		return;
-	memcpy(id, buf + off, sizeof id);
-	id[0] = policy_map_uid(id[0]);
-	id[1] = policy_map_gid(id[1]);
-	memcpy(buf + off, id, sizeof id);
-}
-
 /* statx(dirfd, path, flags, mask, buf).  struct statx is 256 bytes: the owner at 20
  * and 24, the mode at 28 (16 bits), the size at 40. */
 static int answer_statx(struct tracee *t, const struct row *rw)
@@ -1917,7 +2016,6 @@ static int answer_statx(struct tracee *t, const struct row *rw)
 		memcpy(&osec, stx + 96, sizeof osec);
 		memcpy(&onsec, stx + 104, sizeof onsec);
 	}
-	map_owner(t->pid, stx, 20);
 	own_apply(stx, 20, host, how == 1 && (flags & 0x100), odev, oino, osec, onsec);
 	if (n_copies) {
 		u64 ino;
@@ -1966,7 +2064,6 @@ static int answer_stat(struct tracee *t, const struct row *rw)
 	memcpy(&oino, st + 8, sizeof oino);
 	memcpy(&osec, st + 104, sizeof osec);
 	memcpy(&onsec, st + 112, sizeof onsec);
-	map_owner(t->pid, st, 24);
 	own_apply(st, 24, host, how == 1 && (flags & 0x100), odev, oino, osec, onsec);
 	if (n_copies) {
 		u64 dev, ino;

@@ -7,7 +7,7 @@
 # the environment, then runs the command (default: an interactive shell).
 set -eu
 umask 022                          # as on Debian; the app's is 077
-PATH=/usr/sbin:/usr/bin:/sbin:/bin
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 # The app's real uid/gid (the only real kernel identity), kept before the DN_*
 # knobs are dropped; init.sh uses them for /etc/passwd and $HOME.

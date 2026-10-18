@@ -150,6 +150,11 @@ if [ "$LDHOOK" = 1 ]; then
 fi
 cp "$ROOT/scripts/prefix/boot.sh" "$ROOT/scripts/prefix/init.sh" "$DEST/boot/"
 chmod 755 "$DEST/usr/lib/deb-native/dn-tiny" "$DEST/boot/boot.sh" "$DEST/boot/init.sh"
+# The user tools that create an account: say that the account is virtual.
+mkdir -p "$DEST/usr/local/sbin"
+cp "$ROOT/scripts/prefix/virtual-user" "$DEST/usr/local/sbin/useradd"
+cp "$ROOT/scripts/prefix/virtual-user" "$DEST/usr/local/sbin/adduser"
+chmod 755 "$DEST/usr/local/sbin/useradd" "$DEST/usr/local/sbin/adduser"
 
 # ---- 3. the second stage, under dn-tiny
 say "debootstrap, second stage (under dn-tiny)"

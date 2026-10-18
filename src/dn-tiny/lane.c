@@ -5,7 +5,7 @@
  *   realpath, canonicalize_file_name     resolved here, one cached readlink a component
  *   open, openat (read-only flags)       opened here, so the fd is the program's own
  *   stat, lstat, fstatat, fstat, statx   stat here, the owner read as root, a link's size
- *   access, faccessat (no flags)         checked here
+ *   access, faccessat (flags 0, AT_EACCESS, AT_SYMLINK_NOFOLLOW) answered here
  *   readlink, readlinkat (not /proc)     read here, a target inside the prefix as the guest's
  *   [l]getxattr, [l]listxattr            read here
  *   getcwd                               from a copy, dropped by chdir and by a rename
@@ -670,28 +670,6 @@ static void cl_fix(unsigned long dev, unsigned long ino, unsigned *nlink)
 
 static int get_ids(unsigned v[6]);
 
-/* in the fake world (euid is not the app's) the tree reads as root-owned; the
- * real user sees the kernel's owner.  get_ids is the per-process state cache. */
-static int fake_world(void)
-{
-	unsigned v[6];
-
-	if (!get_ids(v))
-		return 1;                       /* cannot ask: keep the fake view */
-	return v[1] != real_uid;
-}
-
-/* what the program is told: the owner read as root in the fake world */
-static void map_owner(unsigned *uid, unsigned *gid)
-{
-	if (!fake_world())
-		return;
-	if (*uid == real_uid)
-		*uid = 0;
-	if (*gid == real_gid)
-		*gid = 0;
-}
-
 /* ---- the owner store: chown is kept in user.dn.owner ("UID:GID"), and every
  * stat reads it back (the tracer stores it; the file's real owner is the app) -- */
 
@@ -777,7 +755,8 @@ static void oc_put(unsigned long long dev, unsigned long long ino, long long sec
 	e->valid = 1;
 }
 
-/* the stored owner for host, or (host empty) for the fd, after map_owner */
+/* the stored owner for host, or (host empty) for the fd; no store means the
+ * implicit root (0:0) in both worlds */
 static void own_stat(unsigned *uid, unsigned *gid, const char *host, int fd, int nofollow,
 		     unsigned long long dev, unsigned long long ino, long long sec, long nsec)
 {
@@ -788,6 +767,8 @@ static void own_stat(unsigned *uid, unsigned *gid, const char *host, int fd, int
 		if (present) {
 			*uid = u;
 			*gid = g;
+		} else {
+			*uid = *gid = 0;
 		}
 		return;
 	}
@@ -809,7 +790,10 @@ static void own_stat(unsigned *uid, unsigned *gid, const char *host, int fd, int
 		*uid = u;
 		*gid = g;
 	} else {
-		u = g = 0;
+		/* no store: the implicit root's, in both worlds (a legacy file, or a
+		 * symlink, which takes no user xattr) */
+		*uid = u = 0;
+		*gid = g = 0;
 	}
 	oc_put(dev, ino, sec, nsec, u, g, present);
 }
@@ -824,7 +808,6 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 			return REAL(fstatat)(dirfd, path, st, flags);
 		if (lane_call(SYS_fstat, dirfd, st, 0L, 0L, 0L) != 0)
 			return -1;
-		map_owner(&st->st_uid, &st->st_gid);
 		own_stat(&st->st_uid, &st->st_gid, "", dirfd, 0,
 			 (unsigned long long) st->st_dev, (unsigned long long) st->st_ino,
 			 (long long) st->st_ctim.tv_sec, st->st_ctim.tv_nsec);
@@ -842,7 +825,6 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 	}
 	if (lane_call(SYS_newfstatat, at, host, st, flags, 0L) != 0)
 		return -1;
-	map_owner(&st->st_uid, &st->st_gid);
 	own_stat(&st->st_uid, &st->st_gid, host, -1, nofollow,
 		 (unsigned long long) st->st_dev, (unsigned long long) st->st_ino,
 		 (long long) st->st_ctim.tv_sec, st->st_ctim.tv_nsec);
@@ -884,7 +866,6 @@ int statx(int dirfd, const char *path, int flags, unsigned mask, struct statx *s
 	}
 	if (lane_call(SYS_statx, at, host, flags, mask, stx) != 0)
 		return -1;
-	map_owner(&stx->stx_uid, &stx->stx_gid);
 	own_stat(&stx->stx_uid, &stx->stx_gid, host, at, nofollow,
 		 (unsigned long long) makedev(stx->stx_dev_major, stx->stx_dev_minor),
 		 (unsigned long long) stx->stx_ino,
@@ -898,21 +879,61 @@ int statx(int dirfd, const char *path, int flags, unsigned mask, struct statx *s
 /* ---- access ---------------------------------------------------------------- */
 static void *real_faccessat;
 
+/* The answer is the virtual identity's: the kernel judges with the app's ids,
+ * not the world's.  Answer here when the stat decides it alone (root, the owner
+ * or the file's group), so an access costs no stop; otherwise (a supplementary
+ * group could allow) ask the tracer, which has the whole list. */
 static int lane_faccessat(int dirfd, const char *path, int mode, int flags)
 {
 	char host[PATH_MAX];
+	struct stat st;
+	unsigned v[6], need, have, shift, eu, eg;
 	int at, e;
 
-	if (flags != 0)
+	if ((mode & ~7) || (flags & ~(AT_EACCESS | AT_SYMLINK_NOFOLLOW)) || !policy_root_len())
 		return REAL(faccessat)(dirfd, path, mode, flags);
-	e = lane_at(dirfd, path, 0, host, sizeof host, &at);
-	if (e == 0)
+	if (!path || path[0] == 0 || !get_ids(v))
 		return REAL(faccessat)(dirfd, path, mode, flags);
-	if (e < 0) {
-		errno = -e;
-		return -1;
+	e = lane_at(dirfd, path, !!(flags & AT_SYMLINK_NOFOLLOW), host, sizeof host, &at);
+	if (e <= 0 || strncmp(host, policy_root(), policy_root_len()) != 0)
+		return REAL(faccessat)(dirfd, path, mode, flags);   /* a host row: the kernel's */
+	{
+		long rr = lane_rawc(SYS_newfstatat, at, host, &st,
+				(flags & AT_SYMLINK_NOFOLLOW) ? AT_SYMLINK_NOFOLLOW : 0L, 0L);
+
+		if (rr != 0) {
+			errno = (int) -rr;       /* it does not exist (or no search): answer it */
+			return -1;
+		}
 	}
-	return (int) lane_call(SYS_faccessat, at, host, mode, 0L, 0L);
+	own_stat(&st.st_uid, &st.st_gid, host, -1, !!(flags & AT_SYMLINK_NOFOLLOW),
+		 (unsigned long long) st.st_dev, (unsigned long long) st.st_ino,
+		 (long long) st.st_ctim.tv_sec, st.st_ctim.tv_nsec);
+	eu = v[1];
+	eg = v[5];
+	if (eu == 0) {
+		if ((mode & 1) && !S_ISDIR(st.st_mode) && !(st.st_mode & 0111)) {
+			errno = EACCES;
+			return -1;
+		}
+		return 0;
+	}
+	need = ((mode & 4) ? 4u : 0) | ((mode & 2) ? 2u : 0) | ((mode & 1) ? 1u : 0);
+	if (need == 0)
+		return 0;
+	if (eu == st.st_uid)
+		shift = 6;
+	else if (eg == st.st_gid)
+		shift = 3;
+	else
+		shift = 0;
+	have = ((unsigned) st.st_mode >> shift) & 7;
+	if ((have & need) == need)
+		return 0;
+	if (shift == 0)
+		return REAL(faccessat)(dirfd, path, mode, flags);   /* a supplementary group may allow */
+	errno = EACCES;
+	return -1;
 }
 
 int faccessat(int dirfd, const char *path, int mode, int flags) { return lane_faccessat(dirfd, path, mode, flags); }
@@ -1314,7 +1335,6 @@ static int lane_hook(unsigned long *r)
 
 			res = lane_rawc(SYS_statx, at, host, fl, r[3], x);
 			if (res == 0) {
-				map_owner(&x->stx_uid, &x->stx_gid);
 				own_stat(&x->stx_uid, &x->stx_gid, host, at, nofollow,
 				 (unsigned long long) makedev(x->stx_dev_major, x->stx_dev_minor),
 				 (unsigned long long) x->stx_ino,
@@ -1328,7 +1348,6 @@ static int lane_hook(unsigned long *r)
 
 			res = lane_rawc(SYS_newfstatat, at, host, st, fl, 0L);
 			if (res == 0) {
-				map_owner(&st->st_uid, &st->st_gid);
 				own_stat(&st->st_uid, &st->st_gid, host, at, nofollow,
 				 (unsigned long long) st->st_dev, (unsigned long long) st->st_ino,
 				 (long long) st->st_ctim.tv_sec, st->st_ctim.tv_nsec);

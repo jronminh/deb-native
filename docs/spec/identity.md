@@ -148,19 +148,28 @@ what would be a lie about authority**.
   by the tracer (`openat` with `O_CREAT`, `mkdirat`, `mknodat`) or by the shim
   (`mkdirat`/`mknodat` on the lane), so a file created by root reads as root
   for the real user, and one created by the real user reads as that uid in the
-  fake world.  A later `chown` overwrites it.  The only implicit owner is the
-  real uid for files that predate marking (and for a symlink, which takes no
-  user xattr); the fake world maps those to 0, the real user leaves them.  The
-  copy `linkat` makes carries the source's xattr.
+  fake world.  A later `chown` overwrites it.  A file with no store is the
+  **implicit root's in both worlds**: a file that predates marking, and a
+  symlink (which takes no user xattr), read `0:0` to the fake root and to the
+  real user alike, so the two worlds cannot disagree about it.  (`chown -h` on a
+  symlink is answered but cannot be stored; a symlink's owner is cosmetic, its
+  target's owner is what access checks.)  The copy `linkat` makes carries the
+  source's xattr.
 - `useradd`/`groupadd` write `/etc/passwd` and `/etc/group` entries; `userdel
   -r` works because the owner store makes the home directory look owned by the
   user it removes.  These are **virtual users**: a login for one exists only
   inside the prefix (through an identity change), never as an Android user.
 - Supplementary groups are a per-process **virtual list**: root starts with
   `{0}`, the real user with the app's groups (read at boot), and
-  `setgroups`/`initgroups` replace it (root only, up to 32 entries).  A service
-  user reads that list.  A file's gid is stored, but the kernel's access checks
-  still use the app's gid, so group permissions are not enforced.
+  `setgroups`/`initgroups` replace it (root only).  The list is sparse and has
+  no fixed cap (the kernel's `NGROUPS_MAX` is the limit): a process that never
+  calls `setgroups` shares the boot seed.  A service user reads that list.
+  `access()`/`faccessat` answer from this identity -- root passes (with the
+  execute-bit rule), anyone else is checked by the stored owner and the group
+  list -- in the shim when the owner or group class decides and in the tracer
+  otherwise.  A real `open` is still the kernel's check against the app's gid;
+  group permissions are the **view** the program asks for, not a kernel
+  boundary (the app owns the tree).
 - The fast path reads the owner store through a cache keyed by
   `(dev, ino, ctime)` in both the shim and the tracer: chown changes ctime, so
   an entry cannot go stale; a collision costs a getxattr.  Measured on p-dev,
@@ -169,7 +178,7 @@ what would be a lie about authority**.
   that never chowns, is still open: a copied prefix can carry stored owners
   with no flag, so it needs a correctness story.
 
-## Current state (2026-10-17)
+## Current state (2026-10-18)
 
 - Automatic classification by euid is implemented in the tracer (fake ids per
   process) and the shim (`DN_IDS` hint, else the traced ids).
@@ -190,10 +199,22 @@ what would be a lie about authority**.
   `initgroups` (root only) replace it.  Checked with a system user
   (`adduser --system`, uid 100, gid 102): after `initgroups('svctest', 102)`
   and `setuid`, `getgroups` is `[102]` and the created file is `100:102` in
-  both worlds.  The list is capped at 32.
+  both worlds.  The list has no fixed cap (40 entries were tested).
 - `chown` is stored for any uid:gid; the cache keeps `stat` cheap; a hard-link
   copy carries the owner.  Root's capabilities are a `/proc` view;
   `capget`/`PR_CAPBSET_READ` are not answered.
+- Legacy files and symlinks read `0:0` in both worlds (no store), so the
+  regression set's digest is now the same for the root seed and the real user;
+  a new file or `chown` carries the creator's stored owner.
+- `access()`/`faccessat` answer the virtual view: a 0440 file is writable to the
+  fake root (its DAC override), `/etc/shadow` is not readable to the real user,
+  and a service user is judged by its stored owner and group list (a
+  root:102 0640 file is readable to a member of 102).  The shim answers the
+  clear cases without a stop; the tracer answers the rest (and static
+  programs).
+- `useradd`/`adduser` are wrapped in `/usr/local/sbin` (now on `PATH`): they
+  print that users and groups here are virtual (one kernel uid, no Android
+  account) and then run the real tool.
 - **Real `sudo`** is installed in the test prefix with
   `/etc/sudoers.d/user` (`user ALL=(ALL) NOPASSWD: ALL`); `sudo -n id` prints
   `uid=0`, `sudo -n apt-get update`, `sudo -n useradd`/`userdel` work, and the
@@ -212,15 +233,16 @@ what would be a lie about authority**.
 
 ## Plan / open questions
 
-1. **Virtual service users**: the group list and file gid are in; still open:
-   group-based access enforcement (the kernel uses the app gid), a `useradd` UX
-   that says "virtual user", and the 32-entry cap.
+1. **Virtual service users**: the group list, file gid and `access()` are in;
+   still open: the kernel's own `open` checks the app's gid, so a service user
+   can open more than `access()` says.  The `useradd` wrapper says "virtual
+   user".
 2. **Real `sudo`, `su` and `passwd`**: tested (sudo NOPASSWD with apt and
    useradd; su login and password auth; passwd as root and as the user).  The
    wrapper remains the fallback.
-3. **Legacy and symlink creations**: files that predate marking (and symlinks,
-   which take no user xattr) still read differently in the two worlds; a
-   one-time adoption pass or a side store would close it.
+3. **Legacy and symlink creations**: closed -- a file with no store reads
+   `0:0` in both worlds.  A symlink's owner is not stored (no user xattr); it is
+   cosmetic.
 4. **Capabilities**: keep the root view in `status` but refuse `capget`, or
    answer a Debian default?  `refuse` is the current rule.
 5. **Binds from the host**: a real user on a bind sees the host's owner and

@@ -147,15 +147,16 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   shim; a create is marked with the creator's ids (`openat`+`O_CREAT`,
   `mkdirat`, `mknodat`); supplementary groups are a per-process virtual list
   (`{0}` for root, the app's groups for the real user, replaced by
-  `setgroups`/`initgroups`, 32 entries).  The fake root's DAC override is
+  `setgroups`/`initgroups`, no fixed cap).  The fake root's DAC override is
   emulated (a write open adds owner-write, restored at exit), `NoNewPrivs`
-  reads 0, `PR_SET_DUMPABLE` is ignored, and an unmarked setuid file counts as
-  root's; with those, real `sudo`, `su` and `passwd` work (sudo NOPASSWD with
-  `apt-get` and `useradd`; su login and password sessions; passwd as root and
-  as the user proving the old password).  Still open: legacy/symlink creations
-  that predate marking, group-based access enforcement, a `useradd` UX that
-  says "virtual user", and the 32-group cap.  Virtual users are not Android
-  users and are not isolation.
+  reads 0, `PR_SET_DUMPABLE` is ignored, an unmarked file (legacy, or a
+  symlink) reads `0:0` in both worlds, and `access()`/`faccessat` answer the
+  virtual view.  With those, real `sudo`, `su` and `passwd` work (sudo NOPASSWD
+  with `apt-get` and `useradd`; su login and password sessions; passwd as root
+  and as the user proving the old password), and a `useradd`/`adduser` wrapper
+  says "virtual user".  Still open: the kernel's own open still checks the
+  app's gid (group access is a view), capabilities, and binds from the host.
+  Virtual users are not Android users and are not isolation.
 
 ## Speed
 

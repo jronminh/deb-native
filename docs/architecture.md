@@ -158,8 +158,13 @@ the net for everything.
   There is no mode flag (see [`spec/identity.md`](spec/identity.md)).
 - `set*id` is emulated when the euid is 0 and answers `EPERM` otherwise; `chown`
   is stored (`user.dn.owner`, 0:0 included) only by root, and a create is marked
-  with the creator's ids (so a file reads the same owner in both worlds).  The
-  fake world (euid not the app's) reads an unmarked real uid as 0 in `stat`.
+  with the creator's ids.  A file with no store -- one that predates marking,
+  or a symlink, which takes no user xattr -- reads `0:0` in both worlds, so the
+  root session and the real user cannot disagree about it.
+- `access()`/`faccessat` answer the **world's** view, not the kernel's: root
+  passes (still needing an execute bit for `X_OK`), anyone else is judged by the
+  stored owner and the virtual group list.  The shim answers the clear cases in
+  process; the tracer answers the rest.
 - A **setuid-bit exec** is the gate: owner 0 gives euid 0, owner the real uid
   gives euid the real uid; a sudo-like helper then calls `setgid(0)`/`setuid(0)`
   to make the command root.  The gate hands the shim its ids in `DN_IDS`.
