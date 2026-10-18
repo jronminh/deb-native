@@ -111,8 +111,10 @@ scripts/adb-deploy.sh --port <wireless-port> ~/p-adb.tar.gz
 ```
 
 `boot/version` says `host=adb`; `boot/binds` maps `/sdcard` (read-only); the
-first boot reconciles the `user` entry to the shell uid.  The model, the limits
-and the measurements are in [`spec/adb-host.md`](spec/adb-host.md).
+first boot reconciles the `user` entry to the shell uid.  For the shell itself,
+install [`scripts/adb-shell.sh`](../scripts/adb-shell.sh)
+as `dn-adb`: it refuses to enter without a connected adb device.  The model, the
+limits and the measurements are in [`spec/adb-host.md`](spec/adb-host.md).
 
 The sets are suggestions, nothing depends on them:
 

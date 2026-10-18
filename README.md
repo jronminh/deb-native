@@ -72,6 +72,7 @@ and `python3`; `--packages "..."` adds anything else. Everything is in
 | `scripts/build-prefix.sh` | builds a prefix in Termux |
 | `scripts/build-busybox.sh` | builds a busybox bundle, a tiny non-Debian tree ([`spec/variants.md`](docs/spec/variants.md)) |
 | `scripts/adb-deploy.sh` | deploys an ADB-hosted prefix over `adb` ([`spec/adb-host.md`](docs/spec/adb-host.md)) |
+| `scripts/adb-shell.sh` | `dn-adb`: enters an ADB-hosted prefix (refuses without adb) |
 | `scripts/prefix/` | the prefix's `boot.sh` and `init.sh`, and the virtual-user wrappers |
 | `tests/bench/` | the bench and check set behind `docs/performance.md` |
 | `docs/` | building, architecture, performance, spec, reference |

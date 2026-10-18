@@ -58,6 +58,24 @@ adb shell 'cd /data/local/tmp/p-adb && ./boot/boot.sh'
 
 The first boot may take a moment (init.sh writes passwd/group for uid 2000).
 
+## Enter the shell
+
+`scripts/adb-shell.sh` is the wrapper; install it once as `dn-adb`:
+
+```sh
+ln -sf "$PWD/scripts/adb-shell.sh" ~/.local/bin/dn-adb
+DN_ADB_PORT=39063 dn-adb                  # an interactive shell in the prefix
+DN_ADB_PORT=39063 dn-adb -c 'id; pwd'     # one command
+dn-adb --prefix /data/local/tmp/p-adb     # another prefix
+```
+
+It **refuses without an ADB device** (there is no local fallback) and refuses a
+prefix whose `boot/version` is not `host=adb`.  `--port`/`DN_ADB_PORT` connects
+first; otherwise an already-connected device is used.  The default prefix is
+`/data/local/tmp/p-adb` (`--prefix`/`DN_ADB_PREFIX` changes it).  The `-c` path
+feeds the command to the prefix's `sh` on stdin, so quoting stays local; the
+interactive path uses `adb shell -t`, so a real terminal gets a PTY.
+
 ## What it gives (measured 2026-10-18, S10e, kernel 4.14)
 
 | test | result |
@@ -100,6 +118,7 @@ from the app except the app lifecycle and data directory.
 - `scripts/build-runtime.sh --host adb` -- the shell/ADB runtime
 - `scripts/build-prefix.sh --host adb` -- the prefix profile
 - `scripts/adb-deploy.sh` -- push, extract, check, boot
+- `scripts/adb-shell.sh` -- `dn-adb`, the guarded shell wrapper
 - `scripts/prefix/init.sh` -- the uid reconcile
 - the two gates and the app-only answers:
   [`../reference/seccomp-gates.md`](../reference/seccomp-gates.md),
