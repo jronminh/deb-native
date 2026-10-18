@@ -161,7 +161,7 @@ the net for everything.
   (euid not the app's) reads the real uid as 0 in every `stat`.
 - A **setuid-bit exec** is the gate: owner 0 gives euid 0, owner the real uid
   gives euid the real uid; a sudo-like helper then calls `setgid(0)`/`setuid(0)`
-  to make the command root.  The gate hands the shim its euid in `DN_EUID`.
+  to make the command root.  The gate hands the shim its ids in `DN_IDS`.
 - `/proc/<pid>/status` says the process's ids (root, service or real), so a
   reader that never calls `get*id` sees the same identity.
 - The goal is no accidental identity leak (apt, dpkg and `git`'s ownership check

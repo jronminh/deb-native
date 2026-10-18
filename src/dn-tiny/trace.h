@@ -16,8 +16,8 @@ void trace_synth_init(void);
 void trace_identity_init(unsigned uid, unsigned gid);
 /* the euid a setuid-bit exec will commit, applied on the exec event (exec.c) */
 void trace_euid_next(pid_t pid, unsigned euid);
-/* the process's current fake euid (exec.c's DN_EUID hint) */
-unsigned trace_euid_of(pid_t pid);
+/* the process's current fake ids, for exec.c's DN_IDS hint */
+void trace_ids_of(pid_t pid, unsigned out[6]);
 /* the stored owner of a host path, 0 when there is none (exec.c's setuid gate) */
 int trace_stored_owner(const char *host, unsigned *u, unsigned *g);
 

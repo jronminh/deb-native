@@ -50,7 +50,8 @@
 static char rootbuf[PATH_MAX];          /* the prefix root, handed to policy_root_set */
 static char cwd[PATH_MAX];              /* the guest working directory (get_cwd) */
 static unsigned real_uid, real_gid;     /* read as root, as the tracer does (policy_map_uid) */
-static int cached_euid = -1, euid_known; /* the exec gate's DN_EUID hint */
+static unsigned hint_ids[6];            /* the exec gate's DN_IDS hint */
+static int hint_ok, hint_pid;
 
 #define REAL(name) ((__typeof__(&name)) real_fn(#name, &real_##name))
 static void *real_fn(const char *name, void **slot)
@@ -135,11 +136,27 @@ __attribute__((constructor)) static void lane_init(void)
 	real_uid = st.st_uid;
 	real_gid = st.st_gid;
 	{
-		const char *e = getenv("DN_EUID");
+		const char *e = getenv("DN_IDS");
 
 		if (e) {
-			cached_euid = (int) strtoul(e, NULL, 10);
-			euid_known = 1;
+			unsigned v[6];
+			int i;
+
+			for (i = 0; i < 6; i++) {
+				char *end;
+
+				v[i] = (unsigned) strtoul(e, &end, 10);
+				if (end == e)
+					break;
+				e = end;
+				if (*e == ':')
+					e++;
+			}
+			if (i == 6) {
+				memcpy(hint_ids, v, sizeof hint_ids);
+				hint_pid = getpid();
+				hint_ok = 1;
+			}
 		}
 	}
 	memcpy(p, di.dli_fname, n - t);
@@ -651,8 +668,6 @@ static int fake_world(void)
 {
 	unsigned v[6];
 
-	if (euid_known)                         /* the common case: no stop to ask */
-		return (unsigned) cached_euid != real_uid;
 	if (!get_ids(v))
 		return 1;                       /* cannot ask: keep the fake view */
 	return v[1] != real_uid;
@@ -1086,6 +1101,10 @@ static int get_ids(unsigned v[6])
 	int pid = getpid();
 	unsigned s, ep;
 
+	if (hint_ok && hint_pid == pid) {       /* the gate's exec-time hint: no stop */
+		memcpy(v, hint_ids, sizeof hint_ids);
+		return 1;
+	}
 	if (seq_read(&ids_seq, &s) && __atomic_load_n(&ids_pid, __ATOMIC_ACQUIRE) == pid) {
 		memcpy(v, ids, sizeof ids);
 		if (seq_check(&ids_seq, s))
@@ -1120,6 +1139,8 @@ static void lane_atfork(void)
 		__atomic_store_n(&cwd_pid, pid, __ATOMIC_RELEASE);
 	if (__atomic_load_n(&ids_pid, __ATOMIC_ACQUIRE) != 0)
 		__atomic_store_n(&ids_pid, pid, __ATOMIC_RELEASE);
+	if (hint_ok)
+		hint_pid = pid;
 }
 
 static void *real_getuid, *real_geteuid, *real_getgid, *real_getegid, *real_getresuid, *real_getresgid;
@@ -1153,13 +1174,27 @@ int getresgid(gid_t *r, gid_t *e, gid_t *s)
 	return 0;
 }
 
+/* getgroups: root's fake view is one group, 0; everyone else gets the kernel's
+ * (the lane cookie allows the call without a stop). */
+int getgroups(int size, gid_t list[])
+{
+	unsigned v[6];
+
+	if (policy_root_len() && get_ids(v) && v[1] == 0) {
+		if (size > 0 && list)
+			list[0] = 0;
+		return 1;
+	}
+	return (int) lane_call(SYS_getgroups, size, (long) list, 0L, 0L, 0L);
+}
+
 #define SET_ID(name, params, args)                              \
 	static void *real_##name;                               \
 	int name params                                         \
 	{                                                       \
 		int ret_ = REAL(name) args;                     \
 		drop_ids();                                     \
-		euid_known = 0;                                 \
+		hint_ok = 0;                                    \
 		return ret_;                                    \
 	}
 SET_ID(setuid, (uid_t u), (u))

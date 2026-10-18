@@ -80,9 +80,11 @@ The exec gate reads the final program's mode and stored owner (from
   as a setuid binary owned by the user would do).
 - anything else: the ids are inherited.
 
-The gate hands the new shim its euid in `DN_EUID` (a hint, so a stat does not
-need a tracer stop to classify); a `set*id` in the process invalidates it and
-the shim asks the tracer again.
+The gate hands the new shim its six ids in `DN_IDS`
+(`ruid:euid:suid:rgid:egid:sgid`, a hint, so `get*id` and a stat's
+classification need no tracer stop); a `set*id` in the process invalidates it
+and the shim asks the tracer again.  `getgroups` is interposed too: root's fake
+view is one group 0, everyone else gets the kernel's through the lane.
 
 Real `sudo` behaviour needs one more step, and a sudo-like helper does it: after
 the gate gives it euid 0, it calls `setgid(0)` and `setuid(0)` (emulated, since
@@ -144,7 +146,7 @@ what would be a lie about authority**.
 ## Current state (2026-10-17)
 
 - Automatic classification by euid is implemented in the tracer (fake ids per
-  process) and the shim (`DN_EUID` hint, else the traced ids).
+  process) and the shim (`DN_IDS` hint, else the traced ids).
 - Default boot is the real app uid; `DN_INITIAL=root` seeds a root session.
   `init.sh` writes the real uid's passwd/group/shadow lines and `/home/user`.
 - In the real user case: real `id`, `get*id`, groups and `/proc/status`;
@@ -159,7 +161,7 @@ what would be a lie about authority**.
   copy carries the owner.  Root's capabilities are a `/proc` view;
   `capget`/`PR_CAPBSET_READ` are not answered.
 - Check suite, coverage and fingerprint are clean with the root seed; the Lua
-  build is ~11.8 s / 874 stops (root) and ~11.8 s / 882 (real user).
+  build is ~11.9 s / 846 stops (root) and ~11.7 s / 854 (real user).
 
 ## Plan / open questions
 

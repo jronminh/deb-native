@@ -291,7 +291,17 @@ void trace_euid_next(pid_t pid, unsigned euid)
 	euid_has_next[PID_SLOT(pid)] = 1;
 }
 
-unsigned trace_euid_of(pid_t pid) { return ids_of(pid)->eu; }
+void trace_ids_of(pid_t pid, unsigned out[6])
+{
+	struct ids *d = ids_of(pid);
+
+	out[0] = d->ru;
+	out[1] = d->eu;
+	out[2] = d->su;
+	out[3] = d->rg;
+	out[4] = d->eg;
+	out[5] = d->sg;
+}
 
 int trace_stored_owner(const char *host, unsigned *u, unsigned *g)
 {

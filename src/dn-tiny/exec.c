@@ -163,9 +163,9 @@ static int setuid_identity(struct tracee *t, const char *prog)
 	return -1;
 }
 
-/* The exec gate tells the new process's shim its effective uid in DN_EUID: a
- * hint for the common case, so the shim does not ask the tracer (a stop) just to
- * classify a stat.  A set*id in the process invalidates it. */
+/* The exec gate tells the new process's shim its six ids in DN_IDS
+ * (ruid:euid:suid:rgid:egid:sgid): a hint for the common case, so get*id and a
+ * stat's classification need no tracer stop.  A set*id invalidates it. */
 #define MAXENVV 512
 static u64 env_old[MAXENVV];
 static u64 env_new[MAXENVV + 8];
@@ -198,24 +198,36 @@ static int env_is(struct tracee *t, u64 p, const char *name, size_t len)
 	return memcmp(b, name, len) == 0;
 }
 
-static void inject_euid(struct tracee *t, unsigned euid, int reg)
+static int put_dec(char *b, int k, unsigned v)
 {
-	char b[32], d[12];
-	int n, i, m = 0, k = 0, j = 0;
-	unsigned v = euid;
+	char d[12];
+	int j = 0;
+
+	do d[j++] = (char) ('0' + v % 10); while ((v /= 10));
+	while (j)
+		b[k++] = d[--j];
+	return k;
+}
+
+static void inject_ids(struct tracee *t, const unsigned id[6], int reg)
+{
+	char b[64];
+	int n, i, m = 0, k = 0;
 	u64 sp, arr;
 
 	n = read_env(t, t->r.regs[reg]);
 	if (n < 0)
 		return;
 	for (i = 0; i < n; i++)
-		if (!env_is(t, env_old[i], "DN_EUID=", 8))
+		if (!env_is(t, env_old[i], "DN_IDS=", 7))
 			env_new[m++] = env_old[i];
-	memcpy(b, "DN_EUID=", 8);
-	k = 8;
-	do d[j++] = (char) ('0' + v % 10); while ((v /= 10));
-	while (j)
-		b[k++] = d[--j];
+	memcpy(b, "DN_IDS=", 7);
+	k = 7;
+	for (i = 0; i < 6; i++) {
+		if (i)
+			b[k++] = ':';
+		k = put_dec(b, k, id[i]);
+	}
 	b[k] = '\0';
 	sp = mon_scratch(t, b, (size_t) k + 1);
 	if (sp == 0)
@@ -225,8 +237,7 @@ static void inject_euid(struct tracee *t, unsigned euid, int reg)
 	arr = mon_scratch(t, env_new, (size_t) (m + 1) * 8);
 	if (arr != 0)
 		mon_set_arg(t, reg, arr);
-}
-/* Decide the final program and argv.  `cur_in` is the guest path being run; `a`
+}/* Decide the final program and argv.  `cur_in` is the guest path being run; `a`
  * holds argv as it stands (a->s[0] is argv[0]).  Fills `final` (a host path) and
  * `out`. */
 static void resolve(const char *cur_in, struct vec *a, char *final, size_t cap, struct vec *out,
@@ -423,10 +434,13 @@ void exec_enter(struct tracee *t)
 		return;
 	resolve(path, &a, final, sizeof final, &out, prog, sizeof prog);
 	{
+		unsigned id[6];
 		int ne = setuid_identity(t, prog);
 
-		inject_euid(t, ne >= 0 ? (unsigned) ne : trace_euid_of(t->pid),
-			    nr == 281 ? 3 : 2);
+		trace_ids_of(t->pid, id);
+		if (ne >= 0)
+			id[1] = id[2] = (unsigned) ne;
+		inject_ids(t, id, nr == 281 ? 3 : 2);
 	}
 	/* what /proc/<pid>/exe will say once the exec succeeds (prog is a guest path) */
 	trace_exe_pending(t->pid, prog);
