@@ -122,11 +122,9 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   gpg-agent and dbus can meet.  On the ADB host the `shell` domain has no
   `sock_file create` on `shell_data_file`, so the path becomes an abstract name
   (`\0dn-<hash>` of the root and the host path) and the answer maps back to the
-  guest path; `ssh-agent` is checked.  Open: `stat`/`chmod`/`unlink` on the
-  socket path (there is no file).  A separate blocker for `tmux`: the shim's
-  `hook_stack` is `initial-exec` TLS, and `libjemalloc` then fails to load
-  ("cannot allocate memory in static TLS block"); drop the model or raise the
-  surplus.
+  guest path.  Bind also makes a regular placeholder at the path, so
+  `stat`/`chmod`/`unlink` work; `stat` reports a file, not `S_IFSOCK` (open if a
+  program needs the type).  `ssh-agent` and `tmux` are checked.
 - **Refused on purpose** (a mapping would be a lie): `openat2` with `RESOLVE_*`
   answers `ENOSYS` (without a resolve flag it runs as `openat`, the path mapped);
   and minor, privileged (allowed, a guest path reaches the kernel): `pivot_root`,

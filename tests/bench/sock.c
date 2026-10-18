@@ -1,9 +1,9 @@
 /* An AF_UNIX pathname socket, end to end: bind, getsockname, connect, accept.
  * On the ADB host the shell domain may not create a sock_file in the tree, so
  * the runtime maps the guest path to an abstract name; getsockname and
- * getpeername must still show the guest path.  stat/unlink on the path are the
- * known half of that mapping (there is no file).  Run inside a prefix:
- * tests/bench/run.sh check. */
+ * getpeername must still show the guest path.  Bind also makes a regular
+ * placeholder at the path, so stat, chmod and unlink work (stat is a file, not
+ * S_IFSOCK).  Run inside a prefix: tests/bench/run.sh check. */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <stdio.h>
@@ -101,8 +101,14 @@ static int one(const char *path)
 		else
 			printf("stat: %s (known gap)\n", strerror(errno));
 	}
+	if (chmod(path, 0600) == 0)
+		printf("chmod: ok\n");
+	else
+		printf("chmod: %s\n", strerror(errno));
 	if (unlink(path) < 0)
-		printf("unlink: %s (known gap)\n", strerror(errno));
+		printf("unlink: %s\n", strerror(errno));
+	else
+		printf("unlink: ok\n");
 	return ok;
 }
 

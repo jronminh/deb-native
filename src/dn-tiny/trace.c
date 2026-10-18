@@ -288,6 +288,33 @@ static int sock_parent_ok(const char *host, int mode)
 	return sc(48, -100, (i64) dir, mode, 0, 0, 0) == 0;
 }
 
+/* The abstract socket has no file, so stat, chmod and unlink on its path would
+ * answer ENOENT.  A regular placeholder at the host path gives them the file
+ * they expect; stat shows a regular file, not S_IFSOCK.  A real socket or a
+ * symlink there is left alone: the path already means one. */
+static void sock_mark_owner(struct tracee *t, const char *host);
+
+static int sock_placeholder(struct tracee *t, const char *host)
+{
+	char st[256];
+	unsigned mode = 0;
+	int fd;
+
+	if (sys_fstatat(host, st, 0x100) == 0) {          /* AT_SYMLINK_NOFOLLOW */
+		mode = *(unsigned *) (st + 16);          /* st_mode on aarch64 */
+		if ((mode & 0170000) == 0140000 ||        /* S_IFSOCK */
+		    (mode & 0170000) == 0120000)          /* S_IFLNK */
+			return 0;
+	}
+	fd = (int) sc(56, -100, (i64) host, 0x20241, 0600, 0, 0); /* W|CREAT|TRUNC|NOFOLLOW */
+	if (fd < 0)
+		return 1;                                /* the abstract name still works */
+	sc(57, fd, 0, 0, 0, 0, 0);
+	if (t)
+		sock_mark_owner(t, host);
+	return 1;
+}
+
 /* The abstract sun_path (leading NUL, then "dn-" and 16 hex digits): 20 bytes. */
 static int sock_abs_name(const char *host, const char *guest, char *path)
 {
@@ -377,7 +404,8 @@ static void sock_map(struct tracee *t, const struct row *rw, int out)
 			 * host directory keeps a real pathname (its host may allow one). */
 			if (root && rl && strncmp(host, root, rl) == 0 &&
 			    (host[rl] == '/' || host[rl] == '\0') &&
-			    sock_parent_ok(host, rw->nr == 200 ? 3 : 1)) {   /* bind: W|X, else X */
+			    sock_parent_ok(host, rw->nr == 200 ? 3 : 1) &&
+			    (rw->nr != 200 || sock_placeholder(t, host))) {
 				char ab[SOCK_ABS_MAX];
 
 				nl = (unsigned) sock_abs_name(host, sa.path, ab);
@@ -475,6 +503,15 @@ static struct grps *grp_of(pid_t pid)
 }
 
 static struct ids *ids_of(pid_t pid) { return &fake_ids[PID_SLOT(pid)]; }
+
+/* The placeholder is the tracer's file: mark it with the tracee's ids, as a
+ * create by that process would be marked, so stat and DAC see one owner. */
+static void sock_mark_owner(struct tracee *t, const char *host)
+{
+	struct ids *id = ids_of(t->pid);
+
+	own_write(host, 0, id->eu, id->eg);
+}
 
 /* the setuid-bit gate's pending euid, applied on the exec event */
 static unsigned euid_next[PID_SLOTS];
