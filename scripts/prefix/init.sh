@@ -30,7 +30,10 @@ if [ -d /usr/lib/locale/C.utf8 ] && [ ! -e /usr/lib/locale/C.UTF-8 ] && [ ! -L /
 fi
 # Android's filter kills rseq, and glibc registers it in every process: a
 # SIGSYS stop each, for nothing.  Turn the registration off.
-GLIBC_TUNABLES=${GLIBC_TUNABLES:+$GLIBC_TUNABLES:}glibc.pthread.rseq=0
+# Android's filter kills rseq (glibc registers it in every process), and the
+# shim's initial-exec hook_stack leaves too little static TLS for libjemalloc
+# (tmux); raise the surplus enough for both.
+GLIBC_TUNABLES=${GLIBC_TUNABLES:+$GLIBC_TUNABLES:}glibc.pthread.rseq=0:glibc.rtld.optional_static_tls=2048
 export GLIBC_TUNABLES
 # No tty and no dialog/hterm here: debconf would otherwise probe Dialog,
 # Readline and Teletype first and print a warning for each before falling back.
