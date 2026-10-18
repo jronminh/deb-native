@@ -1655,6 +1655,51 @@ static int synth_comm(struct tracee *t, const char *guest, char *out, size_t cap
 	return put_synth(nm, buf, l, out, cap);
 }
 
+/* "/proc/<pid>/stat": the kernel names the process after the loader (the gate runs
+ * glibc through it); replace the comm between the parentheses with the program,
+ * as /proc/<pid>/comm and status already do. */
+static int synth_stat_pid(struct tracee *t, const char *guest, char *out, size_t cap)
+{
+	pid_t pid = proc_leaf_pid(guest, "stat", t->pid);
+	char b[1024], ob[1200], nm[40];
+	const char *e = exe_of(pid), *q, *sl = NULL, *r = NULL;
+	ssize_t k;
+	int fd, m = 0, l;
+
+	if (pid <= 0 || !e[0])
+		return 0;
+	fd = sys_open(guest, 0);
+	if (fd < 0)
+		return 0;
+	k = sys_read(fd, b, sizeof b - 1);
+	sys_close(fd);
+	if (k <= 0)
+		return 0;
+	b[k] = '\0';
+	q = strchr(b, '(');
+	for (r = b; *r; r++)
+		if (*r == ')')
+			break;
+	if (!q || !*r || r < q)
+		return 0;
+	for (e = exe_of(pid); *e; e++)
+		if (*e == '/')
+			sl = e;
+	e = sl ? sl + 1 : exe_of(pid);
+	l = (int) strlen(e);
+	if (l > 15)
+		l = 15;
+	memcpy(ob, b, (size_t) (q - b) + 1);
+	m = (int) (q - b) + 1;
+	memcpy(ob + m, e, (size_t) l);
+	m += l;
+	m += (int) scpy(ob + m, sizeof ob - (size_t) m, r);
+	m = scpy(nm, sizeof nm, "stat.");
+	m += uitoa(nm + m, (unsigned) pid);
+	nm[m] = '\0';
+	return put_synth(nm, ob, (size_t) (int) strlen(ob), out, cap);
+}
+
 /* A read-only open the tracer answers with a generated file: /proc/<pid>/status,
  * /proc/<pid>/cmdline, /proc/<pid>/comm, /proc/uptime, /proc/loadavg,
  * /proc/<pid>/cgroup, /proc/<pid>/maps, smaps, /proc/stat, /proc/vmstat.  1 if
@@ -1689,6 +1734,8 @@ static int synth_open(struct tracee *t, const char *guest, char *out, size_t cap
 		return synth_cmdline(t, guest, out, cap);
 	if (proc_leaf_pid(guest, "comm", t->pid) > 0)
 		return synth_comm(t, guest, out, cap);
+	if (proc_leaf_pid(guest, "stat", t->pid) > 0)
+		return synth_stat_pid(t, guest, out, cap);
 	return synth_status(t, guest, out, cap);
 }
 
