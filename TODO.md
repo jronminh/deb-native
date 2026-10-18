@@ -451,6 +451,10 @@ command in a prefix) to prove the path, and whether it becomes
 
 ## Building a prefix
 
+- **The ADB host** (done 2026-10-18): `build-runtime.sh --host adb`,
+  `build-prefix.sh --host adb`, `scripts/adb-deploy.sh`, the uid reconcile and
+  the `/sdcard` bind; see [`docs/spec/adb-host.md`](docs/spec/adb-host.md).
+  Open: the self-hosted `adbwire`/`dsh` bridge (no PC) and autostart.
 - `build-prefix.sh` relies on Termux's `debootstrap` for the first stage, which
   unpacks through `proot --link2symlink`. A first stage of its own (resolve the
   base set, fetch, unpack with hard links as copies) would drop proot from the

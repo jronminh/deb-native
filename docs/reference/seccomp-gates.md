@@ -13,6 +13,11 @@ bionic's app policy is generated as **`SYSCALLS.TXT - blocklist + allowlist`**
 outside that final allowlist is killed with `SIGSYS` **before the kernel runs
 it** — it is not an `ENOSYS` from the kernel.
 
+The **adb host** has no seccomp gate (`Seccomp: 0`, shell uid); its runtime is
+built with `--host adb`, so the app answer table is not compiled at all.  The
+"killed" cases below do not apply there; see
+[`../spec/adb-host.md`](../spec/adb-host.md).
+
 The tracer runs in the same app, under the same filter, so it **cannot re-issue
 a killed call**.  It can only:
 

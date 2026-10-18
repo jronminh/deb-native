@@ -1351,8 +1351,8 @@ static int answer_access(struct tracee *t)
 	if (m & ~7u)
 		return 0;                        /* bits the kernel will refuse */
 	k = mon_read_str(t, t->r.regs[1], in, sizeof in - 1);
-	if (k <= 0 || memchr(in, 0, (size_t) k) == NULL)
-		return 0;
+	if (k <= 0 || in[0] == '\0' || memchr(in, 0, (size_t) k) == NULL)
+		return 0;                        /* "" is ENOENT, not the cwd */
 	in[k] = '\0';
 	if (policy_is_host(in))
 		return 0;                        /* /proc, /sys, /dev, a bind: the kernel's */
@@ -2279,6 +2279,7 @@ void trace_exit(struct tracee *t, const struct row *rw)
  * resumed, the program sees what the policy says.  A substitute is run by moving
  * the program counter back to the `svc` with the new number: it goes through our
  * filter like any other call, so its path is mapped too. */
+#ifndef DN_HOST_ADB
 void trace_denied(struct tracee *t)
 {
 	struct deny d;
@@ -2320,3 +2321,4 @@ void trace_denied(struct tracee *t)
 	}
 	t->r.regs[0] = (u64) d.value;
 }
+#endif

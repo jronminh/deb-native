@@ -9,7 +9,9 @@ behind an app's identity, and no syscall in the tree reaches it. So a prefix
 runs inside a **host** (the app; also the *container*), and the host provides
 what the kernel does not.
 
-This is the contract between the two. Status: proposal.
+This is the contract between the two. Status: proposal.  The app-less **ADB
+host** (a prefix under `/data/local/tmp`, driven from a PC over `adb shell`) is
+the second frontend: [`adb-host.md`](adb-host.md).
 
 ## Contents
 

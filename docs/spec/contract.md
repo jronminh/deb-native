@@ -226,6 +226,19 @@ The order of work, by the userland's demand, not by the syscall table:
 - **T4 -- isolation**: namespaces/cgroups enforcement, containers, modules.
   **Out of scope**; that is the machine boundary (a VM), not a prefix.
 
+### Hosts
+
+The same runtime has two hosts, and the promise is the same:
+
+- **app** (the default): Android's seccomp filter plus the runtime's rows; the
+  app-domain answers (`policy_deny`, SIGSYS substitutes) are built; the prefix
+  is in the app's data; `/sdcard` is not reachable by default.
+- **adb/shell**: no seccomp gate; a runtime built with `--host adb` has no
+  app-domain answers at all; the prefix is in `/data/local/tmp` (uid 2000),
+  `/sdcard` is bound read-only, and a PC drives it over `adb shell`.  The
+  kernel gate (version, config, SELinux/capabilities) is unchanged.  See
+  [`adb-host.md`](adb-host.md).
+
 ## Keeping it true
 
 - The **census** is the host delta (which numbers are allowed/killed/missing).

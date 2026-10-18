@@ -49,7 +49,9 @@ enum { M_BARE, M_REGS, M_FULL };
 static int mode = M_FULL;
 static i64 spin_ns;                              /* -s: poll this long before blocking, 0: never */
 static unsigned long n_enter, n_exit, n_event, n_sig, n_sigsys;
+#ifndef DN_HOST_ADB
 static unsigned deny_count[512];                 /* by syscall number: killed by the platform, answered here */
+#endif
 static unsigned char expect_exit[PID_SLOTS];      /* by pid */
 static unsigned char mark_exit[PID_SLOTS];        /* by pid: a create wants its exit stop */
 static unsigned char dac_exit[PID_SLOTS];         /* by pid: a fake-root mode to restore */
@@ -404,6 +406,7 @@ static void skip_syscall(struct tracee *t)
 /* Answer it as the policy says.  The syscall was not run and the program counter
  * is already past the `svc`, so setting the result register is all it takes.
  * Returns 1 if this was the platform's filter, 0 for an ordinary SIGSYS. */
+#ifndef DN_HOST_ADB
 static int answer_sigsys(struct tracee *t)
 {
 	unsigned char si[128];
@@ -421,6 +424,7 @@ static int answer_sigsys(struct tracee *t)
 		deny_count[nr]++;
 	return 1;
 }
+#endif
 
 /* ---- the loop ---------------------------------------------------------- */
 static int loop(pid_t root)
@@ -540,9 +544,11 @@ static int loop(pid_t root)
 				how = EXP(p) ? PTRACE_SYSCALL : PTRACE_CONT;
 			} else {                                   /* a signal-delivery stop */
 				n_sig++;
+#ifndef DN_HOST_ADB
 				if (sig == SIGSYS_ && mode == M_FULL && answer_sigsys(&t))
 					deliver = 0;
 				else
+#endif
 					deliver = (sig == SIGSTOP_ || sig == SIGTRAP_) ? 0 : sig;
 				how = EXP(p) ? PTRACE_SYSCALL : PTRACE_CONT;
 			}
@@ -554,7 +560,9 @@ static int loop(pid_t root)
 
 static void stats(i64 ns)
 {
+#ifndef DN_HOST_ADB
 	unsigned i;
+#endif
 
 	put(2, "dn-tiny: enter="); putu(2, n_enter);
 	put(2, " exit="); putu(2, n_exit);
@@ -565,12 +573,14 @@ static void stats(i64 ns)
 	put(2, " execs="); putu(2, exec_n_rewritten);
 	put(2, " sigsys="); putu(2, n_sigsys);
 	put(2, "  "); putms(2, ns); put(2, "s  (filter "); putu(2, policy_count()); put(2, " syscalls)\n");
+#ifndef DN_HOST_ADB
 	if (n_sigsys) {
 		put(2, "dn-tiny: answered for the platform's filter:");
 		for (i = 0; i < 512; i++)
 			if (deny_count[i]) { put(2, " "); putu(2, i); put(2, "x"); putu(2, deny_count[i]); }
 		put(2, "\n");
 	}
+#endif
 }
 
 int main(int argc, char **argv)

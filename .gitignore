@@ -3,3 +3,6 @@
 # Core dumps
 *.core
 __pycache__/
+
+# The adb-host runtime (scripts/build-runtime.sh --host adb)
+/build-adb/

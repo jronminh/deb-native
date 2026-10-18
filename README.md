@@ -59,6 +59,7 @@ and `python3`; `--packages "..."` adds anything else. Everything is in
 | [`performance.md`](docs/performance.md) | the stop counts, the workloads, how to measure |
 | [`spec/contract.md`](docs/spec/contract.md) | what a program may rely on: promised, best effort, refused |
 | [`spec/identity.md`](docs/spec/identity.md) | one real uid, virtual principals, real sudo/su/passwd |
+| [`spec/adb-host.md`](docs/spec/adb-host.md) | the ADB host: no app, a prefix under `/data/local/tmp`, driven from a PC |
 | [`reference/`](docs/reference/) | the device census, the syscall classes, prior art, and the seccomp gates |
 | [`tests/bench/`](tests/bench/) | the bench and check set (`run.sh PREFIX bench\|check\|all`) |
 
@@ -70,6 +71,7 @@ and `python3`; `--packages "..."` adds anything else. Everything is in
 | `scripts/build-runtime.sh` | builds `dn-tiny` |
 | `scripts/build-prefix.sh` | builds a prefix in Termux |
 | `scripts/build-busybox.sh` | builds a busybox bundle, a tiny non-Debian tree ([`spec/variants.md`](docs/spec/variants.md)) |
+| `scripts/adb-deploy.sh` | deploys an ADB-hosted prefix over `adb` ([`spec/adb-host.md`](docs/spec/adb-host.md)) |
 | `scripts/prefix/` | the prefix's `boot.sh` and `init.sh`, and the virtual-user wrappers |
 | `tests/bench/` | the bench and check set behind `docs/performance.md` |
 | `docs/` | building, architecture, performance, spec, reference |

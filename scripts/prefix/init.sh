@@ -36,10 +36,17 @@ export GLIBC_TUNABLES
 # Readline and Teletype first and print a warning for each before falling back.
 DEBIAN_FRONTEND=noninteractive
 export DEBIAN_FRONTEND
-# One real uid: the app's.  Its /etc/passwd, group and shadow lines are virtual
-# identity, written once; in user mode the session starts in its home.
+# One real uid: the host's (the app's, or the ADB shell's).  Its /etc/passwd,
+# group and shadow lines are virtual identity; a prefix built under another
+# host carries that host's `user` line, so reconcile it before adding one.
 if [ -n "$real_uid" ]; then
   [ -n "$real_gid" ] || real_gid=$real_uid
+  old_uid=$(getent passwd user 2>/dev/null | cut -d: -f3)
+  if [ -n "$old_uid" ] && [ "$old_uid" != "$real_uid" ]; then
+    sed -i '/^user:/d' /etc/passwd
+    [ -f /etc/shadow ] && sed -i '/^user:/d' /etc/shadow
+    sed -i '/^user:/d' /etc/group
+  fi
   if ! getent passwd "$real_uid" >/dev/null 2>&1; then
     printf 'user:x:%s:%s:user:/home/user:/bin/bash\n' "$real_uid" "$real_gid" >> /etc/passwd
   fi

@@ -75,7 +75,9 @@ Options (`scripts/build-prefix.sh --help`):
 | `--mirror` | `http://deb.debian.org/debian` | the Debian or Ubuntu mirror |
 | `--distro` | from the mirror's name | `debian` or `ubuntu` |
 | `--variant` | `minbase` | debootstrap's variant |
-| `--runtime DIR` | `build/` | where `dn-tiny` is |
+| `--host app\|adb` | `app` | `adb`: an ADB-hosted prefix (shell uid, no app) |
+| `--runtime DIR` | `build/` | the app runtime used to build |
+| `--runtime-adb DIR` | `build-adb/` | the adb runtime for `--host adb` |
 | `--name` | the directory's name | the name in `boot/version` |
 | `--no-shim` | | no `dn-lane.so`: everything goes through the tracer (slower) |
 | `--ldhook` | | ship `dn-ldhook.so`, the loader hook (needs `execmod`/`execmem`) |
@@ -92,6 +94,25 @@ scripts/build-prefix.sh --set minimal --suite noble \
 The host has no Ubuntu keyring, so debootstrap's Release signature is not
 checked there (`--no-check-sig`); the tree gets `ubuntu-keyring` and apt verifies
 every package against it.
+
+## An ADB-hosted prefix
+
+No app: the prefix lives under `/data/local/tmp` and is driven from a PC over
+`adb shell` (uid 2000, `Seccomp: 0`).  The prefix is **built** with the app
+runtime (the second stage runs in Termux), and the shell runtime is put in place
+at the end; the adb runtime has no app-seccomp answers.
+
+```sh
+scripts/build-runtime.sh --host adb build-adb
+scripts/build-prefix.sh --host adb --runtime build --runtime-adb build-adb \
+  --set minimal ~/p-adb
+tar -C ~/p-adb -czf ~/p-adb.tar.gz .
+scripts/adb-deploy.sh --port <wireless-port> ~/p-adb.tar.gz
+```
+
+`boot/version` says `host=adb`; `boot/binds` maps `/sdcard` (read-only); the
+first boot reconciles the `user` entry to the shell uid.  The model, the limits
+and the measurements are in [`spec/adb-host.md`](spec/adb-host.md).
 
 The sets are suggestions, nothing depends on them:
 
@@ -163,6 +184,7 @@ name=debian
 desc=Debian trixie (minbase, set minimal) for deb-native 0.9.0-pre-alpha
 version=0.9.0-pre-alpha
 arch=aarch64
+host=app
 suite=trixie
 shim=1
 ldhook=0

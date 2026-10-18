@@ -947,6 +947,7 @@ unsigned policy_map_gid(unsigned id) { return id == real_gid ? 0 : id; }
 unsigned policy_real_uid(void) { return real_uid; }
 unsigned policy_real_gid(void) { return real_gid; }
 
+#ifndef DN_HOST_ADB
 /* The syscalls Android's filter kills in the app domain (docs/reference/device-census.md),
  * and what each is told.  Anything not listed is told ENOSYS, which is also what
  * a program that probes for a newer call expects: glibc falls back for most. */
@@ -986,3 +987,4 @@ void policy_deny(unsigned nr, struct deny *d)
 		break;
 	}
 }
+#endif

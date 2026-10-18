@@ -23,8 +23,13 @@
 #   --mirror URL       Debian or Ubuntu mirror (default: http://deb.debian.org/debian)
 #   --distro NAME      debian or ubuntu (default: from the mirror's name)
 #   --variant NAME     debootstrap variant (default: minbase)
-#   --runtime DIR      the output of build-runtime.sh (default: build/, built
-#                      when it holds no dn-tiny)
+#   --host NAME        app (the default) or adb: an adb prefix carries the
+#                      runtime built with --host adb and boots in the shell
+#                      domain (no Android seccomp); the prefix is built with
+#                      the app runtime, then the adb one is put in place
+#   --runtime DIR      the app runtime used to build (default: build/)
+#   --runtime-adb DIR  the adb runtime for --host adb (default: build-adb/,
+#                      built when it holds no dn-tiny)
 #   --name NAME        the prefix's name in boot/version (default: DEST's name)
 #   --no-shim          no dn-lane.so: every path call stops in the tracer
 #                      (slower; for comparison or a toolchain-free build)
@@ -46,7 +51,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
 SET=minimal PACKAGES= SUITE=trixie MIRROR=http://deb.debian.org/debian VARIANT=minbase DISTRO=auto
-RUNTIME=$ROOT/build NAME= SHIM=1 LDHOOK=0 CANCEL_PATCH=0 KEEP_TC=0
+RUNTIME=$ROOT/build RUNTIME_ADB=$ROOT/build-adb HOST=app NAME= SHIM=1 LDHOOK=0 CANCEL_PATCH=0 KEEP_TC=0
 while [ $# -gt 0 ]; do
   case $1 in
     --set) SET=$2; shift 2 ;;
@@ -56,6 +61,8 @@ while [ $# -gt 0 ]; do
     --distro) DISTRO=$2; shift 2 ;;
     --variant) VARIANT=$2; shift 2 ;;
     --runtime) RUNTIME=$2; shift 2 ;;
+    --runtime-adb) RUNTIME_ADB=$2; shift 2 ;;
+    --host) HOST=$2; shift 2 ;;
     --name) NAME=$2; shift 2 ;;
     --no-shim) SHIM=0; shift ;;
     --ldhook) LDHOOK=1; shift ;;
@@ -68,6 +75,12 @@ while [ $# -gt 0 ]; do
 done
 [ $# -eq 1 ] || { echo "usage: build-prefix.sh [OPTION...] DEST  (--help)" >&2; exit 2; }
 DEST=$1
+case $HOST in
+  app|adb) ;;
+  *) echo "build-prefix: --host is app or adb" >&2; exit 2 ;;
+esac
+HOSTFLAG=
+[ "$HOST" = adb ] && HOSTFLAG=-DDN_HOST_ADB
 
 case $SET in
   minimal) SET_PKGS= ;;
@@ -102,10 +115,23 @@ mkdir -p "$DEST"
 DEST=$(CDPATH= cd -- "$DEST" && pwd)
 [ -n "$NAME" ] || NAME=${DEST##*/}
 
-# ---- the runtime
+# ---- the runtimes
+# The build always runs under the app runtime: the second stage and the shim
+# are built in Termux, where Android's app seccomp filter is active.  An adb
+# prefix only swaps in the shell/ADB runtime once everything is built.
 if [ ! -x "$RUNTIME/dn-tiny" ]; then
-  say "building the runtime"
-  sh "$ROOT/scripts/build-runtime.sh" "$RUNTIME"
+  say "building the app runtime"
+  sh "$ROOT/scripts/build-runtime.sh" --host app "$RUNTIME"
+fi
+[ "$(cat "$RUNTIME/host" 2>/dev/null || echo app)" = app ] ||
+  die "the runtime in $RUNTIME is not the app runtime (see --runtime)"
+if [ "$HOST" = adb ]; then
+  if [ ! -x "$RUNTIME_ADB/dn-tiny" ]; then
+    say "building the adb runtime"
+    sh "$ROOT/scripts/build-runtime.sh" --host adb "$RUNTIME_ADB"
+  fi
+  [ "$(cat "$RUNTIME_ADB/host" 2>/dev/null)" = adb ] ||
+    die "the runtime in $RUNTIME_ADB is not the adb runtime (see --runtime-adb)"
 fi
 
 # ---- 1. the first stage
@@ -240,7 +266,7 @@ if [ "$SHIM" = 1 ]; then
       say "the cancellable svc: not found; that path stays with the tracer"
     fi
   fi
-  run gcc -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC $CANCEL -o /usr/lib/deb-native/dn-lane.so \
+  run gcc -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC $CANCEL $HOSTFLAG -o /usr/lib/deb-native/dn-lane.so \
       /tmp/dn-lane/lane.c /tmp/dn-lane/policy.c
   rm -rf "$DEST/tmp/dn-lane"
   if [ "$KEEP_TC" = 0 ]; then
@@ -255,6 +281,17 @@ if [ -n "$(echo $SET_PKGS $PACKAGES)" ]; then
 fi
 run apt-get clean
 
+# ---- the host profile: the runtime the prefix boots
+if [ "$HOST" = adb ]; then
+  cp "$RUNTIME_ADB/dn-tiny" "$DEST/usr/lib/deb-native/dn-tiny"
+  chmod 755 "$DEST/usr/lib/deb-native/dn-tiny"
+  if [ "$LDHOOK" = 1 ]; then
+    cp "$RUNTIME_ADB/dn-ldhook.so" "$DEST/usr/lib/deb-native/dn-ldhook.so"
+    chmod 755 "$DEST/usr/lib/deb-native/dn-ldhook.so"
+  fi
+  printf '/sdcard\t/storage/emulated/0\tro\n' >> "$DEST/boot/binds"
+fi
+
 # ---- what the prefix is
 VER=$(cat "$ROOT/VERSION")
 cat > "$DEST/boot/version" <<V
@@ -264,6 +301,7 @@ name=$NAME
 desc=$DISTRO_NAME $SUITE ($VARIANT, set $SET) for deb-native $VER
 version=$VER
 arch=aarch64
+host=$HOST
 suite=$SUITE
 shim=$SHIM
 ldhook=$LDHOOK
