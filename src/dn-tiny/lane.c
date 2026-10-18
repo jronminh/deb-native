@@ -1626,6 +1626,13 @@ static void patch_libc(void)
 	unsigned long lo, hi;
 	int k;
 
+#ifdef DN_HOST_ADB
+	/* The shell domain allows a COW text page (the xm probe's RW -> write -> RX),
+	 * but the shim's old RWX -> RX route left the page in a state the probe
+	 * rejected; do not patch libc text here until a COW route is tested.  The
+	 * exported wrappers and the tracer carry the calls. */
+	return;
+#endif
 	if ((knob && strcmp(knob, "0") == 0) || !dl_iterate_phdr(find_libc, &t) || !t.lo)
 		return;
 	if (pthread_key_create(&hook_key, hook_stack_free) != 0)

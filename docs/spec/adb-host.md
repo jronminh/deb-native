@@ -115,6 +115,12 @@ from the app except the app lifecycle and data directory.
 - No boot autostart (no root/init); the PC must connect and start it, or a
   `setsid`/`nohup` child can outlive a session (bound to the shell's limits).
 - `/data/local/tmp` survives reboots but can be wiped by an OTA; no encryption.
+- **libc text is not patched.**  The `shell` domain allows a private COW text
+  page (the `xm` probe's `RW -> write -> RX` passes), but the shim's old
+  `RWX -> RX` route left the page in a state the probe rejected; the ADB build
+  (`DN_HOST_ADB`) now skips the libc `svc` patch, and the profile does not ship
+  `dn-ldhook.so` either.  The exported wrappers and the tracer carry the calls,
+  and `tests/bench/xm` passes.  A COW patch is the next step.
 - **A pathname socket is abstract, with a placeholder file.**  The guest path
   becomes an abstract name (`\0dn-<hash>`, from the root and the resolved host
   path), because `shell` has no `sock_file create` on `shell_data_file`; bind

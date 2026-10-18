@@ -286,8 +286,7 @@ if [ "$HOST" = adb ]; then
   cp "$RUNTIME_ADB/dn-tiny" "$DEST/usr/lib/deb-native/dn-tiny"
   chmod 755 "$DEST/usr/lib/deb-native/dn-tiny"
   if [ "$LDHOOK" = 1 ]; then
-    cp "$RUNTIME_ADB/dn-ldhook.so" "$DEST/usr/lib/deb-native/dn-ldhook.so"
-    chmod 755 "$DEST/usr/lib/deb-native/dn-ldhook.so"
+    say "no dn-ldhook.so on the ADB host: libc/loader text is not patched there"
   fi
   printf '/sdcard\t/storage/emulated/0\tro\n' >> "$DEST/boot/binds"
 fi
