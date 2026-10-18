@@ -34,6 +34,21 @@ running session (native: 0.08 s; a fresh boot adds about 0.1 s). Details:
 [`docs/architecture.md`](docs/architecture.md),
 [`docs/performance.md`](docs/performance.md).
 
+## Three ways to run a prefix
+
+The runtime is one; a prefix is a tree; the **host** is who runs it:
+
+| host | where the tree lives | who runs it | runtime |
+| --- | --- | --- | --- |
+| **Termux** | Termux's data (`~/debian`, ...) | the Termux app, app seccomp | app (default) |
+| **custom app** | the app's data | a dedicated app (dn-shell), its session/UI | app (default) |
+| **ADB** | `/data/local/tmp` | `adb shell` (uid 2000), no app, no app seccomp | `--host adb` |
+
+The quick start below is the **Termux** host; the app contract is
+[`spec/host.md`](docs/spec/host.md), the ADB host
+[`spec/adb-host.md`](docs/spec/adb-host.md), and the overview
+[`spec/hosts.md`](docs/spec/hosts.md).
+
 ## Quick start
 
 In Termux, on an `arm64` phone:
@@ -59,6 +74,7 @@ and `python3`; `--packages "..."` adds anything else. Everything is in
 | [`performance.md`](docs/performance.md) | the stop counts, the workloads, how to measure |
 | [`spec/contract.md`](docs/spec/contract.md) | what a program may rely on: promised, best effort, refused |
 | [`spec/identity.md`](docs/spec/identity.md) | one real uid, virtual principals, real sudo/su/passwd |
+| [`spec/hosts.md`](docs/spec/hosts.md) | the three hosts: Termux, a custom app, ADB |
 | [`spec/adb-host.md`](docs/spec/adb-host.md) | the ADB host: no app, a prefix under `/data/local/tmp`, driven from a PC |
 | [`reference/`](docs/reference/) | the device census, the syscall classes, prior art, and the seccomp gates |
 | [`tests/bench/`](tests/bench/) | the bench and check set (`run.sh PREFIX bench\|check\|all`) |

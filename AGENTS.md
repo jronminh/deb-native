@@ -3,8 +3,9 @@
 ## What this repo is
 
 The source of a runtime that runs an unmodified Debian `arm64` tree (a
-**prefix**) on Android as an ordinary app, with no root, no `chroot` and no
-namespaces, and the recipe for building a prefix in Termux. Nothing is shipped
+**prefix**) on Android -- in Termux, in a custom app, or over ADB -- with no
+root, no `chroot` and no namespaces, and the recipe for building a prefix in
+Termux.  The three hosts are [`docs/spec/hosts.md`](docs/spec/hosts.md). Nothing is shipped
 prebuilt: users build the runtime and their prefix themselves
 ([`docs/building.md`](docs/building.md)). There is no CI.
 
@@ -25,7 +26,9 @@ The 0.7 runtime (`dn-monitor`, a PRoot fork, shipped prefixes, CI) is at tag
 ## Where it runs
 
 Everything happens on the phone, in Termux: edit, build, test, commit, push
-(`gh` is the git credential helper). The maintainer's phone is a Samsung Galaxy
+(`gh` is the git credential helper).  A built prefix can run in Termux, a
+custom app ([`docs/spec/host.md`](docs/spec/host.md)) or over ADB
+([`docs/spec/adb-host.md`](docs/spec/adb-host.md)). The maintainer's phone is a Samsung Galaxy
 S10e, Android 12, kernel 4.14; an Android 16 phone is the second target.
 
 ## Build and test

@@ -228,11 +228,13 @@ The order of work, by the userland's demand, not by the syscall table:
 
 ### Hosts
 
-The same runtime has two hosts, and the promise is the same:
+The same runtime has three hosts, and the promise is the same
+([`hosts.md`](hosts.md)):
 
-- **app** (the default): Android's seccomp filter plus the runtime's rows; the
-  app-domain answers (`policy_deny`, SIGSYS substitutes) are built; the prefix
-  is in the app's data; `/sdcard` is not reachable by default.
+- **Termux** and **custom app**: Android's seccomp filter plus the runtime's
+  rows; the app runtime (the default build) carries the app-domain answers
+  (`policy_deny`, SIGSYS substitutes); the prefix is in the app's data.  They
+  differ in the app, session, UI and storage, not in the promise.
 - **adb/shell**: no seccomp gate; a runtime built with `--host adb` has no
   app-domain answers at all; the prefix is in `/data/local/tmp` (uid 2000),
   `/sdcard` is bound read-only, and a PC drives it over `adb shell`.  The

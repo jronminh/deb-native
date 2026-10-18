@@ -12,6 +12,8 @@ building and what each costs, and it records what of the core still names Debian
 - **Set**: `minimal` -- `dev` -- `full` -- `server` -- `compute`.
 - **Options**: `--no-shim` -- `--ldhook` -- the boot seed
   (`DN_INITIAL=root`) -- a supervisor (proposed).
+- **Host**: Termux -- a custom app -- ADB; a separate axis from the tree
+  ([`hosts.md`](hosts.md)).
 
 ## The variants
 

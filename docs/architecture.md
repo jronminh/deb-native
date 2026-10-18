@@ -275,4 +275,6 @@ of the core still lean Debian -- the loader named in `policy.c` and `boot.sh`'s
 `/usr/bin/bash` -- and both are open (`TODO.md`, "Beyond Debian, and bundles").
 What the app around a prefix supplies -- the session, the boot inputs, the
 Android bridge, display and input, the services -- is the **host contract**
-([`spec/host.md`](spec/host.md)).
+([`spec/host.md`](spec/host.md)).  The host is a separate axis from the tree:
+Termux, a custom app or ADB, with the app or adb runtime
+([`spec/hosts.md`](spec/hosts.md)).

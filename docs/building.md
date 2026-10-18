@@ -63,7 +63,10 @@ What it does, in order:
    `boot/version`.
 
 On the S10e (Android 12), from a fresh clone: `minimal` in about 3 minutes
-(265 MB), `dev` in about 3 minutes (811 MB), most of it the download.
+(265 MB), `dev` in about 3 minutes (811 MB), most of it the download.  The quick
+start is the **Termux host**; the same tree also runs in a **custom app**
+([`spec/host.md`](spec/host.md)) or over **ADB** ([`spec/adb-host.md`](spec/adb-host.md)),
+and the overview is [`spec/hosts.md`](spec/hosts.md).
 
 Options (`scripts/build-prefix.sh --help`):
 

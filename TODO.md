@@ -443,9 +443,11 @@ MB). What it takes, as far as known:
 - Testing must happen inside the app's own process: `run-as` runs in
   `runas_app`, another domain.
 
-The host side is written up as [`docs/spec/host.md`](docs/spec/host.md) (a
-proposal; [`docs/spec/boot-manager.md`](docs/spec/boot-manager.md) for the
-launcher). Open: a minimal sample app (one activity, one button that runs a
+The hosts are written up in [`docs/spec/hosts.md`](docs/spec/hosts.md) (the
+three), with [`docs/spec/host.md`](docs/spec/host.md) for the custom app (a
+proposal) and [`docs/spec/adb-host.md`](docs/spec/adb-host.md) for ADB
+(implemented); [`docs/spec/boot-manager.md`](docs/spec/boot-manager.md) covers
+the launcher. Open: a minimal sample app (one activity, one button that runs a
 command in a prefix) to prove the path, and whether it becomes
 `docs/embedding.md`.
 

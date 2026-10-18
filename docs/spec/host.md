@@ -1,4 +1,4 @@
-# The host: what an app provides a prefix
+# The custom-app host: what an app provides a prefix
 
 The runtime is the **core**, and it stays Android-agnostic
 ([`architecture.md`](../architecture.md), "The core and the variants"):
@@ -9,9 +9,10 @@ behind an app's identity, and no syscall in the tree reaches it. So a prefix
 runs inside a **host** (the app; also the *container*), and the host provides
 what the kernel does not.
 
-This is the contract between the two. Status: proposal.  The app-less **ADB
-host** (a prefix under `/data/local/tmp`, driven from a PC over `adb shell`) is
-the second frontend: [`adb-host.md`](adb-host.md).
+This is the contract between the two.  Status: proposal.  The custom app is one
+of **three hosts** -- Termux and the app-less **ADB** host (a prefix under
+`/data/local/tmp`, driven from a PC) are the others; the overview is
+[`hosts.md`](hosts.md), and the ADB host is [`adb-host.md`](adb-host.md).
 
 ## Contents
 
