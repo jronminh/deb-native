@@ -15,7 +15,10 @@
 # Usage: scripts/build-runtime.sh [--host app|adb] [OUTDIR]   (default: build/)
 #   --host adb  the shell/ADB host: no Android seccomp filter, so the
 #               app-domain answer table (policy_deny/SIGSYS) is compiled out;
-#               the rows and the law are the same.
+#               the rows and the law are the same.  It must match the prefix's
+#               boot/version (host=app or host=adb): an ADB prefix needs adb,
+#               or the adb answers (the abstract AF_UNIX mapping among them)
+#               are left out.  build/host records the choice.
 #   CC          the compiler (default: clang, else gcc, else aarch64-linux-gnu-gcc)
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)

@@ -224,7 +224,7 @@ Another app (dn-shell, for instance) runs the same `boot/boot.sh`.
 After pulling a newer deb-native:
 
 ```sh
-scripts/build-runtime.sh
+scripts/build-runtime.sh                 # --host adb for an ADB prefix
 cp build/dn-tiny ~/debian/usr/lib/deb-native/dn-tiny
 cp scripts/prefix/boot.sh scripts/prefix/init.sh ~/debian/boot/
 cp src/dn-tiny/lane.c src/dn-tiny/lane.h src/dn-tiny/policy.c src/dn-tiny/policy.h ~/debian/tmp/
@@ -232,6 +232,14 @@ cp build/gen/policy-rows.inc ~/debian/tmp/
 ~/debian/boot/boot.sh gcc -O2 -shared -fPIC -DDN_LIBC \
   -o /usr/lib/deb-native/dn-lane.so /tmp/lane.c /tmp/policy.c
 ```
+
+(add `-DDN_HOST_ADB` to the shim's `gcc` line when the prefix's `boot/version`
+says `host=adb`).
+
+The runtime and the shim must be built for the prefix's host: `boot/version`
+says `host=adb` for the ADB host and `host=app` (the default) otherwise.
+`build/host` records what the runtime was built for.  An ADB prefix with an app
+runtime has no adb answers (the abstract AF_UNIX mapping among them).
 
 (the last two steps need `gcc` and `libc6-dev` in the prefix; the shim links the
 law, `policy.c`, with the generated rows).
