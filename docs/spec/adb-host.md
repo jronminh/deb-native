@@ -124,9 +124,10 @@ from the app except the app lifecycle and data directory.
 - **A pathname socket is abstract, with a placeholder file.**  The guest path
   becomes an abstract name (`\0dn-<hash>`, from the root and the resolved host
   path), because `shell` has no `sock_file create` on `shell_data_file`; bind
-  also makes a regular placeholder at the path, so `stat`, `chmod` and `unlink`
-  work.  `stat` reports a regular file, not `S_IFSOCK`; a program that needs the
-  socket type is still open.  `ssh-agent`/`ssh-add` and `tmux` are checked.
+  also makes a regular placeholder at the path, so `chmod` and `unlink` work; a
+  shared table (`var/lib/deb-native/sockets`) makes the shim's `stat` report
+  `S_IFSOCK`.  `lstat`/`readdir` still see the placeholder, and a raw/static
+  `stat` (no shim) does too.  `ssh-agent`/`ssh-add` and `tmux` are checked.
 - `CONFIG_USER_NS` is off kernel-wide; namespaces, overlayfs, FUSE and mount
   stay refused.  Containers are a VM, not this host.
 - The **self-hosted** variant (`adbwire`/`dsh` from

@@ -67,6 +67,14 @@ int policy_is_host(const char *p);
 /* Point the link cache at the shared generation the caller has mapped (the shim). */
 void policy_links_use(volatile unsigned *g);
 
+/* The socket paths that stat must show as S_IFSOCK: the ADB host's abstract
+ * sockets have a regular placeholder, so the mode is rewritten.  The table is
+ * one mmap'd file the tracer adds to and the shim reads (guest and host paths). */
+void policy_sock_init(void);
+void policy_sock_add(const char *path);
+void policy_sock_del(const char *path);
+int policy_sock_has(const char *path);
+
 /* The link cache: what readlink said for a host path, so that a walk costs no
  * syscall for a component already seen.  Its generation lives in a file of the
  * prefix that every tracer on it maps, so a link made under one session drops the

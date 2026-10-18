@@ -1,8 +1,13 @@
 /* policy.c -- the table and the law, in their smallest form. */
 #include "policy.h"
+#include <fcntl.h>
+#include <sys/mman.h>
 
 #ifdef DN_LIBC
 #include <string.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 /* the two helpers sys.c gives the tracer, here from libc */
 
@@ -857,6 +862,81 @@ int policy_unpath(const char *host, char *out, size_t cap)
 		return 0;
 	return (int) strlen(out) + 1;
 }
+
+#if !defined(DN_FREE)
+/* A direct-mapped table of socket paths, shared by the tracer (which adds on
+ * bind) and the shim (which reads in stat).  4096 slots of 8 bytes: a hash
+ * collision only costs a false S_IFSOCK on a 64-bit hash, as unlikely as the
+ * path itself.  The file is under var/lib/deb-native and mapped by both. */
+#define SOCK_SLOTS 4096u
+static u64 *sock_tab;
+
+static u64 sock_hash(const char *s)
+{
+	u64 h = 1469598103934665603ULL;
+
+	while (*s) {
+		h ^= (unsigned char) *s++;
+		h *= 1099511628211ULL;
+	}
+	return h ? h : 1;
+}
+
+static unsigned sock_slot(const char *s) { return (unsigned) (sock_hash(s) & (SOCK_SLOTS - 1)); }
+
+void policy_sock_init(void)
+{
+	char p[600];
+	const char *tail = "/var/lib/deb-native/sockets";
+	size_t rl = root_len, tl = strlen(tail), len = SOCK_SLOTS * sizeof(u64);
+	long fd;
+
+	if (!rl || rl + tl + 1 > sizeof p)
+		return;
+	memcpy(p, root, rl);
+	memcpy(p + rl, tail, tl + 1);
+#ifdef DN_LIBC
+	fd = open(p, O_RDWR);
+	if (fd < 0)
+		return;
+	sock_tab = (u64 *) mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, (int) fd, 0);
+	close((int) fd);
+	if (sock_tab == MAP_FAILED)
+		sock_tab = 0;
+#else
+	fd = (long) sc(56, -100, (i64) p, O_RDWR | O_CREAT, 0600, 0, 0);
+	if (fd < 0)
+		return;
+	sc(46, fd, (i64) len, 0, 0, 0, 0);              /* ftruncate */
+	sock_tab = (u64 *) sc(222, 0, (i64) len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	sc(57, fd, 0, 0, 0, 0, 0);
+	if ((i64) sock_tab < 0)
+		sock_tab = 0;
+#endif
+}
+
+void policy_sock_add(const char *path)
+{
+	if (sock_tab && path && *path)
+		sock_tab[sock_slot(path)] = sock_hash(path);
+}
+
+void policy_sock_del(const char *path)
+{
+	if (sock_tab && path && sock_tab[sock_slot(path)] == sock_hash(path))
+		sock_tab[sock_slot(path)] = 0;
+}
+
+int policy_sock_has(const char *path)
+{
+	return sock_tab && path && *path && sock_tab[sock_slot(path)] == sock_hash(path);
+}
+#else
+void policy_sock_init(void) { }
+void policy_sock_add(const char *p) { (void) p; }
+void policy_sock_del(const char *p) { (void) p; }
+int policy_sock_has(const char *p) { (void) p; return 0; }
+#endif
 
 /* readlink of a guest path: on the host path, from the shared cache, an absolute
  * link target inside the prefix told as the guest's. */

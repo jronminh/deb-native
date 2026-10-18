@@ -147,8 +147,9 @@ the net for everything.
   entry and exit (the length with it).  On the ADB host the `shell` domain may
   not create a `sock_file` in the tree, so the guest path becomes an abstract
   name (`\0dn-<hash>` of the root and the host path) and the answer is mapped
-  back; bind also makes a regular placeholder at the path, so `stat`, `chmod`
-  and `unlink` work (`stat` reports a file, not `S_IFSOCK`).
+  back; bind also makes a regular placeholder at the path, so `chmod` and
+  `unlink` work, and a shared table makes `stat` report `S_IFSOCK` (`lstat`
+  and `readdir` still see the placeholder).
 - `/dev/shm` is the tree's, not the host's: the law maps it to `ROOT/run/shm`
   (created 1777 by `init.sh`), so `shm_open` works as files on both hosts even
   though the phone's `/dev` has no writable shm.

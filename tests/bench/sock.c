@@ -2,8 +2,9 @@
  * On the ADB host the shell domain may not create a sock_file in the tree, so
  * the runtime maps the guest path to an abstract name; getsockname and
  * getpeername must still show the guest path.  Bind also makes a regular
- * placeholder at the path, so stat, chmod and unlink work (stat is a file, not
- * S_IFSOCK).  Run inside a prefix: tests/bench/run.sh check. */
+ * placeholder at the path, so chmod and unlink work; the shim's socket table
+ * makes stat report S_IFSOCK (lstat/readdir still see the placeholder).  Run
+ * inside a prefix: tests/bench/run.sh check. */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <stdio.h>
@@ -95,11 +96,15 @@ static int one(const char *path)
 	{
 		struct stat st;
 
-		if (stat(path, &st) == 0)
+		if (stat(path, &st) == 0) {
 			printf("stat: mode=%o sock=%d\n", st.st_mode & 07777,
 			       S_ISSOCK(st.st_mode));
-		else
-			printf("stat: %s (known gap)\n", strerror(errno));
+			if (!S_ISSOCK(st.st_mode))
+				ok = 0;
+		} else {
+			printf("stat: %s\n", strerror(errno));
+			ok = 0;
+		}
 	}
 	if (chmod(path, 0600) == 0)
 		printf("chmod: ok\n");

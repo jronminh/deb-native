@@ -124,6 +124,7 @@ void trace_synth_init(void)
 
 	if (!root || policy_root_len() == 0)
 		return;
+	policy_sock_init();                              /* the shared socket-path table */
 	for (i = 0; i < 2; i++) {
 		int len = policy_mounts(b, sizeof b, i);
 		int fd;
@@ -498,6 +499,8 @@ static void sock_map(struct tracee *t, const struct row *rw, int out)
 				char ab[SOCK_ABS_MAX];
 
 				nl = (unsigned) sock_abs_name(host, sa.path, ab);
+				policy_sock_add(host);
+				policy_sock_add(sa.path);
 				if (mon_write(t, nb + 2, ab, nl) != (ssize_t) nl)
 					return;
 				nl += 2;

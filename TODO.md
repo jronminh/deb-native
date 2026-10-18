@@ -123,8 +123,9 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   `sock_file create` on `shell_data_file`, so the path becomes an abstract name
   (`\0dn-<hash>` of the root and the host path) and the answer maps back to the
   guest path.  Bind also makes a regular placeholder at the path, so
-  `stat`/`chmod`/`unlink` work; `stat` reports a file, not `S_IFSOCK` (open if a
-  program needs the type).  `ssh-agent` and `tmux` are checked.
+  `chmod`/`unlink` work, and a shared table makes the shim's `stat` report
+  `S_IFSOCK`; `lstat`/`readdir` and a raw/static `stat` still see the
+  placeholder.  `ssh-agent` and `tmux` are checked.
 - **Refused on purpose** (a mapping would be a lie): `openat2` with `RESOLVE_*`
   answers `ENOSYS` (without a resolve flag it runs as `openat`, the path mapped);
   and minor, privileged (allowed, a guest path reaches the kernel): `pivot_root`,

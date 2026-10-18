@@ -181,6 +181,7 @@ __attribute__((constructor)) static void lane_init(void)
 	memcpy(rootbuf, di.dli_fname, n - t);
 	rootbuf[n - t] = '\0';
 	policy_root_set(rootbuf);               /* set last: until now everything falls back */
+	policy_sock_init();
 	{                                       /* the binds the host wrote before boot */
 		char bp[PATH_MAX + 16], b[4096];
 		long bfd;
@@ -831,6 +832,8 @@ static int lane_fstatat(int dirfd, const char *path, struct stat *st, int flags)
 	cl_fix(st->st_dev, st->st_ino, &st->st_nlink);
 	if (nofollow && S_ISLNK(st->st_mode))
 		st->st_size = link_size(at, host, st->st_size);
+	if (!nofollow && policy_sock_has(host))
+		st->st_mode = (st->st_mode & ~S_IFMT) | S_IFSOCK;
 	return 0;
 }
 
@@ -873,6 +876,8 @@ int statx(int dirfd, const char *path, int flags, unsigned mask, struct statx *s
 	cl_fix(makedev(stx->stx_dev_major, stx->stx_dev_minor), stx->stx_ino, &stx->stx_nlink);
 	if (nofollow && host[0] && S_ISLNK(stx->stx_mode))
 		stx->stx_size = (unsigned long) link_size(at, host, (long) stx->stx_size);
+	if (!nofollow && host[0] && policy_sock_has(host))
+		stx->stx_mode = (stx->stx_mode & ~S_IFMT) | S_IFSOCK;
 	return 0;
 }
 
@@ -1727,6 +1732,15 @@ int unlinkat(int dirfd, const char *path, int flags)
 		known = 1;
 	r = REAL(unlinkat)(dirfd, path, flags);
 	e = errno;
+	if (r == 0) {
+		char host[PATH_MAX];
+		int at = 0;
+
+		if (lane_at(dirfd, path, 1, host, sizeof host, &at) > 0)
+			policy_sock_del(host);
+		if (path[0] == '/')
+			policy_sock_del(path);
+	}
 	if (r == 0 && known) {
 		int i;
 
