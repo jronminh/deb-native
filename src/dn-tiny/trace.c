@@ -14,6 +14,7 @@ static int own_lookup(const char *host, int nofollow, u64 dev, u64 ino, i64 sec,
 static void own_apply(char *buf, unsigned off, const char *host, int nofollow,
 		      u64 dev, u64 ino, i64 sec, i64 nsec);
 static void store_owner(struct tracee *t);
+static void mark_if_new(struct tracee *t);
 
 #define EXE_LEN   128
 static char exe_now[PID_SLOTS][EXE_LEN];          /* by pid, the program each process runs */
@@ -1329,6 +1330,9 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		rewrite_path(t, rw->path_arg);
 	if (rw->path_arg2 >= 0)
 		rewrite_path(t, rw->path_arg2);
+	if ((rw->nr == 56 && (t->r.regs[2] & 0x40) && !(t->r.regs[2] & 0x400000)) ||
+	    rw->nr == 34 || rw->nr == 33)
+		mark_if_new(t);                 /* a create: stop at exit and mark it */
 	if (rw->special == SP_LINK)             /* linkat: the platform denies it, so it is a copy */
 		link_by_copy(t);
 	if (rw->nr == 35 && n_copies && !(t->r.regs[2] & 0x200))   /* unlinkat, not AT_REMOVEDIR */
@@ -1919,6 +1923,47 @@ static int answer_stat(struct tracee *t, const struct row *rw)
 	}
 	mon_skip(t, mon_write(t, t->r.regs[rw->result_arg], st, sizeof st) == (ssize_t) sizeof st ? 0 : -14);
 	return 1;
+}
+
+/* A create (openat with O_CREAT, mkdirat, mknodat): if the name does not exist,
+ * the syscall will make it, so ask for the exit stop and mark the new file with
+ * the creator's identity.  A pre-stat race is the same race the syscall has. */
+static void mark_if_new(struct tracee *t)
+{
+	char host[300];
+	u64 st[18];
+	ssize_t k;
+	int nofollow = 0;
+
+	k = mon_read_str(t, t->r.regs[1], host, sizeof host - 1);
+	if (k <= 0 || host[0] != '/')
+		return;
+	host[k] = '\0';
+	if (t->r.regs[8] == 56)
+		nofollow = (t->r.regs[2] & 0x8000) != 0;      /* O_NOFOLLOW */
+	if (sys_fstatat(host, st, nofollow ? 0x100 : 0) == -2)
+		t->mark_exit = 1;
+}
+
+/* the create succeeded: the file exists now; store the creator's ids, so the
+ * owner reads the same in the fake world and for the real user. */
+void trace_mark_owner(struct tracee *t)
+{
+	char host[300];
+	struct ids *d;
+	ssize_t k;
+
+	if (!t->mark_exit)
+		return;
+	t->mark_exit = 0;
+	if ((i64) t->r.regs[0] < 0)                        /* the call failed */
+		return;
+	k = mon_read_str(t, t->r.regs[1], host, sizeof host - 1);
+	if (k <= 0 || host[0] != '/')
+		return;
+	host[k] = '\0';
+	d = ids_of(t->pid);
+	own_write(host, 0, d->eu, d->eg);
 }
 
 /* unlinkat at entry, its path mapped: a copy losing a name */

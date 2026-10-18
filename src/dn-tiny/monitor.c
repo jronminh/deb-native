@@ -51,6 +51,7 @@ static i64 spin_ns;                              /* -s: poll this long before bl
 static unsigned long n_enter, n_exit, n_event, n_sig, n_sigsys;
 static unsigned deny_count[512];                 /* by syscall number: killed by the platform, answered here */
 static unsigned char expect_exit[PID_SLOTS];      /* by pid */
+static unsigned char mark_exit[PID_SLOTS];        /* by pid: a create wants its exit stop */
 #define EXP(p) expect_exit[PID_SLOT(p)]
 static unsigned short cur_nr[PID_SLOTS];             /* by pid: the syscall to be seen again at exit */
 static u64 saved0[PID_SLOTS];                     /* by pid: x0 as that syscall was entered */
@@ -456,6 +457,7 @@ static int loop(pid_t root)
 		t.pid = p;
 		t.dirty = 0;
 		t.skip = 0;
+		t.mark_exit = 0;
 		if (mode == M_FULL)
 			trace_stop(p);
 		{
@@ -480,6 +482,9 @@ static int loop(pid_t root)
 						skip_syscall(&t);
 						msg = 0;            /* answered at entry: nothing to rewrite at exit */
 					}
+					mark_exit[PID_SLOT(p)] = (unsigned char) (t.mark_exit && !t.skip);
+					if (mark_exit[PID_SLOT(p)])
+						msg |= 1;              /* stop at exit to mark the new file */
 				} else {
 					sys_ptrace(PTRACE_GETEVENTMSG, p, 0, (i64) &msg);
 					if (mode == M_REGS)
@@ -493,9 +498,15 @@ static int loop(pid_t root)
 				const struct row *rw = mode == M_FULL ? policy_row(cur_nr[PID_SLOT(p)]) : NULL;
 
 				n_exit++;
-				if (rw && (rw->result != R_NONE || rw->special == SP_SOCK_OUT) && get_regs(&t) == 0) {
-					t.entry_arg0 = saved0[PID_SLOT(p)];
-					trace_exit(&t, rw);
+				if (mode == M_FULL && get_regs(&t) == 0) {
+					if (rw && (rw->result != R_NONE || rw->special == SP_SOCK_OUT)) {
+						t.entry_arg0 = saved0[PID_SLOT(p)];
+						trace_exit(&t, rw);
+					}
+					t.mark_exit = mark_exit[PID_SLOT(p)];
+					mark_exit[PID_SLOT(p)] = 0;
+					if (t.mark_exit)
+						trace_mark_owner(&t);
 					if (t.dirty)
 						set_regs(&t);
 				}

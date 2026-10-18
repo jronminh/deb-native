@@ -143,11 +143,12 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   app's uid) and virtual principals; the boot seeds the real uid by default
   (`DN_INITIAL=root` for a root session), and every syscall is classified by
   the process's euid -- no mode switch.  The setuid-bit gate is in (euid 0 or
-  the real uid, owner from `user.dn.owner`), with a `DN_EUID` hint for the
-  shim.  Still open: creation marking (a file created without a chown reads
-  differently in the fake world and the real user case), virtual service-user
-  groups, and testing the real `sudo`/`su`/`passwd` binaries.  Virtual users are
-  not Android users and are not isolation.
+  the real uid, owner from `user.dn.owner`), with the `DN_IDS` hint for the
+  shim; a create is marked with the creator's ids (`openat`+`O_CREAT`,
+  `mkdirat`, `mknodat`).  Still open: legacy/symlink creations that predate
+  marking, virtual service-user groups, and testing the real
+  `sudo`/`su`/`passwd` binaries.  Virtual users are not Android users and are
+  not isolation.
 
 ## Speed
 

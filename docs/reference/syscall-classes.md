@@ -158,8 +158,10 @@ Checked against the code and the census tables:
   shim and the tracer (done 2026-10-17); only the first `stat` of a file reads
   the xattr.  A chown is stored even for 0:0, so an explicit chown reads the same
   in the fake world and for the real user; a file that was never chowned falls
-  back to the real uid (the fake world maps it to 0, the real user leaves it).  A shared store-used flag is
-  still open.
+  back to the real uid (the fake world maps it to 0, the real user leaves it).
+  A create is marked with the creator's ids (`openat`+`O_CREAT`/`mkdirat`/
+  `mknodat`; the shim marks `mkdirat`/`mknodat` on the lane), so it no longer
+  depends on the reader's world.  A shared store-used flag is still open.
 
 ## Caveats
 

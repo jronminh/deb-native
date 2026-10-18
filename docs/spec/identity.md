@@ -121,12 +121,15 @@ what would be a lie about authority**.
 
 ## Files, groups, and the owner store
 
-- One xattr, `user.dn.owner`, holds `UID:GID` for every file that was chowned,
-  0:0 included.  The only implicit owner is the real uid: the fake world maps
-  it to 0, the real user leaves it.  A file created without a chown can
-  therefore read as 0 in the fake world and as the real uid in the real user
-  case (and the reverse for a user-created file); marking creations is open.
-  The copy `linkat` makes carries the xattr.
+- One xattr, `user.dn.owner`, holds `UID:GID` for every file that was chowned
+  (0:0 included) or created.  A create is marked with the creator's `euid:egid`
+  by the tracer (`openat` with `O_CREAT`, `mkdirat`, `mknodat`) or by the shim
+  (`mkdirat`/`mknodat` on the lane), so a file created by root reads as root
+  for the real user, and one created by the real user reads as that uid in the
+  fake world.  A later `chown` overwrites it.  The only implicit owner is the
+  real uid for files that predate marking (and for a symlink, which takes no
+  user xattr); the fake world maps those to 0, the real user leaves them.  The
+  copy `linkat` makes carries the source's xattr.
 - `useradd`/`groupadd` write `/etc/passwd` and `/etc/group` entries; `userdel
   -r` works because the owner store makes the home directory look owned by the
   user it removes.  These are **virtual users**: a login for one exists only
@@ -157,24 +160,27 @@ what would be a lie about authority**.
   gives a root shell: `uid=0`, `chown` works, `apt-get install` and `useradd`
   work, and the parent stays the real user.  A service user (euid 33) reads
   `stat` as root-owned, cannot chown, and has no capabilities.
+- A create is marked with the creator's ids: `openat`+`O_CREAT`, `mkdirat` and
+  `mknodat` in the tracer, `mkdirat`/`mknodat` in the shim's lane; the marking
+  costs an exit stop per **new** file (Lua: 79 exit stops, wall unchanged).
 - `chown` is stored for any uid:gid; the cache keeps `stat` cheap; a hard-link
   copy carries the owner.  Root's capabilities are a `/proc` view;
   `capget`/`PR_CAPBSET_READ` are not answered.
 - Check suite, coverage and fingerprint are clean with the root seed; the Lua
-  build is ~11.9 s / 846 stops (root) and ~11.7 s / 854 (real user).
+  build is ~11.8 s / 846 entry + 79 exit stops (root) and ~11.9 s / 854 + 79
+  (real user).
 
 ## Plan / open questions
 
-1. **Creation marking**: mark a file at creation with its creator's identity
-   (root 0:0, service uid, or the real uid) so ownership no longer depends on
-   the reader's euid; the reverse asymmetry (a file created without a chown)
-   goes away.  Needs a pre-stat and an exit stop on create, or a shim path.
-2. **Virtual service users and groups**: `getgroups`/`initgroups` for a service
+1. **Virtual service users and groups**: `getgroups`/`initgroups` for a service
    user (today it falls back to the kernel's groups), file gid, useradd UX that
    says "virtual user".
-3. **Real `sudo` and `su`**: the gate lets the real binary start with euid 0;
+2. **Real `sudo` and `su`**: the gate lets the real binary start with euid 0;
    its PAM/sudoers/setgroups surface remains to be tested.  A wrapper is the
    fallback.
+3. **Legacy and symlink creations**: files that predate marking (and symlinks,
+   which take no user xattr) still read differently in the two worlds; a
+   one-time adoption pass or a side store would close it.
 4. **Capabilities**: keep the root view in `status` but refuse `capget`, or
    answer a Debian default?  `refuse` is the current rule.
 5. **Binds from the host**: a real user on a bind sees the host's owner and

@@ -1124,6 +1124,30 @@ static int get_ids(unsigned v[6])
 	return 1;
 }
 
+/* A file the shim creates carries its creator's owner, so the fake world and
+ * the real user read the same owner without a legacy-style default. */
+static void mark_created(const char *host)
+{
+	unsigned v[6], x;
+	char b[32], d[12];
+	int n = 0, k = 0;
+
+	if (!get_ids(v))
+		return;
+	x = v[1];                                        /* euid */
+	do d[k++] = (char) ('0' + x % 10); while ((x /= 10));
+	while (k)
+		b[n++] = d[--k];
+	b[n++] = ':';
+	x = v[4];                                        /* egid */
+	k = 0;
+	do d[k++] = (char) ('0' + x % 10); while ((x /= 10));
+	while (k)
+		b[n++] = d[--k];
+	b[n] = '\0';
+	lane_call(SYS_setxattr, (long) host, (long) OWN_ATTR, (long) b, n, 0L);
+}
+
 static void drop_ids(void)
 {
 	__atomic_add_fetch(&ids_epoch, 1, __ATOMIC_ACQ_REL);
@@ -1386,6 +1410,8 @@ static int lane_hook(unsigned long *r)
 		e = lane_at((int) r[0], path, 1, host, sizeof host, &at);
 		if (e <= 0) { done = e < 0; res = e; break; }
 		res = lane_rawc(nr, at, host, r[2], r[3], 0L);
+		if (res == 0)
+			mark_created(host);
 		break;
 	case SYS_fchmodat: case SYS_utimensat:
 		if (path && path[0] == '/' && policy_row_ro(path)) { done = 1; res = -30; break; }

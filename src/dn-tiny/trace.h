@@ -27,6 +27,8 @@ void trace_enter(struct tracee *t, const struct row *rw);
 void trace_denied(struct tracee *t);
 /* at syscall exit, for a row with a result to rewrite; may change x0 and the buffer */
 void trace_exit(struct tracee *t, const struct row *rw);
+/* at the exit stop of a create (mark_exit): store the creator's owner on the new file */
+void trace_mark_owner(struct tracee *t);
 
 /* /proc/<pid>/exe: the program a process runs, as the program should see it.
  * The exec gate notes it at entry, the exec event commits it, a fork copies it. */
