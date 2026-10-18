@@ -17,6 +17,10 @@ source, one law, the same rows.
   It has more than an app (execute from `/data/local/tmp`, `/sdcard`, `logcat`,
   some system services) and less than root (no `chown`/`mount`/`setuid`, no
   other apps' data).
+- **No `targetSdk`.**  That is an app concept: the app-only behaviours (scoped
+  storage, W^X from app data, background rules, the per-SDK seccomp policy) do
+  not apply to the shell.  The Android version, the OEM's SELinux policy and the
+  kernel's config/version do.
 - **The app's seccomp answers are not built.**  A runtime built with
   `--host adb` compiles out `policy_deny`, `answer_sigsys`, the substitutes and
   the `deny_count` stats.  The rows, the filter, the law, identity and the

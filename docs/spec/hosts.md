@@ -19,6 +19,12 @@ app filter, so it uses the **adb runtime** (`--host adb`), which compiles those
 answers out.  The rows, the filter, the law, identity and the shim are the same
 in all three.
 
+**`targetSdk` is an app concept.**  The app hosts inherit their app's
+`targetSdk` (scoped storage, W^X from app data, background rules, the per-SDK
+app seccomp policy); the ADB host has none -- there is no manifest and the shell
+runs with `Seccomp: 0`.  What remains there is the Android version, the OEM's
+SELinux policy, and the kernel's config/version.
+
 ## Termux
 
 The shortest path, and the one the quick start uses: build the runtime and the
