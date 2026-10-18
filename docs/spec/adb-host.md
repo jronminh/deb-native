@@ -100,6 +100,7 @@ interactive path uses `adb shell -t`, so a real terminal gets a PTY.
 | `apt-get update` | 0 |
 | `apt-get install hello` + run | `Hello, world!` (root seed) |
 | `/sdcard` | the bind reads `DCIM`, `Android`, ... |
+| `bind("/tmp/x.sock")` | an abstract name (`shell` may not create a `sock_file`); `getsockname` shows the path |
 | `dn-tiny` summary (`id`) | `enter=136 exit=0 sigsys=0`, 0.2 s |
 
 So the **seccomp gate is gone**, while the kernel's own gates stay: version,
@@ -114,6 +115,11 @@ from the app except the app lifecycle and data directory.
 - No boot autostart (no root/init); the PC must connect and start it, or a
   `setsid`/`nohup` child can outlive a session (bound to the shell's limits).
 - `/data/local/tmp` survives reboots but can be wiped by an OTA; no encryption.
+- **A pathname socket has no file.**  The guest path becomes an abstract name
+  (`\0dn-<hash>`, from the root and the resolved host path), because `shell` has
+  no `sock_file create` on `shell_data_file`.  `ssh-agent`/`ssh-add` work, but
+  `stat`, `chmod` and `unlink` on the socket path answer `ENOENT` (there is no
+  file); a program that needs the file's mode, or its cleanup, is still open.
 - `CONFIG_USER_NS` is off kernel-wide; namespaces, overlayfs, FUSE and mount
   stay refused.  Containers are a VM, not this host.
 - The **self-hosted** variant (`adbwire`/`dsh` from

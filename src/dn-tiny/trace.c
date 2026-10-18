@@ -199,6 +199,137 @@ static void rewrite_path(struct tracee *t, int arg)
 	trace_n_rewritten++;
 }
 
+#ifdef DN_HOST_ADB
+/* The ADB host's `shell` domain has no `sock_file create` on shell_data_file,
+ * where the tree lives, so a pathname socket cannot be made there (bind answers
+ * EACCES).  An abstract name needs no file and the same domain may use it.  The
+ * name is "\0dn-" and 64 bits of a hash over the prefix root and the resolved
+ * host path, so bind and connect agree across sessions; the table keeps the
+ * guest path an answer (getsockname, getpeername, accept) must show. */
+#define SOCK_ABS_MAX   108
+#define SOCK_ABS_SLOTS 128
+struct sock_abs {
+	u64 key;
+	char guest[SOCK_ABS_MAX];
+};
+static struct sock_abs sock_abs[SOCK_ABS_SLOTS];
+static unsigned sock_abs_next;
+static u64 sock_abs_salt;
+static int sock_abs_ready;
+
+static u64 sock_fnv(const char *s)
+{
+	u64 h = 1469598103934665603ULL;
+
+	while (*s) {
+		h ^= (unsigned char) *s++;
+		h *= 1099511628211ULL;
+	}
+	return h;
+}
+
+static u64 sock_key(const char *host)
+{
+	if (!sock_abs_ready) {
+		const char *r = policy_root();
+
+		sock_abs_salt = r ? sock_fnv(r) : 0;
+		if (!sock_abs_salt)
+			sock_abs_salt = 0x9e3779b97f4a7c15ULL;
+		sock_abs_ready = 1;
+	}
+	return sock_fnv(host) ^ sock_abs_salt;
+}
+
+static void sock_remember(u64 key, const char *guest)
+{
+	size_t n = strlen(guest);
+	unsigned i;
+
+	if (n >= SOCK_ABS_MAX)
+		return;
+	for (i = 0; i < SOCK_ABS_SLOTS; i++)
+		if (sock_abs[i].key == key)
+			break;
+	if (i == SOCK_ABS_SLOTS)
+		i = sock_abs_next++ % SOCK_ABS_SLOTS;
+	sock_abs[i].key = key;
+	memcpy(sock_abs[i].guest, guest, n + 1);
+}
+
+static const char *sock_recall(u64 key)
+{
+	unsigned i;
+
+	if (!key)
+		return 0;
+	for (i = 0; i < SOCK_ABS_SLOTS; i++)
+		if (sock_abs[i].key == key)
+			return sock_abs[i].guest;
+	return 0;
+}
+
+/* A pathname bind would first create the socket in its parent directory: if the
+ * real uid cannot write there, the abstract name would lie. */
+static int sock_parent_ok(const char *host, int mode)
+{
+	char dir[420];
+	size_t n = strlen(host);
+	int i;
+
+	if (n + 1 > sizeof dir)
+		return 0;
+	memcpy(dir, host, n + 1);
+	for (i = (int) n - 1; i > 0 && dir[i] != '/'; i--)
+		;
+	if (i <= 0)
+		return 0;
+	dir[i] = '\0';
+	return sc(48, -100, (i64) dir, mode, 0, 0, 0) == 0;
+}
+
+/* The abstract sun_path (leading NUL, then "dn-" and 16 hex digits): 20 bytes. */
+static int sock_abs_name(const char *host, const char *guest, char *path)
+{
+	static const char hex[] = "0123456789abcdef";
+	u64 key = sock_key(host);
+	int i;
+
+	path[0] = '\0';
+	path[1] = 'd';
+	path[2] = 'n';
+	path[3] = '-';
+	for (i = 0; i < 16; i++)
+		path[4 + i] = hex[(key >> (60 - 4 * i)) & 15];
+	path[20] = '\0';
+	sock_remember(key, guest);
+	return 20;
+}
+
+static int sock_abs_key(const char *p, u64 *key)
+{
+	u64 k = 0;
+	int i;
+
+	if (p[0] != '\0' || p[1] != 'd' || p[2] != 'n' || p[3] != '-')
+		return 0;
+	for (i = 0; i < 16; i++) {
+		char c = p[4 + i];
+		unsigned v;
+
+		if (c >= '0' && c <= '9')
+			v = (unsigned) (c - '0');
+		else if (c >= 'a' && c <= 'f')
+			v = (unsigned) (c - 'a' + 10);
+		else
+			return 0;
+		k = (k << 4) | v;
+	}
+	*key = k;
+	return 1;
+}
+#endif
+
 /* The path in an AF_UNIX sockaddr_un, mapped like any other path: guest->host on
  * the way in, host->guest on the answer (`out`).  The sockaddr register is
  * rw->path_arg; rw->path_arg2 is the length register (a value for bind/connect/
@@ -227,14 +358,40 @@ static void sock_map(struct tracee *t, const struct row *rw, int out)
 	if (sa.fam != 1)                               /* AF_UNIX */
 		return;
 	sa.path[sizeof sa.path - 1] = '\0';
-	if (sa.path[0] == '\0')                        /* abstract or empty: no path */
-		return;
 	if (!out) {
 		char host[420];
 		unsigned nl;
 
 		if (sa.path[0] != '/' || policy_path_nf(sa.path, host, sizeof host, 0) <= 0)
 			return;                        /* already a host path */
+		if (rw->nr == 200 && policy_row_ro(sa.path)) {   /* bind: a write to a `ro` row */
+			mon_skip(t, -30);
+			return;
+		}
+#ifdef DN_HOST_ADB
+		{
+			const char *root = policy_root();
+			size_t rl = policy_root_len();
+
+			/* Only the tree's own paths: a guest path that reaches a bind's
+			 * host directory keeps a real pathname (its host may allow one). */
+			if (root && rl && strncmp(host, root, rl) == 0 &&
+			    (host[rl] == '/' || host[rl] == '\0') &&
+			    sock_parent_ok(host, rw->nr == 200 ? 3 : 1)) {   /* bind: W|X, else X */
+				char ab[SOCK_ABS_MAX];
+
+				nl = (unsigned) sock_abs_name(host, sa.path, ab);
+				if (mon_write(t, nb + 2, ab, nl) != (ssize_t) nl)
+					return;
+				nl += 2;
+				if (mlp)
+					mon_write(t, msg + 8, &nl, 4);
+				else
+					mon_set_arg(t, rw->path_arg2, nl);
+				return;
+			}
+		}
+#endif
 		if (strlen(host) + 1 > sizeof sa.path)
 			return;                        /* too long for sun_path */
 		if (mon_write(t, nb + 2, host, strlen(host) + 1) != (ssize_t) strlen(host) + 1)
@@ -245,19 +402,41 @@ static void sock_map(struct tracee *t, const struct row *rw, int out)
 		else
 			mon_set_arg(t, rw->path_arg2, nl);
 	} else {
-		char guest[120];
-		int m = policy_unpath(sa.path, guest, sizeof guest);
-		unsigned nl;
+#ifdef DN_HOST_ADB
+		if (sa.path[0] == '\0') {              /* our abstract name: show the guest path */
+			u64 key;
+			const char *g;
+			unsigned nl;
 
-		if (m == 0)                            /* not under a row: leave it */
+			if (!sock_abs_key(sa.path, &key) || (g = sock_recall(key)) == 0)
+				return;
+			if (strlen(g) + 1 > sizeof sa.path)
+				return;
+			if (mon_write(t, nb + 2, g, strlen(g) + 1) != (ssize_t) strlen(g) + 1)
+				return;
+			nl = 2 + (unsigned) strlen(g) + 1;
+			if (mlp)
+				mon_write(t, msg + 8, &nl, 4);
+			else
+				mon_write(t, lp, &nl, 4);
 			return;
-		if (mon_write(t, nb + 2, guest, strlen(guest) + 1) != (ssize_t) strlen(guest) + 1)
-			return;
-		nl = 2 + (unsigned) strlen(guest) + 1;
-		if (mlp)
-			mon_write(t, msg + 8, &nl, 4);
-		else
-			mon_write(t, lp, &nl, 4);      /* the length is a pointer on the way out */
+		}
+#endif
+		{
+			char guest[120];
+			int m = policy_unpath(sa.path, guest, sizeof guest);
+			unsigned nl;
+
+			if (m == 0)                    /* not under a row: leave it */
+				return;
+			if (mon_write(t, nb + 2, guest, strlen(guest) + 1) != (ssize_t) strlen(guest) + 1)
+				return;
+			nl = 2 + (unsigned) strlen(guest) + 1;
+			if (mlp)
+				mon_write(t, msg + 8, &nl, 4);
+			else
+				mon_write(t, lp, &nl, 4);  /* the length is a pointer on the way out */
+		}
 	}
 }
 

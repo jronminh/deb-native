@@ -144,7 +144,10 @@ the net for everything.
 - An AF_UNIX socket path is a path: `bind`, `connect`, `sendto` and `sendmsg`
   carry it in a `sockaddr_un`, and `getsockname`, `getpeername`, `accept`,
   `recvfrom` and `recvmsg` fill one; the tracer maps `sun_path` guest<->host at
-  entry and exit (the length with it).
+  entry and exit (the length with it).  On the ADB host the `shell` domain may
+  not create a `sock_file` in the tree, so the guest path becomes an abstract
+  name (`\0dn-<hash>` of the root and the host path) and the answer is mapped
+  back; the path has no file (`stat`/`unlink` answer `ENOENT`).
 - The law lives once, in `policy.c`, and both engines read it: the tracer links
   it as it is, the shim builds it `-DDN_LIBC` (the types, the strings and
   `pol_readlink` from libc and the lane), the loader hook builds it `-DDN_FREE`

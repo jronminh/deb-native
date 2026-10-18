@@ -23,8 +23,10 @@ after its row is one number to compare between builds.
 vfork child that `chdir`s and `setuid`s), `xm` (`execmod`/`execmem`, the two
 checks Android 16 must pass before the shim or the loader hook ships),
 `syscalls` (the Android 16 denials that have no row: each must return `ENOSYS`,
-not kill the process), `owner` (`chown` kept in `user.dn.owner` and answered by
-`stat`, with `-R`, reset to 0:0, and a hard-link copy), and `t.sh` (`git init`
+not kill the process), `sock` (an AF_UNIX pathname: `bind`, `getsockname`,
+`connect`, `accept`; on the ADB host the path is an abstract name and the
+answers still show the guest path), `owner` (`chown` kept in `user.dn.owner` and
+answered by `stat`, with `-R`, reset to 0:0, and a hard-link copy), and `t.sh` (`git init`
 and `apt-get clean`, the two calls the shim's opendir bug broke).  `xm` fails on
 a domain that refuses `mprotect` RX of libc's text; that is a finding, not a
 broken test.

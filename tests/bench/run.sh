@@ -6,7 +6,8 @@
 # bench  the regression set, the file-tree set, find, ls and (with LUA_DIR)
 #        the Lua build; each row is the wall and the tracer's entry/exit stops
 # check  fr.sh (ids, stat, setresuid, vfork/fork), mt (threads and vfork),
-#        xm (execmod/execmem), syscalls (a killed number with no row), owner
+#        xm (execmod/execmem), syscalls (a killed number with no row), sock
+#        (an AF_UNIX pathname: bind, getsockname, connect, accept), owner
 #        (chown kept in user.dn.owner), access (the virtual ids, not the
 #        kernel's), su (the setuid gate and a PAM session), and t.sh (git init
 #        and apt-get clean)
@@ -28,7 +29,7 @@ HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 KIT=$P/tmp/dn-bench
 mkdir -p "$KIT"
 cp "$HERE"/reg.sh "$HERE"/fr.sh "$HERE"/lua.sh "$HERE"/t.sh "$HERE"/exec200.sh "$HERE"/access.sh "$KIT"/ || exit 1
-cp "$HERE"/mt.c "$HERE"/xm.c "$HERE"/syscalls.c "$KIT"/ || exit 1
+cp "$HERE"/mt.c "$HERE"/xm.c "$HERE"/syscalls.c "$HERE"/sock.c "$KIT"/ || exit 1
 cp "$HERE"/owner.sh "$KIT"/ || exit 1
 cd "$P" || exit 1                        # the tracee's cwd is then the tree's /
 
@@ -83,6 +84,11 @@ check() {
 	*"survived 14 killed numbers"*) ;;
 	*) echo "   syscalls: FAIL"; fail=1 ;;
 	esac
+
+	echo "== sock (AF_UNIX pathname: bind, getsockname, connect, accept)"
+	o=$(quiet 'gcc -O2 -o /tmp/dn-bench/sock /tmp/dn-bench/sock.c && /tmp/dn-bench/sock') || fail=1
+	printf '%s\n' "$o"
+	case "$o" in *"sock: ok"*) ;; *) echo "   sock: FAIL"; fail=1 ;; esac
 
 	echo "== owner (chown kept in user.dn.owner, answered by stat)"
 	o=$(quiet 'sh /tmp/dn-bench/owner.sh') || fail=1
