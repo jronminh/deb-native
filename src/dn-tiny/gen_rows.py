@@ -22,7 +22,7 @@ out = sys.argv[1]
 #   none      caught only for the SELinux label
 # A path entry may also carry a result (statx, readlinkat, the xattr lists), an
 # effect (unlinkat, the link movers), or a fake (fchownat).
-# R_*: 1 cwd, 2 readlinkat, 3 stat buffer, 4 statx buffer, 5 xattr list.
+# R_*: 1 cwd, 2 readlinkat, 3 stat buffer, 4 statx buffer, 5 xattr list, 6 dirent.
 # F_*: 1 zero, 2 resids, 3 groups, 5 own ids, 6 remembered set*id.
 # E_*: 1 the link cache, 2 a cached cwd, 3 both.
 CATALOG = {
@@ -52,6 +52,7 @@ CATALOG = {
     51:  {"cls": "path", "arg": (0,)},              # chroot
     53:  {"cls": "path", "arg": (1,)},              # fchmodat
     54:  {"cls": "path", "arg": (1,), "fake": 1},   # fchownat
+    61:  {"cls": "result", "result": (6, 1), "caught": True},   # getdents64: /proc pids
     55:  {"cls": "identity", "fake": 1},            # fchown
     56:  {"cls": "path", "arg": (1,)},              # openat
     78:  {"cls": "path", "arg": (1,), "result": (2, -1)},   # readlinkat

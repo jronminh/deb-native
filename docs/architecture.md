@@ -142,6 +142,12 @@ the net for everything.
   under `var/lib/deb-native` (a memfd cannot cross the ptrace boundary), so the
   reads need no stop and the source shown is `deb-native`, never a host path;
   the type is `ext4` (`fuse` for `/sdcard`), so `df -T` reads like a Debian.
+- The `/proc` listing is filtered: `getdents64` on `/proc` keeps only the pids
+  the tracer knows (the tree's), so `ps`/`top` do not name Android's processes
+  or kernel threads.  A direct `/proc/<host pid>` path is still the kernel's.
+- `sched_getaffinity` answers the phone's 8 possible CPUs for self and the
+  tree's pids, and returns the kernel's cpumask size, so `nproc`, `taskset` and
+  Python agree instead of following CPU hotplug.
 - An AF_UNIX socket path is a path: `bind`, `connect`, `sendto` and `sendmsg`
   carry it in a `sockaddr_un`, and `getsockname`, `getpeername`, `accept`,
   `recvfrom` and `recvmsg` fill one; the tracer maps `sun_path` guest<->host at

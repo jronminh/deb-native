@@ -1812,15 +1812,19 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		pid_t q = (pid_t) t->r.regs[0];
 		unsigned i;
 
-		if (q != 0 && q != t->pid)
+		if (q != 0 && q != t->pid && pid_state_get(q, 0) == 0)
 			return;
+		if (n < 8) {                            /* the kernel's cpumask_size is 8 */
+			mon_skip(t, -22);
+			return;
+		}
 		if (n > sizeof m)
 			n = sizeof m;
 		memset(m, 0, n);
 		for (i = 0; i < 8 && i / 8 < n; i++)
 			m[i / 8] |= (unsigned char) (1u << (i % 8));
-		if (n && mon_write(t, t->r.regs[2], m, n) == (ssize_t) n)
-			mon_skip(t, 0);
+		if (mon_write(t, t->r.regs[2], m, n) == (ssize_t) n)
+			mon_skip(t, 8);
 		return;
 	}
 	if (rw->special == SP_SOCK_IN) {                /* an AF_UNIX path, in a sockaddr */
@@ -2671,6 +2675,70 @@ static void answer_at_entry(struct tracee *t, const struct row *rw)
 		trace_n_answered++;
 }
 
+/* /proc's getdents64: keep the entries whose numeric name is a traced pid, so
+ * ps/top do not list Android's processes or the kernel's threads.  The fd must
+ * be /proc itself; a per-pid subdirectory is left alone. */
+static void filter_proc(struct tracee *t)
+{
+	struct dn_dirent {
+		u64 ino;
+		i64 off;
+		unsigned short reclen;
+		unsigned char type;
+		char name[];
+	};
+	char link[64], path[256], buf[32768], out[32768];
+	long n = (long) t->r.regs[0];
+	long off = 0, w = 0;
+	int l;
+	ssize_t k;
+
+	if (n <= 0 || n > (long) sizeof buf)
+		return;
+	l = scpy(link, sizeof link, "/proc/");
+	l += uitoa(link + l, (unsigned) t->pid);
+	l += scpy(link + l, sizeof link - (size_t) l, "/fd/");
+	l += uitoa(link + l, (unsigned) t->entry_arg0);
+	if (l <= 0 || l >= (int) sizeof link)
+		return;
+	k = sys_readlink(link, path, sizeof path - 1);
+	if (k <= 0)
+		return;
+	path[k] = '\0';
+	if (strcmp(path, "/proc") != 0 && strcmp(path, "/proc/") != 0)
+		return;
+	if (mon_read(t, t->r.regs[1], buf, (size_t) n) != n)
+		return;
+	while (off < n) {
+		struct dn_dirent *d = (struct dn_dirent *) (buf + off);
+		unsigned long pid = 0;
+		int numeric = 1;
+		char *q;
+
+		if (d->reclen < 19 || (long) d->reclen > n - off)
+			break;
+		for (q = d->name; *q; q++) {
+			if (*q < '0' || *q > '9') {
+				numeric = 0;
+				break;
+			}
+			pid = pid * 10 + (unsigned long) (*q - '0');
+		}
+		if (numeric && pid > 0 && pid_state_get((pid_t) pid, 0) == 0) {
+			off += d->reclen;
+			continue;
+		}
+		memcpy(out + w, d, d->reclen);
+		w += d->reclen;
+		off += d->reclen;
+	}
+	if (w != n) {
+		mon_write(t, t->r.regs[1], out, (size_t) w);
+		t->r.regs[0] = (u64) w;
+		t->dirty = 1;
+	}
+}
+
 void trace_exit(struct tracee *t, const struct row *rw)
 {
 	if (rw->special == SP_SOCK_OUT) {               /* an AF_UNIX path the kernel wrote back */
@@ -2689,6 +2757,7 @@ void trace_exit(struct tracee *t, const struct row *rw)
 		fix_owner(t, t->r.regs[rw->result_arg], 20);
 		fix_link_size(t, t->r.regs[rw->result_arg], 28, 2, 40);
 		break;
+	case R_DIRENT: filter_proc(t); break;
 	default: break;
 	}
 }

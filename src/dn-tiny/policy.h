@@ -41,8 +41,9 @@ enum { E_LINKS = 1, E_CWD = 2 };
 
 /* R_CWD: getcwd's buffer.  R_LINK: readlinkat's buffer, and /proc/<pid>/exe.
  * R_STAT, R_STATX: the owner in a stat buffer.  R_XLIST: listxattr, whose answer
- * drops the SELinux label (a Debian without SELinux shows none). */
-enum { R_NONE = 0, R_CWD = 1, R_LINK = 2, R_STAT = 3, R_STATX = 4, R_XLIST = 5 };
+ * drops the SELinux label (a Debian without SELinux shows none).  R_DIRENT:
+ * getdents64, filtered to the traced pids for /proc. */
+enum { R_NONE = 0, R_CWD = 1, R_LINK = 2, R_STAT = 3, R_STATX = 4, R_XLIST = 5, R_DIRENT = 6 };
 
 /* SP_SOCK_IN / SP_SOCK_OUT: the call's path is inside a sockaddr_un (an AF_UNIX
  * socket), mapped guest<->host like any other path: `path_arg` is the register
