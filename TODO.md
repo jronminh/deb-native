@@ -264,6 +264,13 @@ are kept here and in `experiments.md`, and its branch has been dropped.
 
 ## Emulation
 
+- **The contract** ([`docs/spec/contract.md`](docs/spec/contract.md)): the
+  decision frame -- five interfaces, three deltas (version, config, policy),
+  three levels (promised, best-effort, refused).  T1 (base and dev) is in; T2
+  is the shared-memory broker (SysV shm/sem/msg, POSIX shm under `/dev/shm`) and
+  the netlink families a daemon asks for.  Keep the matrix and its tests in
+  step.
+
 Answer what Android refuses in place of the kernel, the same in the tracer and
 the shim:
 

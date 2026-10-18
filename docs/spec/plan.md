@@ -4,7 +4,8 @@ The roadmap the frame in [`mapped-kernel.md`](mapped-kernel.md) orders. Two
 phases: **first map the Android kernel into the tree** (every coordinate the
 program can observe, by one law), **then disguise it as a stock arm64 Linux
 kernel** (the values the kernel fixes and a mapping cannot carry). Status:
-proposal.
+proposal.  Which facilities are promised, at what fidelity and cost, is the
+decision frame in [`contract.md`](contract.md).
 
 ## Where we are (the honest baseline)
 
