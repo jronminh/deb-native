@@ -1,6 +1,6 @@
 # Identity: one real uid, virtual principals
 
-Status: **implemented** (2026-10-17).  How the paths and `/proc` view work is
+Status: **implemented** (2026-10-18).  How the paths and `/proc` view work is
 in [`../architecture.md`](../architecture.md), "Identity"; the syscall map is
 [`../reference/syscall-classes.md`](../reference/syscall-classes.md).
 
@@ -40,11 +40,10 @@ per process); fork and exec inherit it, and an identity change is the transition
 
 `get*id` always answers the state; in the real user case the state *is* the app
 uid, so the answer is the kernel's.  `stat` ownership is a property of the
-**file**, decoded for the process's world: a process whose euid is not the app's
-(the fake world -- root or a service user) reads the real ids as 0, while the
-real user reads them as they are; a stored `user.dn.owner` wins in both.  A
-`chown` is stored for any uid:gid, 0:0 included, so an explicit owner is the
-same in every case.
+**file**: a stored `user.dn.owner` wins in both worlds, and a file with no store
+reads `0:0` in **both** (the implicit root -- a legacy file, or a symlink, which
+takes no user xattr).  A `chown` is stored for any uid:gid, 0:0 included, so an
+explicit owner is the same in every case.
 
 ## The boot seed
 
@@ -72,19 +71,20 @@ the real uid or `/root` for seed root.
 ## The setuid bit is the gate
 
 The exec gate reads the final program's mode and stored owner (from
-`user.dn.owner`; without one, the real uid is the owner):
+`user.dn.owner`; **without a store it is root's**, as a package's file is):
 
-- `4755`, owner 0: the child gets **euid = suid = 0** (the real uid stays
-  what it was, as a real setuid binary does).
-- `4755`, owner the app uid: the child gets euid = suid = the app uid (a drop,
-  as a setuid binary owned by the user would do).
+- `4755`, stored owner 0: the child gets **euid = suid = 0** (the real uid
+  stays what it was, as a real setuid binary does).
+- `4755`, stored owner the app uid: the child gets euid = suid = the app uid (a
+  drop, as a setuid binary owned by the user would do).
 - anything else: the ids are inherited.
 
 The gate hands the new shim its six ids in `DN_IDS`
 (`ruid:euid:suid:rgid:egid:sgid`, a hint, so `get*id` and a stat's
 classification need no tracer stop); a `set*id` in the process invalidates it
-and the shim asks the tracer again.  `getgroups` is interposed too: root's fake
-view is one group 0, everyone else gets the kernel's through the lane.
+and the shim asks the tracer again.  `getgroups` answers the per-process
+virtual list: root starts with `{0}`, the real user with the app's groups,
+a service user with its own; `setgroups`/`initgroups` (root only) replace it.
 
 Real `sudo` behaviour needs one more step, and a sudo-like helper does it: after
 the gate gives it euid 0, it calls `setgid(0)` and `setuid(0)` (emulated, since

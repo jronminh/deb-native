@@ -4,7 +4,7 @@ A per-syscall map of what the runtime does, why, and where -- the basis for
 deciding what belongs in the fast path and what must stay in the net.  The
 counts come from [`device-census.md`](device-census.md) (S10e, Android 12,
 kernel 4.14, taken 2026-10-13/16; S23 FE, Android 16, kernel 5.10) and were
-checked against `src/dn-tiny/` on 2026-10-17.
+checked against `src/dn-tiny/` on 2026-10-18.
 
 ## The three axes
 
@@ -74,9 +74,12 @@ denials; they are allowed and emulated in process (see the allowed table).
 | 224 | `rseq` `clone3` `close_range` `openat2` `faccessat2` `fchmodat2` `epoll_pwait2` `io_uring_*` `futex_waitv` `landlock_*`, SysV/POSIX mqueue, `mbind*`, `kcmp`, `*_handle_at`, unassigned numbers | `refuse` (`ENOSYS`) | tracer SIGSYS | default |
 
 SysV IPC is here, not in the 32: Android's kernel configuration lacks it, so
-`run-as` says `ENOSYS` too.  When it is emulated (TODO, "Emulation"), it becomes
-a new transform (`emulate`, broker in the tracer + `shmat` in the shim) with
-`state` validation; it still will not be a fast path at first.
+`run-as` says `ENOSYS` too.  It is also **not in bionic's allowlist**, so the
+app's seccomp gate kills it as well -- a double block; see
+[`seccomp-gates.md`](seccomp-gates.md).  When it is emulated (TODO,
+"Emulation"), it becomes a new transform (`emulate`, broker in the tracer +
+`shmat` in the shim) with `state` validation; it still will not be a fast path
+at first.
 
 ## Android 16: 42 = 32 - `bpf` + 11
 

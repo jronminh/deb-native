@@ -3,21 +3,22 @@
 The roadmap the frame in [`mapped-kernel.md`](mapped-kernel.md) orders. Two
 phases: **first map the Android kernel into the tree** (every coordinate the
 program can observe, by one law), **then disguise it as a stock arm64 Linux
-kernel** (the values the kernel fixes and a mapping cannot carry). Status:
-proposal.  Which facilities are promised, at what fidelity and cost, is the
-decision frame in [`contract.md`](contract.md).
+kernel** (the values the kernel fixes and a mapping cannot carry).  Status:
+implemented through phase 1; phase 2 is in for the values that matter, and the
+[contract](contract.md) decides the residue (promised, best effort, refused).
 
-## Where we are (the honest baseline)
+## Where we are (2026-10-18)
 
-- The mapping is **partial**: path in/out only, and the loader's own opens and
-  the `LD_AUDIT` hook are still open (see below), but the law is one and the
-  loader goes through it.
+- The mapping is **complete for the readers in [`coverage.md`](coverage.md)**:
+  path in and out, fds, `AF_UNIX`, the mount view and the process view; the
+  loader's own opens go through the hook when the prefix ships it.
 - The speed engines (the filter's tree, the shared cookie block, the site
-  patches, the `LD_AUDIT` loader hook, the cancellable `svc`) work, but serve a
-  mapping that is not yet complete.
-- A few fakes exist (the id store, netlink, `execveat`) -- phase-2 residue, done
-  early because the kernel refused them.
-- Numbers to keep: the Lua build is 1662 stops; the bench is `scripts/bench.sh`.
+  patches, the loader hook, the cancellable `svc`) work; the Lua build is **864
+  entry + 79 exit stops** (root seed) and **872 + 79** (real user), about 13 s;
+  the bench is `tests/bench/run.sh`.
+- Phase 2 is in for the values that matter (identity, the SELinux label, the
+  `/proc` answers); the rest is the [contract](contract.md)'s business: it says
+  what is promised, best effort or refused, and why.
 
 ## Phase 0 -- the foundation (one law, no seam)
 
@@ -95,12 +96,13 @@ identity to be the tree's.
 - **The boundary:** what the program may and may not see (isolation is *not* the
   goal -- one prefix, one boot -- but the host frame must not leak).
 
-## Open questions (to settle before building)
+## Questions this plan settled
 
-- **Order within phase 1:** the checksum (answer readers first, then names)?
-- **How deep the disguise:** a full `uname`/`cpuinfo` fiction, or the minimum a
-  package probes? "Refuse, don't fake" sets the floor.
-- **Where the law's data lives:** the prefix tree (the old `RT` store) or the
-  app's files.
-- **Performance budget:** how many stops a complete mapping may cost before an
-  engine is required for a surface.
+- **Order within phase 1:** readers first, then names; the checklist is
+  [`coverage.md`](coverage.md).
+- **How deep the disguise:** the kernel and the hardware are shown as they are;
+  only what Android forces is answered, and the answer names the Debian release
+  ([`phase2.md`](phase2.md)) -- no invented `uname`.
+- **Where the law's data lives:** the prefix's `boot/binds` and `boot/env`.
+- **Performance budget:** the engines keep the Lua build near native (about
+  13 s); a new feature must not move the stop counts materially.

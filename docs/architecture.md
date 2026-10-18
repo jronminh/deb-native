@@ -4,7 +4,9 @@ How a Debian program runs in a prefix on Android, unprivileged: what is caught,
 where it is answered, and what it costs. Building and booting a prefix is in
 [`building.md`](building.md); the measurements are in
 [`performance.md`](performance.md). The model it serves -- the Android kernel
-mapped into the prefix -- is [`spec/mapped-kernel.md`](spec/mapped-kernel.md).
+mapped into the prefix -- is [`spec/mapped-kernel.md`](spec/mapped-kernel.md);
+what a program may rely on, at what fidelity and cost, is
+[`spec/contract.md`](spec/contract.md).
 
 ## Contents
 
@@ -165,8 +167,9 @@ the net for everything.
   passes (still needing an execute bit for `X_OK`), anyone else is judged by the
   stored owner and the virtual group list.  The shim answers the clear cases in
   process; the tracer answers the rest.
-- A **setuid-bit exec** is the gate: owner 0 gives euid 0, owner the real uid
-  gives euid the real uid; a sudo-like helper then calls `setgid(0)`/`setuid(0)`
+- A **setuid-bit exec** is the gate: a stored owner 0 gives euid 0, a stored
+  owner the real uid gives euid the real uid (no store is root's); a sudo-like
+  helper then calls `setgid(0)`/`setuid(0)`
   to make the command root.  The gate hands the shim its ids in `DN_IDS`.
 - Programs that expect root's kernel powers are answered, not granted: a
   fake-root write open temporarily adds the owner write bit (restored at the
@@ -255,7 +258,7 @@ runtime's.)
   allow (`/sys/fs/selinux`, parts of `/sys`), and `PPid`/`getppid()` name the
   tracer (a structural residue; `docs/spec/phase2.md`, "An accepted residue").
 - `ld.so`'s own opens (the program, the shim, the libraries) are removed by the
-  loader hook when a prefix ships it (`--audit`); without it they stop in the
+  loader hook when a prefix ships it (`--ldhook`); without it they stop in the
   tracer.
 
 ## The core and the variants

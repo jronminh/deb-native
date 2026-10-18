@@ -1,8 +1,9 @@
 # The contract: what the prefix promises a program
 
-Status: **proposal** (2026-10-18).  The frame for deciding which kernel
-facilities the prefix provides, at what fidelity and at what cost; some rows are
-implemented already, the rest are the order of work.  How the mapping works is
+Status: **current** (2026-10-18).  T1 is in and frozen; T2 is an open question.
+The frame for deciding which kernel facilities the prefix provides, at what
+fidelity and at what cost; some rows are implemented, and the rest stay best
+effort or refused until a named workload opens them.  How the mapping works is
 [`mapped-kernel.md`](mapped-kernel.md) and [`../architecture.md`](../architecture.md);
 the per-syscall mechanics are
 [`../reference/syscall-classes.md`](../reference/syscall-classes.md).
@@ -35,11 +36,33 @@ of them.  The strategy differs:
 | --- | --- | --- | --- |
 | **version** | the host kernel is older than the reference | `clone3` (5.3), `faccessat2` (5.8), `openat2` (5.6) on 4.14 | substitute the older call when one exists; else `ENOSYS` |
 | **config** | the kernel was built without the facility | SysV IPC (`CONFIG_SYSVIPC` off: no `/proc/sysvipc`), POSIX mqueues | only a broker in user space can provide it |
-| **policy** | Android's seccomp/SELinux removes it | the 32/42 denials, hidden `/proc`, SELinux xattr | answer, substitute, or refuse with a reason |
+| **policy** | the app sandbox's kernel side (SELinux, capabilities) denies a call the kernel has | `unshare`, raw sockets, parts of `/sys` | answer or refuse; enforcement cannot be restored |
 
 The config delta was checked on the S10e on 2026-10-18: `/proc/sysvipc`,
 `/proc/sys/kernel/shmmax`, `/proc/sys/fs/mqueue` and `/dev/shm` are absent, and
 `shmget`/`semget`/`msgget`/`mq_open` answer `ENOSYS` in the prefix.
+
+### A second gate: seccomp
+
+The three deltas describe the **kernel** gate.  A call also passes the app's
+**seccomp** filter, and the two gates are independent: bionic's policy is
+`SYSCALLS.TXT - blocklist + allowlist`, and a number outside it is killed with
+`SIGSYS` before the kernel sees it.  The tracer runs in the same app, under the
+same filter, so it **cannot re-issue a killed call**; it can answer it,
+substitute an allowed call, or implement the effect in user space.
+
+| seccomp | kernel | example | strategy |
+| --- | --- | --- | --- |
+| allowed | native | `read`, `mmap`, `unshare`* | pass (the kernel answers) |
+| allowed | version/config | `clone3` on 4.14, `fchmodat2` | substitute / `ENOSYS` |
+| killed | native | `setuid`, `accept`, `faccessat2` | fake or substitute an allowed call |
+| killed | version/config | SysV, `mq_*`, `io_uring`, keyrings | emulate in user space (broker) or refuse |
+
+\* `unshare`/`setns` are in `SYSCALLS.TXT` (seccomp allows them); what refuses
+them is SELinux/capabilities, not seccomp.
+
+The source check and the per-call findings are in
+[`../reference/seccomp-gates.md`](../reference/seccomp-gates.md).
 
 `uname` and `/proc/version` are **not** faked: the phone is a real Linux on real
 arm64, and the contract says so ([`phase2.md`](phase2.md)).  The reference
@@ -133,7 +156,7 @@ in [`syscall-classes.md`](../reference/syscall-classes.md).
 | `faccessat2`/`fchmodat2`/`openat2` (no resolve flags) | syscall | version/policy | substitute the older call (`openat2` with `RESOLVE_*` -> `ENOSYS`) | promised | `syscalls.c` |
 | `mmap`/`mremap`/`madvise`/`memfd` | syscall | native | pass | promised | toolchains |
 | `futex`/`epoll`/`eventfd`/`timerfd`/`signalfd` | syscall | native | pass | promised | `mt`, Lua |
-| `io_uring` | syscall | version + policy | refuse `ENOSYS` | refused | census |
+| `io_uring` | syscall | seccomp kill; version on 4.14, the kernel has it on 5.10 | refuse `ENOSYS` | refused | gates |
 | `clock_gettime`/timers | syscall | native | pass | promised | all |
 | `clock_settime`/`settimeofday`/`adjtimex` | syscall | policy (`EPERM` as non-root) | refuse `EPERM` | refused | census |
 | `uname`/`/proc/version`/`cpuinfo` | syscall / pseudo-file | native, real kernel | pass (no fiction) | promised | fingerprint |
@@ -159,9 +182,9 @@ in [`syscall-classes.md`](../reference/syscall-classes.md).
 | --- | --- | --- | --- | --- | --- |
 | pipes, `AF_UNIX` (path mapped), `AF_INET` | syscall | native | pass / map the `sun_path` | promised | `coverage`, tmux |
 | socket options, `SO_PEERCRED` | syscall | kernel's app ids | pass (the peer's ids are a residue) | best-effort | docs |
-| SysV `shm*`/`sem*`/`msg*` | syscall | config off (`CONFIG_SYSVIPC`; no `/proc/sysvipc`) | broker (planned: `memfd` + unix socket) | refused today | census, probe |
-| POSIX `mq_*` | syscall | config off (`CONFIG_POSIX_MQUEUE`) | broker or refuse | refused today | census, probe |
-| POSIX shm (`shm_open`) | libc over `/dev/shm` | no `/dev/shm` in the tree | provide a tmpfs (with the SysV broker) | refused today | probe |
+| SysV `shm*`/`sem*`/`msg*` | syscall | double-blocked: seccomp kill + `CONFIG_SYSVIPC` off | broker (open question; `memfd` + unix socket) | refused today | census, gates |
+| POSIX `mq_*` | syscall | double-blocked: seccomp kill + config off | broker or refuse | refused today | census, gates |
+| POSIX shm (`shm_open`) | libc over `/dev/shm` | no `/dev/shm` row in the tree | provide a tmpfs (with a shm broker) | refused today | probe |
 | netlink `route`/`kobject` | netlink | partly allowed | pass / refuse per family | best-effort | census |
 | netlink `audit` | netlink | policy | `EPROTONOSUPPORT` (libaudit tolerates) | promised | `xm`, sudo |
 | raw sockets, netfilter/`iptables` | syscall | no `CAP_NET_ADMIN` | refuse `EPERM` | refused | docs |
@@ -177,11 +200,11 @@ in [`syscall-classes.md`](../reference/syscall-classes.md).
 | SELinux label | xattr | present | answer absent | promised | coverage |
 | capabilities (`status` view) | pseudo-file | app's | view; `capget`/`PR_CAPBSET_READ` refused | view / refused | identity |
 | `prctl(PR_GET_NO_NEW_PRIVS)`, `PR_SET_DUMPABLE` | syscall | policy | answer (0) / ignore | promised | sudo |
-| namespaces (`unshare`, `setns`, clone flags) | syscall | no `CAP_SYS_ADMIN`, policy | refuse `EPERM`/`ENOSYS` | refused | docs |
+| namespaces (`unshare`, `setns`, clone flags) | syscall | seccomp allows; SELinux/capabilities deny | refuse `EPERM`/`ENOSYS` | refused | gates |
 | cgroups | pseudo-file | `/sys/fs/cgroup` hidden (`EACCES`); `/proc/<pid>/cgroup` answered as `0::/` | answer the process file; a cgroup tree is refused | view / refused | phase2, probe |
 | `init_module`/`delete_module`/`kexec`/`reboot` | syscall | policy | refuse `EPERM` | refused | census |
-| `bpf` | syscall | policy | refuse `EPERM` | refused | census |
-| keyrings (`add_key`, `request_key`, `keyctl`) | syscall | config/policy | `ENOSYS` | refused | census |
+| `bpf` | syscall | killed on Android 12; allowed on 16, the kernel says `EPERM` | refuse `EPERM` | refused | gates |
+| keyrings (`add_key`, `request_key`, `keyctl`) | syscall | seccomp kill + kernel `ENOSYS` | `ENOSYS` | refused | gates |
 | `perf_event_open` | syscall | allowed; the host's perf/SELinux policy says `EACCES` | pass (the host's answer) | best-effort | census, probe |
 | `/dev` nodes, `ioctl` | device | host's nodes via binds | pass through (the node's truth) | best-effort | GPU TODO |
 
@@ -190,11 +213,16 @@ in [`syscall-classes.md`](../reference/syscall-classes.md).
 The order of work, by the userland's demand, not by the syscall table:
 
 - **T1 -- base and dev**: the rows above marked *promised*; a Debian trixie
-  prefix with `apt`, `dpkg`, gcc, git, python, sudo/su/passwd.  **State: in.**
+  prefix with `apt`, `dpkg`, gcc, git, python, sudo/su/passwd.  **This is the
+  milestone; it is in.**  The feature set is frozen here: no new promised row
+  without a named workload and a test.
 - **T2 -- service**: a broker for SysV shm/sem/msg (PostgreSQL, X/Steam),
-  POSIX shm, pty/utmp, the netlink families a daemon asks for.  **Next.**
+  POSIX shm, pty/utmp, a netlink family.  **Open question, not planned**: the
+  survey puts it in the expensive quadrant (seccomp-killed + config off), and a
+  broker is a new stateful subsystem, not a row.  A named workload and a
+  time-boxed spike are the way in, not a general commitment.
 - **T3 -- desktop**: device passthrough (GPU, input, audio), Wayland/X over a
-  Windows/Host client.  **Later.**
+  Windows/Host client.  **Later, only with a target.**
 - **T4 -- isolation**: namespaces/cgroups enforcement, containers, modules.
   **Out of scope**; that is the machine boundary (a VM), not a prefix.
 
@@ -234,6 +262,7 @@ In the repository: [`mapped-kernel.md`](mapped-kernel.md),
 [`identity.md`](identity.md),
 [`../reference/syscall-classes.md`](../reference/syscall-classes.md),
 [`../reference/device-census.md`](../reference/device-census.md),
+[`../reference/seccomp-gates.md`](../reference/seccomp-gates.md),
 [`../reference/syscalls-by-kernel.md`](../reference/syscalls-by-kernel.md).
 
 Outside:
@@ -246,5 +275,10 @@ Outside:
 - namespaces and cgroups, the facilities the prefix refuses:
   <https://man7.org/linux/man-pages/man7/namespaces.7.html>,
   <https://man7.org/linux/man-pages/man7/cgroups.7.html>
-- the kernel's own user-space API docs:
-  <https://docs.kernel.org/>
+- the bionic seccomp sources: `libc/SYSCALLS.TXT`,
+  `SECCOMP_BLOCKLIST_APP.TXT`, `SECCOMP_ALLOWLIST_COMMON.TXT` (the
+  `android12-release` branch for the S10e, `main` for Android 16):
+  <https://android.googlesource.com/platform/bionic/>
+- the GKI kernel config fragments (`android-base.config`, which has
+  `# CONFIG_SYSVIPC is not set`): <https://android.googlesource.com/kernel/common/>
+- the kernel's own user-space API docs: <https://docs.kernel.org/>

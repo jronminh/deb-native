@@ -40,8 +40,16 @@ cache hits.
 
 ## In an app session
 
+**Current (2026-10-18, a test prefix in Termux, S10e):** the Lua build is 13.1 s
+(864 entry + 79 exit stops); `find /usr -type f` 0.13 s inside a running session
+(native Termux over the same tree: 0.08 s); the regression set 2.3 s; the
+file-tree set 0.45 s; `ls -lR /usr/share/doc` 0.48 s.  A fresh boot adds about
+0.1 s.  The table below is the 2026-10-14 app-session comparison, kept for the
+shape of the improvement; the absolute numbers moved with the identity work and
+with the phone's thermal state.
+
 The app's earlier runtime (dn-tiny without the shim, 2026-10-14) against the
-current one, in the same app session, interleaved:
+then-current one, in the same app session, interleaved:
 
 | workload | before | now |
 | --- | --- | --- |

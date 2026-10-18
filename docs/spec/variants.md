@@ -10,8 +10,8 @@ building and what each costs, and it records what of the core still names Debian
 - **Base**: `debian` (debootstrap) -- `busybox` (static) -- `bare` (one program
   and its closure).
 - **Set**: `minimal` -- `dev` -- `full` -- `server` -- `compute`.
-- **Options**: `--no-shim` -- `--ldhook` -- `--real-uid` -- a supervisor
-  (`runit` or `busybox`).
+- **Options**: `--no-shim` -- `--ldhook` -- the boot seed
+  (`DN_INITIAL=root`) -- a supervisor (proposed).
 
 ## The variants
 

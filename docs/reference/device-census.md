@@ -154,6 +154,9 @@ by `SIGSYS` with and without `GLIBC_TUNABLES=glibc.pthread.rseq=0`, and ran unde
 `dn-tiny` with `rseq` and `set_robust_list` answered once for each process. The
 stock files were not modified.
 
+The two gates behind each gap -- the app's seccomp filter and the kernel's own
+version/config -- are separated in [`seccomp-gates.md`](seccomp-gates.md).
+
 ## What it means for glibc programs
 
 - Every glibc process, static or dynamic, calls `rseq` and `set_robust_list` at

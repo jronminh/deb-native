@@ -125,6 +125,11 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   and minor, privileged (allowed, a guest path reaches the kernel): `pivot_root`,
   `quotactl`. `execveat` is done (a row through the exec gate; `fexecve` works).
   The SELinux xattr is read absent, the fd forms (`fgetxattr`/`flistxattr`) too.
+- **Two small refusals**: `acct` (89) and `__reboot` (142) are in bionic's app
+  blocklist, so the platform kills them; `policy_deny` has no case and answers
+  the default `ENOSYS`.  Answer `EPERM`, as a non-root would get (the census
+  skipped both because they change global state; see
+  [`seccomp-gates.md`](docs/reference/seccomp-gates.md)).
 - **The census against the policy** (the S10e half is done): the 32 calls the
   app's filter kills are accounted for in `docs/reference/device-census.md`
   (8 `FAKE`, `accept` -> `accept4`, 17 `EPERM`, 6 `ENOSYS`; the default answer
@@ -142,8 +147,8 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   [`docs/spec/identity.md`](docs/spec/identity.md)): one real principal (the
   app's uid) and virtual principals; the boot seeds the real uid by default
   (`DN_INITIAL=root` for a root session), and every syscall is classified by
-  the process's euid -- no mode switch.  The setuid-bit gate is in (euid 0 or
-  the real uid, owner from `user.dn.owner`), with the `DN_IDS` hint for the
+  the process's euid -- no mode switch.  The setuid-bit gate is in (a stored
+  owner of 0 or the real uid; no store is root's), with the `DN_IDS` hint for the
   shim; a create is marked with the creator's ids (`openat`+`O_CREAT`,
   `mkdirat`, `mknodat`); supplementary groups are a per-process virtual list
   (`{0}` for root, the app's groups for the real user, replaced by
@@ -160,9 +165,9 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 
 ## Speed
 
-- **Keep it small and fast as it grows**: the runtime is about 61 KB (`dn-tiny`)
-  and 77 KB (`dn-lane.so`), and a program in it feels native. Every feature to come
-  (binds, SysV, `/proc` files) must leave that so. `scripts/bench.sh` runs real
+- **Keep it small and fast as it grows**: the runtime is about 72 KB (`dn-tiny`)
+  and 77 KB (`dn-lane.so`), and a program in it feels native. Every feature that comes
+  (a new bind, IPC, a `/proc` file) must leave that so. `scripts/bench.sh` runs real
   workloads (a stat storm, links, a git workflow, Python, a tar round trip, a
   spawn loop); the lane test, the regression set and the Lua build's wall now
   live in `tests/bench/` (`run.sh` prints the rows of `docs/performance.md`,
@@ -265,11 +270,12 @@ are kept here and in `experiments.md`, and its branch has been dropped.
 ## Emulation
 
 - **The contract** ([`docs/spec/contract.md`](docs/spec/contract.md)): the
-  decision frame -- five interfaces, three deltas (version, config, policy),
-  three levels (promised, best-effort, refused).  T1 (base and dev) is in; T2
-  is the shared-memory broker (SysV shm/sem/msg, POSIX shm under `/dev/shm`) and
-  the netlink families a daemon asks for.  Keep the matrix and its tests in
-  step.
+  decision frame -- two gates (seccomp and the kernel), three levels (promised,
+  best-effort, refused).  T1 (base and dev) is the milestone and is in; the
+  feature set is frozen there.  T2 (the shared-memory broker: SysV shm/sem/msg,
+  POSIX shm) is an **open question**, not planned: it is the expensive quadrant
+  (seccomp-killed + config off), and a named workload plus a time-boxed spike is
+  the way in.  See [`docs/reference/seccomp-gates.md`](docs/reference/seccomp-gates.md).
 
 Answer what Android refuses in place of the kernel, the same in the tracer and
 the shim:
