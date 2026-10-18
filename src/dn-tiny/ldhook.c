@@ -18,12 +18,21 @@
  *
  * See docs/reference/syscall-patching.md and experiments.md, E5-E7. */
 #define _GNU_SOURCE
-#include <link.h>
+#include <elf.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include "policy.h"                     /* the law (u64/i64, policy_path_nf, ...) */
+
+/* Freestanding: do not take <link.h>.  Its aarch64 audit prototypes name
+ * La_aarch64_regs/La_aarch64_retval, so defining the same functions with the
+ * opaque pointers this ABI-only module wants is a conflict (gcc 14, glibc
+ * 2.41); the loader matches the symbols, not the C types.  aarch64 only. */
+#ifndef ElfW
+#define ElfW(type) Elf64_##type
+#endif
+struct link_map;                /* la_objopen's parameter: opaque here */
 
 #define COOKIE 0x9e1ab6c3d7f2a541UL
 #define TAIL   "/usr/lib/deb-native/dn-ldhook.so"
