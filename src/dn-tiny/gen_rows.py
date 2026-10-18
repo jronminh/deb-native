@@ -69,6 +69,7 @@ CATALOG = {
     152: {"cls": "identity", "fake": 6},            # setfsgid
     158: {"cls": "identity", "fake": 3},            # getgroups
     159: {"cls": "identity", "fake": 1},            # setgroups
+    167: {"cls": "none", "caught": True},           # prctl: PR_GET_NO_NEW_PRIVS answered 0
     174: {"cls": "identity", "fake": 5},            # getuid
     175: {"cls": "identity", "fake": 5},            # geteuid
     176: {"cls": "identity", "fake": 5},            # getgid

@@ -29,6 +29,8 @@ void trace_denied(struct tracee *t);
 void trace_exit(struct tracee *t, const struct row *rw);
 /* at the exit stop of a create (mark_exit): store the creator's owner on the new file */
 void trace_mark_owner(struct tracee *t);
+/* at the exit stop of a fake-root write open (dac_exit): put the mode back */
+void trace_dac_restore(struct tracee *t);
 
 /* /proc/<pid>/exe: the program a process runs, as the program should see it.
  * The exec gate notes it at entry, the exec event commits it, a fork copies it. */

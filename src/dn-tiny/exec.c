@@ -151,7 +151,7 @@ static int setuid_identity(struct tracee *t, const char *prog)
 	if (!(mode & 04000))
 		return -1;
 	if (!trace_stored_owner(host, &u, &g))
-		u = policy_real_uid();
+		u = 0;                           /* an unmarked setuid file is a package's: root */
 	if (u == 0) {
 		trace_euid_next(t->pid, 0);
 		return 0;
@@ -211,15 +211,17 @@ static int put_dec(char *b, int k, unsigned v)
 
 static void inject_ids(struct tracee *t, const unsigned id[6], int reg)
 {
-	char b[64];
-	int n, i, m = 0, k = 0;
-	u64 sp, arr;
+	char b[64], u[32], g[32];
+	int n, i, m = 0, k = 0, ku = 0, kg = 0;
+	u64 sp, spu, spg, arr;
 
 	n = read_env(t, t->r.regs[reg]);
 	if (n < 0)
 		return;
 	for (i = 0; i < n; i++)
-		if (!env_is(t, env_old[i], "DN_IDS=", 7))
+		if (!env_is(t, env_old[i], "DN_IDS=", 7) &&
+		    !env_is(t, env_old[i], "DN_REAL_UID=", 12) &&
+		    !env_is(t, env_old[i], "DN_REAL_GID=", 12))
 			env_new[m++] = env_old[i];
 	memcpy(b, "DN_IDS=", 7);
 	k = 7;
@@ -230,9 +232,19 @@ static void inject_ids(struct tracee *t, const unsigned id[6], int reg)
 	}
 	b[k] = '\0';
 	sp = mon_scratch(t, b, (size_t) k + 1);
-	if (sp == 0)
+	memcpy(u, "DN_REAL_UID=", 12);
+	ku = put_dec(u, 12, policy_real_uid());
+	u[ku] = '\0';
+	spu = mon_scratch(t, u, (size_t) ku + 1);
+	memcpy(g, "DN_REAL_GID=", 12);
+	kg = put_dec(g, 12, policy_real_gid());
+	g[kg] = '\0';
+	spg = mon_scratch(t, g, (size_t) kg + 1);
+	if (sp == 0 || spu == 0 || spg == 0)
 		return;
 	env_new[m++] = sp;
+	env_new[m++] = spu;
+	env_new[m++] = spg;
 	env_new[m] = 0;
 	arr = mon_scratch(t, env_new, (size_t) (m + 1) * 8);
 	if (arr != 0)

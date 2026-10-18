@@ -15,6 +15,7 @@ static void own_apply(char *buf, unsigned off, const char *host, int nofollow,
 		      u64 dev, u64 ino, i64 sec, i64 nsec);
 static void store_owner(struct tracee *t);
 static void mark_if_new(struct tracee *t);
+static void dac_fix(struct tracee *t);
 
 #define EXE_LEN   128
 static char exe_now[PID_SLOTS][EXE_LEN];          /* by pid, the program each process runs */
@@ -876,6 +877,11 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 			rn += 7;
 			memcpy(w + rn, s, strlen(s));
 			rn += strlen(s);
+		} else if (strncmp(p, "NoNewPrivs:", 11) == 0) {
+			const char *s = "NoNewPrivs:\t0\n";   /* Android sets it; the gate already made root */
+
+			if (rn + strlen(s) >= sizeof buf) break;
+			memcpy(w + rn, s, strlen(s)); rn += strlen(s);
 		} else if (strncmp(p, "Seccomp:", 8) == 0 || strncmp(p, "Seccomp_filters:", 16) == 0) {
 			;
 		} else {
@@ -1332,6 +1338,14 @@ void trace_enter(struct tracee *t, const struct row *rw)
 			}
 		}
 	}
+	if (rw->nr == 167) {                             /* prctl: keep the tracer's access */
+		if ((int) t->r.regs[0] == 39 ||         /* PR_GET_NO_NEW_PRIVS: Android set it */
+		    (int) t->r.regs[0] == 4) {          /* PR_SET_DUMPABLE: keep /proc/<pid>/mem usable */
+			mon_skip(t, 0);
+			return;
+		}
+		return;                                  /* every other prctl runs as it is */
+	}
 	if (rw->nr == 54 || rw->nr == 55) {              /* chown: kept in user.dn.owner */
 		store_owner(t);
 		return;
@@ -1375,6 +1389,8 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		rewrite_path(t, rw->path_arg);
 	if (rw->path_arg2 >= 0)
 		rewrite_path(t, rw->path_arg2);
+	if (rw->nr == 56)
+		dac_fix(t);                     /* a fake-root write: owner-write, restored at exit */
 	if ((rw->nr == 56 && (t->r.regs[2] & 0x40) && !(t->r.regs[2] & 0x400000)) ||
 	    rw->nr == 34 || rw->nr == 33)
 		mark_if_new(t);                 /* a create: stop at exit and mark it */
@@ -1969,6 +1985,57 @@ static int answer_stat(struct tracee *t, const struct row *rw)
 	}
 	mon_skip(t, mon_write(t, t->r.regs[rw->result_arg], st, sizeof st) == (ssize_t) sizeof st ? 0 : -14);
 	return 1;
+}
+
+/* The fake root has no CAP_DAC_OVERRIDE, so writing a file whose owner bits lack
+ * write would fail where root succeeds (dpkg's 0440 .dpkg-new is the usual
+ * case).  Add the owner write bit for the open, and put the mode back at the
+ * exit stop: the fd keeps the access it was opened with.  Only write opens;
+ * reads that root alone could do are rare. */
+static void dac_fix(struct tracee *t)
+{
+	char host[300];
+	u64 st[18];
+	ssize_t k;
+	unsigned flags = (unsigned) t->r.regs[2], mode, need = 0200;
+	int nofollow = (flags & 0x8000) != 0;
+
+	if (ids_of(t->pid)->eu != 0)               /* only the fake root */
+		return;
+	if ((flags & 3) == 0 && !(flags & 0x200))   /* O_RDONLY without O_TRUNC */
+		return;
+	k = mon_read_str(t, t->r.regs[1], host, sizeof host - 1);
+	if (k <= 0 || host[0] != '/')
+		return;
+	host[k] = '\0';
+	if (sys_fstatat(host, st, nofollow ? 0x100 : 0) != 0)
+		return;                          /* a create: the open may make it */
+	mode = *(unsigned *) ((char *) st + 16);
+	if ((mode & 0xf000) == 0xa000 && nofollow)
+		return;                          /* O_NOFOLLOW on a symlink: ELOOP anyway */
+	if ((mode & 0xf000) == 0x4000)     /* a directory: write also needs execute */
+		need = 0300;
+	if ((mode & need) == need)
+		return;
+	if (sc(53, -100, (i64) host, (i64) (mode | need), 0, 0, 0) != 0)
+		return;                          /* fchmodat */
+	t->dac_exit = 1;
+	t->dac_mode = mode;
+}
+
+void trace_dac_restore(struct tracee *t)
+{
+	char host[300];
+	ssize_t k;
+
+	if (!t->dac_exit)
+		return;
+	t->dac_exit = 0;
+	k = mon_read_str(t, t->r.regs[1], host, sizeof host - 1);
+	if (k <= 0 || host[0] != '/')
+		return;
+	host[k] = '\0';
+	sc(53, -100, (i64) host, (i64) t->dac_mode, 0, 0, 0);
 }
 
 /* A create (openat with O_CREAT, mkdirat, mknodat): if the name does not exist,

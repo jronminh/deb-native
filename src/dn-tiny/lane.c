@@ -158,6 +158,14 @@ __attribute__((constructor)) static void lane_init(void)
 				hint_ok = 1;
 			}
 		}
+		{
+			const char *u = getenv("DN_REAL_UID"), *g = getenv("DN_REAL_GID");
+
+			if (u)
+				real_uid = (unsigned) strtoul(u, NULL, 10);
+			if (g)
+				real_gid = (unsigned) strtoul(g, NULL, 10);
+		}
 	}
 	memcpy(p, di.dli_fname, n - t);
 	strcpy(p + (n - t), "/var/lib/deb-native/dn-tiny.gen");

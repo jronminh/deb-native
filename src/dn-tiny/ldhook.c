@@ -38,7 +38,7 @@ static long sc6(long n, long a, long b, long c, long d, long e, long f) {
     register long x8 __asm__("x8") = n;
     register long x0 __asm__("x0") = a, x1 __asm__("x1") = b, x2 __asm__("x2") = c;
     register long x3 __asm__("x3") = d, x4 __asm__("x4") = e, x5 __asm__("x5") = f;
-    __asm__ volatile("svc 0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x5) : "memory");
+    __asm__ volatile("svc 0\n\tmov x5, xzr" : "+r"(x0), "+r"(x5) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4) : "memory");
     return x0;
 }
 /* the module's own openat, with the lane cookie, so it does not itself stop */
@@ -48,7 +48,7 @@ static long openat_c(const char *p) {
     register long x1 __asm__("x1") = (long) p;
     register long x2 __asm__("x2") = 0;
     register long x5 __asm__("x5") = (long) COOKIE;
-    __asm__ volatile("svc 0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x5) : "memory");
+    __asm__ volatile("svc 0\n\tmov x5, xzr" : "+r"(x0), "+r"(x5) : "r"(x8), "r"(x1), "r"(x2) : "memory");
     return x0;
 }
 
@@ -61,7 +61,7 @@ ssize_t pol_readlink(const char *host, char *buf, size_t n) {
     register long x2 __asm__("x2") = (long) buf;
     register long x3 __asm__("x3") = (long) n;
     register long x5 __asm__("x5") = (long) COOKIE;
-    __asm__ volatile("svc 0" : "+r"(x0) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x5) : "memory");
+    __asm__ volatile("svc 0\n\tmov x5, xzr" : "+r"(x0), "+r"(x5) : "r"(x8), "r"(x1), "r"(x2), "r"(x3) : "memory");
     return x0;
 }
 
@@ -187,6 +187,7 @@ static void emit_common(void) {
         emit(ldp(i, i + 1, i * 8));
     emit(ldrx(28, 224));
     emit(0xd4000001u);                          /* svc #0 */
+    emit(0xaa1f03e5u);                          /* mov x5, xzr: the cookie is for this svc only */
     emit(0xd65f03c0u);                          /* ret */
     if ((unsigned long) emit_p & 4)
         emit(0xd503201fu);                      /* nop: the literal is 8-aligned */
@@ -270,3 +271,45 @@ __attribute__((visibility("default"))) unsigned int la_version(unsigned int v) {
 }
 __attribute__((visibility("default"))) void la_preinit(uintptr_t *c) { (void) c; }
 __attribute__((visibility("default"))) unsigned int la_objopen(struct link_map *m, long l, uintptr_t *c) { (void) m; (void) l; (void) c; return 0; }
+/* glibc's audit interface requires the whole symbol set (version 2 too); the
+ * module binds nothing (la_objopen returns 0), so these are stubs. */
+__attribute__((visibility("default"))) char *la_objsearch(const char *name, uintptr_t *c, unsigned int flag)
+{
+	(void) c;
+	(void) flag;
+	return (char *) name;
+}
+__attribute__((visibility("default"))) void la_activity(uintptr_t *c, unsigned int flag)
+{
+	(void) c;
+	(void) flag;
+}
+__attribute__((visibility("default"))) unsigned int la_objclose(uintptr_t *c)
+{
+	(void) c;
+	return 0;
+}
+__attribute__((visibility("default"))) uintptr_t la_symbind64(ElfW(Sym) *sym, unsigned int ndx,
+		uintptr_t *refcook, uintptr_t *defcook, unsigned int *flags, const char *name)
+{
+	(void) ndx; (void) refcook; (void) defcook; (void) flags; (void) name;
+	return (uintptr_t) sym->st_value;
+}
+__attribute__((visibility("default"))) ElfW(Addr) la_aarch64_gnu_pltenter(ElfW(Sym) *sym,
+		unsigned int ndx, uintptr_t *refcook, uintptr_t *defcook, void *regs,
+		unsigned int *flags, const char *name, long *framesizep)
+{
+	(void) sym; (void) ndx; (void) refcook; (void) defcook; (void) regs;
+	(void) flags; (void) name;
+	if (framesizep)
+		*framesizep = 0;
+	return 0;
+}
+__attribute__((visibility("default"))) unsigned int la_aarch64_gnu_pltexit(ElfW(Sym) *sym,
+		unsigned int ndx, uintptr_t *refcook, uintptr_t *defcook, const void *inregs,
+		void *outregs, const char *name)
+{
+	(void) sym; (void) ndx; (void) refcook; (void) defcook; (void) inregs;
+	(void) outregs; (void) name;
+	return 0;
+}

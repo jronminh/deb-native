@@ -98,6 +98,28 @@ the tree and can replace the helper, clear its setuid bit, or read
 `/etc/shadow`.  It exists so the real Debian binaries and their documentation
 behave; it must never be presented as isolation.
 
+### What a root program expects beyond the ids
+
+Real programs check more than `geteuid()`; the runtime answers the checks, not
+the privilege:
+
+- **DAC override.**  The fake root cannot write a file whose owner bits lack
+  write (a 0440 `.dpkg-new` is the usual case).  A write open by euid 0 adds the
+  owner write bit for the open and restores the mode at the exit stop; the fd
+  keeps the access it was opened with.  A directory open adds write+execute.
+- **`NoNewPrivs`.**  Android sets it; sudo refuses to run with it.  It reads 0
+  in `/proc/<pid>/status` and `prctl(PR_GET_NO_NEW_PRIVS)` answers 0.
+- **`PR_SET_DUMPABLE`.**  sudo clears it, which would stop the tracer reading
+  its memory (`process_vm_readv` and `/proc/<pid>/mem`); the prctl is answered
+  without changing the flag, and `mon_read`/`mon_write` fall back to
+  `PTRACE_PEEKDATA`/`POKEDATA` when the vm calls are refused.
+- **An unmarked setuid file** (no `user.dn.owner`) is taken as a package's,
+  owned by root, so the gate gives euid 0; a setuid file with a stored owner
+  elevates to that owner.
+- **The audit hook** exports glibc's whole audit symbol set and clears the lane
+  cookie after each loader call; without that, a setuid program's `RUNPATH`
+  libraries (sudo's `libsudo_util`) were opened as host paths.
+
 ## Tree-root is not real root
 
 Because the app owns every file in the prefix, the app is the real *owner* of
@@ -172,18 +194,23 @@ what would be a lie about authority**.
 - `chown` is stored for any uid:gid; the cache keeps `stat` cheap; a hard-link
   copy carries the owner.  Root's capabilities are a `/proc` view;
   `capget`/`PR_CAPBSET_READ` are not answered.
+- **Real `sudo`** is installed in the test prefix with
+  `/etc/sudoers.d/user` (`user ALL=(ALL) NOPASSWD: ALL`); `sudo -n id` prints
+  `uid=0`, `sudo -n apt-get update`, `sudo -n useradd`/`userdel` work, and the
+  parent shell stays the real user.  It needed those answers above, not a
+  wrapper.
 - Check suite, coverage and fingerprint are clean with the root seed; the Lua
-  build is ~11.7 s / 848 entry + 79 exit stops (root) and ~11.9 s / 856 + 79
-  (real user).
+  build is 864 entry + 79 exit stops (root) and 872 + 79 (real user), wall
+  ~12-14 s (the prctl row is the +16 over the row set before the sudo work).
 
 ## Plan / open questions
 
 1. **Virtual service users**: the group list and file gid are in; still open:
    group-based access enforcement (the kernel uses the app gid), a `useradd` UX
    that says "virtual user", and the 32-entry cap.
-2. **Real `sudo` and `su`**: the gate lets the real binary start with euid 0;
-   its PAM/sudoers/setgroups surface remains to be tested.  A wrapper is the
-   fallback.
+2. **Real `su` and `passwd`**: `sudo` is tested (NOPASSWD, apt and useradd);
+   `su`/`passwd` still need their PAM/password surface tested.  The wrapper
+   remains the fallback.
 3. **Legacy and symlink creations**: files that predate marking (and symlinks,
    which take no user xattr) still read differently in the two worlds; a
    one-time adoption pass or a side store would close it.

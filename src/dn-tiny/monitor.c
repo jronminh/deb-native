@@ -52,6 +52,8 @@ static unsigned long n_enter, n_exit, n_event, n_sig, n_sigsys;
 static unsigned deny_count[512];                 /* by syscall number: killed by the platform, answered here */
 static unsigned char expect_exit[PID_SLOTS];      /* by pid */
 static unsigned char mark_exit[PID_SLOTS];        /* by pid: a create wants its exit stop */
+static unsigned char dac_exit[PID_SLOTS];         /* by pid: a fake-root mode to restore */
+static unsigned dac_mode[PID_SLOTS];
 #define EXP(p) expect_exit[PID_SLOT(p)]
 static unsigned short cur_nr[PID_SLOTS];             /* by pid: the syscall to be seen again at exit */
 static u64 saved0[PID_SLOTS];                     /* by pid: x0 as that syscall was entered */
@@ -458,6 +460,7 @@ static int loop(pid_t root)
 		t.dirty = 0;
 		t.skip = 0;
 		t.mark_exit = 0;
+		t.dac_exit = 0;
 		if (mode == M_FULL)
 			trace_stop(p);
 		{
@@ -483,6 +486,11 @@ static int loop(pid_t root)
 						msg = 0;            /* answered at entry: nothing to rewrite at exit */
 					}
 					mark_exit[PID_SLOT(p)] = (unsigned char) (t.mark_exit && !t.skip);
+					dac_exit[PID_SLOT(p)] = (unsigned char) (t.dac_exit && !t.skip);
+					if (dac_exit[PID_SLOT(p)]) {
+						dac_mode[PID_SLOT(p)] = t.dac_mode;
+						msg |= 1;              /* stop at exit to restore the mode */
+					}
 					if (mark_exit[PID_SLOT(p)])
 						msg |= 1;              /* stop at exit to mark the new file */
 				} else {
@@ -505,8 +513,13 @@ static int loop(pid_t root)
 					}
 					t.mark_exit = mark_exit[PID_SLOT(p)];
 					mark_exit[PID_SLOT(p)] = 0;
+					t.dac_exit = dac_exit[PID_SLOT(p)];
+					t.dac_mode = dac_mode[PID_SLOT(p)];
+					dac_exit[PID_SLOT(p)] = 0;
 					if (t.mark_exit)
 						trace_mark_owner(&t);
+					if (t.dac_exit)
+						trace_dac_restore(&t);
 					if (t.dirty)
 						set_regs(&t);
 				}

@@ -147,10 +147,14 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   shim; a create is marked with the creator's ids (`openat`+`O_CREAT`,
   `mkdirat`, `mknodat`); supplementary groups are a per-process virtual list
   (`{0}` for root, the app's groups for the real user, replaced by
-  `setgroups`/`initgroups`, 32 entries).  Still open: legacy/symlink creations
-  that predate marking, group-based access enforcement, a `useradd` UX that says
-  "virtual user", and testing the real `sudo`/`su`/`passwd` binaries.  Virtual
-  users are not Android users and are not isolation.
+  `setgroups`/`initgroups`, 32 entries).  The fake root's DAC override is
+  emulated (a write open adds owner-write, restored at exit), `NoNewPrivs`
+  reads 0, `PR_SET_DUMPABLE` is ignored, and an unmarked setuid file counts as
+  root's; with those, the real `sudo` works (NOPASSWD, `apt-get`, `useradd`,
+  parent stays the real user).  Still open: legacy/symlink creations that
+  predate marking, group-based access enforcement, a `useradd` UX that says
+  "virtual user", and testing the real `su`/`passwd` binaries.  Virtual users
+  are not Android users and are not isolation.
 
 ## Speed
 

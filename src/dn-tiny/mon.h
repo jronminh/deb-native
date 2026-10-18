@@ -16,6 +16,8 @@ struct tracee {
 	u64 scratch;                    /* the next free byte below the stack pointer, growing down */
 	int skip;                       /* do not run the syscall: its result is in x0 */
 	int mark_exit;                  /* this call may create a file: stop at exit and mark it */
+	int dac_exit;                   /* a temporary owner-write bit to restore at exit */
+	unsigned dac_mode;              /* the mode before the fake-root open */
 	u64 entry_arg0;                 /* x0 as the syscall was entered; at exit x0 holds the result */
 };
 
