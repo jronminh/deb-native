@@ -57,6 +57,8 @@ CATALOG = {
     78:  {"cls": "path", "arg": (1,), "result": (2, -1)},   # readlinkat
     79:  {"cls": "path", "arg": (1,), "result": (3, 2)},    # newfstatat
     88:  {"cls": "path", "arg": (1,)},              # utimensat
+    90:  {"cls": "none", "caught": True},           # capget: the virtual Cap* sets
+    91:  {"cls": "none", "caught": True},           # capset
     143: {"cls": "identity", "fake": 6},            # setregid
     144: {"cls": "identity", "fake": 6},            # setgid
     145: {"cls": "identity", "fake": 6},            # setreuid

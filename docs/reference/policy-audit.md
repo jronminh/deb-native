@@ -44,8 +44,9 @@ by taking the path the fd names (so `fexecve` works). Measured: the path form an
 - `pivot_root` (41) and `quotactl` (60): allowed, not caught. Measured, the
   kernel runs them with the guest path (`EPERM`, `ENOENT`). Both are privileged,
   so they fail anyway; the only effect is that a guest path reaches the kernel.
-- `capget` (90) is not faked: a program that probes capabilities sees the real
-  set (measured `eff=0`), not root's. To decide.
+- `capget` (90) and `capset` (91): answered from the same virtual sets as
+  `/proc/<pid>/status` (root full, the real user none); `PR_CAPBSET_READ`/`DROP`
+  too.
 
 ## Over-catch (rows that never run)
 
@@ -63,7 +64,8 @@ fake_result(...)`), so a call Android *kills* still gets its fake. That matters
 for the `set*id` family, which is killed: measured, `setuid(1000)` then `getuid()`
 returns 1000 (`F_SETID`), and `setresuid(1,2,3)` reads back 1,2,3. So those rows
 are live. The rest measured too: `getgroups` -> one group 0, `getresgid` ->
-0,0,0, `fchown(0,0,0)` -> 0. Complete; `capget` (not faked) is the one gap.
+0,0,0, `fchown(0,0,0)` -> 0. Complete; `capget`/`capset` and
+`PR_CAPBSET_READ`/`DROP` answer the virtual sets too.
 
 **The audit is complete** (PATH_ARG, FAKE, RESULT, EFFECT, deny); the outcome
 below is the summary.
@@ -120,8 +122,7 @@ the tracer share cache invalidation; the rest need the gate or the id store.
 
 - **One real bug found and fixed: `execveat`** (a row for 281 through the exec
 gate; the path form and `fexecve` now run).
-- Minor: `pivot_root`/`quotactl` (allowed, unmapped, privileged), `capget` (not
-  faked).
+- Minor: `pivot_root`/`quotactl` (allowed, unmapped, privileged).
 - Cleanup: the dead `chroot` row and `fchownat` `path_arg`.
 - Everything else checked and correct; the numbers are stable across kernels, so
   the rows are portable.

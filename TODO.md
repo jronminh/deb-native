@@ -316,8 +316,9 @@ the shim:
   `tools/linuxfs/preload/sysv.c` (GPL-3.0, as this repo) keeps shm, sem and msg
   as files under `/dev/shm`. Do it when a program needs it;
 - privileged ports (a bind translation, and `getsockname`/`accept` back);
-- capabilities: the `Cap*` sets in `/proc/<pid>/status` and `cap_last_cap` are
-  answered; `capget` and `PR_CAPBSET_READ` are not;
+- capabilities: the `Cap*` sets in `/proc/<pid>/status`, `cap_last_cap`,
+  `capget`/`capset` and `PR_CAPBSET_READ`/`PR_CAPBSET_DROP` answer one virtual
+  view;
 - a clear refusal (`EPERM` or `ENOSYS`, with the reason) for what cannot be
   faked: real isolation, TUN, anything an LSM sees.
 

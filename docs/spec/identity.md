@@ -201,8 +201,9 @@ what would be a lie about authority**.
   and `setuid`, `getgroups` is `[102]` and the created file is `100:102` in
   both worlds.  The list has no fixed cap (40 entries were tested).
 - `chown` is stored for any uid:gid; the cache keeps `stat` cheap; a hard-link
-  copy carries the owner.  Root's capabilities are a `/proc` view;
-  `capget`/`PR_CAPBSET_READ` are not answered.
+  copy carries the owner.  Root's capabilities are one view: the `Cap*` sets in
+  `/proc/<pid>/status`, `capget`/`capset`, and `PR_CAPBSET_READ`/`DROP` all
+  answer the same virtual sets.
 - Legacy files and symlinks read `0:0` in both worlds (no store), so the
   regression set's digest is now the same for the root seed and the real user;
   a new file or `chown` carries the creator's stored owner.
@@ -243,8 +244,8 @@ what would be a lie about authority**.
 3. **Legacy and symlink creations**: closed -- a file with no store reads
    `0:0` in both worlds.  A symlink's owner is not stored (no user xattr); it is
    cosmetic.
-4. **Capabilities**: keep the root view in `status` but refuse `capget`, or
-   answer a Debian default?  `refuse` is the current rule.
+4. **Capabilities**: the root view in `status`, `capget`/`capset` and
+   `PR_CAPBSET_READ`/`DROP` are one view (done).
 5. **Binds from the host**: a real user on a bind sees the host's owner and
    permissions (the kernel's truth); the fake world's mapping of the real uid
    to 0 may disagree with the host's ids there.

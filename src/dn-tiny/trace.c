@@ -513,6 +513,43 @@ static void sock_mark_owner(struct tracee *t, const char *host)
 	own_write(host, 0, id->eu, id->eg);
 }
 
+/* capget/capset: the same virtual Cap* sets /proc/<pid>/status shows.  Root's
+ * sets are full (the kernel's stay 0); everyone else has none.  The kernel's
+ * own answer would be the app's, not the tree's view. */
+static void answer_capget(struct tracee *t)
+{
+	struct { unsigned version; int pid; } h;
+	unsigned d[6];
+
+	if (mon_read(t, t->r.regs[0], &h, sizeof h) != sizeof h)
+		return;
+	if (h.version != 0x20080522)                     /* _LINUX_CAPABILITY_VERSION_3 */
+		return;
+	if (h.pid != 0 && h.pid != t->pid)
+		return;                                  /* another pid: the kernel's */
+	if (ids_of(t->pid)->eu == 0) {
+		unsigned full[6] = { 0xffffffff, 0xffffffff, 0, 0x1ff, 0x1ff, 0 };
+
+		memcpy(d, full, sizeof d);
+	} else {
+		memset(d, 0, sizeof d);
+	}
+	if (mon_write(t, t->r.regs[1], d, sizeof d) != sizeof d)
+		return;
+	mon_skip(t, 0);
+}
+
+static void answer_capset(struct tracee *t)
+{
+	struct { unsigned version; int pid; } h;
+
+	if (mon_read(t, t->r.regs[0], &h, sizeof h) != sizeof h)
+		return;
+	if (h.version != 0x20080522 || (h.pid != 0 && h.pid != t->pid))
+		return;
+	mon_skip(t, ids_of(t->pid)->eu == 0 ? 0 : -1);   /* root's sets are fixed; EPERM otherwise */
+}
+
 /* the setuid-bit gate's pending euid, applied on the exec event */
 static unsigned euid_next[PID_SLOTS];
 static unsigned char euid_has_next[PID_SLOTS];
@@ -1638,6 +1675,14 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		drop(rw->effect);
 		pending[PID_SLOT(t->pid)] |= (unsigned char) rw->effect;
 	}
+	if (rw->nr == 90) {                             /* capget: the virtual sets */
+		answer_capget(t);
+		return;
+	}
+	if (rw->nr == 91) {                             /* capset: fixed for root, EPERM */
+		answer_capset(t);
+		return;
+	}
 	if (rw->special == SP_SOCK_IN) {                /* an AF_UNIX path, in a sockaddr */
 		sock_map(t, rw, 0);
 		return;
@@ -1667,9 +1712,22 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		}
 	}
 	if (rw->nr == 167) {                             /* prctl: keep the tracer's access */
-		if ((int) t->r.regs[0] == 39 ||         /* PR_GET_NO_NEW_PRIVS: Android set it */
-		    (int) t->r.regs[0] == 4) {          /* PR_SET_DUMPABLE: keep /proc/<pid>/mem usable */
+		int op = (int) t->r.regs[0];
+
+		if (op == 39 ||                         /* PR_GET_NO_NEW_PRIVS: Android set it */
+		    op == 4) {                          /* PR_SET_DUMPABLE: keep /proc/<pid>/mem usable */
 			mon_skip(t, 0);
+			return;
+		}
+		if (op == 23) {                         /* PR_CAPBSET_READ */
+			int cap = (int) t->r.regs[1];
+
+			mon_skip(t, cap < 0 || cap > 40 ? -22 :
+				 ids_of(t->pid)->eu == 0 ? 1 : 0);
+			return;
+		}
+		if (op == 24) {                         /* PR_CAPBSET_DROP */
+			mon_skip(t, ids_of(t->pid)->eu == 0 ? 0 : -1);
 			return;
 		}
 		return;                                  /* every other prctl runs as it is */

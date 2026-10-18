@@ -198,7 +198,7 @@ in [`syscall-classes.md`](../reference/syscall-classes.md).
 | setuid-bit exec | syscall (exec gate) | native exec + gate | answer euid | promised | `su`, sudo |
 | `/proc/<pid>/status` (`Uid`, `Gid`, `Cap*`, `NoNewPrivs`, `Seccomp`, `TracerPid`) | pseudo-file | hidden/leaky | answer | promised | coverage |
 | SELinux label | xattr | present | answer absent | promised | coverage |
-| capabilities (`status` view) | pseudo-file | app's | view; `capget`/`PR_CAPBSET_READ` refused | view / refused | identity |
+| capabilities (`status` view) | pseudo-file | app's | view; `capget`/`PR_CAPBSET_READ` answer it | view | identity |
 | `prctl(PR_GET_NO_NEW_PRIVS)`, `PR_SET_DUMPABLE` | syscall | policy | answer (0) / ignore | promised | sudo |
 | namespaces (`unshare`, `setns`, clone flags) | syscall | seccomp allows; SELinux/capabilities deny | refuse `EPERM`/`ENOSYS` | refused | gates |
 | cgroups | pseudo-file | `/sys/fs/cgroup` hidden (`EACCES`); `/proc/<pid>/cgroup` answered as `0::/` | answer the process file; a cgroup tree is refused | view / refused | phase2, probe |
