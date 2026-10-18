@@ -453,28 +453,32 @@ int policy_mounts(char *buf, size_t cap, int mountinfo)
 	int i, id = 1;
 
 	if (!mountinfo) {
-		if (ap(buf, cap, &n, "deb-native / deb-native rw,relatime 0 0\n") < 0)
+		if (ap(buf, cap, &n, "deb-native / ext4 rw,relatime 0 0\n") < 0)
 			goto out;
 	} else {
-		if (ap(buf, cap, &n, "1 0 0:1 / / rw,relatime - deb-native deb-native rw\n") < 0)
+		if (ap(buf, cap, &n, "1 0 0:1 / / rw,relatime - ext4 deb-native rw\n") < 0)
 			goto out;
 	}
 	for (i = 0; i < nbinds; i++) {
 		const struct bind *b = &binds[i];
+		const char *type;
 
 		if (strcmp(b->g, "/") == 0 || (b->flags & B_SYNTH))
 			continue;
+		type = strcmp(b->g, "/sdcard") == 0 ? "fuse" : "ext4";
 		id++;
 		if (!mountinfo) {
 			if (ap(buf, cap, &n, "deb-native ") < 0 || ap(buf, cap, &n, b->g) < 0 ||
-			    ap(buf, cap, &n, (b->flags & 1) ? " deb-native ro,relatime 0 0\n"
-							    : " deb-native rw,relatime 0 0\n") < 0)
+			    ap(buf, cap, &n, " ") < 0 || ap(buf, cap, &n, type) < 0 ||
+			    ap(buf, cap, &n, (b->flags & 1) ? " ro,relatime 0 0\n"
+							    : " rw,relatime 0 0\n") < 0)
 				goto out;
 		} else {
 			if (apu(buf, cap, &n, (unsigned) id) < 0 || ap(buf, cap, &n, " 1 0:1 / ") < 0 ||
 			    ap(buf, cap, &n, b->g) < 0 ||
-			    ap(buf, cap, &n, (b->flags & 1) ? " ro,relatime - deb-native deb-native ro\n"
-							    : " rw,relatime - deb-native deb-native rw\n") < 0)
+			    ap(buf, cap, &n, (b->flags & 1) ? " ro,relatime - " : " rw,relatime - ") < 0 ||
+			    ap(buf, cap, &n, type) < 0 ||
+			    ap(buf, cap, &n, (b->flags & 1) ? " deb-native ro\n" : " deb-native rw\n") < 0)
 				goto out;
 		}
 	}

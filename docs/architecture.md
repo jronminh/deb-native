@@ -140,7 +140,8 @@ the net for everything.
 - The mount view is the table too: `/proc/mounts`, `/proc/self/mounts`,
   `mountinfo` and `/etc/mtab` are rows that map straight to a file built at boot
   under `var/lib/deb-native` (a memfd cannot cross the ptrace boundary), so the
-  reads need no stop and the source shown is `deb-native`, never a host path.
+  reads need no stop and the source shown is `deb-native`, never a host path;
+  the type is `ext4` (`fuse` for `/sdcard`), so `df -T` reads like a Debian.
 - An AF_UNIX socket path is a path: `bind`, `connect`, `sendto` and `sendmsg`
   carry it in a `sockaddr_un`, and `getsockname`, `getpeername`, `accept`,
   `recvfrom` and `recvmsg` fill one; the tracer maps `sun_path` guest<->host at

@@ -86,11 +86,11 @@ still find the phone; this is about what a program finds *without asking*.
    the gate's loader dropped, `comm` the program);
 3. the denied files (C) -- `/proc/uptime` and `/proc/loadavg` are answered with
    the real values (`CLOCK_BOOTTIME` and `sysinfo`), generated at open, so
-   `uptime` works; `/proc/stat` and `/proc/vmstat` get a **fixed placeholder**
-   instead of `EACCES`: every counter 0 with `btime 0` (stat) and a
-   `dn_not_faked 1` key (vmstat), so the file is readable but says at once it is
-   not the kernel's -- a fake is avoided, only a null is shown (`top` and
-   `vmstat` run again, and a reader knows);
+   `uptime` works; `/proc/stat`'s cpu/intr/ctxt counters are 0, but `btime` is
+   the real boot time and `processes`/`procs_running` come from the tracer;
+   `/proc/vmstat` keeps a `dn_not_faked 1` key and null counters, so the file is
+   readable but says at once it is not the kernel's (`top` and `vmstat` run
+   again, and a reader knows);
 4. capabilities and cgroup (E), then rlimit/`/proc/sys` (F).  Capabilities come
    with the fake root: `/proc/<pid>/status` shows root's set (not 0), since a root
    with no capabilities is the inconsistency.  `/proc/<pid>/cgroup` is answered

@@ -33,6 +33,8 @@ static struct pid_state *pid_last;
 static pid_t pid_last_pid;
 static struct ids seed_ids;
 static struct pid_state pid_sink;                 /* only if mmap fails */
+static unsigned long n_forked = 1;                /* /proc/stat processes */
+static unsigned long pid_live;                    /* /proc/stat procs_running */
 
 static unsigned pid_hash(pid_t p)
 {
@@ -89,6 +91,7 @@ struct pid_state *pid_state_get(pid_t pid, int create)
 	pid_bucket[h] = s;
 	pid_last = s;
 	pid_last_pid = pid;
+	pid_live++;
 	return s;
 }
 
@@ -106,6 +109,8 @@ static void pid_drop(pid_t pid)
 			}
 			s->next = pid_free;
 			pid_free = s;
+			if (pid_live)
+				pid_live--;
 			return;
 		}
 }
@@ -1417,15 +1422,26 @@ static int synth_maps(struct tracee *t, const char *guest, const char *leaf, cha
 	return put_synth(nm, buf, rn, out, cap);
 }
 
-/* "/proc/stat": Android denies it and no syscall gives the aggregate, so it is a
- * fixed placeholder -- every counter 0, btime 0 -- and a reader sees at once that
- * it is not the kernel's (a running system has non-zero counters). */
+/* "/proc/stat": Android denies the aggregate, so the cpu/intr/ctxt counters are
+ * a placeholder; btime is the kernel's real boot time and processes/procs_running
+ * come from the tracer's own fork and live-pid counts. */
 static int synth_stat(char *out, size_t cap)
 {
 	static char b[4096];
 	int n = 0, i, cpus = 8;
-	char rb[64];
+	char rb[64], tail[192];
+	long ts[2] = { 0, 0 };
+	char si[112];
+	unsigned long btime = 0;
 	int fd = sys_open("/sys/devices/system/cpu/online", 0);   /* the real cpu count */
+
+	if (sc(113, 0, (i64) ts, 0, 0, 0, 0) == 0 &&        /* clock_gettime(REALTIME) */
+	    sc(179, (i64) si, 0, 0, 0, 0, 0) == 0) {        /* sysinfo: uptime */
+		long up = *(long *) si;
+
+		if (ts[0] > up)
+			btime = (unsigned long) (ts[0] - up);
+	}
 
 	if (fd >= 0) {
 		ssize_t k = sys_read(fd, rb, sizeof rb - 1);
@@ -1457,9 +1473,22 @@ static int synth_stat(char *out, size_t cap)
 		n += m;
 		n += scpy(b + n, sizeof b - n, " 0 0 0 0 0 0 0 0 0 0\n");
 	}
-	scpy(b + n, sizeof b - n,
-	     "intr 0\nctxt 0\nbtime 0\nprocesses 0\nprocs_running 0\nprocs_blocked 0\n"
-	     "softirq 0 0 0 0 0 0 0 0 0 0\n");
+	{
+		int tn = 0;
+
+		tn = scpy(tail, sizeof tail, "intr 0\nctxt 0\nbtime ");
+		tn += uitoa(tail + tn, (unsigned) btime);
+		tn += scpy(tail + tn, sizeof tail - tn, "\nprocesses ");
+		tn += uitoa(tail + tn, (unsigned) n_forked);
+		tn += scpy(tail + tn, sizeof tail - tn, "\nprocs_running ");
+		tn += uitoa(tail + tn, (unsigned) pid_live);
+		tn += scpy(tail + tn, sizeof tail - tn,
+			   "\nprocs_blocked 0\nsoftirq 0 0 0 0 0 0 0 0 0 0\n");
+		if (tn > 0 && n + tn < (int) sizeof b) {
+			memcpy(b + n, tail, (size_t) tn);
+			n += tn;
+		}
+	}
 	return put_synth("stat", b, strlen(b), out, cap);
 }
 
@@ -1777,6 +1806,23 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		answer_capset(t);
 		return;
 	}
+	if (rw->nr == 123) {                            /* sched_getaffinity: a stable 8 */
+		unsigned char m[128];
+		size_t n = (size_t) t->r.regs[1];
+		pid_t q = (pid_t) t->r.regs[0];
+		unsigned i;
+
+		if (q != 0 && q != t->pid)
+			return;
+		if (n > sizeof m)
+			n = sizeof m;
+		memset(m, 0, n);
+		for (i = 0; i < 8 && i / 8 < n; i++)
+			m[i / 8] |= (unsigned char) (1u << (i % 8));
+		if (n && mon_write(t, t->r.regs[2], m, n) == (ssize_t) n)
+			mon_skip(t, 0);
+		return;
+	}
 	if (rw->special == SP_SOCK_IN) {                /* an AF_UNIX path, in a sockaddr */
 		sock_map(t, rw, 0);
 		return;
@@ -1915,6 +1961,7 @@ void trace_exe_fork(pid_t parent, pid_t child)
 	c->euid_has_next = 0;
 	c->pending = 0;
 	memcpy(c->exe_now, p->exe_now, EXE_LEN);
+	n_forked++;
 }
 
 /* "/proc/self/exe" or "/proc/<pid>/exe": the pid it names, or 0 if it is neither */
