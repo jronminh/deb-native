@@ -6,10 +6,6 @@
 
 unsigned long trace_n_rewritten;
 
-static int root_persona = 1;             /* the boot persona; see trace.h */
-
-void trace_persona(int root) { root_persona = root ? 1 : 0; }
-
 /* the owner store, used by link_copy before its definition */
 static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g);
 static void own_write(const char *host, int nofollow, unsigned u, unsigned g);
@@ -263,12 +259,44 @@ static void sock_map(struct tracee *t, const struct row *rw, int out)
 	}
 }
 
-/* The ids a process was last given.  Everything starts as root (0); a process that
- * drops privilege, as apt's download method does, then reads back what it set. */
+/* The ids a process was last given.  The boot seeds them with the app's real
+ * uid (or 0 for a root test session); a process that changes them, as root does
+ * or a setuid binary will, reads back what it set. */
 struct ids { unsigned ru, eu, su, rg, eg, sg; };
 static struct ids fake_ids[PID_SLOTS];
 
 static struct ids *ids_of(pid_t pid) { return &fake_ids[PID_SLOT(pid)]; }
+
+/* the identity a process presents: real (euid is the app's), root (0), or a
+ * virtual service user (any other euid).  No mode: the euid is the classifier. */
+static int fake_world(pid_t pid) { return ids_of(pid)->eu != policy_real_uid(); }
+
+/* the setuid-bit gate's pending euid, applied on the exec event */
+static unsigned euid_next[PID_SLOTS];
+static unsigned char euid_has_next[PID_SLOTS];
+
+void trace_identity_init(unsigned uid, unsigned gid)
+{
+	unsigned i;
+
+	for (i = 0; i < PID_SLOTS; i++) {
+		fake_ids[i].ru = fake_ids[i].eu = fake_ids[i].su = uid;
+		fake_ids[i].rg = fake_ids[i].eg = fake_ids[i].sg = gid;
+	}
+}
+
+void trace_euid_next(pid_t pid, unsigned euid)
+{
+	euid_next[PID_SLOT(pid)] = euid;
+	euid_has_next[PID_SLOT(pid)] = 1;
+}
+
+unsigned trace_euid_of(pid_t pid) { return ids_of(pid)->eu; }
+
+int trace_stored_owner(const char *host, unsigned *u, unsigned *g)
+{
+	return own_read(host, 0, u, g);
+}
 
 static void set_id(unsigned *r, unsigned *e, unsigned *s, long a, long b, long c, int mode)
 {
@@ -283,6 +311,46 @@ static void set_id(unsigned *r, unsigned *e, unsigned *s, long a, long b, long c
 		if (b != -1) *e = (unsigned) b;
 		if (c != -1) *s = (unsigned) c;
 	}
+}
+
+/* Changing ids is allowed for root, or for a non-root process to a target that
+ * is already one of its real/effective/saved ids (POSIX setuid(2)).  A setuid
+ * program that drops to a user keeps the saved root id, so it can return to 0;
+ * apt's sandbox methods rely on this. */
+static int id_is(unsigned v, unsigned a, unsigned b, unsigned c)
+{
+	return v == a || v == b || v == c;
+}
+
+static int setid_allowed(struct ids *d, unsigned nr, long a, long b, long c)
+{
+	if (d->eu == 0)
+		return 1;
+	switch (nr) {
+	case 146:                                        /* setuid */
+		return a == -1 || a == (long) d->ru || a == (long) d->su;
+	case 145:                                        /* setreuid */
+		return (a == -1 || a == (long) d->ru || a == (long) d->su) &&
+		       (b == -1 || b == (long) d->ru || b == (long) d->su);
+	case 147:                                        /* setresuid */
+		return (a == -1 || id_is((unsigned) a, d->ru, d->eu, d->su)) &&
+		       (b == -1 || id_is((unsigned) b, d->ru, d->eu, d->su)) &&
+		       (c == -1 || id_is((unsigned) c, d->ru, d->eu, d->su));
+	case 144:                                        /* setgid */
+		return a == -1 || a == (long) d->rg || a == (long) d->sg;
+	case 143:                                        /* setregid */
+		return (a == -1 || a == (long) d->rg || a == (long) d->sg) &&
+		       (b == -1 || b == (long) d->rg || b == (long) d->sg);
+	case 149:                                        /* setresgid */
+		return (a == -1 || id_is((unsigned) a, d->rg, d->eg, d->sg)) &&
+		       (b == -1 || id_is((unsigned) b, d->rg, d->eg, d->sg)) &&
+		       (c == -1 || id_is((unsigned) c, d->rg, d->eg, d->sg));
+	case 151:                                        /* setfsuid */
+		return a == -1 || id_is((unsigned) a, d->ru, d->eu, d->su);
+	case 152:                                        /* setfsgid */
+		return a == -1 || id_is((unsigned) a, d->rg, d->eg, d->sg);
+	}
+	return 0;
 }
 
 /* fake root: answer without running the syscall */
@@ -316,6 +384,10 @@ static void fake_result(struct tracee *t, int fake)
 		long a = (long) (int) t->r.regs[0], b = (long) (int) t->r.regs[1], c = (long) (int) t->r.regs[2];
 		unsigned long nr = t->r.regs[8];
 
+		if (!setid_allowed(d, (unsigned) nr, a, b, c)) {
+			mon_skip(t, -1);                 /* EPERM */
+			break;
+		}
 		if (nr == 146)      set_id(&d->ru, &d->eu, &d->su, a, 0, 0, 0);       /* setuid */
 		else if (nr == 144) set_id(&d->rg, &d->eg, &d->sg, a, 0, 0, 0);       /* setgid */
 		else if (nr == 145) set_id(&d->ru, &d->eu, &d->su, a, b, 0, 1);       /* setreuid */
@@ -330,6 +402,9 @@ static void fake_result(struct tracee *t, int fake)
 		if (t->r.regs[0] != 0)
 			mon_write(t, t->r.regs[1], zero, 4);
 		mon_skip(t, 1);
+		break;
+	case F_ZERO:                                    /* setgroups: root only */
+		mon_skip(t, ids_of(t->pid)->eu == 0 ? 0 : -1);
 		break;
 	case F_EXDEV:                                   /* link across file systems */
 		mon_skip(t, -18);
@@ -623,7 +698,7 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 	char kp[64], raw[16384], buf[16384], *w;
 	size_t rn = 0;
 	ssize_t n;
-	int fd, m;
+	int fd, m, isreal, isroot;
 
 	if (strncmp(guest, "/proc/", 6) != 0 || policy_root_len() == 0)
 		return 0;
@@ -642,6 +717,12 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 		}
 		if (p != s || pid <= 0)
 			return 0;
+	}
+	{
+		unsigned e = ids_of(pid)->eu;
+
+		isreal = e == policy_real_uid();
+		isroot = e == 0;
 	}
 	m = scpy(kp, sizeof kp, "/proc/");              /* the kernel's /proc/<pid>/status */
 	if (m < 0)
@@ -696,8 +777,8 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 			w[rn++] = '\n';
 		} else if (strncmp(p, "Uid:", 4) == 0 || strncmp(p, "Gid:", 4) == 0) {
 			char l[64];                    /* the fake ids in root, the real in user */
-			int q = root_persona ?
-				id_line(l, p[0] == 'U' ? "Uid:\t" : "Gid:\t", ids_of(pid), p[0] == 'G') : -1;
+			int q = isreal ? -1 :
+				id_line(l, p[0] == 'U' ? "Uid:\t" : "Gid:\t", ids_of(pid), p[0] == 'G');
 
 			if (q < 0) {
 				if (rn + len >= sizeof buf)
@@ -710,33 +791,28 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 				memcpy(w + rn, l, (size_t) q);
 				rn += (size_t) q;
 			}
-		} else if (!root_persona && (strncmp(p, "CapInh:", 7) == 0 || strncmp(p, "CapAmb:", 7) == 0 ||
-					     strncmp(p, "CapPrm:", 7) == 0 || strncmp(p, "CapEff:", 7) == 0 ||
-					     strncmp(p, "CapBnd:", 7) == 0)) {
-			if (rn + len >= sizeof buf)
-				break;
-			memcpy(w + rn, p, len);
-			rn += len;
-		} else if (strncmp(p, "CapInh:", 7) == 0) {
-			const char *s = "CapInh:\t0000000000000000\n";
-
-			if (rn + strlen(s) >= sizeof buf) break;
-			memcpy(w + rn, s, strlen(s)); rn += strlen(s);
-		} else if (strncmp(p, "CapAmb:", 7) == 0) {
-			const char *s = "CapAmb:\t0000000000000000\n";
-
-			if (rn + strlen(s) >= sizeof buf) break;
-			memcpy(w + rn, s, strlen(s)); rn += strlen(s);
-		} else if (strncmp(p, "CapPrm:", 7) == 0 || strncmp(p, "CapEff:", 7) == 0 ||
+		} else if (strncmp(p, "CapInh:", 7) == 0 || strncmp(p, "CapAmb:", 7) == 0 ||
+			   strncmp(p, "CapPrm:", 7) == 0 || strncmp(p, "CapEff:", 7) == 0 ||
 			   strncmp(p, "CapBnd:", 7) == 0) {
-			const char *s = "\t000001ffffffffff\n";         /* root's set, as the fake id is root */
-			size_t sl = strlen(s);
+			const char *s;
 
-			if (rn + 7 + sl >= sizeof buf) break;
-			memcpy(w + rn, p, 7);                           /* the field name as it is */
+			if (isreal) {                            /* the kernel's own caps */
+				if (rn + len >= sizeof buf)
+					break;
+				memcpy(w + rn, p, len);
+				rn += len;
+				goto nextline;
+			}
+			if (strncmp(p, "CapInh:", 7) == 0 || strncmp(p, "CapAmb:", 7) == 0)
+				s = "0000000000000000\n";
+			else
+				s = isroot ? "000001ffffffffff\n" : "0000000000000000\n";
+			if (rn + 7 + strlen(s) >= sizeof buf)
+				break;
+			memcpy(w + rn, p, 7);                    /* the field name as it is */
 			rn += 7;
-			memcpy(w + rn, s, sl);
-			rn += sl;
+			memcpy(w + rn, s, strlen(s));
+			rn += strlen(s);
 		} else if (strncmp(p, "Seccomp:", 8) == 0 || strncmp(p, "Seccomp_filters:", 16) == 0) {
 			;
 		} else {
@@ -745,6 +821,7 @@ static int synth_status(struct tracee *t, const char *guest, char *out, size_t c
 			memcpy(w + rn, p, len);
 			rn += len;
 		}
+nextline:
 		if (!e)
 			break;
 		p = e + 1;
@@ -1197,11 +1274,17 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		return;
 	}
 	if (rw->fake != F_NONE) {
-		if (root_persona) {
+		unsigned eu = ids_of(t->pid)->eu;
+		int handled = 1;
+
+		/* getgroups is the kernel's for a non-root euid; set*id is faked with
+		 * the saved-id rules, chown is handled before this (store_owner). */
+		if (rw->fake == F_GROUPS && eu != 0)
+			handled = 0;
+		if (handled) {
 			fake_result(t, rw->fake);
 			return;
 		}
-		/* user persona: let the kernel answer -- get*id real, set*id EPERM */
 	}
 	if (rw->special == SP_EXEC) {
 		exec_enter(t);
@@ -1257,11 +1340,18 @@ void trace_exe_commit(pid_t pid)
 	unsigned i = PID_SLOT(pid);
 
 	memcpy(exe_now[i], exe_next[i], EXE_LEN);
+	if (euid_has_next[i]) {
+		struct ids *d = ids_of(pid);
+
+		euid_has_next[i] = 0;
+		d->eu = d->su = euid_next[i];    /* a setuid exec: ruid stays as it was */
+	}
 }
 
 void trace_exe_fork(pid_t parent, pid_t child)
 {
 	*ids_of(child) = *ids_of(parent);
+	euid_has_next[PID_SLOT(child)] = 0;
 	memcpy(exe_now[PID_SLOT(child)], exe_now[PID_SLOT(parent)], EXE_LEN);
 }
 
@@ -1381,9 +1471,11 @@ static void fix_owner(struct tracee *t, u64 buf, unsigned off)
 
 	if (t->r.regs[0] != 0 || mon_read(t, buf + off, id, sizeof id) != (ssize_t) sizeof id)
 		return;
-	id[0] = policy_map_uid(id[0]);
-	id[1] = policy_map_gid(id[1]);
-	mon_write(t, buf + off, id, sizeof id);
+	if (fake_world(t->pid)) {
+		id[0] = policy_map_uid(id[0]);
+		id[1] = policy_map_gid(id[1]);
+		mon_write(t, buf + off, id, sizeof id);
+	}
 	k = mon_read_str(t, t->r.regs[1], host, sizeof host - 1);
 	if (k <= 0 || host[0] != '/')
 		return;                                  /* the path, mapped at entry */
@@ -1589,8 +1681,8 @@ static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g)
 }
 
 /* Every chown is stored, 0:0 included: the only implicit owner is the real uid,
- * which the root persona maps to 0.  Storing 0:0 is what lets a file chowned by
- * the root persona read as root in the user persona too. */
+ * which the fake world (euid not the app's) maps to 0.  Storing 0:0 is what
+ * lets a file chowned by root read as root for the real user too. */
 static void own_write(const char *host, int nofollow, unsigned u, unsigned g)
 {
 	char b[32];
@@ -1669,8 +1761,8 @@ static void store_owner(struct tracee *t)
 {
 	char host[300];
 
-	if (!root_persona) {
-		mon_skip(t, -1);                 /* EPERM: a user cannot chown, as on Debian */
+	if (ids_of(t->pid)->eu != 0) {
+		mon_skip(t, -1);                 /* EPERM: only root chowns, as on Debian */
 		return;
 	}
 	unsigned u = (unsigned) t->r.regs[2], g = (unsigned) t->r.regs[3];
@@ -1703,12 +1795,13 @@ out:
 	mon_skip(t, 0);
 }
 
-/* the owner at buf + off (uid, then gid): the real ids read as root */
-static void map_owner(char *buf, unsigned off)
+/* the owner at buf + off (uid, then gid): in the fake world the tree is root's,
+ * so the real ids read as 0; the real user sees them as they are */
+static void map_owner(pid_t pid, char *buf, unsigned off)
 {
 	unsigned id[2];
 
-	if (!root_persona)
+	if (!fake_world(pid))
 		return;
 	memcpy(id, buf + off, sizeof id);
 	id[0] = policy_map_uid(id[0]);
@@ -1748,7 +1841,7 @@ static int answer_statx(struct tracee *t, const struct row *rw)
 		memcpy(&osec, stx + 96, sizeof osec);
 		memcpy(&onsec, stx + 104, sizeof onsec);
 	}
-	map_owner(stx, 20);
+	map_owner(t->pid, stx, 20);
 	own_apply(stx, 20, host, how == 1 && (flags & 0x100), odev, oino, osec, onsec);
 	if (n_copies) {
 		u64 ino;
@@ -1797,7 +1890,7 @@ static int answer_stat(struct tracee *t, const struct row *rw)
 	memcpy(&oino, st + 8, sizeof oino);
 	memcpy(&osec, st + 104, sizeof osec);
 	memcpy(&onsec, st + 112, sizeof onsec);
-	map_owner(st, 24);
+	map_owner(t->pid, st, 24);
 	own_apply(st, 24, host, how == 1 && (flags & 0x100), odev, oino, osec, onsec);
 	if (n_copies) {
 		u64 dev, ino;
@@ -1930,11 +2023,7 @@ void trace_denied(struct tracee *t)
 	/* A call the platform kills never reaches the entry stop (seccomp takes the strictest
 	 * answer, and TRAP outranks TRACE), so a faked call is answered here the same way. */
 	if (rw && rw->fake != F_NONE) {
-		if (!root_persona) {
-			t->r.regs[0] = (u64) -1;         /* EPERM: a user cannot setuid */
-			return;
-		}
-		fake_result(t, rw->fake);
+		fake_result(t, rw->fake);        /* the saved-id rules answer EPERM */
 		return;
 	}
 	policy_deny(nr, &d);

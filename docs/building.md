@@ -119,13 +119,16 @@ in it, which sets the environment (`PATH`, `HOME=/root`, `LANG=C.UTF-8`,
 stop by default (`-s 500`): faster when work spawns or stops a lot, a few percent
 slower on a parallel build. `DN_TINY_FLAGS="-s 0"` sleeps between stops instead.
 
-`DN_PERSONA=user boot/boot.sh` boots the session as the app's **real uid**
-instead of the default fake-root persona: `id` is the app uid, `set*id` and
-`chown` answer `EPERM`, and `/etc/passwd`, `group` and `shadow` get its line at
-boot so `whoami`, `ssh` and `$HOME` work.  Root is the compatibility persona
-`apt`/`dpkg` need.  Either way there is **one real kernel uid**; other users are
-virtual (see [`spec/identity.md`](spec/identity.md)), and the persona is fixed
-for the boot.
+A prefix boots as the app's **real uid** by default: `id` is the app uid,
+`set*id` and `chown` answer `EPERM`, and `/etc/passwd`, `group` and `shadow` get
+its line at boot so `whoami`, `ssh` and `$HOME` work.  `DN_INITIAL=root
+boot/boot.sh` seeds a root session for package management
+(`apt`/`dpkg`/`useradd`); after that every syscall is classified by the current
+euid -- there is no mode switch.  A setuid-bit helper can raise one process
+(the gate reads the bit and the stored owner), and a sudo-like helper calls
+`setgid(0)`/`setuid(0)` so the command is fully root.  Either way there is
+**one real kernel uid**; other users are virtual (see
+[`spec/identity.md`](spec/identity.md)).
 
 ## The prefix
 

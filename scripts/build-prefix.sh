@@ -80,6 +80,10 @@ case $SET in minimal) ;; *) KEEP_TC=1 ;; esac
 
 DN_TINY_FLAGS=${DN_TINY_FLAGS--s 500}
 export DN_TINY_FLAGS
+# the build's own commands (debootstrap's second stage, apt, the shim) run as root:
+# the built prefix still boots as the app's real uid by default
+DN_INITIAL=root
+export DN_INITIAL
 
 say() { printf '\n== %s\n' "$*"; }
 die() { echo "build-prefix: $*" >&2; exit 1; }
@@ -151,7 +155,7 @@ chmod 755 "$DEST/usr/lib/deb-native/dn-tiny" "$DEST/boot/boot.sh" "$DEST/boot/in
 say "debootstrap, second stage (under dn-tiny)"
 # shellcheck disable=SC2086
 if ! env -i HOME=/root TERM=dumb PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 \
-     "$DEST/usr/lib/deb-native/dn-tiny" -q $DN_TINY_FLAGS -t "$DEST" -- /bin/sh /debootstrap/debootstrap --second-stage; then
+     "$DEST/usr/lib/deb-native/dn-tiny" -q $DN_TINY_FLAGS --initial root -t "$DEST" -- /bin/sh /debootstrap/debootstrap --second-stage; then
   tail -n 30 "$DEST/debootstrap/debootstrap.log" >&2 2>/dev/null || true
   die "the second stage failed (log: $DEST/debootstrap/debootstrap.log)"
 fi

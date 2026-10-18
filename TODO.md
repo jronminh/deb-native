@@ -138,14 +138,16 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 - **Hard links that share contents**: a link is a copy with its count
   remembered. A real `link2symlink` would keep one file; do it if a program needs
   the contents shared.
-- **Modes** (the model: [`docs/spec/identity.md`](docs/spec/identity.md)): one
-  real principal (the app's uid) and virtual principals (`root` and service
-  users).  The boot-scoped personas are done: root by default, `DN_PERSONA=user`
-  boots as the real uid, with `/etc/passwd`, `group`, `shadow` and `$HOME`
-  written at boot from the host's `id -u`.  Still open: a per-command switch
-  (per-process persona), the setuid-bit gate so the real `sudo`/`su`/`passwd`
-  run, and virtual service users/groups (`getgroups`, file gid).  Virtual users
-  are not Android users and are not isolation.
+- **Identity** (the model and current state:
+  [`docs/spec/identity.md`](docs/spec/identity.md)): one real principal (the
+  app's uid) and virtual principals; the boot seeds the real uid by default
+  (`DN_INITIAL=root` for a root session), and every syscall is classified by
+  the process's euid -- no mode switch.  The setuid-bit gate is in (euid 0 or
+  the real uid, owner from `user.dn.owner`), with a `DN_EUID` hint for the
+  shim.  Still open: creation marking (a file created without a chown reads
+  differently in the fake world and the real user case), virtual service-user
+  groups, and testing the real `sudo`/`su`/`passwd` binaries.  Virtual users are
+  not Android users and are not isolation.
 
 ## Speed
 

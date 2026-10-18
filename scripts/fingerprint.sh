@@ -11,7 +11,7 @@ DN=$P/usr/lib/deb-native/dn-tiny
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 cp "$HERE/fingerprint/probe.sh" "$P/tmp/dn-fingerprint.sh" || exit 1
-out=$("$P/boot/boot.sh" sh /tmp/dn-fingerprint.sh 2>&1)
+out=$(DN_INITIAL=root "$P/boot/boot.sh" sh /tmp/dn-fingerprint.sh 2>&1)
 printf '%s\n' "$out"
 rm -f "$P/tmp/dn-fingerprint.sh"
 

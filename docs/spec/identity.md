@@ -1,8 +1,8 @@
 # Identity: one real uid, virtual principals
 
-Status: **proposal** (2026-10-17).  How identity works today is in
-[`../architecture.md`](../architecture.md), "Identity: fake root"; the syscall
-map is [`../reference/syscall-classes.md`](../reference/syscall-classes.md).
+Status: **implemented** (2026-10-17).  How the paths and `/proc` view work is
+in [`../architecture.md`](../architecture.md), "Identity"; the syscall map is
+[`../reference/syscall-classes.md`](../reference/syscall-classes.md).
 
 A prefix is one Android app with **one real kernel identity**: the app's uid and
 gid.  Every other identity a Debian program can name -- `root`, `www-data`,
@@ -17,8 +17,8 @@ So there are two layers:
 
 | layer | in the kernel | in the tree | isolation |
 | --- | --- | --- | --- |
-| **real principal** | the app's uid/gid | itself (user mode) | the app sandbox |
-| **virtual principals** | the app's uid/gid | `/etc/passwd`, `/etc/group`, `user.dn.owner`, a persona | **none** |
+| **real principal** | the app's uid/gid | itself | the app sandbox |
+| **virtual principals** | the app's uid/gid | `/etc/passwd`, `/etc/group`, `user.dn.owner`, the fake ids | **none** |
 
 The runtime must say this plainly.  A user created inside a prefix is not an
 Android user: it cannot be logged into outside the prefix, it has no separate
@@ -26,45 +26,90 @@ sandbox, and it does not restrict what the app can do.  Virtual identity is for
 **compatibility** -- file ownership as a Debian program expects it, daemons that
 drop to a service user, package maintainer scripts -- never for security.
 
-## The personas
+## No mode: the euid is the classifier
 
-A process has one **persona**, chosen at boot or at exec, inherited by fork and
-exec:
+There is no boot "persona" and no switch.  Every syscall is classified by the
+calling process's **current effective uid** (the `ids` state the tracer keeps
+per process); fork and exec inherit it, and an identity change is the transition.
 
-- **user persona** -- the real principal.  `getuid()` is the app's uid;
-  `stat` is the kernel's (plus a stored owner, below); `setuid` to another id
-  is `EPERM`; `chown` is `EPERM`; `access` is the kernel's.  This is an
-  ordinary non-root Linux user.
-- **root persona** -- the virtual principal `root` (uid 0).  `getuid()` is 0,
-  `set*id` is remembered per process, `chown` is stored, `access` is emulated
-  as root, `/proc/<pid>/status` shows root.  This is the compatibility view
-  `apt`/`dpkg`/`useradd` need; it is **not** privilege: the kernel still sees
-  the app.
+| case | euid | what the program gets |
+| --- | --- | --- |
+| **root** | `0` | fake root: `set*id` remembered, `chown` stored, root's `/proc/status` view, `getgroups` one group 0 |
+| **service user** | a virtual uid, not the app's | its fake uid; no root: `set*id`/`chown` `EPERM`, no capabilities |
+| **real user** | the app's uid | the kernel's: real `get*id`, real groups, `set*id`/`chown` `EPERM`, real `access` and `/proc/status` |
 
-A **service-user persona** (any other virtual uid, e.g. `www-data`) is like
-the user persona for authority -- no root view, no capabilities -- but its
-identity and files are virtual: `getuid()` and `stat` say that uid, `setuid`
-to it is allowed from the root persona, and its files carry an owner store
-entry.  It is a normal (non-root) virtual principal.
+`get*id` always answers the state; in the real user case the state *is* the app
+uid, so the answer is the kernel's.  `stat` ownership is a property of the
+**file**, decoded for the process's world: a process whose euid is not the app's
+(the fake world -- root or a service user) reads the real ids as 0, while the
+real user reads them as they are; a stored `user.dn.owner` wins in both.  A
+`chown` is stored for any uid:gid, 0:0 included, so an explicit owner is the
+same in every case.
 
-Personas are per process, not per prefix.  Fork and exec inherit; a shell can
-start a root command and a user command side by side.  `ps` inside the tree
-shows each process's persona identity.
+## The boot seed
+
+The boot chooses only the **identity the first process starts with**:
+
+- the default is the app's **real uid** -- an ordinary user session;
+- `DN_INITIAL=root boot/boot.sh` starts a root session (the package-management
+  compatibility view, and what the test suite uses).
+
+That is a seed, not a mode: after the first process, everything follows from
+the euid.  `init.sh` writes `/etc/passwd`, `group` and `shadow` lines for the
+app uid from `DN_REAL_UID`/`DN_REAL_GID`, and sets `HOME` to `/home/user` for
+the real uid or `/root` for seed root.
+
+## Transitions
+
+- **Root -> anything**: `setuid`/`setresuid` are emulated in the root case; the
+  new euid classifies the process from the next syscall.  `su user` reduces to
+  `setuid(real_uid)`.
+- **Non-root -> root**: only through a **setuid-bit exec** (below) or the boot
+  seed; `setuid(0)` from a non-root euid answers `EPERM`.
+- **Root -> service user**: the same `setuid`/`setresuid`, then the process is
+  a service user; e.g. a daemon dropping to `www-data`.
+
+## The setuid bit is the gate
+
+The exec gate reads the final program's mode and stored owner (from
+`user.dn.owner`; without one, the real uid is the owner):
+
+- `4755`, owner 0: the child gets **euid = suid = 0** (the real uid stays
+  what it was, as a real setuid binary does).
+- `4755`, owner the app uid: the child gets euid = suid = the app uid (a drop,
+  as a setuid binary owned by the user would do).
+- anything else: the ids are inherited.
+
+The gate hands the new shim its euid in `DN_EUID` (a hint, so a stat does not
+need a tracer stop to classify); a `set*id` in the process invalidates it and
+the shim asks the tracer again.
+
+Real `sudo` behaviour needs one more step, and a sudo-like helper does it: after
+the gate gives it euid 0, it calls `setgid(0)` and `setuid(0)` (emulated, since
+it is root) so the command sees **uid 0 too**.  A shell started with euid 0 but
+real uid non-zero drops back to the real uid, as a setuid program's child shell
+should; a shell whose uid is 0 does not.  This is why a helper that only execs
+the command is not enough.
+
+This remains **compatibility theatre, not a security boundary**: the app owns
+the tree and can replace the helper, clear its setuid bit, or read
+`/etc/shadow`.  It exists so the real Debian binaries and their documentation
+behave; it must never be presented as isolation.
 
 ## Tree-root is not real root
 
 Because the app owns every file in the prefix, the app is the real *owner* of
-the tree.  That makes the user persona's file access honest (owner bits apply),
+the tree.  That makes the real user's file access honest (owner bits apply),
 but it also means:
 
-- the root persona's `chown` and ownership are **stored**, not kernel-enforced;
+- a virtual `chown`/ownership is **stored**, not kernel-enforced;
 - a file stored as `root:root` with mode 0644 is still writable by the app, so
   a virtual user can be more permissive than its Debian counterpart;
-- `setuid`/`setgid` bits do not grant kernel privilege; a setuid-root binary
-  runs with the app's real credentials;
+- `setuid`/`setgid` bits do not grant kernel privilege; the gate only changes
+  the ids state;
 - capabilities shown as root's are a view; the kernel's are the app's;
 - DAC override (`mode 000`, a file owned by another host uid, a bind from
-  `/sdcard`) is not available to either persona; the kernel answers `EACCES`;
+  `/sdcard`) is not available in any case; the kernel answers `EACCES`;
 - ownership-based security in programs (`sshd` StrictModes, `su`, `login`) can
   see the virtual owner and reach a different conclusion than the kernel.
 
@@ -72,54 +117,22 @@ These are accepted gaps, not bugs to patch with more fakery.  The rule is the
 same as everywhere: **map what can be mapped, emulate what is harmless, refuse
 what would be a lie about authority**.
 
-## Syscall view by persona
-
-| call | user / service persona | root persona |
-| --- | --- | --- |
-| `get*id`, `getgroups` | real app id | 0 / remembered state |
-| `set*id` | kernel `EPERM` (or `EPERM` answered) | remembered per process |
-| `stat` owner | real id, or the stored owner | stored owner, else 0 |
-| `chown` | `EPERM` | `user.dn.owner` xattr |
-| `access`, `euidaccess` | kernel | emulated as root |
-| `/proc/<pid>/status` | real Uid/Gid | 0, root's `Cap*` view |
-| `setuid` binary exec | persona from the setuid bit (below) | same |
-
-## Setuid binaries as the elevation gate
-
-A virtual identity needs a **transition**: user -> root, root -> service user,
-and so on.  The closest thing to the kernel's mechanism is the setuid bit,
-which the exec gate can read (the owner comes from `user.dn.owner`):
-
-- `sudo` (mode 4755, stored owner root): a user-persona process that execs it
-  gets the root persona, the way the kernel would give it euid 0; `sudo`'s PAM
-  and `/etc/sudoers` then run as they do on Debian, and its `setuid(target)`
-  switches the persona down to the target user.
-- `su`, `passwd`, `login` can follow the same rule.
-- A user-persona process **cannot** become root by calling `setuid(0)`; only
-  the setuid-bit gate (and the runtime's own boot/session switch) changes
-  personas upward.
-
-This is **compatibility theatre, not a security boundary**: the app user owns
-the tree and can replace `sudo`, clear its setuid bit, read `/etc/shadow`, or
-call the runtime's switch.  It exists so that the real Debian binaries behave
-as their documentation says; it must never be presented as isolation.
-
 ## Files, groups, and the owner store
 
 - One xattr, `user.dn.owner`, holds `UID:GID` for every file that was chowned,
-  0:0 included.  The only implicit owner is the real uid: the root persona maps
-  it to 0, the user persona leaves it.  So an explicit chown is stable across
-  personas, while a file created without one can read as 0 in the root persona
-  and as the real uid in the user persona (and the reverse for a user-created
-  file); marking creations is open.  The copy `linkat` makes carries the xattr.
+  0:0 included.  The only implicit owner is the real uid: the fake world maps
+  it to 0, the real user leaves it.  A file created without a chown can
+  therefore read as 0 in the fake world and as the real uid in the real user
+  case (and the reverse for a user-created file); marking creations is open.
+  The copy `linkat` makes carries the xattr.
 - `useradd`/`groupadd` write `/etc/passwd` and `/etc/group` entries; `userdel
   -r` works because the owner store makes the home directory look owned by the
-  user it removes.  These are **virtual users**: the runtime should say so,
-  and a login for one only exists inside the prefix (through a persona switch),
-  never as an Android user.
+  user it removes.  These are **virtual users**: a login for one exists only
+  inside the prefix (through an identity change), never as an Android user.
 - Supplementary groups are virtual too: `getgroups`/`initgroups` can be
-  answered, the file's gid can be stored, but the kernel's access checks use
-  the app's gid, so group permissions are not enforced.
+  answered in the fake world, the file's gid can be stored, but the kernel's
+  access checks use the app's gid, so group permissions are not enforced.  The
+  real user gets the kernel's groups.
 - The fast path reads the owner store through a cache keyed by
   `(dev, ino, ctime)` in both the shim and the tracer: chown changes ctime, so
   an entry cannot go stale; a collision costs a getxattr.  Measured on p-dev,
@@ -128,67 +141,40 @@ as their documentation says; it must never be presented as isolation.
   that never chowns, is still open: a copied prefix can carry stored owners
   with no flag, so it needs a correctness story.
 
-## Current state (2026-10-17, phase 1)
+## Current state (2026-10-17)
 
-- The boot persona is **root by default**; `DN_PERSONA=user boot/boot.sh`
-  boots the whole session as the real app uid (user persona).  The tracer
-  reads it from `--persona`, the shim from `var/lib/deb-native/persona`, which
-  `boot.sh` writes.  The persona is global for the boot; a per-command switch
-  needs per-process state (phase 3).
-- In user mode `id` is the real uid, `get*id` and `/proc/status` are real,
-  `set*id` and `chown` answer `EPERM`, `access` is the kernel's; `/etc/passwd`,
-  `group` and `shadow` get the real uid's line at boot (from `DN_REAL_UID`),
-  and `HOME` is `/home/user`.  `git`, `python`, `tar`, `git init` and `apt-get
-  update` were checked; `useradd` and `dpkg -i` need the root persona, as on a
-  normal Debian user.
-- In root mode the behaviour is as recorded below (fake root, stored owners).
-- `chown` stores `user.dn.owner` for any uid:gid; the tracer and the shim read
-  it back in `stat`, through a `(dev, ino, ctime)` cache.  A hard-link copy
-  carries it.
-- `set*id` remembers any uid in the root persona; `get*id` answers it; the shim
-  answers the `get*id`/`getres*id` family in process.
-- `useradd`/`userdel -r` work against the virtual identity (checked on `p-dev`).
-- Root's capabilities are a `/proc` view; `capget`/`PR_CAPBSET_READ` are not
-  answered.
-- There is no setuid-bit persona gate, no `sudo`/`su` wrapper, and no real
-  multi-user.
+- Automatic classification by euid is implemented in the tracer (fake ids per
+  process) and the shim (`DN_EUID` hint, else the traced ids).
+- Default boot is the real app uid; `DN_INITIAL=root` seeds a root session.
+  `init.sh` writes the real uid's passwd/group/shadow lines and `/home/user`.
+- In the real user case: real `id`, `get*id`, groups and `/proc/status`;
+  `set*id`/`chown` `EPERM`; `git`, `python`, `tar`, `git init` and `apt-get
+  update` were checked.  `useradd` and `dpkg -i` need root, as on Debian.
+- The setuid gate is implemented for euid (owner 0 -> 0; owner real -> real).
+  A small `dn-sudo` helper (4755, stored owner 0, calls `setgid(0)`/`setuid(0)`)
+  gives a root shell: `uid=0`, `chown` works, `apt-get install` and `useradd`
+  work, and the parent stays the real user.  A service user (euid 33) reads
+  `stat` as root-owned, cannot chown, and has no capabilities.
+- `chown` is stored for any uid:gid; the cache keeps `stat` cheap; a hard-link
+  copy carries the owner.  Root's capabilities are a `/proc` view;
+  `capget`/`PR_CAPBSET_READ` are not answered.
+- Check suite, coverage and fingerprint are clean with the root seed; the Lua
+  build is ~11.8 s / 874 stops (root) and ~11.8 s / 882 (real user).
 
-## Plan
+## Plan / open questions
 
-1. **Persona state** (done, boot-scoped): `user`/`root`, chosen at boot
-   (`DN_PERSONA`, the `--persona` option, and `var/lib/deb-native/persona` for
-   the shim), inherited by fork/exec.  A per-process or per-command switch
-   (phase 3) still needs the exec gate to carry the persona into the child.
-2. **User persona behaviour** (done): real `get*id`, `set*id` -> `EPERM`, real
-   `access`, `chown` -> `EPERM`, `stat` without the real-id-to-0 map; the
-   stored owner is still read when present.
-3. **Virtual users and groups**: passwd/group entries written at boot for the
-   real uid (the boot script knows it, the tree does not); setuid to any
-   virtual uid from the root persona; `getgroups`/`initgroups`; useradd UX
+1. **Creation marking**: mark a file at creation with its creator's identity
+   (root 0:0, service uid, or the real uid) so ownership no longer depends on
+   the reader's euid; the reverse asymmetry (a file created without a chown)
+   goes away.  Needs a pre-stat and an exit stop on create, or a shim path.
+2. **Virtual service users and groups**: `getgroups`/`initgroups` for a service
+   user (today it falls back to the kernel's groups), file gid, useradd UX that
    says "virtual user".
-4. **Setuid-bit gate** (optional, after 1-3): the exec gate reads the setuid
-   bit and the stored owner and starts the child in the matching persona, so
-   the real `sudo`/`su`/`passwd` binaries can run.
-5. **Owner cache** (done 2026-10-17): `(dev, ino, ctime)` in the shim and the
-   tracer.  The shared store-used flag remains open (see above).
-6. **Tests**: the matrix in `../../tests/bench/` -- a user-persona prefix with
-   `git`, `python`, `tar`, `make`, `ssh-keygen` (expected to work); `apt-get`,
-   `dpkg -i`, `useradd`, `passwd` (expected to need the root persona); a
-   setuid-bit `sudo`; a service user that a package creates; `stat` on stored
-   owners; the authority mismatches (0644/0600/000, a bind from the host);
-   the fast path before and after the first chown.
-
-## Open questions
-
-- **Default persona**: root (Debian's habit, `apt` just works) or user (the
-  honest one, with `sudo` for package management)?  Decide with the test
-  matrix, not by taste.
-- **Real sudo or a wrapper**: the setuid gate lets the real binary run, but its
-  PAM sessions, tty handling and `setgroups` widen the emulation surface.  A
-  small wrapper is less faithful and less risky.  Try the real one first.
-- **Capabilities**: keep the root view in `status` but refuse `capget`, or
-  answer a Debian default?  Answering a default is more complete and also more
-  of a lie; `refuse` is the current rule.
-- **Binds from the host**: a user persona on a bind sees the host's owner and
-  permissions; that is the kernel's truth and should stay so, but it is the
-  first place a "virtual user" will look wrong.
+3. **Real `sudo` and `su`**: the gate lets the real binary start with euid 0;
+   its PAM/sudoers/setgroups surface remains to be tested.  A wrapper is the
+   fallback.
+4. **Capabilities**: keep the root view in `status` but refuse `capget`, or
+   answer a Debian default?  `refuse` is the current rule.
+5. **Binds from the host**: a real user on a bind sees the host's owner and
+   permissions (the kernel's truth); the fake world's mapping of the real uid
+   to 0 may disagree with the host's ids there.

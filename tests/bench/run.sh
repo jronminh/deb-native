@@ -20,6 +20,7 @@ P=$(CDPATH= cd -- "$1" && pwd) || exit 2
 shift
 SUITE=${1:-all}
 DN=$P/usr/lib/deb-native/dn-tiny
+INIT=${DN_INITIAL:-root}                 # the check set and the old rows are root's
 [ -x "$DN" ] || { echo "run.sh: no runtime at $DN" >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 KIT=$P/tmp/dn-bench
@@ -29,11 +30,11 @@ cp "$HERE"/mt.c "$HERE"/xm.c "$HERE"/syscalls.c "$KIT"/ || exit 1
 cp "$HERE"/owner.sh "$KIT"/ || exit 1
 cd "$P" || exit 1                        # the tracee's cwd is then the tree's /
 
-quiet() { "$DN" -q -s 500 -t "$P" -- /usr/bin/bash /boot/init.sh /usr/bin/sh -c "$1"; }
+quiet() { "$DN" -q -s 500 --initial "$INIT" -t "$P" -- /usr/bin/bash /boot/init.sh /usr/bin/sh -c "$1"; }
 
 timed() {
 	t0=$(date +%s%N)
-	out=$("$DN" -s 500 -t "$P" -- /usr/bin/bash /boot/init.sh /usr/bin/sh -c "$2" 2>&1 >/dev/null)
+	out=$("$DN" -s 500 --initial "$INIT" -t "$P" -- /usr/bin/bash /boot/init.sh /usr/bin/sh -c "$2" 2>&1 >/dev/null)
 	t1=$(date +%s%N)
 	ms=$(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%d", (b - a) / 1000000 }')
 	stops=$(printf '%s' "$out" | sed -n 's/.*\(enter=[0-9]* exit=[0-9]*\).*/\1/p' | tail -1)

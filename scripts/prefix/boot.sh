@@ -19,21 +19,17 @@ unset LD_PRELOAD LD_LIBRARY_PATH
 # must not reach it.
 cd "$root" || exit 1
 umask 022
-# The boot persona: root (the fake-root compatibility view, the default) or
-# user (the app's real uid).  The tracer reads it from the command line and the
-# shim from var/lib/deb-native/persona, which is written here; the tree also
-# gets DN_PERSONA and the real ids, which init.sh uses for /etc/passwd.
-persona=${DN_PERSONA:-root}
-case $persona in
-root|user) ;;
-*) echo "boot.sh: DN_PERSONA is root or user" >&2; exit 1 ;;
+# The identity the session starts from: the app's real uid (the default, a user
+# session) or root (a test session).  Behaviour is classified per syscall from
+# the process's current euid; there is no mode switch.  The real ids go to
+# init.sh for /etc/passwd and $HOME.
+initial=${DN_INITIAL:-user}
+case $initial in
+user|root) ;;
+*) echo "boot.sh: DN_INITIAL is user or root" >&2; exit 1 ;;
 esac
 real_uid=$(id -u 2>/dev/null)
 real_gid=$(id -g 2>/dev/null)
-mkdir -p "$root/var/lib/deb-native" 2>/dev/null
-if ! printf '%s\n' "$persona" > "$root/var/lib/deb-native/persona" 2>/dev/null; then
-  [ "$persona" = user ] && { echo "boot.sh: cannot write var/lib/deb-native/persona" >&2; exit 1; }
-fi
 # A clean environment, as login builds it: the host's PATH, ANDROID_* and the
 # rest do not pass.  TERM and COLORTERM are kept (a terminal the host made);
 # TZ is the phone's.
@@ -51,7 +47,7 @@ if [ -f "$root/boot/env" ]; then
       case $line in ''|'#'*) continue ;; esac
       name=${line%%=*}
       case $name in
-      DN_PERSONA|DN_REAL_UID|DN_REAL_GID)
+      DN_INITIAL|DN_REAL_UID|DN_REAL_GID)
         echo "boot.sh: boot/env: $name is set by boot.sh" >&2; exit 1 ;;
       [!A-Za-z_]*|*[!A-Za-z0-9_]*)
         echo "boot.sh: boot/env: bad name: $name" >&2; exit 1 ;;
@@ -74,18 +70,18 @@ if [ -n "$envfile" ]; then
     TERM="${TERM:-dumb}" \
     COLORTERM="$COLORTERM" \
     TZ="${tz:-UTC}" \
-    DN_PERSONA="$persona" DN_REAL_UID="${real_uid:-}" DN_REAL_GID="${real_gid:-}" \
+    DN_REAL_UID="${real_uid:-}" DN_REAL_GID="${real_gid:-}" \
     DN_BOOT_ENV="$envfile" DN_BOOT_ROOT="$root" DN_BOOT_FLAGS="${DN_TINY_FLAGS:-}" \
-    DN_BOOT_PERSONA="$persona" \
+    DN_BOOT_INITIAL="$initial" \
     /system/bin/sh -c '
-      e=$DN_BOOT_ENV r=$DN_BOOT_ROOT f=$DN_BOOT_FLAGS p=$DN_BOOT_PERSONA
+      e=$DN_BOOT_ENV r=$DN_BOOT_ROOT f=$DN_BOOT_FLAGS i=$DN_BOOT_INITIAL
       while IFS= read -r line || [ -n "$line" ]; do
         export "$line" || exit 1
       done < "$e"
       rm -f "$e"
-      unset DN_BOOT_ENV DN_BOOT_ROOT DN_BOOT_FLAGS DN_BOOT_PERSONA
+      unset DN_BOOT_ENV DN_BOOT_ROOT DN_BOOT_FLAGS DN_BOOT_INITIAL
       exec "$r/usr/lib/deb-native/dn-tiny" -q -s 500 $f \
-        --persona "$p" -t "$r" -- /usr/bin/bash /boot/init.sh "$@"
+        --initial "$i" -t "$r" -- /usr/bin/bash /boot/init.sh "$@"
     ' sh "$@"
 fi
 # shellcheck disable=SC2086
@@ -98,6 +94,6 @@ exec env -i \
   TERM="${TERM:-dumb}" \
   COLORTERM="$COLORTERM" \
   TZ="${tz:-UTC}" \
-  DN_PERSONA="$persona" DN_REAL_UID="${real_uid:-}" DN_REAL_GID="${real_gid:-}" \
-  "$root/usr/lib/deb-native/dn-tiny" -q -s 500 ${DN_TINY_FLAGS:-} --persona "$persona" \
+  DN_REAL_UID="${real_uid:-}" DN_REAL_GID="${real_gid:-}" \
+  "$root/usr/lib/deb-native/dn-tiny" -q -s 500 ${DN_TINY_FLAGS:-} --initial "$initial" \
   -t "$root" -- /usr/bin/bash /boot/init.sh "$@"

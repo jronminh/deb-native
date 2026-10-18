@@ -118,6 +118,9 @@ int policy_unpath(const char *host, char *out, size_t cap);
 void policy_set_ids(unsigned uid, unsigned gid);
 unsigned policy_map_uid(unsigned id);
 unsigned policy_map_gid(unsigned id);
+/* the app's real uid/gid, as the tracer read them at boot */
+unsigned policy_real_uid(void);
+unsigned policy_real_gid(void);
 
 /* the shim the exec gate preloads into a glibc program (/usr/lib/deb-native/
  * dn-lane.so, a host path when the prefix has it, else ""): the runtime's own,

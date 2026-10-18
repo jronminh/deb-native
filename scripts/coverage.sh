@@ -14,7 +14,7 @@ DN=$P/usr/lib/deb-native/dn-tiny
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 cp "$HERE/coverage/probe.sh" "$P/tmp/dn-coverage-probe.sh" || exit 1
-out=$("$P/boot/boot.sh" sh /tmp/dn-coverage-probe.sh 2>&1)
+out=$(DN_INITIAL=root "$P/boot/boot.sh" sh /tmp/dn-coverage-probe.sh 2>&1)
 printf '%s\n' "$out"
 rm -f "$P/tmp/dn-coverage-probe.sh"
 

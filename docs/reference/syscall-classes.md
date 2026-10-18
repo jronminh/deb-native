@@ -157,8 +157,8 @@ Checked against the code and the census tables:
 - The owner store (`user.dn.owner`) is cached by `(dev, ino, ctime)` in both the
   shim and the tracer (done 2026-10-17); only the first `stat` of a file reads
   the xattr.  A chown is stored even for 0:0, so an explicit chown reads the same
-  in the root and the user persona; a file that was never chowned falls back to
-  the real uid (root maps it to 0, user leaves it).  A shared store-used flag is
+  in the fake world and for the real user; a file that was never chowned falls
+  back to the real uid (the fake world maps it to 0, the real user leaves it).  A shared store-used flag is
   still open.
 
 ## Caveats

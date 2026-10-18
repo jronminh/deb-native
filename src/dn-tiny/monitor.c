@@ -551,7 +551,7 @@ static void stats(i64 ns)
 
 int main(int argc, char **argv)
 {
-	int i = 1, quiet = 0, st, rc;
+	int i = 1, quiet = 0, st, rc, initial_root = 0;
 	i64 t0, t1;
 	const char *root = NULL;
 	pid_t pid;
@@ -567,15 +567,15 @@ int main(int argc, char **argv)
 			sys_cpu_pin((int) atou(argv[++i]));
 		} else if (!strcmp(argv[i], "-s") && i + 1 < argc) {
 			spin_ns = (i64) atou(argv[++i]) * 1000;
-		} else if (!strcmp(argv[i], "--persona") && i + 1 < argc) {
+		} else if (!strcmp(argv[i], "--initial") && i + 1 < argc) {
 			const char *p = argv[++i];
 
 			if (!strcmp(p, "user"))
-				trace_persona(0);
+				initial_root = 0;
 			else if (!strcmp(p, "root"))
-				trace_persona(1);
+				initial_root = 1;
 			else {
-				put(2, "dn-tiny: --persona is user or root\n");
+				put(2, "dn-tiny: --initial is user or root\n");
 				return 2;
 			}
 		} else if (!strcmp(argv[i], "-q"))
@@ -584,7 +584,7 @@ int main(int argc, char **argv)
 	if (i < argc && !strcmp(argv[i], "--"))
 		i++;
 	if (i >= argc || (mode == M_FULL && root == NULL)) {
-		put(2, "usage: dn-tiny [-m bare|regs|full] [-t ROOT] [--persona user|root] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]\n");
+		put(2, "usage: dn-tiny [-m bare|regs|full] [-t ROOT] [--initial user|root] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]\n");
 		return 2;
 	}
 	if (root != NULL)
@@ -622,7 +622,13 @@ int main(int argc, char **argv)
 		sys_exit(127);
 	}
 
-	policy_set_ids((unsigned) sc(174, 0, 0, 0, 0, 0, 0), (unsigned) sc(176, 0, 0, 0, 0, 0, 0));   /* getuid, getgid */
+	{
+		unsigned ru = (unsigned) sc(174, 0, 0, 0, 0, 0, 0);      /* getuid */
+		unsigned rg = (unsigned) sc(176, 0, 0, 0, 0, 0, 0);      /* getgid */
+
+		policy_set_ids(ru, rg);
+		trace_identity_init(initial_root ? 0 : ru, initial_root ? 0 : rg);
+	}
 	sys_wait4(pid, &st, 0);                  /* the child's SIGSTOP */
 	sys_ptrace(PTRACE_SETOPTIONS, pid, 0,
 		   PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK |

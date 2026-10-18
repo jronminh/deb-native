@@ -150,24 +150,22 @@ the net for everything.
 
 ## Identity: fake root
 
-- The boot persona is root by default (`DN_PERSONA=user` boots as the real app
-  uid; see [`spec/identity.md`](spec/identity.md)).  In the root persona every
-  process starts as root (uid and gid 0); `set*id` calls are accepted and
-  remembered per process, inherited by children; `get*id` say what was set.  In
-  the user persona `get*id` are the kernel's real ids and `set*id`/`chown`
-  answer `EPERM`.
-- Files owned by the app's uid read as owned by root in every `stat` the tracer
-  or the shim answers. `chown`/`fchownat` are accepted and kept in a
-  `user.dn.owner` xattr (`UID:GID`) on the file; every `stat` reads it back, a
-  `chown` to 0:0 removes it, and the copy a hard link makes carries it.
-- `/proc/<pid>/status`'s `Uid`/`Gid` say the same ids, so a reader that never
-  calls `get*id` (a `ps` that reads the file) also sees root.
+- There is one real identity (the app's uid/gid); every other is virtual.  The
+  boot seeds the first process with the **real uid** by default
+  (`DN_INITIAL=root` seeds a root session), and every syscall is classified by
+  the process's current **euid**: root (0) gets the fake-root view, a service
+  uid its fake identity without root, the app uid the kernel's own answer.
+  There is no mode flag (see [`spec/identity.md`](spec/identity.md)).
+- `set*id` is emulated when the euid is 0 and answers `EPERM` otherwise; `chown`
+  is stored (`user.dn.owner`, 0:0 included) only by root, and the fake world
+  (euid not the app's) reads the real uid as 0 in every `stat`.
+- A **setuid-bit exec** is the gate: owner 0 gives euid 0, owner the real uid
+  gives euid the real uid; a sudo-like helper then calls `setgid(0)`/`setuid(0)`
+  to make the command root.  The gate hands the shim its euid in `DN_EUID`.
+- `/proc/<pid>/status` says the process's ids (root, service or real), so a
+  reader that never calls `get*id` sees the same identity.
 - The goal is no accidental identity leak (apt, dpkg and `git`'s ownership check
-  see a consistent root), not isolation.
-- The model that separates the one real identity from virtual principals
-  (root and service users), with personas and a setuid-bit gate, is
-  [`spec/identity.md`](spec/identity.md) (proposal); today every process is the
-  root persona.
+  see what the tree's user expects), not isolation.
 
 ## What Android refuses
 

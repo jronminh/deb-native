@@ -48,9 +48,9 @@
 #define LANE (((long) DN_LANE_HI << 32) | (long) DN_LANE_LO)
 
 static char rootbuf[PATH_MAX];          /* the prefix root, handed to policy_root_set */
-static int root_mode = 1;               /* the boot persona (var/lib/deb-native/persona) */
 static char cwd[PATH_MAX];              /* the guest working directory (get_cwd) */
 static unsigned real_uid, real_gid;     /* read as root, as the tracer does (policy_map_uid) */
+static int cached_euid = -1, euid_known; /* the exec gate's DN_EUID hint */
 
 #define REAL(name) ((__typeof__(&name)) real_fn(#name, &real_##name))
 static void *real_fn(const char *name, void **slot)
@@ -134,6 +134,14 @@ __attribute__((constructor)) static void lane_init(void)
 		return;                                 /* the lane is not there: leave it all to the tracer */
 	real_uid = st.st_uid;
 	real_gid = st.st_gid;
+	{
+		const char *e = getenv("DN_EUID");
+
+		if (e) {
+			cached_euid = (int) strtoul(e, NULL, 10);
+			euid_known = 1;
+		}
+	}
 	memcpy(p, di.dli_fname, n - t);
 	strcpy(p + (n - t), "/var/lib/deb-native/dn-tiny.gen");
 	fd = lane_call(SYS_openat, AT_FDCWD, p, O_RDONLY | O_CLOEXEC, 0, 0L);
@@ -148,25 +156,6 @@ __attribute__((constructor)) static void lane_init(void)
 	memcpy(rootbuf, di.dli_fname, n - t);
 	rootbuf[n - t] = '\0';
 	policy_root_set(rootbuf);               /* set last: until now everything falls back */
-	{                                       /* the boot persona, written before boot.sh starts */
-		char pp[PATH_MAX + 32], b[16];
-		long pfd;
-
-		if (strlen(rootbuf) + 32 < sizeof pp) {
-			strcpy(pp, rootbuf);
-			strcat(pp, "/var/lib/deb-native/persona");
-			pfd = lane_call(SYS_openat, AT_FDCWD, pp, O_RDONLY | O_CLOEXEC, 0, 0L);
-			if (pfd >= 0) {
-				long k = lane_call(SYS_read, (int) pfd, b, sizeof b - 1, 0L, 0L);
-
-				lane_call(SYS_close, (int) pfd, 0, 0, 0, 0L);
-				if (k > 0) {
-					b[k] = '\0';
-					root_mode = b[0] != 'u';
-				}
-			}
-		}
-	}
 	{                                       /* the binds the host wrote before boot */
 		char bp[PATH_MAX + 16], b[4096];
 		long bfd;
@@ -654,10 +643,25 @@ static void cl_fix(unsigned long dev, unsigned long ino, unsigned *nlink)
 		*nlink = n;
 }
 
-/* what the program is told: the owner read as root */
+static int get_ids(unsigned v[6]);
+
+/* in the fake world (euid is not the app's) the tree reads as root-owned; the
+ * real user sees the kernel's owner.  get_ids is the per-process state cache. */
+static int fake_world(void)
+{
+	unsigned v[6];
+
+	if (euid_known)                         /* the common case: no stop to ask */
+		return (unsigned) cached_euid != real_uid;
+	if (!get_ids(v))
+		return 1;                       /* cannot ask: keep the fake view */
+	return v[1] != real_uid;
+}
+
+/* what the program is told: the owner read as root in the fake world */
 static void map_owner(unsigned *uid, unsigned *gid)
 {
-	if (!root_mode)
+	if (!fake_world())
 		return;
 	if (*uid == real_uid)
 		*uid = 0;
@@ -1155,6 +1159,7 @@ int getresgid(gid_t *r, gid_t *e, gid_t *s)
 	{                                                       \
 		int ret_ = REAL(name) args;                     \
 		drop_ids();                                     \
+		euid_known = 0;                                 \
 		return ret_;                                    \
 	}
 SET_ID(setuid, (uid_t u), (u))

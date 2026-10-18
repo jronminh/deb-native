@@ -9,9 +9,8 @@ set -eu
 umask 022                          # as on Debian; the app's is 077
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
-# The boot identity inputs, kept before the DN_* knobs are dropped: the boot
-# persona and the app's real uid/gid (the only real kernel identity).
-persona=${DN_PERSONA:-root}
+# The app's real uid/gid (the only real kernel identity), kept before the DN_*
+# knobs are dropped; init.sh uses them for /etc/passwd and $HOME.
 real_uid=${DN_REAL_UID:-}
 real_gid=${DN_REAL_GID:-}
 # The host's environment reaches the tree through dn-tiny: drop the host's
@@ -51,16 +50,16 @@ if [ -n "$real_uid" ]; then
     printf 'user:!:20000:0:99999:7:::\n' >> /etc/shadow
   fi
 fi
-if [ "$persona" = user ]; then
+if [ "$(id -u)" = "0" ]; then
+  HOME=/root
+else
   HOME=/home/user
   USER=user
   LOGNAME=user
+  export USER LOGNAME
   mkdir -p "$HOME" 2>/dev/null || true
-else
-  HOME=/root
 fi
 export HOME
-[ "$persona" = user ] && export USER LOGNAME
 TMPDIR=/tmp
 export TMPDIR
 mkdir -p "$TMPDIR"

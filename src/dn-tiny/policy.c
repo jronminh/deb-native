@@ -944,6 +944,8 @@ static unsigned real_uid = (unsigned) -1, real_gid = (unsigned) -1;
 void policy_set_ids(unsigned uid, unsigned gid) { real_uid = uid; real_gid = gid; }
 unsigned policy_map_uid(unsigned id) { return id == real_uid ? 0 : id; }
 unsigned policy_map_gid(unsigned id) { return id == real_gid ? 0 : id; }
+unsigned policy_real_uid(void) { return real_uid; }
+unsigned policy_real_gid(void) { return real_gid; }
 
 /* The syscalls Android's filter kills in the app domain (docs/reference/device-census.md),
  * and what each is told.  Anything not listed is told ENOSYS, which is also what

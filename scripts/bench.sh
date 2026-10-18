@@ -17,7 +17,7 @@ DN=$P/usr/lib/deb-native/dn-tiny
 
 run() {
 	t0=$(date +%s%N)
-	out=$("$DN" -t "$P" -- /usr/bin/bash /boot/init.sh \
+	out=$("$DN" --initial root -t "$P" -- /usr/bin/bash /boot/init.sh \
 		/usr/bin/sh -c "$2" 2>&1 >/dev/null)
 	t1=$(date +%s%N)
 	# awk: /bin/sh here is Android's, whose arithmetic is 32-bit

@@ -10,9 +10,16 @@ extern unsigned long trace_n_answered;   /* calls answered at entry, with no exi
 /* build the synthetic /proc files (the mount view) once, at boot */
 void trace_synth_init(void);
 
-/* the persona for this boot: 1 = root (fake), 0 = user (the real app uid).
- * It is global until a per-process switch exists (spec/identity.md). */
-void trace_persona(int root);
+/* The identity a boot starts from: the app's real uid (the default) or 0 for a
+ * root test session.  Behaviour is classified per syscall from the process's
+ * current euid, not from this seed (spec/identity.md). */
+void trace_identity_init(unsigned uid, unsigned gid);
+/* the euid a setuid-bit exec will commit, applied on the exec event (exec.c) */
+void trace_euid_next(pid_t pid, unsigned euid);
+/* the process's current fake euid (exec.c's DN_EUID hint) */
+unsigned trace_euid_of(pid_t pid);
+/* the stored owner of a host path, 0 when there is none (exec.c's setuid gate) */
+int trace_stored_owner(const char *host, unsigned *u, unsigned *g);
 
 /* at syscall entry; may change the tracee's argument registers */
 void trace_enter(struct tracee *t, const struct row *rw);
