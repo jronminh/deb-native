@@ -164,7 +164,9 @@ the net for everything.
   gives euid the real uid; a sudo-like helper then calls `setgid(0)`/`setuid(0)`
   to make the command root.  The gate hands the shim its ids in `DN_IDS`.
 - `/proc/<pid>/status` says the process's ids (root, service or real), so a
-  reader that never calls `get*id` sees the same identity.
+  reader that never calls `get*id` sees the same identity; supplementary groups
+  are a per-process virtual list (`{0}` for root, the app's groups for the real
+  user at boot, replaced by `setgroups`/`initgroups`).
 - The goal is no accidental identity leak (apt, dpkg and `git`'s ownership check
   see what the tree's user expects), not isolation.
 

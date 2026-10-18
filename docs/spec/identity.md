@@ -34,9 +34,9 @@ per process); fork and exec inherit it, and an identity change is the transition
 
 | case | euid | what the program gets |
 | --- | --- | --- |
-| **root** | `0` | fake root: `set*id` remembered, `chown` stored, root's `/proc/status` view, `getgroups` one group 0 |
-| **service user** | a virtual uid, not the app's | its fake uid; no root: `set*id`/`chown` `EPERM`, no capabilities |
-| **real user** | the app's uid | the kernel's: real `get*id`, real groups, `set*id`/`chown` `EPERM`, real `access` and `/proc/status` |
+| **root** | `0` | fake root: `set*id` remembered, `chown` stored, root's `/proc/status` view, groups `{0}` |
+| **service user** | a virtual uid, not the app's | its fake uid; no root: `set*id`/`chown` `EPERM`, no capabilities; its virtual group list |
+| **real user** | the app's uid | the kernel's: real `get*id`, the app's groups at boot, `set*id`/`chown` `EPERM`, real `access` and `/proc/status` |
 
 `get*id` always answers the state; in the real user case the state *is* the app
 uid, so the answer is the kernel's.  `stat` ownership is a property of the
@@ -134,10 +134,11 @@ what would be a lie about authority**.
   -r` works because the owner store makes the home directory look owned by the
   user it removes.  These are **virtual users**: a login for one exists only
   inside the prefix (through an identity change), never as an Android user.
-- Supplementary groups are virtual too: `getgroups`/`initgroups` can be
-  answered in the fake world, the file's gid can be stored, but the kernel's
-  access checks use the app's gid, so group permissions are not enforced.  The
-  real user gets the kernel's groups.
+- Supplementary groups are a per-process **virtual list**: root starts with
+  `{0}`, the real user with the app's groups (read at boot), and
+  `setgroups`/`initgroups` replace it (root only, up to 32 entries).  A service
+  user reads that list.  A file's gid is stored, but the kernel's access checks
+  still use the app's gid, so group permissions are not enforced.
 - The fast path reads the owner store through a cache keyed by
   `(dev, ino, ctime)` in both the shim and the tracer: chown changes ctime, so
   an entry cannot go stale; a collision costs a getxattr.  Measured on p-dev,
@@ -163,18 +164,23 @@ what would be a lie about authority**.
 - A create is marked with the creator's ids: `openat`+`O_CREAT`, `mkdirat` and
   `mknodat` in the tracer, `mkdirat`/`mknodat` in the shim's lane; the marking
   costs an exit stop per **new** file (Lua: 79 exit stops, wall unchanged).
+- Groups: `getgroups` returns the process's virtual list; `setgroups`/
+  `initgroups` (root only) replace it.  Checked with a system user
+  (`adduser --system`, uid 100, gid 102): after `initgroups('svctest', 102)`
+  and `setuid`, `getgroups` is `[102]` and the created file is `100:102` in
+  both worlds.  The list is capped at 32.
 - `chown` is stored for any uid:gid; the cache keeps `stat` cheap; a hard-link
   copy carries the owner.  Root's capabilities are a `/proc` view;
   `capget`/`PR_CAPBSET_READ` are not answered.
 - Check suite, coverage and fingerprint are clean with the root seed; the Lua
-  build is ~11.8 s / 846 entry + 79 exit stops (root) and ~11.9 s / 854 + 79
+  build is ~11.7 s / 848 entry + 79 exit stops (root) and ~11.9 s / 856 + 79
   (real user).
 
 ## Plan / open questions
 
-1. **Virtual service users and groups**: `getgroups`/`initgroups` for a service
-   user (today it falls back to the kernel's groups), file gid, useradd UX that
-   says "virtual user".
+1. **Virtual service users**: the group list and file gid are in; still open:
+   group-based access enforcement (the kernel uses the app gid), a `useradd` UX
+   that says "virtual user", and the 32-entry cap.
 2. **Real `sudo` and `su`**: the gate lets the real binary start with euid 0;
    its PAM/sudoers/setgroups surface remains to be tested.  A wrapper is the
    fallback.

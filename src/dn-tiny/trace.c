@@ -266,6 +266,12 @@ static void sock_map(struct tracee *t, const struct row *rw, int out)
 struct ids { unsigned ru, eu, su, rg, eg, sg; };
 static struct ids fake_ids[PID_SLOTS];
 
+/* the supplementary groups, by pid; a virtual list for root/service users,
+ * the kernel's for the real user at boot */
+#define MAXG 32
+struct grps { unsigned char n; unsigned g[MAXG]; };
+static struct grps groups[PID_SLOTS];
+
 static struct ids *ids_of(pid_t pid) { return &fake_ids[PID_SLOT(pid)]; }
 
 /* the identity a process presents: real (euid is the app's), root (0), or a
@@ -278,11 +284,28 @@ static unsigned char euid_has_next[PID_SLOTS];
 
 void trace_identity_init(unsigned uid, unsigned gid)
 {
+	unsigned gbuf[MAXG];
+	i64 k;
 	unsigned i;
 
+	memset(gbuf, 0, sizeof gbuf);
+	if (uid == 0) {
+		gbuf[0] = 0;
+		k = 1;
+	} else {
+		k = sc(158, MAXG, (i64) gbuf, 0, 0, 0, 0);    /* the app's real groups */
+		if (k <= 0) {
+			gbuf[0] = gid;
+			k = 1;
+		}
+		if (k > MAXG)
+			k = MAXG;
+	}
 	for (i = 0; i < PID_SLOTS; i++) {
 		fake_ids[i].ru = fake_ids[i].eu = fake_ids[i].su = uid;
 		fake_ids[i].rg = fake_ids[i].eg = fake_ids[i].sg = gid;
+		groups[i].n = (unsigned char) k;
+		memcpy(groups[i].g, gbuf, (size_t) k * sizeof(unsigned));
 	}
 }
 
@@ -409,14 +432,43 @@ static void fake_result(struct tracee *t, int fake)
 		mon_skip(t, nr == 151 ? d->eu : nr == 152 ? d->eg : 0);
 		break;
 	}
-	case F_GROUPS:                                  /* getgroups(size, list): one group, 0 */
-		if (t->r.regs[0] != 0)
-			mon_write(t, t->r.regs[1], zero, 4);
-		mon_skip(t, 1);
+	case F_GROUPS: {                                /* getgroups(size, list) */
+		struct grps *g = &groups[PID_SLOT(t->pid)];
+		unsigned size = (unsigned) t->r.regs[0];
+
+		if (size == 0) {
+			mon_skip(t, g->n);
+			break;
+		}
+		if (size < g->n) {
+			mon_skip(t, -22);               /* EINVAL, as the kernel */
+			break;
+		}
+		mon_write(t, t->r.regs[1], g->g, (size_t) g->n * sizeof(unsigned));
+		mon_skip(t, g->n);
 		break;
-	case F_ZERO:                                    /* setgroups: root only */
-		mon_skip(t, ids_of(t->pid)->eu == 0 ? 0 : -1);
+	}
+	case F_ZERO: {                                  /* setgroups: root only, remembered */
+		struct grps *g = &groups[PID_SLOT(t->pid)];
+		unsigned size = (unsigned) t->r.regs[0];
+
+		if (ids_of(t->pid)->eu != 0) {
+			mon_skip(t, -1);                 /* EPERM */
+			break;
+		}
+		if (size > MAXG) {
+			mon_skip(t, -22);                /* EINVAL: our virtual list is smaller */
+			break;
+		}
+		if (size > 0 && mon_read(t, t->r.regs[1], g->g, (size_t) size * sizeof(unsigned)) !=
+				(ssize_t) (size * sizeof(unsigned))) {
+			mon_skip(t, -14);                /* EFAULT */
+			break;
+		}
+		g->n = (unsigned char) size;
+		mon_skip(t, 0);
 		break;
+	}
 	case F_EXDEV:                                   /* link across file systems */
 		mon_skip(t, -18);
 		break;
@@ -1285,17 +1337,10 @@ void trace_enter(struct tracee *t, const struct row *rw)
 		return;
 	}
 	if (rw->fake != F_NONE) {
-		unsigned eu = ids_of(t->pid)->eu;
-		int handled = 1;
-
-		/* getgroups is the kernel's for a non-root euid; set*id is faked with
-		 * the saved-id rules, chown is handled before this (store_owner). */
-		if (rw->fake == F_GROUPS && eu != 0)
-			handled = 0;
-		if (handled) {
-			fake_result(t, rw->fake);
-			return;
-		}
+		/* Every fake is answered here: get*id from the state, set*id with the
+		 * saved-id rules, groups from the virtual list (chown is earlier). */
+		fake_result(t, rw->fake);
+		return;
 	}
 	if (rw->special == SP_EXEC) {
 		exec_enter(t);
@@ -1365,6 +1410,7 @@ void trace_exe_commit(pid_t pid)
 void trace_exe_fork(pid_t parent, pid_t child)
 {
 	*ids_of(child) = *ids_of(parent);
+	groups[PID_SLOT(child)] = groups[PID_SLOT(parent)];
 	euid_has_next[PID_SLOT(child)] = 0;
 	memcpy(exe_now[PID_SLOT(child)], exe_now[PID_SLOT(parent)], EXE_LEN);
 }

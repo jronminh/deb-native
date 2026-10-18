@@ -145,10 +145,12 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   the process's euid -- no mode switch.  The setuid-bit gate is in (euid 0 or
   the real uid, owner from `user.dn.owner`), with the `DN_IDS` hint for the
   shim; a create is marked with the creator's ids (`openat`+`O_CREAT`,
-  `mkdirat`, `mknodat`).  Still open: legacy/symlink creations that predate
-  marking, virtual service-user groups, and testing the real
-  `sudo`/`su`/`passwd` binaries.  Virtual users are not Android users and are
-  not isolation.
+  `mkdirat`, `mknodat`); supplementary groups are a per-process virtual list
+  (`{0}` for root, the app's groups for the real user, replaced by
+  `setgroups`/`initgroups`, 32 entries).  Still open: legacy/symlink creations
+  that predate marking, group-based access enforcement, a `useradd` UX that says
+  "virtual user", and testing the real `sudo`/`su`/`passwd` binaries.  Virtual
+  users are not Android users and are not isolation.
 
 ## Speed
 

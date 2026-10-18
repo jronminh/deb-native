@@ -106,7 +106,7 @@ it; the runtime may still map its path.
 | transform | examples | placement | validation | fast path today |
 | --- | --- | --- | --- | --- |
 | `map` | `openat` `newfstatat` `statx` `readlinkat` `faccessat` `chdir` `mkdirat` ..., exec gate, AF_UNIX `sun_path` | shim symbol / lane, tracer entry (AF_UNIX, exec), loader hook | law | **yes** for the shim's list; **no** for AF_UNIX and exec (tracer only) |
-| `emulate` | `get*id`, `getres*id`; `/proc` synth (`status`, `cmdline`, `comm`, `cgroup`, `maps`, `smaps`, `uptime`, `loadavg`, `stat`, `vmstat`, `mounts`, `mountinfo`, `/etc/mtab`); `user.dn.owner` | shim symbol (ids), tracer entry/open (synth), xattr read (owner) | state / regenerated at open / xattr | **yes** for ids and synth reads; owner goes through a `(dev, ino, ctime)` cache (first stat per file reads the xattr) |
+| `emulate` | `get*id`, `getres*id`, `getgroups`/`setgroups` (the virtual list); `/proc` synth (`status`, `cmdline`, `comm`, `cgroup`, `maps`, `smaps`, `uptime`, `loadavg`, `stat`, `vmstat`, `mounts`, `mountinfo`, `/etc/mtab`); `user.dn.owner` | shim symbol (ids), tracer entry/open (synth), xattr read (owner) | state / regenerated at open / xattr | **yes** for ids and synth reads; owner goes through a `(dev, ino, ctime)` cache (first stat per file reads the xattr) |
 | `substitute` | `faccessat2`->`faccessat`, `fchmodat2`->`fchmodat`, `openat2`->`openat` (only when killed; `RESOLVE_*` -> `ENOSYS`) | tracer SIGSYS | explicit | no (not a hot path) |
 | `pass` | `read` `write` `close` `mmap` `futex` `epoll` `signals`, and sockets without an AF_UNIX path ... | kernel | kernel | yes (by definition) |
 

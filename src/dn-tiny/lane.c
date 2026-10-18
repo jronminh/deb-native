@@ -1198,19 +1198,6 @@ int getresgid(gid_t *r, gid_t *e, gid_t *s)
 	return 0;
 }
 
-/* getgroups: root's fake view is one group, 0; everyone else gets the kernel's
- * (the lane cookie allows the call without a stop). */
-int getgroups(int size, gid_t list[])
-{
-	unsigned v[6];
-
-	if (policy_root_len() && get_ids(v) && v[1] == 0) {
-		if (size > 0 && list)
-			list[0] = 0;
-		return 1;
-	}
-	return (int) lane_call(SYS_getgroups, size, (long) list, 0L, 0L, 0L);
-}
 
 #define SET_ID(name, params, args)                              \
 	static void *real_##name;                               \
