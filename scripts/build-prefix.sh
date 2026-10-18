@@ -292,6 +292,10 @@ if [ "$HOST" = adb ]; then
   printf '/sdcard\t/storage/emulated/0\tro\n' >> "$DEST/boot/binds"
 fi
 
+# A tar extraction by the host user drops the setuid bits; record the list so
+# init.sh can restore them on every boot (the app, Termux and ADB hosts alike).
+( cd "$DEST" && find . -xdev -type f -perm -4000 -printf '%P\n' | sort ) > "$DEST/boot/setuid"
+
 # ---- what the prefix is
 VER=$(cat "$ROOT/VERSION")
 cat > "$DEST/boot/version" <<V

@@ -168,6 +168,7 @@ DEST/
 │   ├── env           the host's variables: NAME keeps the host's value,
 │   │                 NAME=VALUE sets it (optional; read by boot.sh, never
 │   │                 sourced)
+│   ├── setuid        the setuid files, restored by init.sh after a copy
 │   └── version       what the prefix is (key=value)
 ├── usr/lib/deb-native/
 │   ├── dn-tiny       the tracer
@@ -206,7 +207,10 @@ Inside the prefix the paths are Debian's: `/usr`, `/etc`, `/var`, `/root`,
 ## Moving a prefix
 
 A prefix names no absolute path of its own: `boot.sh` finds the tree from its own
-location, so a prefix works wherever it is put.
+location, so a prefix works wherever it is put.  Extract it as the user who will
+own it: an unprivileged `tar` drops the setuid bits, so the prefix records them
+in `boot/setuid` (written by `build-prefix.sh`) and `init.sh` restores them at
+every boot -- this is what makes `sudo`/`su`/`passwd` work after an ADB deploy.
 
 ```sh
 tar -C ~ -czf /sdcard/debian.tar.gz debian       # in Termux

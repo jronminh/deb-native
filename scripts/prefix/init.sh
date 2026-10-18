@@ -57,6 +57,13 @@ if [ -n "$real_uid" ]; then
     printf 'user:!:20000:0:99999:7:::\n' >> /etc/shadow
   fi
 fi
+# A copy extracted by an unprivileged user loses the setuid bits; the build
+# records them in boot/setuid, and this restores them on every boot.
+if [ -f /boot/setuid ]; then
+  while IFS= read -r f; do
+    [ -n "$f" ] && chmod 4755 "/$f" 2>/dev/null || true
+  done < /boot/setuid
+fi
 if [ "$(id -u)" = "0" ]; then
   HOME=/root
 else

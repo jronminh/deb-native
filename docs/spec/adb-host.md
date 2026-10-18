@@ -56,7 +56,11 @@ scripts/adb-deploy.sh --port 39063 ~/p-adb.tar.gz
 ```
 
 It connects, pushes the tarball, extracts under `/data/local/tmp/<name>`,
-checks `boot/version` says `host=adb`, and boots once as `shell`.  Later:
+checks `boot/version` says `host=adb`, and boots once as `shell`.  The extraction
+by an unprivileged user drops the setuid bits; the prefix carries `boot/setuid`
+(written by `build-prefix.sh`) and `init.sh` restores them on the first boot, so
+`sudo`/`su`/`passwd` work.  (A prefix built before the manifest needs the list
+added once.)  Later:
 
 ```sh
 adb shell 'cd /data/local/tmp/p-adb && ./boot/boot.sh'
