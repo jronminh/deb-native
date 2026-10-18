@@ -167,8 +167,8 @@ the net for everything.
   fake-root write open temporarily adds the owner write bit (restored at the
   exit stop), `NoNewPrivs` reads 0, `PR_SET_DUMPABLE` is ignored, and the
   tracer reaches a non-dumpable tracee through `PTRACE_PEEKDATA`/`POKEDATA`.
-  Real `sudo` runs this way (the test prefix's `/etc/sudoers.d/user` is
-  NOPASSWD); the kernel still sees the app.
+  Real `sudo`, `su` and `passwd` run this way (the test prefix's
+  `/etc/sudoers.d/user` is NOPASSWD); the kernel still sees the app.
 - `/proc/<pid>/status` says the process's ids (root, service or real), so a
   reader that never calls `get*id` sees the same identity; supplementary groups
   are a per-process virtual list (`{0}` for root, the app's groups for the real

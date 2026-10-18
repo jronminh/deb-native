@@ -7,7 +7,8 @@
 #        the Lua build; each row is the wall and the tracer's entry/exit stops
 # check  fr.sh (ids, stat, setresuid, vfork/fork), mt (threads and vfork),
 #        xm (execmod/execmem), syscalls (a killed number with no row), owner
-#        (chown kept in user.dn.owner), and t.sh (git init and apt-get clean)
+#        (chown kept in user.dn.owner), su (the setuid gate and a PAM
+#        session), and t.sh (git init and apt-get clean)
 #
 # LUA_DIR is a guest path (default: /home/bench/lua-5.4.7, skipped if absent).
 # The tracer polls 500 us, as boot.sh does.  Interleave runs before and after a
@@ -89,6 +90,11 @@ check() {
 	*"owner: ok"*) ;;
 	*) echo "   owner: FAIL"; fail=1 ;;
 	esac
+
+	echo "== su (the setuid gate and a PAM session; from the root seed)"
+	o=$(quiet 'su -s /bin/sh user -c "id -u" </dev/null') || fail=1
+	printf '   su -> %s (real %s)\n' "${o:-none}" "$(id -u)"
+	[ "$o" = "$(id -u)" ] || { echo "   su: FAIL"; fail=1; }
 
 	echo "== t.sh (git init, apt-get clean)"
 	o=$(quiet 'sh /tmp/dn-bench/t.sh') || fail=1

@@ -150,11 +150,12 @@ step checked as `AGENTS.md` says, in Termux and in the app:
   `setgroups`/`initgroups`, 32 entries).  The fake root's DAC override is
   emulated (a write open adds owner-write, restored at exit), `NoNewPrivs`
   reads 0, `PR_SET_DUMPABLE` is ignored, and an unmarked setuid file counts as
-  root's; with those, the real `sudo` works (NOPASSWD, `apt-get`, `useradd`,
-  parent stays the real user).  Still open: legacy/symlink creations that
-  predate marking, group-based access enforcement, a `useradd` UX that says
-  "virtual user", and testing the real `su`/`passwd` binaries.  Virtual users
-  are not Android users and are not isolation.
+  root's; with those, real `sudo`, `su` and `passwd` work (sudo NOPASSWD with
+  `apt-get` and `useradd`; su login and password sessions; passwd as root and
+  as the user proving the old password).  Still open: legacy/symlink creations
+  that predate marking, group-based access enforcement, a `useradd` UX that
+  says "virtual user", and the 32-group cap.  Virtual users are not Android
+  users and are not isolation.
 
 ## Speed
 

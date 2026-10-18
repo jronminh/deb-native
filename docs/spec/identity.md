@@ -199,6 +199,13 @@ what would be a lie about authority**.
   `uid=0`, `sudo -n apt-get update`, `sudo -n useradd`/`userdel` work, and the
   parent shell stays the real user.  It needed those answers above, not a
   wrapper.
+- **Real `su` and `passwd`** run through PAM: `su - root` from the real user
+  authenticates from `/etc/shadow` and gives uid 0, a `/root` cwd and
+  `HOME=USER=LOGNAME=root`; a wrong password is refused; `su` from the root
+  seed to the real user, a service uid and root all work (sets `initgroups`,
+  the target's home and shell); `passwd` changes a password both as the fake
+  root and as a user proving the old one, and a wrong old password leaves the
+  hash untouched.  The regression set runs `su` from the root seed.
 - Check suite, coverage and fingerprint are clean with the root seed; the Lua
   build is 864 entry + 79 exit stops (root) and 872 + 79 (real user), wall
   ~12-14 s (the prctl row is the +16 over the row set before the sudo work).
@@ -208,9 +215,9 @@ what would be a lie about authority**.
 1. **Virtual service users**: the group list and file gid are in; still open:
    group-based access enforcement (the kernel uses the app gid), a `useradd` UX
    that says "virtual user", and the 32-entry cap.
-2. **Real `su` and `passwd`**: `sudo` is tested (NOPASSWD, apt and useradd);
-   `su`/`passwd` still need their PAM/password surface tested.  The wrapper
-   remains the fallback.
+2. **Real `sudo`, `su` and `passwd`**: tested (sudo NOPASSWD with apt and
+   useradd; su login and password auth; passwd as root and as the user).  The
+   wrapper remains the fallback.
 3. **Legacy and symlink creations**: files that predate marking (and symlinks,
    which take no user xattr) still read differently in the two worlds; a
    one-time adoption pass or a side store would close it.
