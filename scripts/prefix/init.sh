@@ -67,6 +67,15 @@ if [ -f /boot/setuid ]; then
     [ -n "$f" ] && chmod 4755 "/$f" 2>/dev/null || true
   done < /boot/setuid
 fi
+# A prefix built under another host can carry the builder's ownership on the
+# account files.  Make the virtual owner Debian's (the real inode stays the
+# builder's; the view is the contract the prefix promises).
+if command -v sudo >/dev/null 2>&1; then
+  sudo -n chown root:root /etc/passwd /etc/group 2>/dev/null || true
+  sudo -n chown root:shadow /etc/shadow /etc/gshadow 2>/dev/null || true
+  sudo -n chmod 644 /etc/passwd /etc/group 2>/dev/null || true
+  sudo -n chmod 640 /etc/shadow /etc/gshadow 2>/dev/null || true
+fi
 if [ "$(id -u)" = "0" ]; then
   HOME=/root
 else
