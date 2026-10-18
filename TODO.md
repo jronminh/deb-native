@@ -277,10 +277,11 @@ are kept here and in `experiments.md`, and its branch has been dropped.
 - **The contract** ([`docs/spec/contract.md`](docs/spec/contract.md)): the
   decision frame -- two gates (seccomp and the kernel), three levels (promised,
   best-effort, refused).  T1 (base and dev) is the milestone and is in; the
-  feature set is frozen there.  T2 (the shared-memory broker: SysV shm/sem/msg,
-  POSIX shm) is an **open question**, not planned: it is the expensive quadrant
+  feature set is frozen there.  T2 (the shared-memory broker: SysV shm/sem/msg)
+  is an **open question**, not planned: it is the expensive quadrant
   (seccomp-killed + config off), and a named workload plus a time-boxed spike is
-  the way in.  See [`docs/reference/seccomp-gates.md`](docs/reference/seccomp-gates.md).
+  the way in.  POSIX shm is done: the law maps `/dev/shm` to `<root>/run/shm`
+  and `init.sh` creates it.  See [`docs/reference/seccomp-gates.md`](docs/reference/seccomp-gates.md).
 
 Answer what Android refuses in place of the kernel, the same in the tracer and
 the shim:

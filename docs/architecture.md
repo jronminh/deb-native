@@ -149,6 +149,9 @@ the net for everything.
   name (`\0dn-<hash>` of the root and the host path) and the answer is mapped
   back; bind also makes a regular placeholder at the path, so `stat`, `chmod`
   and `unlink` work (`stat` reports a file, not `S_IFSOCK`).
+- `/dev/shm` is the tree's, not the host's: the law maps it to `ROOT/run/shm`
+  (created 1777 by `init.sh`), so `shm_open` works as files on both hosts even
+  though the phone's `/dev` has no writable shm.
 - The law lives once, in `policy.c`, and both engines read it: the tracer links
   it as it is, the shim builds it `-DDN_LIBC` (the types, the strings and
   `pol_readlink` from libc and the lane), the loader hook builds it `-DDN_FREE`

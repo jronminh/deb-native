@@ -39,8 +39,10 @@ of them.  The strategy differs:
 | **policy** | the app sandbox's kernel side (SELinux, capabilities) denies a call the kernel has | `unshare`, raw sockets, parts of `/sys` | answer or refuse; enforcement cannot be restored |
 
 The config delta was checked on the S10e on 2026-10-18: `/proc/sysvipc`,
-`/proc/sys/kernel/shmmax`, `/proc/sys/fs/mqueue` and `/dev/shm` are absent, and
-`shmget`/`semget`/`msgget`/`mq_open` answer `ENOSYS` in the prefix.
+`/proc/sys/kernel/shmmax`, `/proc/sys/fs/mqueue` and `/dev/shm` are absent from
+the host, and `shmget`/`semget`/`msgget`/`mq_open` answer `ENOSYS` in the
+prefix.  The law maps the tree's `/dev/shm` to `<root>/run/shm`, so POSIX shm
+(`shm_open`) works as files; SysV shm is still the broker question.
 
 ### A second gate: seccomp
 
@@ -184,7 +186,7 @@ in [`syscall-classes.md`](../reference/syscall-classes.md).
 | socket options, `SO_PEERCRED` | syscall | kernel's app ids | pass (the peer's ids are a residue) | best-effort | docs |
 | SysV `shm*`/`sem*`/`msg*` | syscall | double-blocked: seccomp kill + `CONFIG_SYSVIPC` off | broker (open question; `memfd` + unix socket) | refused today | census, gates |
 | POSIX `mq_*` | syscall | double-blocked: seccomp kill + config off | broker or refuse | refused today | census, gates |
-| POSIX shm (`shm_open`) | libc over `/dev/shm` | no `/dev/shm` row in the tree | provide a tmpfs (with a shm broker) | refused today | probe |
+| POSIX shm (`shm_open`) | libc over `/dev/shm` | no host `/dev/shm`; the law maps it to `<root>/run/shm` | the tree directory, created by `init.sh` | promised | probe, Python |
 | netlink `route`/`kobject` | netlink | partly allowed | pass / refuse per family | best-effort | census |
 | netlink `audit` | netlink | policy | `EPROTONOSUPPORT` (libaudit tolerates) | promised | `xm`, sudo |
 | raw sockets, netfilter/`iptables` | syscall | no `CAP_NET_ADMIN` | refuse `EPERM` | refused | docs |

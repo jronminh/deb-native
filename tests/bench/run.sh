@@ -7,7 +7,8 @@
 #        the Lua build; each row is the wall and the tracer's entry/exit stops
 # check  fr.sh (ids, stat, setresuid, vfork/fork), mt (threads and vfork),
 #        xm (execmod/execmem), syscalls (a killed number with no row), sock
-#        (an AF_UNIX pathname: bind, getsockname, connect, accept), owner
+#        (an AF_UNIX pathname: bind, getsockname, connect, accept), shm
+#        (a file under /dev/shm), owner
 #        (chown kept in user.dn.owner), access (the virtual ids, not the
 #        kernel's), su (the setuid gate and a PAM session), and t.sh (git init
 #        and apt-get clean)
@@ -89,6 +90,11 @@ check() {
 	o=$(quiet 'gcc -O2 -o /tmp/dn-bench/sock /tmp/dn-bench/sock.c && /tmp/dn-bench/sock') || fail=1
 	printf '%s\n' "$o"
 	case "$o" in *"sock: ok"*) ;; *) echo "   sock: FAIL"; fail=1 ;; esac
+
+	echo "== shm (a file under /dev/shm)"
+	o=$(quiet 'echo ok > /dev/shm/dn-bench-shm && cat /dev/shm/dn-bench-shm && rm -f /dev/shm/dn-bench-shm') || fail=1
+	printf '%s\n' "$o"
+	case "$o" in *ok*) ;; *) echo "   shm: FAIL"; fail=1 ;; esac
 
 	echo "== owner (chown kept in user.dn.owner, answered by stat)"
 	o=$(quiet 'sh /tmp/dn-bench/owner.sh') || fail=1

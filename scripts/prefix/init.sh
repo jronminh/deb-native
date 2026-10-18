@@ -81,6 +81,10 @@ TMPDIR=/tmp
 export TMPDIR
 mkdir -p "$TMPDIR"
 chmod 1777 "$TMPDIR" 2>/dev/null || true
+# POSIX shm: the law maps /dev/shm to this tree directory (the host's /dev has no
+# writable shm), on both hosts.
+mkdir -p /run/shm
+chmod 1777 /run/shm 2>/dev/null || true
 
 # A resolver for glibc: Android provides no /etc/resolv.conf.  A link that
 # does not resolve in the tree is replaced.

@@ -759,6 +759,18 @@ int policy_path_nf(const char *in, char *out, size_t cap, int nofollow)
 
 	if (in[0] != '/')
 		return 0;
+	/* /dev is the host's, but /dev/shm is the tree's: POSIX shm names live in a
+	 * directory the prefix owns (root/run/shm), on both hosts. */
+	if (strncmp(in, "/dev/shm", 8) == 0 && (in[8] == '\0' || in[8] == '/')) {
+		size_t n = strlen(in + 8);
+
+		if (root_len + 8 + n + 1 > cap)
+			return 0;
+		memcpy(out, root, root_len);
+		memcpy(out + root_len, "/run/shm", 8);
+		memcpy(out + root_len + 8, in + 8, n + 1);
+		return (int) (root_len + 8 + n + 1);
+	}
 	if (policy_is_host(in))
 		return 0;
 	b = row_guest(in);
@@ -830,6 +842,17 @@ int policy_nofollow(unsigned nr, int arg, const u64 *x)
  * same string (a host row), where the caller keeps it as it is */
 int policy_unpath(const char *host, char *out, size_t cap)
 {
+	if (root_len && strncmp(host, root, root_len) == 0 &&
+	    strncmp(host + root_len, "/run/shm", 8) == 0 &&
+	    (host[root_len + 8] == '\0' || host[root_len + 8] == '/')) {
+		size_t n = strlen(host + root_len + 8);
+
+		if (8 + n + 1 > cap)
+			return 0;
+		memcpy(out, "/dev/shm", 8);
+		memcpy(out + 8, host + root_len + 8, n + 1);
+		return (int) (8 + n + 1);
+	}
 	if (!to_guest(host, out, cap))
 		return 0;
 	return (int) strlen(out) + 1;
