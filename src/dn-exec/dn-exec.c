@@ -97,6 +97,15 @@ static i64 sc6(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f) {
 }
 
 static u64 slen(const char *s) { u64 n = 0; while (s[n]) n++; return n; }
+static int strncmp2(const char *a, const char *b, u64 n)
+{
+    while (n--) {
+        if (*a != *b) return (unsigned char)*a - (unsigned char)*b;
+        if (!*a) return 0;
+        a++; b++;
+    }
+    return 0;
+}
 static void *memcpy2(void *d, const void *s, u64 n) { u8 *a = d; const u8 *b = s; while (n--) *a++ = *b++; return d; }
 static void *memset2(void *d, int c, u64 n) { u8 *p = d; while (n--) *p++ = (u8)c; return d; }
 void *memset(void *d, int c, u64 n) { return memset2(d, c, n); }
@@ -323,7 +332,22 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
     i64 st = sc6(SYS_mmap, 0, STACK_SIZE, PROT_READ | PROT_WRITE,
                  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (st < 0) die("map stack");
-    u64 sp = build_stack((char *)((u64)st + STACK_SIZE), argc - i, argv + i, envp,
+
+    /* The L3 bootstrap: guest paths, not Android paths.  The shim/ldhook are
+     * opened by the loader through the law; ldhook's root comes from its own
+     * mapped host path. */
+    char *env2[MAX_VEC];
+    int ne = 0;
+    for (int e = 0; envp[e] && ne < MAX_VEC - 3; e++) {
+        if (strncmp2(envp[e], "LD_PRELOAD=", 11) == 0 || strncmp2(envp[e], "LD_AUDIT=", 9) == 0)
+            continue;
+        env2[ne++] = envp[e];
+    }
+    env2[ne++] = "LD_PRELOAD=/usr/lib/deb-native/dn-lane.so";
+    env2[ne++] = "LD_AUDIT=/usr/lib/deb-native/dn-ldhook.so";
+    env2[ne] = 0;
+
+    u64 sp = build_stack((char *)((u64)st + STACK_SIZE), argc - i, argv + i, env2,
                          prog_base + eh.e_phoff, sizeof(Phdr), eh.e_phnum, load_base, prog_entry,
                          prog, hwcap, hwcap2, sysinfo);
     jump_to(sp, entry);

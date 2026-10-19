@@ -1,7 +1,7 @@
 # Loader POC: `dn-exec` and the FHS bootstrap
 
-Status: **POC in progress** (2026-10-19), branch `dev/loader`.  L0/L1/L2 pass;
-L3 (shim/ldhook) is next.  Not in 0.9.0 and not merged.  The target is the one seam left after the runtime is in place: at
+Status: **POC in progress** (2026-10-19), branch `dev/loader`.  L0/L1/L2/L3
+pass; L4 (A/B measurements) is next.  Not in 0.9.0 and not merged.  The target is the one seam left after the runtime is in place: at
 boot, something must be loaded by the kernel before the prefix's own loader and
 law can run.  This plan removes the prefix paths from that seam.
 
@@ -69,6 +69,15 @@ Built `build/dn-exec` as a freestanding static PIE (`clang -static-pie
   `/proc/self/comm` says `readlink`, and `/proc/self/cmdline` starts with the
   program; the tracer recognises `dn-exec` and sets `exe_next` from its argv.
   A subsequent `exec` (`env`, `bash -c exec`) still goes through the gate.
+- L3 is in: `dn-exec` adds `LD_PRELOAD=/usr/lib/deb-native/dn-lane.so` and
+  `LD_AUDIT=/usr/lib/deb-native/dn-ldhook.so` (guest paths, not Android paths);
+  both appear in `/proc/self/maps` and `find` runs with the shim.
+  `dn-ldhook.so` finds the loader through `AT_BASE` when the loader is an
+  anonymous map, not a file-backed `ld-linux` line.
+- Cost so far: `true` went from L1 `enter=6/paths=5` to L3
+  `enter=8/paths=7`; that is the shim/ldhook bootstrap, not a speed result.
+  `/proc/self/environ` still shows the caller's environment (the loader's
+  `LD_*` are passed on the stack, not through the kernel), a follow-up.
 - The POC uses `MAP_FIXED` (the 4.14 kernel has no `MAP_FIXED_NOREPLACE`) and
   maps images from anonymous memory, so it needs `execmem` for RX, not
   `execmod`; this is the opposite trade of the current loader hook.
@@ -127,8 +136,8 @@ tests/dn-exec/run.sh ~/work/p-adb
 | **L0** | done: `dn-exec` maps a static hello and jumps; no prefix loader | a static program runs |
 | **L1** | done: dynamic hello: map the tree's `ld.so` and program; auxv/stack | `ld.so` loads libc and enters the program |
 | **L2** | done: guest argv/env, `#!`, `/proc/self/exe`, `AT_EXECFN` under the tracer | `readlink /proc/self/exe` is the guest path |
-| **L3** | next: shim + ldhook from guest paths/fds; root hint; no Android path in argv/env | `find`/`bash` boot; no host path in loader-visible config |
-| **L4** | A/B against the current kernel exec: stops and wall on the three workloads | no worse than the baseline |
+| **L3** | done: shim + ldhook from guest paths/fds; root hint; no Android path in argv/env | `find`/`bash` boot; no host path in loader-visible config |
+| **L4** | next: A/B against the current kernel exec: stops and wall on the three workloads | no worse than the baseline |
 | **L5** | `posix_spawn`/`vfork`, 100 × `true`, `make`, Python subprocess | no parent corruption; spawn within the agreed bound |
 | **L6** | 16 KB host and app `targetSdk` 36 (when available) | documented pass or refusal |
 

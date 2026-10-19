@@ -105,6 +105,45 @@ static int ld_text(const char *b, long tot, unsigned long *lo, unsigned long *hi
     }
     return 0;
 }
+/* AT_BASE from /proc/self/auxv: the loader's own base.  dn-exec maps the
+ * loader from anonymous memory, so its maps line has no "ld-linux" path. */
+static unsigned long auxv_base(void) {
+    char b[128];
+    long fd = openat_c("/proc/self/auxv"), n;
+    if (fd < 0) return 0;
+    n = sc6(63, fd, (long) b, sizeof b, 0, 0, 0);
+    sc6(57, fd, 0, 0, 0, 0, 0);
+    if (n < 16) return 0;
+    for (long i = 0; i + 15 < n; i += 16) {
+        unsigned long k = 0, v = 0;
+        for (int j = 0; j < 8; j++) k |= (unsigned long) (unsigned char) b[i + j] << (j * 8);
+        for (int j = 0; j < 8; j++) v |= (unsigned long) (unsigned char) b[i + 8 + j] << (j * 8);
+        if (k == 0) break;
+        if (k == 7) return v;
+    }
+    return 0;
+}
+
+/* The loader's entry segment, found by AT_BASE when the maps line has no path. */
+static int anon_text(const char *b, long tot, unsigned long base,
+                     unsigned long *lo, unsigned long *hi) {
+    unsigned long best = ~0UL, blo = 0, bhi = 0;
+    if (!base) return 0;
+    for (long i = 0; i < tot; ) {
+        long j = i; while (j < tot && b[j] != '\n') j++;
+        long L = j - i;
+        if (has(b + i, L, "r-xp")) {
+            unsigned long a = 0, c = 0; long k = i;
+            while (k < j && b[k] != '-') { a = a * 16 + (b[k] <= '9' ? b[k] - '0' : (b[k] | 32) - 'a' + 10); k++; }
+            k++; while (k < j && b[k] != ' ') { c = c * 16 + (b[k] <= '9' ? b[k] - '0' : (b[k] | 32) - 'a' + 10); k++; }
+            if (a >= base && a - base < 0x400000UL && a < best) { best = a; blo = a; bhi = c; }
+        }
+        i = j + 1;
+    }
+    if (best == ~0UL) return 0;
+    *lo = blo; *hi = bhi; return 1;
+}
+
 /* the module's own host path, into out; 1 if found */
 static int self_path(const char *b, long tot, char *out, long cap) {
     for (long i = 0; i < tot; ) {
@@ -213,7 +252,9 @@ __attribute__((visibility("default"))) unsigned int la_version(unsigned int v) {
     unsigned *common, *stubs, *sites[64];
     int ns = 0, i;
 
-    if (tot <= 0 || !ld_text(maps, tot, &lo, &hi) || !self_path(maps, tot, root, sizeof root))
+    if (tot <= 0 || !self_path(maps, tot, root, sizeof root))
+        return v ? v : LAV_CURRENT;
+    if (!ld_text(maps, tot, &lo, &hi) && !anon_text(maps, tot, auxv_base(), &lo, &hi))
         return v ? v : LAV_CURRENT;
     {   /* the root is this module's host path minus the tail */
         size_t n = 0, t = 0; while (TAIL[t]) t++;
