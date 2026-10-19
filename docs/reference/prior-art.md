@@ -136,7 +136,6 @@ the same road.
 | [lassik/shm_open_anon](https://github.com/lassik/shm_open_anon) | an anonymous shared-memory fd (`memfd_create`, or `shm_open` with the name removed) that can be passed over a unix socket with `SCM_RIGHTS` and survives `exec` if `FD_CLOEXEC` is cleared | the fd-passing rule the broker needs: clear `FD_CLOEXEC` only on the fd handed to a child, and give it a known number with `dup2` |
 | [Adding System V IPC support via LD_PRELOAD](https://github.com/termux/proot-distro/issues/19) (proot-distro #19) | the proot maintainer adds `msg*` and `sem*` in proot, and `shm*` later; `libandroid-shmem` is what worked until then | the order the work went in (msg and sem before shm), for the TODO's SysV item |
 
-
 ## Other hosts, devices, and ABI
 
 The projects below are not a syscall technique; they are platforms where a

@@ -78,7 +78,8 @@ may live in the runtime or in a small per-prefix daemon (see
 
 ## Shared limits and security
 
-- Both are per prefix and per boot; no sharing with Android or another prefix.
+- Both are per prefix; no sharing with Android or another prefix.  POSIX shm
+  names live with the tree; message queues would be per boot.
 - Permissions are emulated; the host authority is untouched.
 - The broker enforces queue and message limits, and the shm directory is
   bounded by the tree's filesystem; a guest cannot exhaust the app's memory
@@ -88,24 +89,26 @@ may live in the runtime or in a small per-prefix daemon (see
 
 | | scope |
 | --- | --- |
-| **P1** | `/dev/shm` row + regular-file shm; `shm_open`/`unlink`; `wl_shm` test |
+| **P1** | done: the `/dev/shm` mapping + regular-file shm; `shm_open`/`unlink`; `wl_shm` test |
 | **P2** | mqueue broker: open/send/receive/unlink/attrs |
 | **P3** | `mq_notify` signals; `/proc/sys/fs/mqueue` view |
 
-P1 is a path row, not a broker.  P2 needs the same kind of stateful service as
-SysV `msg`, and can share its transport.
+P1 is the path mapping in `policy.c` plus the directory from `init.sh`; it needs
+no broker.  P2 needs the same kind of stateful service as SysV `msg`, and can
+share its transport.
 
 ## Non-goals
 
 - A tmpfs (no privilege to mount one).
 - `/dev/mqueue` directory listing.
-- Persistence across boots.
+- A per-boot tmpfs.  Shm names live with the tree until unlinked.
 - Kernel-enforced permissions.
 
 ## Open questions
 
-1. **Shm directory location**: `/run/shm`, `/dev/shm` under the tree, or a
-   per-boot subdirectory?  How is it cleaned without touching a user's files?
+1. **Stale shm names**: `init.sh` creates `<root>/run/shm` but does not clear
+   it; POSIX shm is per boot.  Should boot remove old names, and how without
+   touching a user's own files?
 2. **`statfs`**: report the tree's filesystem, or synthesize a small tmpfs-like
    answer?  The former is honest; the latter may satisfy a probe.
 3. **Broker sharing**: one daemon for SysV and POSIX queues, or two?
@@ -116,6 +119,7 @@ SysV `msg`, and can share its transport.
 ## Sources
 
 glibc's `shm_open`/`mq_*` man pages and the Linux `mqueue`/tmpfs
-documentation; `lassik/shm_open_anon` for fd-passing; the SysV broker design
-in [`ipc-sysv.md`](ipc-sysv.md) for the queue state.  The shm target is a
-Wayland `wl_shm` client; the queue target is a `mq_notify` test.
+documentation; the `/dev/shm` mapping in `src/dn-tiny/policy.c` and the directory
+in `scripts/prefix/init.sh`; `lassik/shm_open_anon` for fd-passing; the SysV
+broker design in [`ipc-sysv.md`](ipc-sysv.md) for the queue state.  The shm
+target is a Wayland `wl_shm` client; the queue target is a `mq_notify` test.
