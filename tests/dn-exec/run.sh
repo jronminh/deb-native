@@ -28,6 +28,9 @@ cp "$OUT/dn-exec" "$P/usr/local/bin/dn-exec"
 chmod 755 "$P/usr/local/bin/dn-exec"
 echo "== dynamic true"
 "$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec /usr/bin/true
+echo "== dynamic exe identity"
+exe=$("$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec /usr/bin/readlink /proc/self/exe 2>/dev/null)
+[ "$exe" = "/usr/bin/readlink" ] || { echo "exe: got '$exe'"; exit 1; }
 echo "== dynamic find"
 "$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec /usr/bin/find /usr -maxdepth 1 >/dev/null
-echo "OK (static + dynamic; /proc/self/exe still needs L2)"
+echo "OK (L0 static, L1 dynamic, L2 identity)"

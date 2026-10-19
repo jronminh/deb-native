@@ -1537,6 +1537,17 @@ static int loader_token(const char *s, size_t l)
 	return l == m || s[l - m - 1] == '/';
 }
 
+/* dn-exec's own command line is the bootstrap seam; it names the program it
+ * will map.  The guest sees the program and its arguments, not dn-exec. */
+static int dn_exec_token(const char *s, size_t l)
+{
+	static const char n[] = "dn-exec";
+	size_t m = sizeof n - 1;
+
+	return l == m ? memcmp(s, n, m) == 0
+		: (l > m && s[l - m - 1] == '/' && memcmp(s + l - m, n, m) == 0);
+}
+
 /* "/proc/<pid>/cmdline": the kernel's own, minus the loader the exec gate puts in
  * front of a glibc program -- the loader, --preload/--audit and their host
  * paths, and the program token.  What is left is the argv the program was run
@@ -1571,8 +1582,51 @@ static int synth_cmdline(struct tracee *t, const char *guest, char *out, size_t 
 
 		ldl = z0 ? (size_t) (z0 - raw) : 0;
 	}
-	if (!loader_token(raw, ldl))
-		return 0;                              /* not the gate's command line: leave it */
+	{
+		int dn = dn_exec_token(raw, ldl);
+
+		if (!dn && !loader_token(raw, ldl))
+			return 0;                      /* not the gate's command line: leave it */
+		if (dn) {
+			const char *tok, *prog = NULL;
+			size_t len;
+
+			end = raw + n;
+			tok = raw + ldl + 1;               /* skip the dn-exec token */
+			if (tok > end) tok = end;
+			for (; tok < end; ) {
+				const char *z = memchr(tok, 0, (size_t) (end - tok));
+				size_t tl = z ? (size_t) (z - tok) : (size_t) (end - tok);
+
+				if (tl == 6 && memcmp(tok, "--root", 6) == 0) {
+					if (!z) break;
+					tok = z + 1;
+					z = memchr(tok, 0, (size_t) (end - tok));
+					if (!z) break;
+					tok = z + 1;
+					continue;
+				}
+				if (tl > 0 && tok[0] == '-') { tok += tl + 1; continue; }
+				prog = tok;
+				break;
+			}
+			if (!prog)
+				return 0;
+			len = (size_t) (end - prog);
+			if (len >= sizeof buf)
+				return 0;
+			memcpy(buf, prog, len);
+			rn = len;
+			if (rn == 0 || buf[rn - 1] != '\0')
+				buf[rn++] = '\0';
+			m = scpy(nm, sizeof nm, "cmdline.");
+			if (m < 0)
+				return 0;
+			m += uitoa(nm + m, (unsigned) pid);
+			nm[m] = '\0';
+			return put_synth(nm, buf, rn, out, cap);
+		}
+	}
 	end = raw + n;
 	for (tok = raw; tok < end; ) {
 		const char *z = memchr(tok, 0, (size_t) (end - tok));

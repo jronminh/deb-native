@@ -417,6 +417,47 @@ static void execveat_relative(struct tracee *t, int dirfd, char *path, size_t ca
 	scpy(path, cap, full);
 }
 
+/* Does this token name the POC's dn-exec?  The name is the seam: dn-exec
+ * tells the tracer which program it will map, because no kernel exec event
+ * follows the jump. */
+static int dn_exec_token(const char *s, size_t l)
+{
+	static const char n[] = "dn-exec";
+	size_t m = sizeof n - 1;
+
+	return l == m ? memcmp(s, n, m) == 0
+		: (l > m && s[l - m - 1] == '/' && memcmp(s + l - m, n, m) == 0);
+}
+
+/* dn-exec [--root DIR] PROGRAM [ARG...]: the guest program, into out.
+ * read_argv() carries only argv[0] in a; argv[1..] are pointers. */
+static int dn_exec_program(struct tracee *t, char *out, size_t cap)
+{
+	char s[4096];
+	int j = 1;
+
+	while (j < orig_n) {
+		ssize_t n = mon_read_str(t, orig_ptr[j], s, sizeof s - 1);
+
+		if (n <= 0)
+			return -1;
+		s[n] = '\0';
+		if (strcmp(s, "--root") == 0) {
+			j += 2;
+			continue;
+		}
+		if (s[0] == '-') {
+			j++;
+			continue;
+		}
+		if (strlen(s) + 1 > cap)
+			return -1;
+		memcpy(out, s, strlen(s) + 1);
+		return 0;
+	}
+	return -1;
+}
+
 void exec_enter(struct tracee *t)
 {
 	struct vec a = { .n = 0, .used = 0 }, out = { .n = 0, .used = 0 };
@@ -446,16 +487,24 @@ void exec_enter(struct tracee *t)
 		return;
 	resolve(path, &a, final, sizeof final, &out, prog, sizeof prog);
 	{
+		char idprog[512];
+		const char *ip = prog;
 		unsigned id[6];
-		int ne = setuid_identity(t, prog);
+		int ne;
 
+		if (dn_exec_token(prog, strlen(prog)) != 0 && dn_exec_program(t, idprog, sizeof idprog) == 0) {
+			if (idprog[0] != '/')
+				absolute_from_cwd(t, idprog, sizeof idprog);
+			ip = idprog;
+		}
+		ne = setuid_identity(t, ip);
 		trace_ids_of(t->pid, id);
 		if (ne >= 0)
 			id[1] = id[2] = (unsigned) ne;
 		inject_ids(t, id, nr == 281 ? 3 : 2);
+		/* what /proc/<pid>/exe will say once the exec succeeds */
+		trace_exe_pending(t->pid, ip);
 	}
-	/* what /proc/<pid>/exe will say once the exec succeeds (prog is a guest path) */
-	trace_exe_pending(t->pid, prog);
 
 	for (i = 0; i < out.n; i++) {
 		ptrs[i] = mon_scratch(t, out.s[i], strlen(out.s[i]) + 1);
