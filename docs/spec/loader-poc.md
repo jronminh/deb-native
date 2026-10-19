@@ -1,7 +1,7 @@
 # Loader POC: `dn-exec` and the FHS bootstrap
 
-Status: **POC plan** (2026-10-19), branch `dev/loader`.  Not in 0.9.0 and not
-merged.  The target is the one seam left after the runtime is in place: at
+Status: **POC in progress** (2026-10-19), branch `dev/loader`.  L0/L1 pass; L2
+(identity) is next.  Not in 0.9.0 and not merged.  The target is the one seam left after the runtime is in place: at
 boot, something must be loaded by the kernel before the prefix's own loader and
 law can run.  This plan removes the prefix paths from that seam.
 
@@ -54,6 +54,30 @@ Two properties matter:
 freestanding, and has no authority.  It validates the ELF it maps and never
 reads a path from the guest without the law.
 
+## POC result so far
+
+Built `build/dn-exec` as a freestanding static PIE (`clang -static-pie
+-nostdlib ... -Wl,-e,_start`), and `tests/dn-exec/hello` as a static ET_EXEC.
+
+- A static hello runs through `dn-exec`.
+- Under `dn-tiny` (`build/dn-tiny -t P -- /usr/local/bin/dn-exec ...`),
+  `/usr/bin/true` and `find /usr -maxdepth 1` run; the loader's libraries are
+  mapped through the law.
+- One stop cost: `dn-exec /usr/bin/true` was `enter=6 paths=5`; the current
+  kernel-exec path was `enter=3 paths=1` (single run, not a benchmark).
+- `readlink /proc/self/exe` still says `/usr/local/bin/dn-exec`, so L2 is
+  real: the tracer must recognise `dn-exec` and answer with the guest program.
+- The POC uses `MAP_FIXED` (the 4.14 kernel has no `MAP_FIXED_NOREPLACE`) and
+  maps images from anonymous memory, so it needs `execmem` for RX, not
+  `execmod`; this is the opposite trade of the current loader hook.
+
+Build/run:
+
+```sh
+scripts/build-dn-exec.sh
+tests/dn-exec/run.sh ~/work/p-adb
+```
+
 ## What `dn-exec` must do
 
 - Parse ELF64/AArch64: `PT_LOAD`, `PT_INTERP`, `PT_GNU_STACK`,
@@ -98,9 +122,9 @@ reads a path from the guest without the law.
 
 | | scope | gate |
 | --- | --- | --- |
-| **L0** | `dn-exec` maps a static hello and jumps; no prefix loader | a static program runs |
-| **L1** | dynamic hello: map the tree's `ld.so` and program; auxv/stack | `ld.so` loads libc and enters the program |
-| **L2** | guest argv/env, `#!`, `/proc/self/exe`, `AT_EXECFN` under the tracer | `readlink /proc/self/exe` is the guest path |
+| **L0** | done: `dn-exec` maps a static hello and jumps; no prefix loader | a static program runs |
+| **L1** | done: dynamic hello: map the tree's `ld.so` and program; auxv/stack | `ld.so` loads libc and enters the program |
+| **L2** | next: guest argv/env, `#!`, `/proc/self/exe`, `AT_EXECFN` under the tracer | `readlink /proc/self/exe` is the guest path |
 | **L3** | shim + ldhook from guest paths/fds; root hint; no Android path in argv/env | `find`/`bash` boot; no host path in loader-visible config |
 | **L4** | A/B against the current kernel exec: stops and wall on the three workloads | no worse than the baseline |
 | **L5** | `posix_spawn`/`vfork`, 100 × `true`, `make`, Python subprocess | no parent corruption; spawn within the agreed bound |
