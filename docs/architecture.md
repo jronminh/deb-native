@@ -125,6 +125,9 @@ the net for everything.
 - The mapping is one **table** (`policy.c`): a row per guest path. `/` is the
   prefix root; three host directories stay the phone's under their own names
   (`/proc`, `/sys`, `/dev`); each bind in a prefix's `boot/binds` is a row too.
+  A **device** is not a path row: synthetic nodes are a separate, opt-in table
+  ([`spec/devices.md`](spec/devices.md)), and a tagged device fd answers
+  `ioctl`/`mmap` itself instead of passing them to a host node.
   Guest to
   host by the longest guest row, host to guest by the longest host row.
 - The path is walked one component at a time on the **guest** path, links and
@@ -224,6 +227,11 @@ A program in the prefix sees three things, and nothing else of Android:
 - the host directories the law lets into the tree (today `/proc`, `/sys` and
   `/dev` under their own names; a bind can add another on purpose).
 
+0.9.0 has no synthetic devices.  When they are added
+([`spec/devices.md`](spec/devices.md)), a `boot/dev` entry makes a name under
+`/dev` a device the runtime serves, and a tagged fd is the one exception to the
+rule that `ioctl` is passed through.
+
 The test for a leak: a program that does not ask where it runs and still meets
 Android (in `ls -l`, in a leaky `/proc` file) is a bug. A program
 that looks on purpose finds out, and that is accepted:
@@ -258,10 +266,10 @@ kernel adds over a stock Debian's is there to be reached -- `binder` and
 `ashmem` (Android's IPC and shared memory, with no Debian analog), the GPU nodes
 `/dev/kgsl-3d0` and `/dev/ion`/`/dev/dma_heap` ([`../TODO.md`](../TODO.md),
 "Graphics"), the Android netlink families. A Debian on a PC has none of them;
-here they are a bind away (`boot/binds`) and an `ioctl` that is never stopped. It
-is the flip side of "the kernel is the truth" (`spec/phase2.md`): the rule that
-shows the phone's `uname` and `cpuinfo` shows its devices too, and a program
-that wants one finds it. (In the app domain SELinux may still refuse a node;
+here they are a bind away (`boot/binds`) and, for a host node, an `ioctl` that
+is never stopped. It is the flip side of "the kernel is the truth"
+(`spec/phase2.md`): the rule that shows the phone's `uname` and `cpuinfo` shows
+its devices too, and a program that wants one finds it. (In the app domain SELinux may still refuse a node;
 whether to expose it is the host's decision, a bind and a grant, not the
 runtime's.)
 

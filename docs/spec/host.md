@@ -42,8 +42,10 @@ of **three hosts** -- Termux and the app-less **ADB** host (a prefix under
   unix socket it listens on, and the tree's programs call it. The runtime only
   keeps the channel reachable: an AF_UNIX path is mapped like any other
   ([`../architecture.md`](../architecture.md), "The law"), a bind exposes the
-  socket's directory, and `/dev` and `ioctl` are untouched. No Android API is
-  faked in the tracer.
+  socket's directory, and, for a host node, `/dev` and `ioctl` are untouched.
+  No Android API is faked in the tracer.  A synthetic device is the deliberate
+  exception: that fd is the runtime's, not the host node's
+  ([`devices.md`](devices.md)).
 - **Display and input.** There is no DRM master for an app: the display is
   SurfaceFlinger's, reached with buffers over binder. So the host is the
   compositor -- a Wayland compositor on a `SurfaceView`, clients handing
@@ -51,6 +53,13 @@ of **three hosts** -- Termux and the app-less **ADB** host (a prefix under
   the input translated from `InputEvent` to Wayland. The GPU is the kernel's:
   render is Turnip on `/dev/kgsl-3d0` ([`../architecture.md`](../architecture.md),
   "Inherited from Android"; [`../../TODO.md`](../../TODO.md), "Graphics").
+
+  The compositor is one backend of the [device table](devices.md), not the
+  only one.  There, a prefix declares a synthetic `/dev` node; a provider owns
+  the device model and the backend owns the physical side.  The first planned
+  model is [fbdev](devices/fbdev.md) (a flat framebuffer, software), which keeps
+  the display path host-agnostic and gives the compositor a later step instead
+  of a prerequisite.
 - **Audio.** Android's audio is the framework's (AAudio/OpenSL ES); a Debian
   program reaches ALSA or PulseAudio. The host bridges it the way it bridges
   display: an ALSA or Pulse plugin in the tree talking to the app over a socket,

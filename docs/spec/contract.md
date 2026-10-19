@@ -81,8 +81,10 @@ Five kinds of surface, each with its own way of being answered:
    file Android hides is generated at open (`synth_*`).
 3. **netlink** -- route, audit, kobject; some families are killed, some answers
    are lies the kernel will not tell.
-4. **ioctl / device** -- the host's nodes under `/dev`; `ioctl` is never stopped,
-   so a node is either exposed through the bind table or it is not.
+4. **ioctl / device** -- the host's nodes under `/dev`; for a host node `ioctl`
+   is never stopped, so the node is either exposed through the bind table or it
+   is not.  A synthetic device ([`devices.md`](devices.md)) is the one
+   exception: its fd is tagged, and the runtime answers `ioctl` itself.
 5. **kernel-maintained names** -- the mount view, `getcwd`, `readlink`, the
    `/proc/<pid>/{cwd,exe,fd}` links, `AF_UNIX` paths; the law maps them out as
    well as in ([`coverage.md`](coverage.md)).
@@ -183,11 +185,12 @@ in [`syscall-classes.md`](../reference/syscall-classes.md).
 | facility | interface | host today | strategy | level | proof |
 | --- | --- | --- | --- | --- | --- |
 | pipes, `AF_UNIX` (path mapped), `AF_INET` | syscall | native | pass / map the `sun_path` | promised | `coverage`, tmux |
+| PTY, utmp/wtmp | syscall / files | `ptmx` may be allowed; no utmp view | pass a real PTY; file-backed records ([`pty-utmp.md`](pty-utmp.md)) | proposal | probe |
 | socket options, `SO_PEERCRED` | syscall | kernel's app ids | pass (the peer's ids are a residue) | best-effort | docs |
-| SysV `shm*`/`sem*`/`msg*` | syscall | double-blocked: seccomp kill + `CONFIG_SYSVIPC` off | broker (open question; `memfd` + unix socket) | refused today | census, gates |
-| POSIX `mq_*` | syscall | double-blocked: seccomp kill + config off | broker or refuse | refused today | census, gates |
-| POSIX shm (`shm_open`) | libc over `/dev/shm` | no host `/dev/shm`; the law maps it to `<root>/run/shm` | the tree directory, created by `init.sh` | promised | probe, Python |
-| netlink `route`/`kobject` | netlink | partly allowed | pass / refuse per family | best-effort | census |
+| SysV `shm*`/`sem*`/`msg*` | syscall | double-blocked: seccomp kill + `CONFIG_SYSVIPC` off | broker ([`ipc-sysv.md`](ipc-sysv.md)) | refused today | census, gates |
+| POSIX `mq_*` | syscall | double-blocked: seccomp kill + config off | broker ([`ipc-posix.md`](ipc-posix.md)) | refused today | census, gates |
+| POSIX shm (`shm_open`) | libc over `/dev/shm` | no host `/dev/shm`; the law maps it to `<root>/run/shm` | the tree directory, created by `init.sh` ([`ipc-posix.md`](ipc-posix.md)) | promised | probe, Python |
+| netlink `route`/`kobject` | netlink | partly allowed | pass / refuse per family ([`netlink.md`](netlink.md)) | best-effort | census |
 | netlink `audit` | netlink | policy | `EPROTONOSUPPORT` (libaudit tolerates) | promised | `xm`, sudo |
 | raw sockets, netfilter/`iptables` | syscall | no `CAP_NET_ADMIN` | refuse `EPERM` | refused | docs |
 | `ptrace` | syscall | same app only (SELinux) | pass; cross-app is the host's no | best-effort | runtime itself |
@@ -209,6 +212,7 @@ in [`syscall-classes.md`](../reference/syscall-classes.md).
 | keyrings (`add_key`, `request_key`, `keyctl`) | syscall | seccomp kill + kernel `ENOSYS` | `ENOSYS` | refused | gates |
 | `perf_event_open` | syscall | allowed; the host's perf/SELinux policy says `EACCES` | pass (the host's answer) | best-effort | census, probe |
 | `/dev` nodes, `ioctl` | device | host's nodes via binds | pass through (the node's truth) | best-effort | GPU TODO |
+| synthetic device (`boot/dev`) | device fd | none | broker: a tagged fd answers `ioctl`/`mmap`/`read`; unknown `ioctl` is `ENOTTY` | proposal ([`devices.md`](devices.md)) | conformance |
 
 ## Tiers
 
@@ -219,12 +223,18 @@ The order of work, by the userland's demand, not by the syscall table:
   milestone; it is in.**  The feature set is frozen here: no new promised row
   without a named workload and a test.
 - **T2 -- service**: a broker for SysV shm/sem/msg (PostgreSQL, X/Steam),
-  POSIX shm, pty/utmp, a netlink family.  **Open question, not planned**: the
+  POSIX shm and queues, pty/utmp, a netlink family.  **Still not planned**: the
   survey puts it in the expensive quadrant (seccomp-killed + config off), and a
   broker is a new stateful subsystem, not a row.  A named workload and a
-  time-boxed spike are the way in, not a general commitment.
+  time-boxed spike are the way in.  The designs are [`ipc-sysv.md`](ipc-sysv.md),
+  [`ipc-posix.md`](ipc-posix.md), [`pty-utmp.md`](pty-utmp.md),
+  [`netlink.md`](netlink.md).
 - **T3 -- desktop**: device passthrough (GPU, input, audio), Wayland/X over a
-  Windows/Host client.  **Later, only with a target.**
+  Windows/Host client.  **Later, only with a target**.  Device proposals:
+  [`devices.md`](devices.md), [`devices/fbdev.md`](devices/fbdev.md),
+  [`devices/input.md`](devices/input.md), [`devices/log.md`](devices/log.md),
+  [`devices/audio.md`](devices/audio.md), [`devices/tun.md`](devices/tun.md);
+  DRM is a [study](devices/drm.md), not a promise.
 - **T4 -- isolation**: namespaces/cgroups enforcement, containers, modules.
   **Out of scope**; that is the machine boundary (a VM), not a prefix.
 
@@ -265,8 +275,10 @@ The same runtime has three hosts, and the promise is the same
 3. **Substitute or refuse** for a version-missing call: `clone3`->`clone` is
    safe for glibc, but a direct-syscall program may prefer `ENOSYS`; keep the
    rule in one place.
-4. **Devices**: which `/dev` rows are safe to expose, given `ioctl` is never
-   stopped and a node is the host's.
+4. **Devices**: which host `/dev` rows are safe to expose, and which synthetic
+   nodes to offer.  The synthetic side is a separate, opt-in table
+   ([`devices.md`](devices.md)); a tagged device fd is the one exception to
+   "`ioctl` is never stopped".
 5. **Fast-path budget**: how many stops a promised facility may add before it
    must move into the shim/loader fast path.
 6. **Views of enforcement**: for cgroups/namespaces, is a view honest enough to
@@ -275,6 +287,7 @@ The same runtime has three hosts, and the promise is the same
 ## References
 
 In the repository: [`mapped-kernel.md`](mapped-kernel.md),
+[`../reference/syscall-security.md`](../reference/syscall-security.md),
 [`plan.md`](plan.md), [`phase2.md`](phase2.md), [`coverage.md`](coverage.md),
 [`identity.md`](identity.md),
 [`../reference/syscall-classes.md`](../reference/syscall-classes.md),

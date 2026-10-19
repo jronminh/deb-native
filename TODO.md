@@ -18,6 +18,10 @@ the numbers: [`docs/performance.md`](docs/performance.md).
   rule, not the census's, and the shim's libc patching needs `execmod`. No SUD
   and no seccomp bitmap (5.10 < 5.11); `memfd` exec is refused in Termux's
   domain (checked on the S10e).
+- **Security review before any synthetic device or a sandbox claim**: the
+  bypass classes and rules are in
+  [`docs/reference/syscall-security.md`](docs/reference/syscall-security.md);
+  the prefix is a compatibility layer, not an isolation boundary.
 - **Another phone**, and Termux from F-Droid as a user gets it.
 - **dn-shell**: stage 5 (prefixes) is next -- it does not run a prefix's
   `boot/boot.sh` yet, and will write the prefix's `boot/binds` before (see "The
@@ -278,11 +282,15 @@ are kept here and in `experiments.md`, and its branch has been dropped.
 - **The contract** ([`docs/spec/contract.md`](docs/spec/contract.md)): the
   decision frame -- two gates (seccomp and the kernel), three levels (promised,
   best-effort, refused).  T1 (base and dev) is the milestone and is in; the
-  feature set is frozen there.  T2 (the shared-memory broker: SysV shm/sem/msg)
-  is an **open question**, not planned: it is the expensive quadrant
-  (seccomp-killed + config off), and a named workload plus a time-boxed spike is
-  the way in.  POSIX shm is done: the law maps `/dev/shm` to `<root>/run/shm`
-  and `init.sh` creates it.  See [`docs/reference/seccomp-gates.md`](docs/reference/seccomp-gates.md).
+  feature set is frozen there.  POSIX shm is done: the law maps `/dev/shm` to
+  `<root>/run/shm` and `init.sh` creates it.  T2 (SysV shm/sem/msg, POSIX
+  queues, pty/utmp, netlink) is **still not planned**: it is the expensive
+  quadrant (seccomp-killed + config off), and a named workload plus a
+  time-boxed spike is the way in.  Designs: [`docs/spec/ipc-sysv.md`](docs/spec/ipc-sysv.md),
+  [`docs/spec/ipc-posix.md`](docs/spec/ipc-posix.md),
+  [`docs/spec/pty-utmp.md`](docs/spec/pty-utmp.md),
+  [`docs/spec/netlink.md`](docs/spec/netlink.md).  See
+  [`docs/reference/seccomp-gates.md`](docs/reference/seccomp-gates.md).
 
 Answer what Android refuses in place of the kernel, the same in the tracer and
 the shim:
@@ -316,7 +324,7 @@ the shim:
   woken when another process changes the set): huntergdavis/steamclienttermux
   names that, with robust lists, as what made Steam run. Droid-Deck/DroidDeck's
   `tools/linuxfs/preload/sysv.c` (GPL-3.0, as this repo) keeps shm, sem and msg
-  as files under `/dev/shm`. Do it when a program needs it;
+  as files under `/dev/shm`. Do it when a program needs it ([`docs/spec/ipc-sysv.md`](docs/spec/ipc-sysv.md));
 - privileged ports (a bind translation, and `getsockname`/`accept` back);
 - capabilities: the `Cap*` sets in `/proc/<pid>/status`, `cap_last_cap`,
   `capget`/`capset` and `PR_CAPBSET_READ`/`PR_CAPBSET_DROP` answer one virtual
@@ -334,6 +342,15 @@ over a PC's kernel: `binder` and `ashmem`, the GPU nodes (`/dev/kgsl-3d0`,
 can drive it from the tree. Worth reaching for when a program wants one (a GPU;
 an IPC or shared-memory client); today they are only what a prober finds
 ([`docs/architecture.md`](docs/architecture.md), "Inherited from Android").
+
+## Devices (0.10, proposal)
+
+Synthetic `/dev` nodes served by a provider, opt-in through `boot/dev`; see
+[`docs/spec/devices.md`](docs/spec/devices.md) and
+[`docs/spec/devices/fbdev.md`](docs/spec/devices/fbdev.md).  Input, log/console,
+audio and TUN are separate proposals under `docs/spec/devices/`; DRM is a
+study.  Not in 0.9.0 and not part of T1.  D0-D2 (mechanism, fbdev, evdev) need neither T2 nor T3.
+A tagged device fd is the one exception to "`ioctl` is never stopped".
 
 ## Graphics (later)
 
@@ -450,6 +467,8 @@ MB). What it takes, as far as known:
   service for long work.
 - Testing must happen inside the app's own process: `run-as` runs in
   `runas_app`, another domain.
+
+Design for the high-`targetSdk`, APK-only path: [`docs/spec/dn-ng.md`](docs/spec/dn-ng.md).
 
 The hosts are written up in [`docs/spec/hosts.md`](docs/spec/hosts.md) (the
 three), with [`docs/spec/host.md`](docs/spec/host.md) for the custom app (a

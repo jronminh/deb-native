@@ -4,10 +4,12 @@ Projects that do a part of what deb-native does, and what each one offers it.
 None of them combines the three parts deb-native rests on
 ([`architecture.md`](../architecture.md)): an unmodified Debian glibc tree,
 a shim that patches the `svc` sites in the process, and a tracer as the net
-under it, both answering by one law. Checked 2026-10-15 and 2026-10-16; the
-claims about a project's own behavior come from its README or paper, and are
-not checked on this phone unless the text says so. The long ideas behind them,
-with their papers, are in [`research.md`](research.md).
+under it, both answering by one law. Checked 2026-10-15 and 2026-10-16, with the
+platform rows added 2026-10-19; the claims about a project's own behavior come
+from its README or paper, and are not checked on this phone unless the text says
+so. The long ideas behind them,
+with their papers, are in [`research.md`](research.md); the security lens on
+restricted syscalls is in [`syscall-security.md`](syscall-security.md).
 
 ## Contents
 
@@ -22,6 +24,7 @@ with their papers, are in [`research.md`](research.md).
 - [Root emulation and path walks](#root-emulation-and-path-walks)
 - [Loader and libc interposition](#loader-and-libc-interposition)
 - [System V IPC and shared memory](#system-v-ipc-and-shared-memory)
+- [Other hosts, devices, and ABI](#other-hosts-devices-and-abi)
 
 ## The closest relative: WSL1
 
@@ -132,3 +135,62 @@ the same road.
 | [pelya/android-shmem](https://github.com/pelya/android-shmem) (2013) | SysV shm over ashmem through `LD_PRELOAD`, with `sendmsg`/`recvmsg` for the fds; used by Xserver and Linux GUI programs in chroots | the shm half of the SysV work, and why the TODO's SysV design needs `memfd`, not ashmem, on newer kernels |
 | [lassik/shm_open_anon](https://github.com/lassik/shm_open_anon) | an anonymous shared-memory fd (`memfd_create`, or `shm_open` with the name removed) that can be passed over a unix socket with `SCM_RIGHTS` and survives `exec` if `FD_CLOEXEC` is cleared | the fd-passing rule the broker needs: clear `FD_CLOEXEC` only on the fd handed to a child, and give it a known number with `dup2` |
 | [Adding System V IPC support via LD_PRELOAD](https://github.com/termux/proot-distro/issues/19) (proot-distro #19) | the proot maintainer adds `msg*` and `sem*` in proot, and `shm*` later; `libandroid-shmem` is what worked until then | the order the work went in (msg and sem before shm), for the TODO's SysV item |
+
+
+## Other hosts, devices, and ABI
+
+The projects below are not a syscall technique; they are platforms where a
+host owns the screen, the devices, or the kernel personality.  They are
+references for the device table ([`../spec/devices.md`](../spec/devices.md)),
+the display backend, and the "hardware thật" route, not a dependency list.
+
+### A host that owns the screen
+
+| project | how | what deb-native can take |
+| --- | --- | --- |
+| **ChromeOS Crostini** (Termina VM, `crosvm`, **Sommelier**, Xwayland, virtio-gpu, 9p/virtiofs) | Linux runs in a VM; Sommelier is a Wayland/X proxy that presents guest windows on Chrome's compositor; Xwayland covers X11 clients | the split "guest compositor vs host compositor" and a proxy protocol; the host owns the display, the guest owns its desktop.  This is the closest mature shape to an app as display host, with a VM instead of a prefix |
+| **WSLg** ([microsoft/wslg](https://github.com/microsoft/wslg)) | a system distro runs Weston; Windows presents it over RDP/VAIL; audio and clipboard are bridged; Xwayland for X11 | display/audio/clipboard transport as a host service; the client stays stock |
+| **Android Terminal app / AVF** (`pKVM` + `crosvm`; Android 15 QPR2/16; [nixos-avf](https://github.com/nix-community/nixos-avf), [arch-arm64-avf](https://github.com/vitorpy/arch-arm64-avf)) | Android runs a Linux VM with virtio devices; the Terminal app is the front end; images are installed as a guest | the real-hardware route on Android: virtio, no root, a real guest kernel.  It is **VM-shaped and system-level**, not an app API; GPU/virtio-gpu support is device-dependent ([gfxstream](https://github.com/google/gfxstream)) |
+| **Waydroid / Anbox / ARCVM / Halium** | the inverse: Android in a container/VM on Linux, with binder/gralloc adaptations | what a binder/gralloc boundary looks like, and why a container is not a prefix; not a path for Debian |
+
+### Android hardware from glibc
+
+| project | how | what deb-native can take |
+| --- | --- | --- |
+| [libhybris](https://github.com/libhybris/libhybris) | glibc programs load bionic HALs: gralloc, EGL, HWC, sensors | a possible real-GPU/display path without a DRM card; the app sandbox and HAL permissions decide whether it is usable |
+| [NotKit/xf86-video-hwcomposer](https://github.com/NotKit/xf86-video-hwcomposer) | an Xorg DDX that renders through Android's HWComposer via libhybris | a worked "glibc + HWC" adapter; a data point for display without SurfaceFlinger |
+| [google/gfxstream](https://github.com/google/gfxstream), virglrenderer, venus, ANGLE, Zink/Turnip | GPU virtualization or translation for a VM or a remote renderer | the GPU half of the VM route; not needed for the first synthetic devices |
+
+### Userspace devices
+
+| project | how | what deb-native can take |
+| --- | --- | --- |
+| [xspager/fuse_fb](https://github.com/xspager/fuse_fb) | CUSE implements a `/dev/fb0`-like char device in userspace | the ioctl/mmap shape of a synthetic framebuffer; CUSE needs a kernel module and root, so only the semantics are taken |
+| [stefanberger/swtpm](https://github.com/stefanberger/swtpm), [OpenMandrivaSoftware/ossp](https://github.com/OpenMandrivaSoftware/ossp) | CUSE devices for TPM and OSS audio | examples of a char device whose ioctl answers come from a userspace model |
+| [rust-vmm/vfio-user](https://github.com/rust-vmm/vfio-user), vhost-user | a device backend in another process, over a socket and shared memory | the provider/backend split and the fd-passing discipline for the device table |
+| QEMU TCG with virtio-gpu/input (in Termux) | a full VMM in userspace, no KVM; virtio devices are real to the guest | the "true hardware" PoC on a phone, and a benchmark for why a prefix is cheaper |
+
+### Input, seat, udev
+
+| project | how | what deb-native can take |
+| --- | --- | --- |
+| [illiliti/libudev-zero](https://github.com/illiliti/libudev-zero) | a daemonless libudev replacement; reads sysfs and `/run/udev/data` | libinput without a udev daemon, if a synthetic sysfs view exists |
+| [kennylevinsen/seatd](https://github.com/kennylevinsen/seatd) | a minimal seat management daemon (`libseat`) | a seat for a guest compositor without logind; useful if a virtual DRM model appears |
+| mdevd / mdev | small device managers | a replacement for udevd in a tree; not needed for v1 |
+| evemu, evtest, ydotool | event recording, reading, injection | conformance tools for evdev/uinput |
+
+### ABI personalities and kernel-in-userspace
+
+| project | how | what deb-native can take |
+| --- | --- | --- |
+| [darlinghq/darling](https://github.com/darlinghq/darling), [Wine](https://github.com/wine-mirror/wine) | a loader plus a personality layer (Darling also has a kernel module); Wine's `ntdll` is a userspace NT kernel | how a personality is separated from the host, and where a loader must sit; neither runs a Debian tree on Android |
+| User-Mode Linux (`arch/um`) | the Linux kernel runs as a process; devices are host-backed | a real kernel without a hypervisor, but **x86 only**; not usable on arm64 |
+| LKL (`lkl/linux`) | Linux kernel code as a library | a real kernel in-process; device support is host-specific, so it is research, not a drop-in |
+| Drawbridge, Lupine, Gramine, OSv, Unikraft | library OS / unikernel: rebuild the program or libc instead of patching it | the other side of the bet; useful as a control, not as the runtime |
+
+### Remote display and transport
+
+| project | how | what deb-native can take |
+| --- | --- | --- |
+| SPICE, Looking Glass, wayvnc, Xpra | pixels and input over a protocol | data-plane designs for a display backend; not a reason to put a server in the architecture |
+| Weston headless, Xvfb, Cage | a server/compositor without a physical output | reference behaviour for a virtual screen; the server route the device table avoids |

@@ -67,9 +67,43 @@ in a different way.
 
 - **Gramine**, **OSv**, **LKL** (Linux Kernel Library): rebuild the program or
   its libc to call a library instead of the kernel -- the opposite of patching an
-  unmodified libc. They show what a runtime does *not* have to intercept when it
-  owns the program; deb-native's bet is the other side, keeping the program
-  stock.
+  unmodified libc.  **Drawbridge** (ASPLOS 2011) and **Lupine** ("A Linux in
+  Unikernel Clothing", EuroSys 2020) are the same family: a library OS with a
+  Linux ABI.  They show what a runtime does *not* have to intercept when it owns
+  the program; deb-native's bet is the other side, keeping the program stock.
+
+## A host that owns the screen
+
+These are platforms and specifications, not papers, but they are the closest
+published designs for a host that presents a guest's windows and devices:
+
+- **Crostini** (ChromeOS): a Termina VM under `crosvm`, **Sommelier** as the
+  Wayland/X proxy to Chrome's compositor, Xwayland for X11, virtio-gpu and
+  9p/virtiofs.  The split is the one the device table makes: the guest owns its
+  compositor, the host owns the screen; only the proxy and the buffers cross.
+- **WSLg** (Microsoft): a system distro with Weston, presented to Windows over
+  RDP/VAIL, with audio and clipboard bridged.  A worked example of display and
+  input as a host service.
+- **Android Terminal app / AVF** (Android 15 QPR2/16): `pKVM` + `crosvm`, a
+  real Linux VM with virtio devices.  It validates the hardware route on
+  Android, but it is system-level and VM-shaped, not an app API.
+
+## Devices, seats, and virtual hardware
+
+- **virtio** (OASIS): the device model and split-ring protocol.  A reference
+  for a provider/backend contract; a prefix without a guest kernel cannot use
+  the bus, only the shapes.
+- **VKMS** (kernel docs): a virtual KMS driver; the UAPI a synthetic DRM model
+  would imitate.  **CUSE/FUSE** (kernel docs): a char device in userspace, the
+  direct ancestor of a synthetic `/dev` node; it needs kernel support an app
+  does not have.
+- **vfio-user** and **vhost-user**: a device backend in another process over a
+  socket and shared memory; the discipline for fd passing and queues.
+- **libudev-zero** and **seatd**: daemonless libudev and minimal seat
+  management; the pieces a guest compositor or libinput needs when there is no
+  systemd/udevd.
+- **Mesa `drm-shim`**: a narrow userspace DRM model, enough for a test stack;
+  the proof that a subset can satisfy real clients, not a general driver.
 
 ## What to read first
 
@@ -77,3 +111,7 @@ in a different way.
 2. **zpoline/lazypoline** and **Systrap** -- the two shapes of an in-process
    fast path (rewrite the instruction; learn the site).
 3. **Charliecloud's paper** -- what a fake root can and cannot be.
+4. **Crostini/Sommelier** and **WSLg** -- the host-display split before designing
+   a backend; **VKMS**/`drm-shim` -- the device UAPI before promising DRM.
+5. **`syscall-security.md`** -- the bypass classes and the rules that follow
+   them; read it before calling any filter a sandbox.

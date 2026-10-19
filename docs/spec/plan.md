@@ -95,6 +95,9 @@ identity to be the tree's.
   the stop counts as the measure, near-native as the target.
 - **The boundary:** what the program may and may not see (isolation is *not* the
   goal -- one prefix, one boot -- but the host frame must not leak).
+- **Devices (0.10, proposal):** a synthetic `/dev` device is a new tier, not a
+  mapping row; see [`devices.md`](devices.md).  It starts after the T1 freeze
+  and does not change phases 1 and 2.
 
 ## Questions this plan settled
 
