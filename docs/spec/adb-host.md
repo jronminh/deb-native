@@ -3,7 +3,7 @@
 Status: **implemented and tested** (2026-10-18) on the S10e, Android 12.
 The runtime is the same; the host is different: instead of an app, the prefix
 lives in `/data/local/tmp` and is driven from a PC over `adb shell`.  This is
-**one of three hosts** -- Termux and a custom app are the others
+**one of the hosts** -- Termux, a custom app and the dn-ng APK are the others
 ([`hosts.md`](hosts.md)).  It is a **host variant**, not a kernel or a fork: one
 source, one law, the same rows.
 

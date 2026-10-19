@@ -7,7 +7,7 @@ kernel** (the values the kernel fixes and a mapping cannot carry).  Status:
 implemented through phase 1; phase 2 is in for the values that matter, and the
 [contract](contract.md) decides the residue (promised, best effort, refused).
 
-## Where we are (2026-10-18)
+## Where we are (2026-10-19)
 
 - The mapping is **complete for the readers in [`coverage.md`](coverage.md)**:
   path in and out, fds, `AF_UNIX`, the mount view and the process view; the
@@ -16,6 +16,8 @@ implemented through phase 1; phase 2 is in for the values that matter, and the
   patches, the loader hook, the cancellable `svc`) work; the Lua build is **864
   entry + 79 exit stops** (root seed) and **872 + 79** (real user), about 13 s;
   the bench is `tests/bench/run.sh`.
+- POSIX shm is in: the law maps `/dev/shm` to `<root>/run/shm` (`policy.c`,
+  `init.sh`); `capget` and the `/proc/<pid>/stat` name are answered too.
 - Phase 2 is in for the values that matter (identity, the SELinux label, the
   `/proc` answers); the rest is the [contract](contract.md)'s business: it says
   what is promised, best effort or refused, and why.
@@ -98,6 +100,9 @@ identity to be the tree's.
 - **Devices (0.10, proposal):** a synthetic `/dev` device is a new tier, not a
   mapping row; see [`devices.md`](devices.md).  It starts after the T1 freeze
   and does not change phases 1 and 2.
+- **The platform (proposal):** Debian is the first tree, not the product
+  boundary; [dn-ng](dn-ng.md) is the high-`targetSdk`, APK-only host, and the
+  device table is the I/O tier.
 
 ## Questions this plan settled
 

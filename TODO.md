@@ -383,7 +383,7 @@ when a prefix should draw with the GPU:
   client over a unix socket to a bionic service using the system's
   `libvulkan.so`; compute works there, display does not yet.
 
-## Beyond Debian, and bundles (the focus is Debian)
+## Beyond Debian, and bundles (Debian is the first tree)
 
 The runtime knows nothing of dpkg or apt: a tree with a loader, its libraries
 and a program is enough. The variants worth building, a worked busybox bundle and

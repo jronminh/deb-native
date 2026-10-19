@@ -222,8 +222,9 @@ The order of work, by the userland's demand, not by the syscall table:
   prefix with `apt`, `dpkg`, gcc, git, python, sudo/su/passwd.  **This is the
   milestone; it is in.**  The feature set is frozen here: no new promised row
   without a named workload and a test.
-- **T2 -- service**: a broker for SysV shm/sem/msg (PostgreSQL, X/Steam),
-  POSIX shm and queues, pty/utmp, a netlink family.  **Still not planned**: the
+- **T2 -- service**: POSIX shm is in (the `/dev/shm` mapping).  Still open are a
+  broker for SysV shm/sem/msg (PostgreSQL, X/Steam), POSIX queues, pty/utmp and
+  a netlink family.  **Still not planned**: the
   survey puts it in the expensive quadrant (seccomp-killed + config off), and a
   broker is a new stateful subsystem, not a row.  A named workload and a
   time-boxed spike are the way in.  The designs are [`ipc-sysv.md`](ipc-sysv.md),
@@ -240,7 +241,8 @@ The order of work, by the userland's demand, not by the syscall table:
 
 ### Hosts
 
-The same runtime has three hosts, and the promise is the same
+The same runtime has three current hosts (plus the dn-ng APK proposal), and the
+promise is the same
 ([`hosts.md`](hosts.md)):
 
 - **Termux** and **custom app**: Android's seccomp filter plus the runtime's

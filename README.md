@@ -56,7 +56,7 @@ adds about 0.1 s).  Details: [`docs/architecture.md`](docs/architecture.md),
 
 | track | today | direction |
 | --- | --- | --- |
-| **terminal / tools** | Debian T1, three hosts | stable, near-native |
+| **terminal / tools** | Debian T1, three current hosts | stable, near-native |
 | **GUI** | next | a host backend (X11/Wayland) + the device table |
 | **input / audio** | next | evdev/uinput, ALSA/AAudio; data only |
 | **games / Steam** | roadmap | same-arch tools first; Wine/Box64/GPU are extra layers |

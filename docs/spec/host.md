@@ -9,10 +9,11 @@ behind an app's identity, and no syscall in the tree reaches it. So a prefix
 runs inside a **host** (the app; also the *container*), and the host provides
 what the kernel does not.
 
-This is the contract between the two.  Status: proposal.  The custom app is one
-of **three hosts** -- Termux and the app-less **ADB** host (a prefix under
-`/data/local/tmp`, driven from a PC) are the others; the overview is
-[`hosts.md`](hosts.md), and the ADB host is [`adb-host.md`](adb-host.md).
+This is the contract between the two.  Status: proposal.  The custom app is the
+classic app host; Termux and the app-less **ADB** host (a prefix under
+`/data/local/tmp`, driven from a PC) are the others, and **dn-ng** is the
+APK-only host proposal.  The overview is [`hosts.md`](hosts.md), the ADB host is
+[`adb-host.md`](adb-host.md), and the next generation is [`dn-ng.md`](dn-ng.md).
 
 ## Contents
 
@@ -85,11 +86,12 @@ of **three hosts** -- Termux and the app-less **ADB** host (a prefix under
 
 ## The bounds
 
-- **targetSdk 28**, while the app's own `execve` of a file in its data
-  directory is required ([`../reference/prior-art.md`](../reference/prior-art.md),
-  "Exec on Android: W^X and the linker"). A later target ships the runtime as
-  the APK's native libraries and execs through a trampoline -- believed, not
-  checked (TODO, "A prefix in any app").
+- **targetSdk 28** is the legacy path, while the app's own `execve` of a file in
+  its data directory is required ([`../reference/prior-art.md`](../reference/prior-art.md),
+  "Exec on Android: W^X and the linker").
+- **targetSdk 36, APK-only** is [dn-ng](dn-ng.md): runtime and loader as APK
+  native libraries, userland exec, no app-data `execve`.  The exact API-level
+  behaviour is checked on the Android 16 phone (TODO, "A prefix in any app").
 - **Permissions:** the host exposes only what it holds and the platform allows;
   the framework checks the app, not the tree.
 
