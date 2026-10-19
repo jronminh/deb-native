@@ -1,7 +1,8 @@
 # Loader POC: `dn-exec` and the FHS bootstrap
 
-Status: **POC in progress** (2026-10-19), branch `dev/loader`.  L0/L1/L2/L3
-pass; L4 (A/B measurements) is next.  Not in 0.9.0 and not merged.  The target is the one seam left after the runtime is in place: at
+Status: **POC in progress** (2026-10-19), branch `dev/loader`.  L0-L4 pass;
+L4 says userland exec is a boundary fix, not a speed fix.  L5 (`vfork`) is next.
+Not in 0.9.0 and not merged.  The target is the one seam left after the runtime is in place: at
 boot, something must be loaded by the kernel before the prefix's own loader and
 law can run.  This plan removes the prefix paths from that seam.
 
@@ -137,12 +138,35 @@ tests/dn-exec/run.sh ~/work/p-adb
 | **L1** | done: dynamic hello: map the tree's `ld.so` and program; auxv/stack | `ld.so` loads libc and enters the program |
 | **L2** | done: guest argv/env, `#!`, `/proc/self/exe`, `AT_EXECFN` under the tracer | `readlink /proc/self/exe` is the guest path |
 | **L3** | done: shim + ldhook from guest paths/fds; root hint; no Android path in argv/env | `find`/`bash` boot; no host path in loader-visible config |
-| **L4** | next: A/B against the current kernel exec: stops and wall on the three workloads | no worse than the baseline |
-| **L5** | `posix_spawn`/`vfork`, 100 × `true`, `make`, Python subprocess | no parent corruption; spawn within the agreed bound |
+| **L4** | done: A/B against the current kernel exec: stops and wall on find/tar/ls/spawn | no consistent speed win; boundary only |
+| **L5** | next: `posix_spawn`/`vfork`, 100 × `true`, `make`, Python subprocess | no parent corruption; spawn within the agreed bound |
 | **L6** | 16 KB host and app `targetSdk` 36 (when available) | documented pass or refusal |
 
 L0-L3 are the POC.  L4 decides whether the design is worth merging.  L5 is the
 make-or-break for real workloads; L6 is the dn-ng gate.
+
+## L4 result (2026-10-19)
+
+The prefix used for the POC has no gcc/git/Lua, so the A/B used the workloads it
+has: `find /usr -type f`, `tar -cf` + `tar -xf` over `/usr/share/doc`,
+`ls -lR /usr/share`, and 100 x `/usr/bin/true`.  Interleaved, three runs each,
+on the S10e in Termux (not the app domain).
+
+| workload | kernel exec (median) | dn-exec (median) | stops |
+| --- | --- | --- | --- |
+| find | 137 ms | 128 ms | 1330 vs 1331 entry, same exit |
+| tar | 239 ms | 256 ms | 1824 vs 1825, same exit |
+| ls | 234 ms | 236 ms | 1035 vs 1036, same exit |
+| spawn 100 | 809 ms | 822 ms | 306 vs 307, same events |
+
+**No speed win.**  The stop counts are identical (one extra path in dn-exec);
+the wall times are within the 10-20% run-to-run noise, with tar slightly slower.
+The loader is not the bottleneck in these workloads; the userland exec is a
+**boundary/portability** change, not a 90%-native lever.  That lever remains the
+syscall fast path (shim/ldhook/site patches).
+
+Lua/git were not available in this prefix; a dev prefix and the app domain are
+still needed for the full matrix.
 
 ## Measurements
 
