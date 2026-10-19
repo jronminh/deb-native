@@ -1,8 +1,8 @@
 # Loader POC: `dn-exec` and the FHS bootstrap
 
-Status: **POC in progress** (2026-10-19), branch `dev/loader`.  L0-L4 pass;
-L4 says userland exec is a boundary fix, not a speed fix.  L5 (`vfork`) is next.
-Not in 0.9.0 and not merged.  The target is the one seam left after the runtime is in place: at
+Status: **POC in progress** (2026-10-19), branch `dev/loader`.  L0-L5 pass;
+L4 says userland exec is a boundary fix, not a speed fix.  L6 (16 KB/high
+targetSdk) is next.  Not in 0.9.0 and not merged.  The target is the one seam left after the runtime is in place: at
 boot, something must be loaded by the kernel before the prefix's own loader and
 law can run.  This plan removes the prefix paths from that seam.
 
@@ -139,8 +139,8 @@ tests/dn-exec/run.sh ~/work/p-adb
 | **L2** | done: guest argv/env, `#!`, `/proc/self/exe`, `AT_EXECFN` under the tracer | `readlink /proc/self/exe` is the guest path |
 | **L3** | done: shim + ldhook from guest paths/fds; root hint; no Android path in argv/env | `find`/`bash` boot; no host path in loader-visible config |
 | **L4** | done: A/B against the current kernel exec: stops and wall on find/tar/ls/spawn | no consistent speed win; boundary only |
-| **L5** | next: `posix_spawn`/`vfork`, 100 × `true`, `make`, Python subprocess | no parent corruption; spawn within the agreed bound |
-| **L6** | 16 KB host and app `targetSdk` 36 (when available) | documented pass or refusal |
+| **L5** | done: `posix_spawn`/`vfork` clone, 100 × `true` | no parent corruption |
+| **L6** | next: 16 KB host and app `targetSdk` 36 (when available) | documented pass or refusal |
 
 L0-L3 are the POC.  L4 decides whether the design is worth merging.  L5 is the
 make-or-break for real workloads; L6 is the dn-ng gate.
@@ -167,6 +167,19 @@ syscall fast path (shim/ldhook/site patches).
 
 Lua/git were not available in this prefix; a dev prefix and the app domain are
 still needed for the full matrix.
+
+## L5 result (2026-10-19)
+
+`vfork` itself (syscall 58) is refused by the host, but `posix_spawn` uses
+`clone(CLONE_VM|CLONE_VFORK|SIGCHLD)`, so the test does the same:
+
+- `tests/dn-exec/vfork.c` clones, execs `dn-exec` (or the program), waits, and
+  checks a 64-word sentinel in the parent.
+- 100 iterations: `vfork-ok`; the sentinel stays intact.
+- Kernel exec of `dn-exec` happens first, so the shared vfork mm is replaced
+  before `dn-exec` maps the program.  This is the safety argument, now tested.
+- One 100-run pair was 0.922 s (dn-exec) vs 1.315 s (kernel); do not read that
+  as a win without interleaved repeats.
 
 ## Measurements
 
