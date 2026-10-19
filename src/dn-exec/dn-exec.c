@@ -27,6 +27,8 @@ typedef unsigned char u8;
 #define SYS_mmap 222
 #define SYS_mprotect 226
 
+#define COOKIE 0x9e1ab6c3d7f2a541UL
+
 #define AT_FDCWD (-100)
 #define O_RDONLY 0
 #define PROT_READ 1
@@ -96,6 +98,16 @@ static i64 sc6(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f) {
     return x0;
 }
 
+static i64 sc6c(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f, u64 cookie)
+{
+    register i64 x8 __asm__("x8") = n;
+    register i64 x0 __asm__("x0") = a, x1 __asm__("x1") = b, x2 __asm__("x2") = c;
+    register i64 x3 __asm__("x3") = d, x4 __asm__("x4") = e, x5 __asm__("x5") = f;
+    register i64 x6 __asm__("x6") = (i64) cookie;
+    __asm__ volatile("mov x5, x6\n\tsvc 0\n\tmov x5, xzr" : "+r"(x0), "+r"(x5) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x6) : "memory");
+    return x0;
+}
+
 static u64 slen(const char *s) { u64 n = 0; while (s[n]) n++; return n; }
 static int strncmp2(const char *a, const char *b, u64 n)
 {
@@ -117,8 +129,10 @@ static void die(const char *s) { put("dn-exec: "); put(s); put("\n"); sc6(SYS_ex
 static u64 align_up(u64 v, u64 a) { return (v + a - 1) & ~(a - 1); }
 static u64 align_down(u64 v, u64 a) { return v & ~(a - 1); }
 
-static int open_ro(const char *path) {
-    i64 fd = sc6(SYS_openat, AT_FDCWD, (i64)path, O_RDONLY, 0, 0, 0);
+static int open_ro(const char *path, int host)
+{
+    i64 fd = host ? sc6c(SYS_openat, AT_FDCWD, (i64)path, O_RDONLY, 0, 0, 0, COOKIE)
+                  : sc6(SYS_openat, AT_FDCWD, (i64)path, O_RDONLY, 0, 0, 0);
     return fd < 0 ? -1 : (int)fd;
 }
 
@@ -297,7 +311,7 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
         memcpy2(path, prog, pl + 1);
     }
 
-    int fd = open_ro(path);
+    int fd = open_ro(path, root[0] != 0);
     if (fd < 0) die("open program");
     Ehdr eh; Phdr ph[64]; char interp[4096];
     if (read_elf(fd, &eh, ph, interp, sizeof interp) < 0) die("bad ELF");
@@ -318,7 +332,7 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
             if (il >= sizeof ipath) die("interp path too long");
             memcpy2(ipath, interp, il + 1);
         }
-        int lfd = open_ro(ipath);
+        int lfd = open_ro(ipath, root[0] != 0);
         if (lfd < 0) die("open loader");
         Ehdr leh; Phdr lph[64];
         if (read_elf(lfd, &leh, lph, 0, 0) < 0) die("bad loader");

@@ -27,9 +27,9 @@ P="$1"
 cp "$OUT/dn-exec" "$P/usr/local/bin/dn-exec"
 chmod 755 "$P/usr/local/bin/dn-exec"
 echo "== dynamic true"
-"$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec /usr/bin/true
+"$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec --root "$P" /usr/bin/true
 echo "== dynamic exe identity"
-exe=$("$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec /usr/bin/readlink /proc/self/exe 2>/dev/null)
+exe=$("$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec --root "$P" /usr/bin/readlink /proc/self/exe 2>/dev/null)
 [ "$exe" = "/usr/bin/readlink" ] || { echo "exe: got '$exe'"; exit 1; }
 echo "== vfork/clone"
 clang -O2 -static -nostdlib -ffreestanding -fno-builtin -fno-stack-protector \
@@ -37,13 +37,13 @@ clang -O2 -static -nostdlib -ffreestanding -fno-builtin -fno-stack-protector \
     -o "$OUT/vforktest" "$SRC/tests/dn-exec/vfork.c"
 cp "$OUT/vforktest" "$P/usr/local/bin/vforktest"
 chmod 755 "$P/usr/local/bin/vforktest"
-vfork=$("$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/vforktest /usr/local/bin/dn-exec /usr/bin/true 10 2>/dev/null)
+vfork=$("$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/vforktest /usr/local/bin/dn-exec --root "$P" /usr/bin/true 10 2>/dev/null)
 [ "$vfork" = "vfork-ok" ] || { echo "vfork: got '$vfork'"; exit 1; }
 
 echo "== dynamic shim/ldhook"
-maps=$("$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec /usr/bin/cat /proc/self/maps 2>/dev/null)
+maps=$("$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec --root "$P" /usr/bin/cat /proc/self/maps 2>/dev/null)
 printf '%s\n' "$maps" | grep -q "dn-lane.so" || { echo "shim not mapped"; exit 1; }
 printf '%s\n' "$maps" | grep -q "dn-ldhook.so" || { echo "ldhook not mapped"; exit 1; }
 echo "== dynamic find"
-"$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec /usr/bin/find /usr -maxdepth 1 >/dev/null
+"$SRC/build/dn-tiny" -t "$P" -- /usr/local/bin/dn-exec --root "$P" /usr/bin/find /usr -maxdepth 1 >/dev/null
 echo "OK (L0 static, L1 dynamic, L2 identity, L3 shim/ldhook, L5 clone/vfork)"

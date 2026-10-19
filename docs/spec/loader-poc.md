@@ -145,6 +145,24 @@ tests/dn-exec/run.sh ~/work/p-adb
 L0-L3 are the POC.  L4 decides whether the design is worth merging.  L5 is the
 make-or-break for real workloads; L6 is the dn-ng gate.
 
+## L1 bootstrap fast path (2026-10-19)
+
+The first of the six stop levers: `dn-exec` opens the program and loader by
+**host path with the lane cookie**.  The filter's lane leaf lets those calls
+through without a tracer stop; the paths are host paths from `--root`, never
+guest paths with the cookie.
+
+Measured under `dn-tiny` on `p-adb`:
+
+| | entry | paths |
+| --- | ---: | ---: |
+| dn-exec, guest paths | 8 | 7 |
+| dn-exec, `--root` + cookie | 6 | 5 |
+
+So two bootstrap stops per exec are real; the remaining five are the loader
+opening the shim/ldhook/libraries through the law.  This is the shape of lever
+1, not the final trusted-bootstrap design.
+
 ## L4 result (2026-10-19)
 
 The prefix used for the POC has no gcc/git/Lua, so the A/B used the workloads it
