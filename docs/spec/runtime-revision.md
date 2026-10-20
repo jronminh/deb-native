@@ -240,6 +240,23 @@ birth-time patch is not just parity, it is cheaper than the loader hook (no audi
 module to load, no self-discovery). The patch is one reusable `patch_image(lo, hi)`,
 so it extends to a static binary by the same call.
 
+Benchmark (2026-10-20, p-dev, the same tree, A/B interleaved -- `dn-exec` default
+vs `--no-dnexec` loader path, entry stops):
+
+| workload | dn-exec | loader | note |
+| --- | ---: | ---: | --- |
+| `find /usr -type f` (22k files) | 5811-5828 | 5855 | metadata: parity (the cost is getdents64 + the shim, not exec) |
+| `ls -lR /usr/share` | 2976-3013 | 3020 | parity |
+| `links` (`find -type l`, `stat -L`, `realpath`) | 5846-5859 | 5878 | parity |
+| `spawn` 300 x `true` | 1258-1274 | 2196 | **42% fewer** |
+| `git` (init/add/commit/status) | 2415-2431 | 2479-2480 | ~2% fewer |
+| `py` (`os.walk` + `stat`) | 289 | 325 | 11% fewer |
+| `tar` (pack + unpack ca-certs) | 720-778 | 787 | ~8% fewer |
+
+`dn-exec` is never slower and wins on every workload with exec/spawn.  (The old
+"find 61 stops" figure predates the getdents64 `/proc`-filter row; find now stops
+once per directory, 2871 dirs, in both modes alike.)
+
 ## Boot flow
 
 1. `boot.sh` cleans the environment, finds the root, and `exec dn-init` once
