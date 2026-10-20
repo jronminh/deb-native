@@ -445,8 +445,17 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
 
     if (argv0[0])
         argv[i] = argv0;                            /* the program's argv[0], as invoked */
+    u64 at_phdr = 0;                                /* AT_PHDR: where the phdrs are mapped */
+    for (int j = 0; j < eh.e_phnum; j++) {
+        if (ph[j].p_type != PT_LOAD)
+            continue;
+        if (eh.e_phoff >= ph[j].p_offset && eh.e_phoff < ph[j].p_offset + ph[j].p_filesz) {
+            at_phdr = prog_base + ph[j].p_vaddr + (eh.e_phoff - ph[j].p_offset);
+            break;
+        }
+    }
     u64 sp = build_stack((char *)((u64)st + STACK_SIZE), argc - i, argv + i, env2,
-                         prog_base + eh.e_phoff, sizeof(Phdr), eh.e_phnum, load_base, prog_entry,
+                         at_phdr, sizeof(Phdr), eh.e_phnum, load_base, prog_entry,
                          prog, hwcap, hwcap2, sysinfo);
     jump_to(sp, entry);
     die("entry returned");
