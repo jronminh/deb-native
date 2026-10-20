@@ -257,6 +257,21 @@ vs `--no-dnexec` loader path, entry stops):
 "find 61 stops" figure predates the getdents64 `/proc`-filter row; find now stops
 once per directory, 2871 dirs, in both modes alike.)
 
+Lua 5.4.7 `make -j1` (compile-heavy, ~65 execs of gcc/cc1/as/ld, `cc1` is 30 MB):
+
+| mode | wall | entry stops |
+| --- | ---: | ---: |
+| dn-exec | 12.2-12.4 s | 1173-1195 |
+| loader (`--no-dnexec`) | 11.6-11.8 s | 2092 |
+
+dn-exec has 44% fewer stops but ~5% slower wall here: the userland exec
+`pread`s the program and loader into anonymous memory per exec, which costs more
+than the kernel's file-cache-backed exec for a large binary (`cc1`).  The win is
+spawn (process lifecycle); the compile axis is "boundary, not speed" -- the
+stopped calls are not gcc's bottleneck, and the userland exec is slightly
+heavier.  Against the recorded 2026-10-18 app-session number (13.1 s / 864 stops,
+with ldhook) both are in the same band.
+
 ## Boot flow
 
 1. `boot.sh` cleans the environment, finds the root, and `exec dn-init` once
