@@ -35,6 +35,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -169,19 +170,32 @@ static int root_from_maps(char *out, size_t cap)
 	return 0;
 }
 
-/* the prefix root: dn-exec hands it down in DN_ROOT (the host root), so the shim
- * stops self-discovering.  The gate's own path (--preload with a host path) still
- * works through dladdr, and the maps fallback covers a guest LD_PRELOAD. */
+/* the prefix root: dn-exec hands it down as a reserved fd (DN_ROOT_FD), resolved
+ * to a path here and closed, so the shim stops self-discovering and no host path
+ * leaks into the program's environment.  The gate's own path (--preload with a
+ * host path) still works through dladdr, and the maps fallback covers a guest
+ * LD_PRELOAD. */
 static int own_root(char *out, size_t cap)
 {
-	const char *e = getenv("DN_ROOT");
+	const char *e = getenv("DN_ROOT_FD");
 	static const char tail[] = "/usr/lib/deb-native/dn-lane.so";
 	const size_t t = sizeof tail - 1;
 	Dl_info di;
 
-	if (e && e[0] && strlen(e) < cap) {
-		memcpy(out, e, strlen(e) + 1);
-		return 1;
+	if (e && e[0]) {
+		char link[64];
+		long fd = strtol(e, NULL, 10);
+		ssize_t r;
+
+		if (fd > 0 && fd < 100000) {
+			snprintf(link, sizeof link, "/proc/self/fd/%ld", fd);
+			r = pol_readlink(link, out, cap - 1);
+			if (r > 0) {
+				out[r] = '\0';
+				close((int) fd);        /* the handoff fd: read once, then drop it */
+				return 1;
+			}
+		}
 	}
 	if (dladdr((void *) lane_init, &di) && di.dli_fname) {
 		size_t n = strlen(di.dli_fname);

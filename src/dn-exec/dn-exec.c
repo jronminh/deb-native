@@ -32,11 +32,15 @@ typedef unsigned char u8;
 #define SYS_munmap 215
 #define SYS_getxattr 8
 #define SYS_lgetxattr 9
+#define SYS_dup3 24
+
+#define ROOT_FD 200                          /* the reserved fd the shim reads */
 
 #define COOKIE 0x9e1ab6c3d7f2a541UL
 
 #define AT_FDCWD (-100)
 #define O_RDONLY 0
+#define O_DIRECTORY 0x10000
 #define PROT_READ 1
 #define PROT_WRITE 2
 #define PROT_EXEC 4
@@ -433,22 +437,27 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
     /* The L3 bootstrap: guest paths, not Android paths.  The shim is opened by
      * the loader through the patched sites (the law + lane); the loader's own
      * sites are patched at birth above, so no LD_AUDIT module is needed.  The
-     * root is handed to the shim in DN_ROOT so it need not self-discover. */
-    char dn_root[1024 + 8];
+     * root is handed to the shim as a reserved fd (DN_ROOT_FD), not a path, so
+     * no Android path leaks into the program's environment. */
+    if (root[0]) {
+        int rfd = (int) sc6(SYS_openat, AT_FDCWD, (i64) root, O_RDONLY | O_DIRECTORY, 0, 0, 0);
+
+        if (rfd >= 0) {
+            sc6(SYS_dup3, rfd, ROOT_FD, 0, 0, 0, 0);
+            sc6(SYS_close, rfd, 0, 0, 0, 0, 0);
+        }
+    }
     char *env2[MAX_VEC];
     int ne = 0;
     for (int e = 0; envp[e] && ne < MAX_VEC - 4; e++) {
         if (strncmp2(envp[e], "LD_PRELOAD=", 11) == 0 || strncmp2(envp[e], "LD_AUDIT=", 9) == 0 ||
-            strncmp2(envp[e], "DN_ROOT=", 8) == 0)
+            strncmp2(envp[e], "DN_ROOT_FD=", 11) == 0)
             continue;
         env2[ne++] = envp[e];
     }
     env2[ne++] = "LD_PRELOAD=/usr/lib/deb-native/dn-lane.so";
-    if (root[0]) {
-        memcpy2(dn_root, "DN_ROOT=", 8);
-        memcpy2(dn_root + 8, root, slen(root) + 1);
-        env2[ne++] = dn_root;
-    }
+    if (root[0])
+        env2[ne++] = "DN_ROOT_FD=200";
     env2[ne] = 0;
 
     if (argv0[0])
