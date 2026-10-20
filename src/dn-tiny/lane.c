@@ -114,22 +114,84 @@ ssize_t pol_readlink(const char *host, char *buf, size_t n)
 }
 
 static void lane_atfork(void);
+static void lane_init(void);
 static void patch_libc(void);
+
+/* the shim's own host path, from the real maps (read through the lane, so the
+ * tracer's synthesized maps does not hide it).  dn-exec hands the loader a guest
+ * path for LD_PRELOAD, so dladdr sees the tail itself and gives no root; the
+ * kernel's map name is the host path the file was opened by either way. */
+static int root_from_maps(char *out, size_t cap)
+{
+	static const char tail[] = "/usr/lib/deb-native/dn-lane.so";
+	const size_t t = sizeof tail - 1;
+	char b[8192];
+	long fd, n, tot = 0;
+	size_t i;
+
+	fd = lane_call(SYS_openat, AT_FDCWD, "/proc/self/maps", O_RDONLY | O_CLOEXEC, 0, 0L);
+	if (fd < 0)
+		return 0;
+	for (;;) {
+		if (tot >= (long) sizeof b - 1)
+			break;
+		n = lane_call(SYS_read, fd, b + tot, sizeof b - 1 - (size_t) tot, 0, 0L);
+		if (n <= 0)
+			break;
+		tot += n;
+	}
+	lane_call(SYS_close, fd, 0, 0, 0, 0L);
+	b[tot] = '\0';
+
+	for (i = 0; i < (size_t) tot; ) {
+		size_t j = i, sp = 0;
+
+		while (j < (size_t) tot && b[j] != '\n')
+			j++;
+		for (size_t k = i; k < j; k++)
+			if (b[k] == ' ')
+				sp = k + 1;
+		if (sp > 0 && sp < j && j - sp > t && j - sp - t < cap &&
+		    memcmp(b + sp + (j - sp - t), tail, t) == 0) {
+			memcpy(out, b + sp, j - sp - t);
+			out[j - sp - t] = '\0';
+			return 1;
+		}
+		i = j + 1;
+	}
+	return 0;
+}
+
+/* the prefix root from this library's own path.  The loader hands dn-lane.so to
+ * ld.so as a host path (the gate) or a guest path (dn-exec); dladdr sees the
+ * name as given, so a guest name is the tail itself and yields no root, and the
+ * real maps carry the host path either way. */
+static int own_root(char *out, size_t cap)
+{
+	static const char tail[] = "/usr/lib/deb-native/dn-lane.so";
+	const size_t t = sizeof tail - 1;
+	Dl_info di;
+
+	if (dladdr((void *) lane_init, &di) && di.dli_fname) {
+		size_t n = strlen(di.dli_fname);
+
+		if (n > t && n - t < cap && strcmp(di.dli_fname + n - t, tail) == 0) {
+			memcpy(out, di.dli_fname, n - t);
+			out[n - t] = '\0';
+			return 1;
+		}
+	}
+	return root_from_maps(out, cap);
+}
 
 /* ---- set up: the root from this library's own path, the shared generation ---- */
 __attribute__((constructor)) static void lane_init(void)
 {
-	Dl_info di;
-	const char *tail = "/usr/lib/deb-native/dn-lane.so";
-	size_t n, t = strlen(tail);
 	char p[PATH_MAX + 64];
 	struct stat st;
 	long fd;
 
-	if (!dladdr((void *) lane_init, &di) || !di.dli_fname)
-		return;
-	n = strlen(di.dli_fname);
-	if (n <= t || n - t >= sizeof rootbuf || strcmp(di.dli_fname + n - t, tail) != 0)
+	if (!own_root(rootbuf, sizeof rootbuf))
 		return;
 	if (lane_call(SYS_newfstatat, AT_FDCWD, "/proc/self", &st, 0, 0L) != 0)
 		return;                                 /* the lane is not there: leave it all to the tracer */
@@ -167,8 +229,8 @@ __attribute__((constructor)) static void lane_init(void)
 				real_gid = (unsigned) strtoul(g, NULL, 10);
 		}
 	}
-	memcpy(p, di.dli_fname, n - t);
-	strcpy(p + (n - t), "/var/lib/deb-native/dn-tiny.gen");
+	strcpy(p, rootbuf);
+	strcat(p, "/var/lib/deb-native/dn-tiny.gen");
 	fd = lane_call(SYS_openat, AT_FDCWD, p, O_RDONLY | O_CLOEXEC, 0, 0L);
 	if (fd >= 0) {
 		void *m = mmap(NULL, 4096, PROT_READ, MAP_SHARED, (int) fd, 0);
@@ -178,8 +240,6 @@ __attribute__((constructor)) static void lane_init(void)
 		close((int) fd);
 	}
 	pthread_atfork(NULL, NULL, lane_atfork);
-	memcpy(rootbuf, di.dli_fname, n - t);
-	rootbuf[n - t] = '\0';
 	policy_root_set(rootbuf);               /* set last: until now everything falls back */
 	policy_sock_init();
 	{                                       /* the binds the host wrote before boot */
