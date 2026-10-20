@@ -142,9 +142,6 @@ int policy_own_read(const char *host, int nofollow, unsigned *u, unsigned *g);
  * dn-lane.so, a host path when the prefix has it, else ""): the runtime's own,
  * so it stays host -- the shim finds the root from its own path */
 const char *policy_preload(void);
-/* the loader hook the exec gate audits with (usr/lib/deb-native/dn-ldhook.so, a
- * host path; empty when the prefix ships none); see docs/reference/syscall-patching.md */
-const char *policy_ldhook(void);
 /* the exec gate's userland exec (usr/lib/deb-native/dn-exec, a host path; empty
  * when the prefix ships none); see docs/spec/runtime-revision.md */
 const char *policy_dnexec(void);
