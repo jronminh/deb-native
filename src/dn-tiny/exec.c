@@ -312,6 +312,8 @@ static void resolve(const char *cur_in, struct vec *a, char *final, size_t cap, 
 				vpush(out, "dn-exec");
 				vpush(out, "--root");
 				vpush(out, policy_root());
+				vpush(out, "--argv0");
+				vpush(out, a->n > 0 ? a->s[0] : cprog);   /* argv[0], as invoked */
 				vpush(out, cprog);
 				for (i = 1; i < a->n; i++)
 					vpush(out, a->s[i]);

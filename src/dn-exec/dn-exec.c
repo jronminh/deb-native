@@ -358,6 +358,16 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
         i += 2;
     }
     if (i >= argc) die("no program");
+    char argv0[1024];
+    argv0[0] = 0;
+    if (i < argc && slen(argv[i]) == 7 && strncmp2(argv[i], "--argv0", 7) == 0) {
+        if (i + 1 >= argc) die("--argv0 needs a name");
+        u64 n = slen(argv[i + 1]);
+        if (n >= sizeof argv0) die("argv0 too long");
+        memcpy2(argv0, argv[i + 1], n + 1);
+        i += 2;
+    }
+    if (i >= argc) die("no program");
     if (root[0]) law_init(root);
     const char *prog = argv[i];
     char path[4096];
@@ -433,6 +443,8 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
     env2[ne++] = "LD_PRELOAD=/usr/lib/deb-native/dn-lane.so";
     env2[ne] = 0;
 
+    if (argv0[0])
+        argv[i] = argv0;                            /* the program's argv[0], as invoked */
     u64 sp = build_stack((char *)((u64)st + STACK_SIZE), argc - i, argv + i, env2,
                          prog_base + eh.e_phoff, sizeof(Phdr), eh.e_phnum, load_base, prog_entry,
                          prog, hwcap, hwcap2, sysinfo);
