@@ -9,7 +9,7 @@ emulation in the core.
 Debian `arm64` is the **first tree**; the runtime is the platform.  A tree is
 data; a host is the app or shell around it.
 
-> **Pre-alpha** (0.9.0).  AI-assisted, independently unaudited
+> **Pre-alpha** (0.10.0).  AI-assisted, independently unaudited
 > ([`SECURITY.md`](SECURITY.md)).  Scope: compatibility; use a VM for
 > isolation.
 
@@ -25,7 +25,7 @@ stock arm64 phone:
 - the [contract](docs/spec/contract.md) says what is promised, best effort,
   and refused.
 
-0.9.0 covers the terminal and tools.  GUI, GPU, audio and Steam come next, with
+0.10.0 covers the terminal and tools.  GUI, GPU, audio and Steam come next, with
 designs: the [device table](docs/spec/devices.md) for display/input,
 [dn-ng](docs/spec/dn-ng.md) for a high-`targetSdk` APK, and the device models
 next to them.  Steam and CPU emulators build on extra layers (Wine, Box64/FEX,

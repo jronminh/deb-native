@@ -187,8 +187,8 @@ DEST/
 ```
 format=2
 name=debian
-desc=Debian trixie (minbase, set minimal) for deb-native 0.9.0-pre-alpha
-version=0.9.0-pre-alpha
+desc=Debian trixie (minbase, set minimal) for deb-native 0.10.0-pre-alpha
+version=0.10.0-pre-alpha
 arch=aarch64
 host=app
 suite=trixie
