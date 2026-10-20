@@ -16,5 +16,5 @@ fi
 "$CC" -O2 -static-pie -nostdlib -ffreestanding -fno-builtin \
     -fno-stack-protector -fPIE -DDN_FREE -Wl,-e,_start -Wl,--build-id=none \
     -I"$SRC/src/dn-tiny" -I"$GEN" \
-    -o "$OUT" "$SRC/src/dn-exec/dn-exec.c" "$SRC/src/dn-tiny/policy.c"
+    -o "$OUT" "$SRC/src/dn-exec/dn-exec.c" "$SRC/src/dn-exec/patch.c" "$SRC/src/dn-tiny/policy.c"
 echo "built $OUT"
