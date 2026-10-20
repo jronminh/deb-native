@@ -113,6 +113,13 @@ ssize_t pol_readlink(const char *host, char *buf, size_t n)
 	return (ssize_t) lane_rawc(SYS_readlinkat, AT_FDCWD, host, buf, n, 0L);
 }
 
+/* the law's second syscall: read the owner store, on the lane */
+ssize_t pol_getxattr(const char *host, int nofollow, const char *name, char *buf, size_t n)
+{
+	return (ssize_t) lane_rawc(nofollow ? SYS_lgetxattr : SYS_getxattr,
+				   (long) host, (long) name, (long) buf, (long) n, 0L);
+}
+
 static void lane_atfork(void);
 static void lane_init(void);
 static void patch_libc(void);
@@ -731,51 +738,6 @@ static void cl_fix(unsigned long dev, unsigned long ino, unsigned *nlink)
 
 static int get_ids(unsigned v[6]);
 
-/* ---- the owner store: chown is kept in user.dn.owner ("UID:GID"), and every
- * stat reads it back (the tracer stores it; the file's real owner is the app) -- */
-
-#define OWN_ATTR "user.dn.owner"
-
-static int own_parse(const char *b, unsigned *u, unsigned *g)
-{
-	unsigned v = 0, w = 0;
-	int i = 0;
-
-	if (b[i] < '0' || b[i] > '9')
-		return 0;
-	while (b[i] >= '0' && b[i] <= '9') {
-		if (v > 0x7fffffffu / 10)
-			return 0;
-		v = v * 10 + (unsigned) (b[i++] - '0');
-	}
-	if (b[i++] != ':')
-		return 0;
-	if (b[i] < '0' || b[i] > '9')
-		return 0;
-	while (b[i] >= '0' && b[i] <= '9') {
-		if (w > 0x7fffffffu / 10)
-			return 0;
-		w = w * 10 + (unsigned) (b[i++] - '0');
-	}
-	if (b[i] != '\0')
-		return 0;
-	*u = v;
-	*g = w;
-	return 1;
-}
-
-static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g)
-{
-	char b[32];
-	long n = lane_call(nofollow ? SYS_lgetxattr : SYS_getxattr, (long) host,
-			   (long) OWN_ATTR, (long) b, (long) sizeof b - 1, 0L);
-
-	if (n <= 0)
-		return 0;
-	b[n] = '\0';
-	return own_parse(b, u, g);
-}
-
 /* the owner cache: (dev, ino, ctime) -> the stored owner.  chown changes ctime,
  * so an entry cannot go stale; a chmod or a write only makes it miss sooner.
  * Direct-mapped: a collision costs a getxattr, never a wrong answer. */
@@ -834,7 +796,7 @@ static void own_stat(unsigned *uid, unsigned *gid, const char *host, int fd, int
 		return;
 	}
 	if (host && host[0]) {
-		present = (unsigned) own_read(host, nofollow, &u, &g);
+		present = (unsigned) policy_own_read(host, nofollow, &u, &g);
 	} else {
 		char d[12];
 		int k = 0, i = 14;
@@ -845,7 +807,7 @@ static void own_stat(unsigned *uid, unsigned *gid, const char *host, int fd, int
 		while (k)
 			p[i++] = d[--k];
 		p[i] = '\0';
-		present = (unsigned) own_read(p, 0, &u, &g);
+		present = (unsigned) policy_own_read(p, 0, &u, &g);
 	}
 	if (present) {
 		*uid = u;
@@ -1220,6 +1182,8 @@ static int get_ids(unsigned v[6])
 
 /* A file the shim creates carries its creator's owner, so the fake world and
  * the real user read the same owner without a legacy-style default. */
+#define OWN_ATTR "user.dn.owner"
+
 static void mark_created(const char *host)
 {
 	unsigned v[6], x;

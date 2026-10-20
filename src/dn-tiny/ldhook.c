@@ -74,6 +74,20 @@ ssize_t pol_readlink(const char *host, char *buf, size_t n) {
     return x0;
 }
 
+/* the law's second syscall: the owner store (unused by the loader hook, but
+ * policy.c links it) */
+ssize_t pol_getxattr(const char *host, int nofollow, const char *name, char *buf, size_t n) {
+    register long x8 __asm__("x8") = nofollow ? 9 : 8;
+    register long x0 __asm__("x0") = -100;
+    register long x1 __asm__("x1") = (long) host;
+    register long x2 __asm__("x2") = (long) name;
+    register long x3 __asm__("x3") = (long) buf;
+    register long x4 __asm__("x4") = (long) n;
+    register long x5 __asm__("x5") = (long) COOKIE;
+    __asm__ volatile("svc 0\n\tmov x5, xzr" : "+r"(x0), "+r"(x5) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4) : "memory");
+    return x0;
+}
+
 static int has(const char *hay, long hn, const char *pat) {
     long pn = 0, i, j; while (pat[pn]) pn++;
     for (i = 0; i + pn <= hn; i++) { for (j = 0; j < pn && hay[i + j] == pat[j]; j++) { } if (j == pn) return 1; }

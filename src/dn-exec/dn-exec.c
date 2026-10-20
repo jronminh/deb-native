@@ -29,6 +29,8 @@ typedef unsigned char u8;
 #define SYS_read 63
 #define SYS_readlinkat 78
 #define SYS_munmap 215
+#define SYS_getxattr 8
+#define SYS_lgetxattr 9
 
 #define COOKIE 0x9e1ab6c3d7f2a541UL
 
@@ -116,6 +118,12 @@ static i64 sc6c(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f, u64 cookie)
 ssize_t pol_readlink(const char *host, char *buf, size_t n)
 {
 	return sc6c(SYS_readlinkat, AT_FDCWD, (i64) host, (i64) buf, (i64) n, 0, 0, COOKIE);
+}
+
+ssize_t pol_getxattr(const char *host, int nofollow, const char *name, char *buf, size_t n)
+{
+	return sc6c(nofollow ? SYS_lgetxattr : SYS_getxattr, AT_FDCWD,
+		    (i64) host, (i64) name, (i64) buf, (i64) n, 0, COOKIE);
 }
 
 static u64 slen(const char *s) { u64 n = 0; while (s[n]) n++; return n; }

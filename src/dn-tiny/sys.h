@@ -42,6 +42,7 @@ static inline ssize_t sys_read(int fd, void *b, size_t n) { return sc(N_read, fd
 static inline int sys_open(const char *p, int flags) { return (int) sc(N_openat, -100, (i64) p, flags, 0, 0, 0); }
 static inline int sys_close(int fd) { return (int) sc(N_close, fd, 0, 0, 0, 0, 0); }
 static inline ssize_t sys_readlink(const char *p, char *buf, size_t n) { return sc(78, -100, (i64) p, (i64) buf, (i64) n, 0, 0); }
+static inline ssize_t sys_getxattr(const char *p, int nofollow, const char *name, char *buf, size_t n) { return sc(nofollow ? 9 : 8, (i64) p, (i64) name, (i64) buf, (i64) n, 0, 0); }
 static inline int sys_fstatat(const char *p, void *st, int flags) { return (int) sc(79, -100, (i64) p, (i64) st, flags, 0, 0); }
 static inline int sys_statx(const char *p, int flags, unsigned mask, void *stx) { return (int) sc(291, -100, (i64) p, flags, mask, (i64) stx, 0); }
 static inline i64 sys_ptrace(i64 req, i64 pid, i64 addr, i64 data) { return sc(N_ptrace, req, pid, addr, data, 0, 0); }

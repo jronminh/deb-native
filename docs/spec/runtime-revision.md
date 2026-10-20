@@ -60,24 +60,40 @@ session end, signal handling).
 
 ```
 src/
-  dn-init/          # catcher + real init: PID 1, ptrace+seccomp, the law, /proc
-    catch.c         #   the wait/ptrace loop, the filter, the lane
-    law.c           #   the path table + walk (single owner; from policy.c)
-    gate.c          #   the exec gate = the virtual execve
-    apply.c         #   syscall answers, identity, /proc synthesis
+  dn-init/          # the catcher + real init + the prefix's kernel (PID 1)
+    main.c          #   _start, args, boot
+    catch.c         #   the seccomp filter + ptrace wait loop + the lane
+    apply.c         #   syscall transforms + /proc synthesis (from trace.c)
+    gate.c          #   the exec gate = virtual execve + clone (the few emulated)
     init.c          #   init: session, signals, reap, respawn (from init.sh)
+    state.c         #   per-pid state, identity, the caches (from trace.c)
+    law.c / law.h   #   the one law: the path walk + the fix-ups (owner store,
+                    #     link-copy count, symlink size, target map-back)
     rows.inc        #   the generated syscall catalog
-  dn-exec/          # birth: map the loader (or a static program), build
-    dn-exec.c       #   stack/auxv, jump; a dumb executor, no policy
-  dn-lane/          # the shim: a thin, context-fed fast-path client
-    lane.c
+  dn-exec/          # birth: map the loader (or a static program), patch its
+    dn-exec.c       #   svc sites, build stack/auxv, jump
+    patch.c / patch.h   # the svc-site patcher + the hook (the ONE mechanism)
+  dn-lane/          # the shim: in-process fast path for dynamic libc
+    lane.c          #   interpose symbols; runs patch.c's hook at load
   boot/
     boot.sh         # find root, clean env, exec dn-init
   spec/             # the contract: promised / best-effort / refused
 ```
 
-`dn-ldhook` disappears. If the loader's startup stops still matter, that patching
-belongs in `dn-exec` at map time, not in a self-booting audit module.
+Moves from the current tree:
+
+- `ldhook.c` disappears: its loader-patching is `patch.c`, run by `dn-exec` at
+  birth (and the shim at load), not a self-booting audit module.
+- `policy.c` becomes `law.c` and also owns the fix-ups that today live in both
+  `trace.c` and `lane.c` -- one copy of the owner store, link-copy and symlink
+  size, not three.
+- `lane.c` stops self-discovering root/binds/gen; `dn-init` hands the context
+  down.
+- `monitor.c` -> `catch.c`; `trace.c` -> `apply.c` + `state.c`; `exec.c` ->
+  `gate.c`.
+- The few emulated syscalls (`execve`, `clone`) live in `gate.c` + `dn-exec`;
+  the path syscalls all go through the one `patch.c` hook + the one law + the
+  lane, whichever code location the `svc` sits in.
 
 ## The law becomes data
 
@@ -286,6 +302,23 @@ Grouped from the feature inventory; each collapses to one owner in the revision.
 - delivering shim/ldhook to the loader: `exec.c` (argv) vs `dn-exec.c` (env).
 - the `DN_*` env contract: `boot.sh`, `exec.c`, `lane.c`, `init.sh`.
 
+## Emulation scope: full, partial, or map+fix
+
+A syscall is emulated only as far as it needs to be -- never "completely", which
+would be reimplementing the kernel (WSL1 lxcore, a library OS). The contract
+decides the depth, one syscall at a time:
+
+| depth | when | example |
+| --- | --- | --- |
+| full | the kernel's job leaks the host and userland can do it correctly | `execve` (dn-exec replaces the ELF load) |
+| partial | the kernel must still do half; the runtime owns the lifecycle | `clone` (the kernel makes the process; dn-init owns spawn) |
+| map + fix | the kernel touches the filesystem; the runtime maps the path and fixes the result | `open`, `stat`, `readlink` |
+
+The rule: emulate only what the program needs and the kernel/Android cannot give
+directly; refuse the rest. Full emulation is the exception (`execve`), not the
+model. Everything else is "one law, one patch": the same fix-up and the same
+svc-site patcher, whichever code location the `svc` sits in.
+
 ## Second syscall to emulate
 
 `execve` is the first syscall the runtime takes over from the kernel. The
@@ -324,6 +357,30 @@ so "emulating clone" means `dn-init` reusing a process it created earlier.
 4. libc `svc` patching: keep it in the shim, or move it to `dn-exec` at map time?
 5. Clone: level one (filter `RET_ERRNO`) or level two (process pool)?
 6. Where `dn-exec`/shim live at a high targetSdk (APK lib vs fd), and 16 KB pages.
+
+## Migration
+
+Seven steps from the current tree to the target, each its own commit, each A/B'd
+against the old behaviour. Done: dn-exec patches the loader at birth
+(`ec308c9`), the static fast path (`e14e2c0`), the shim root-from-maps fix
+(`9d91190`).
+
+1. **Move the fix-ups into the law** -- owner-store read (`user.dn.owner`),
+   link-copy count, symlink size, target map-back, from `trace.c` + `lane.c`
+   into `law.c`. One copy, so `dn-exec`'s hook can take `stat`/`readlink` too.
+2. **Extract `patch.c`** -- the svc-site patcher + hook out of `dn-exec.c` into
+   a shared unit.
+3. **Drop `ldhook`** -- delete `ldhook.c`, stop the gate setting `--audit`, stop
+   building `dn-ldhook`; the birth-time patch already covers the loader.
+4. **`dn-tiny` -> `dn-init`** -- rename, split `monitor/trace/exec` into
+   `catch/apply+state/gate`.
+5. **Context handoff** -- `dn-init` hands root/ids/binds/gen down; the shim and
+   `dn-exec` stop self-discovering.
+6. **`clone` (partial)** -- `gate.c` owns spawn as the other birth half.
+7. (later) the law as a read-only shared table.
+
+Step 1 is the core: it is what lets "one law, one patch" replace the three
+copies of the fix-up, and it unblocks a full static metadata fast path.
 
 ## Non-goals
 

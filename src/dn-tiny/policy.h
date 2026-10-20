@@ -17,6 +17,8 @@ typedef long ssize_t;
 typedef uint64_t u64;
 typedef int64_t i64;
 ssize_t pol_readlink(const char *host, char *buf, size_t n);
+/* the law's second syscall: read the owner store (user.dn.owner). */
+ssize_t pol_getxattr(const char *host, int nofollow, const char *name, char *buf, size_t n);
 #else
 #include "sys.h"
 #endif
@@ -130,6 +132,11 @@ unsigned policy_map_gid(unsigned id);
 /* the app's real uid/gid, as the tracer read them at boot */
 unsigned policy_real_uid(void);
 unsigned policy_real_gid(void);
+
+/* The stored owner of a host path (user.dn.owner "UID:GID", read through the
+ * lane); 1 if present, else the caller uses the implicit root.  One copy of the
+ * fix-up, shared by the tracer, the shim and dn-exec. */
+int policy_own_read(const char *host, int nofollow, unsigned *u, unsigned *g);
 
 /* the shim the exec gate preloads into a glibc program (/usr/lib/deb-native/
  * dn-lane.so, a host path when the prefix has it, else ""): the runtime's own,

@@ -41,6 +41,7 @@ static int scpy(char *out, size_t cap, const char *s)
 }
 #else
 #define pol_readlink sys_readlink
+#define pol_getxattr sys_getxattr
 #endif
 
 /* the working-path buffer the law walks in, and its own errno values (so it
@@ -1053,6 +1054,52 @@ unsigned policy_map_uid(unsigned id) { return id == real_uid ? 0 : id; }
 unsigned policy_map_gid(unsigned id) { return id == real_gid ? 0 : id; }
 unsigned policy_real_uid(void) { return real_uid; }
 unsigned policy_real_gid(void) { return real_gid; }
+
+/* ---- the owner store: chown is kept in user.dn.owner ("UID:GID"), and every
+ * stat reads it back (the file's real owner is the app's).  One copy of the
+ * fix-up, shared by the tracer, the shim and dn-exec. ------------------------ */
+
+#define OWN_ATTR "user.dn.owner"
+
+static int own_parse(const char *b, unsigned *u, unsigned *g)
+{
+	unsigned v = 0, w = 0;
+	int i = 0;
+
+	if (b[i] < '0' || b[i] > '9')
+		return 0;
+	while (b[i] >= '0' && b[i] <= '9') {
+		if (v > 0x7fffffffu / 10)
+			return 0;
+		v = v * 10 + (unsigned) (b[i++] - '0');
+	}
+	if (b[i++] != ':')
+		return 0;
+	if (b[i] < '0' || b[i] > '9')
+		return 0;
+	while (b[i] >= '0' && b[i] <= '9') {
+		if (w > 0x7fffffffu / 10)
+			return 0;
+		w = w * 10 + (unsigned) (b[i++] - '0');
+	}
+	if (b[i] != '\0')
+		return 0;
+	*u = v;
+	*g = w;
+	return 1;
+}
+
+/* the stored owner of a host path; 1 if present, else the implicit root */
+int policy_own_read(const char *host, int nofollow, unsigned *u, unsigned *g)
+{
+	char b[32];
+	ssize_t n = pol_getxattr(host, nofollow, OWN_ATTR, b, sizeof b - 1);
+
+	if (n <= 0)
+		return 0;
+	b[n] = '\0';
+	return own_parse(b, u, g);
+}
 
 #ifndef DN_HOST_ADB
 /* The syscalls Android's filter kills in the app domain (docs/reference/device-census.md),

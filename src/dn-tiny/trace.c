@@ -7,7 +7,6 @@
 unsigned long trace_n_rewritten;
 
 /* the owner store, used by link_copy before its definition */
-static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g);
 static void own_write(const char *host, int nofollow, unsigned u, unsigned g);
 static int own_lookup(const char *host, int nofollow, u64 dev, u64 ino, i64 sec, i64 nsec,
 		      unsigned *u, unsigned *g);
@@ -704,7 +703,7 @@ void trace_ids_of(pid_t pid, unsigned out[6])
 
 int trace_stored_owner(const char *host, unsigned *u, unsigned *g)
 {
-	return own_read(host, 0, u, g);
+	return policy_own_read(host, 0, u, g);
 }
 
 static void set_id(unsigned *r, unsigned *e, unsigned *s, long a, long b, long c, int mode)
@@ -978,7 +977,7 @@ done:
 	if (r == 0) {
 		unsigned u, g;
 
-		if (own_read(old, 0, &u, &g))             /* the copy carries the stored owner */
+		if (policy_own_read(old, 0, &u, &g))             /* the copy carries the stored owner */
 			own_write(new, 0, u, g);
 	}
 	if (r == 0)
@@ -2346,49 +2345,10 @@ static void link_size(const char *host, u64 *size)
 }
 
 /* ---- the owner store: chown is kept in user.dn.owner ("UID:GID"), and every
- * stat reads it back (the file's real owner is the app's) -------------------- */
+ * stat reads it back (the file's real owner is the app's).  The read and its
+ * parse live in the law (policy.c), shared with the shim and dn-exec. --------- */
 
 #define OWN_ATTR "user.dn.owner"
-
-static int own_parse(const char *b, unsigned *u, unsigned *g)
-{
-	unsigned v = 0, w = 0;
-	int i = 0;
-
-	if (b[i] < '0' || b[i] > '9')
-		return 0;
-	while (b[i] >= '0' && b[i] <= '9') {
-		if (v > 0x7fffffffu / 10)
-			return 0;
-		v = v * 10 + (unsigned) (b[i++] - '0');
-	}
-	if (b[i++] != ':')
-		return 0;
-	if (b[i] < '0' || b[i] > '9')
-		return 0;
-	while (b[i] >= '0' && b[i] <= '9') {
-		if (w > 0x7fffffffu / 10)
-			return 0;
-		w = w * 10 + (unsigned) (b[i++] - '0');
-	}
-	if (b[i] != '\0')
-		return 0;
-	*u = v;
-	*g = w;
-	return 1;
-}
-
-/* the stored owner of a host path (nofollow) or /proc/<pid>/fd/N; 1 if present */
-static int own_read(const char *host, int nofollow, unsigned *u, unsigned *g)
-{
-	char b[32];
-	i64 n = sc(nofollow ? 9 : 8, (i64) host, (i64) OWN_ATTR, (i64) b, (i64) sizeof b - 1, 0, 0);
-
-	if (n <= 0)
-		return 0;
-	b[n] = '\0';
-	return own_parse(b, u, g);
-}
 
 /* Every chown is stored, 0:0 included: the only implicit owner is the real uid,
  * which the fake world (euid not the app's) maps to 0.  Storing 0:0 is what
@@ -2443,7 +2403,7 @@ static int own_lookup(const char *host, int nofollow, u64 dev, u64 ino, i64 sec,
 	e->sec = sec;
 	e->nsec = nsec;
 	e->valid = 1;
-	if (own_read(host, nofollow, &e->u, &e->g)) {
+	if (policy_own_read(host, nofollow, &e->u, &e->g)) {
 		e->present = 1;
 		*u = e->u;
 		*g = e->g;
@@ -2494,7 +2454,7 @@ static void store_owner(struct tracee *t)
 		goto out;
 	}
 	if (u != (unsigned) -1 || g != (unsigned) -1) {
-		if (!own_read(host, nofollow, &cu, &cg)) {
+		if (!policy_own_read(host, nofollow, &cu, &cg)) {
 			cu = 0;
 			cg = 0;
 		}
