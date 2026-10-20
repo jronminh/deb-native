@@ -609,6 +609,8 @@ int main(int argc, char **argv)
 			}
 		} else if (!strcmp(argv[i], "-q"))
 			quiet = 1;
+		else if (!strcmp(argv[i], "--dnexec"))
+			exec_use_dnexec_set(1);
 	}
 	if (i < argc && !strcmp(argv[i], "--"))
 		i++;

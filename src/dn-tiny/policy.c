@@ -59,7 +59,7 @@ static int indexed;
 
 static const char *root;
 static size_t root_len;
-static char preload[512], ldhook[512];
+static char preload[512], ldhook[512], dnexec[512];
 
 /* ---- the link cache (policy.h).  An entry is valid while its generation is the
  * shared one; moving the generation drops every entry at once.  A seqlock lets
@@ -554,13 +554,15 @@ void policy_root_set(const char *r)
 	root = r;
 	root_len = strlen(r);
 	binds_defaults();
-	preload[0] = ldhook[0] = '\0';
+	preload[0] = ldhook[0] = dnexec[0] = '\0';
 	/* the shim and the loader hook are the runtime's own, and the shim finds the
 	 * root from its own host path: both stay host paths */
 	append(preload, sizeof preload, r);
 	append(preload, sizeof preload, "/usr/lib/deb-native/dn-lane.so");
 	append(ldhook, sizeof ldhook, r);
 	append(ldhook, sizeof ldhook, "/usr/lib/deb-native/dn-ldhook.so");
+	append(dnexec, sizeof dnexec, r);
+	append(dnexec, sizeof dnexec, "/usr/lib/deb-native/dn-exec");
 }
 
 const char *policy_root(void) { return root; }
@@ -578,6 +580,8 @@ void policy_set_root(const char *r)
 		preload[0] = '\0';
 	if (sys_fstatat(ldhook, st, 0) != 0)
 		ldhook[0] = '\0';
+	if (sys_fstatat(dnexec, st, 0) != 0)
+		dnexec[0] = '\0';
 	/* the binds the host wrote before boot; a bad line refuses the boot */
 	if (cat2(p, sizeof p, r, "/boot/binds") > 0 && (fd = sys_open(p, 0)) >= 0) {
 		k = sys_read(fd, buf, sizeof buf - 1);
@@ -619,6 +623,7 @@ void policy_set_root(const char *r)
 
 const char *policy_preload(void) { return preload; }
 const char *policy_ldhook(void) { return ldhook; }
+const char *policy_dnexec(void) { return dnexec; }
 
 int policy_is_glibc_interp(const char *interp)
 {

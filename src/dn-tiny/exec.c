@@ -22,6 +22,8 @@
 #define DEPTH   4                 /* script -> interpreter script -> ... */
 
 unsigned long exec_n_rewritten;
+static int use_dnexec;
+void exec_use_dnexec_set(int v) { use_dnexec = v; }
 
 struct vec {                      /* an argv built in the tracer's memory */
 	char *s[MAXARGS + 8];
@@ -303,6 +305,20 @@ static void resolve(const char *cur_in, struct vec *a, char *final, size_t cap, 
 		}
 
 		if (elf_interp(b, n, interp, sizeof interp) && policy_is_glibc_interp(interp)) {
+			if (use_dnexec && policy_dnexec()[0]) {
+				char cprog[512];
+
+				guest_canon(cur, cprog, sizeof cprog);  /* dn-exec concatenates root + prog */
+				vpush(out, "dn-exec");
+				vpush(out, "--root");
+				vpush(out, policy_root());
+				vpush(out, cprog);
+				for (i = 1; i < a->n; i++)
+					vpush(out, a->s[i]);
+				scpy(final, cap, policy_dnexec());      /* the runtime artifact, a host path */
+				scpy(prog, pcap, cprog);                /* /proc/<pid>/exe says the program */
+				return;
+			}
 			vpush(out, interp);                       /* the tree's own loader */
 			if (policy_preload()[0]) {                /* the shim, when the prefix ships one */
 				vpush(out, "--preload");

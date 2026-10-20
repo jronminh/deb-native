@@ -145,6 +145,9 @@ const char *policy_preload(void);
 /* the loader hook the exec gate audits with (usr/lib/deb-native/dn-ldhook.so, a
  * host path; empty when the prefix ships none); see docs/reference/syscall-patching.md */
 const char *policy_ldhook(void);
+/* the exec gate's userland exec (usr/lib/deb-native/dn-exec, a host path; empty
+ * when the prefix ships none); see docs/spec/runtime-revision.md */
+const char *policy_dnexec(void);
 /* Is this PT_INTERP a glibc loader?  The gate runs it, whatever the tree's own
  * spelling (Debian, Ubuntu, Arch, ...); the path itself is the tree's. */
 int policy_is_glibc_interp(const char *interp);
