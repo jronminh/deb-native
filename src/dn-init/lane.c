@@ -169,16 +169,20 @@ static int root_from_maps(char *out, size_t cap)
 	return 0;
 }
 
-/* the prefix root from this library's own path.  The loader hands dn-lane.so to
- * ld.so as a host path (the gate) or a guest path (dn-exec); dladdr sees the
- * name as given, so a guest name is the tail itself and yields no root, and the
- * real maps carry the host path either way. */
+/* the prefix root: dn-exec hands it down in DN_ROOT (the host root), so the shim
+ * stops self-discovering.  The gate's own path (--preload with a host path) still
+ * works through dladdr, and the maps fallback covers a guest LD_PRELOAD. */
 static int own_root(char *out, size_t cap)
 {
+	const char *e = getenv("DN_ROOT");
 	static const char tail[] = "/usr/lib/deb-native/dn-lane.so";
 	const size_t t = sizeof tail - 1;
 	Dl_info di;
 
+	if (e && e[0] && strlen(e) < cap) {
+		memcpy(out, e, strlen(e) + 1);
+		return 1;
+	}
 	if (dladdr((void *) lane_init, &di) && di.dli_fname) {
 		size_t n = strlen(di.dli_fname);
 

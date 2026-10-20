@@ -432,15 +432,23 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
 
     /* The L3 bootstrap: guest paths, not Android paths.  The shim is opened by
      * the loader through the patched sites (the law + lane); the loader's own
-     * sites are patched at birth above, so no LD_AUDIT module is needed. */
+     * sites are patched at birth above, so no LD_AUDIT module is needed.  The
+     * root is handed to the shim in DN_ROOT so it need not self-discover. */
+    char dn_root[1024 + 8];
     char *env2[MAX_VEC];
     int ne = 0;
-    for (int e = 0; envp[e] && ne < MAX_VEC - 3; e++) {
-        if (strncmp2(envp[e], "LD_PRELOAD=", 11) == 0 || strncmp2(envp[e], "LD_AUDIT=", 9) == 0)
+    for (int e = 0; envp[e] && ne < MAX_VEC - 4; e++) {
+        if (strncmp2(envp[e], "LD_PRELOAD=", 11) == 0 || strncmp2(envp[e], "LD_AUDIT=", 9) == 0 ||
+            strncmp2(envp[e], "DN_ROOT=", 8) == 0)
             continue;
         env2[ne++] = envp[e];
     }
     env2[ne++] = "LD_PRELOAD=/usr/lib/deb-native/dn-lane.so";
+    if (root[0]) {
+        memcpy2(dn_root, "DN_ROOT=", 8);
+        memcpy2(dn_root + 8, root, slen(root) + 1);
+        env2[ne++] = dn_root;
+    }
     env2[ne] = 0;
 
     if (argv0[0])
