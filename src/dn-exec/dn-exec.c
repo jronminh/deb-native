@@ -269,25 +269,45 @@ static void law_init(const char *root)
 #define PBUF  512
 #define SITE  (FRAME + PBUF)
 
-static int wanted(unsigned n) { return n == 56 || n == 48; }   /* openat, faccessat */
+/* the syscalls the hook answers, and the register each keeps its path in: map
+ * the path and re-issue the call on the lane.  Only calls whose result needs no
+ * fix-up are listed; the stat/readlink/getcwd/xattr family needs the owner-store
+ * and link-copy logic, which the shared law should own, not a third copy here. */
+static int hook_path_reg(unsigned n)
+{
+	switch (n) {
+	case 56: case 48:               /* openat, faccessat: path in x1 */
+		return 1;
+	case 43: case 45:               /* statfs, truncate: path in x0 */
+		return 0;
+	default:
+		return -1;
+	}
+}
 
-/* The hook: map the path (in x1) through the one law and mark the call with the
- * lane cookie, so the filter lets the already-mapped call through without a stop. */
+/* The hook: map the path through the one law and mark the call with the lane
+ * cookie, so the filter lets the already-mapped call through without a stop.
+ * A write open, or a relative path (dirfd resolution), is left untouched: the
+ * tracer handles it. */
 static void exec_hook(unsigned long *r)
 {
 	long nr = (long) r[8];
+	int pr = hook_path_reg((unsigned) nr);
 
-	if (wanted((unsigned) nr)) {
-		const char *path = (const char *) r[1];
+	if (pr < 0)
+		return;
+	if (nr == 56 && (r[2] & 0x643))        /* O_WRONLY|O_RDWR|O_CREAT|O_TRUNC|O_APPEND */
+		return;
+	const char *path = (const char *) r[pr];
 
-		if (path && path[0] == '/') {
-			char *host = (char *) r + FRAME;
-			int n = policy_path_nf(path, host, PBUF, 0);
+	if (path && path[0] == '/') {
+		char *host = (char *) r + FRAME;
+		int n = policy_path_nf(path, host, PBUF, 0);
 
-			if (n > 0)
-				r[1] = (unsigned long) host;
+		if (n > 0) {
+			r[pr] = (unsigned long) host;
+			r[5] = (unsigned long) COOKIE;
 		}
-		r[5] = (unsigned long) COOKIE;
 	}
 }
 
@@ -366,7 +386,7 @@ static void patch_image(u64 lo, u64 hi)
 			int x8 = (w & 0xffe0001fu) == 0xd2800008u;   /* movz x8,#imm */
 			int w8 = (w & 0xffe0001fu) == 0x52800008u;   /* movz w8,#imm (clang's freestanding form) */
 
-			if ((x8 || w8) && wanted((w >> 5) & 0xffff)) { sites[ns++] = q; break; }
+			if ((x8 || w8) && hook_path_reg((w >> 5) & 0xffff) >= 0) { sites[ns++] = q; break; }
 		}
 	}
 	if (ns == 0)

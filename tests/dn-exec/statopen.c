@@ -23,6 +23,11 @@ void _start(void) {
     fd = sc6(56, -100, (i64) "/etc/ld.so.cache", 0, 0, 0, 0);
     if (fd < 0) { put("open /etc/ld.so.cache failed\n"); quit(1); }
     sc6(57, fd, 0, 0, 0, 0, 0);
+    {
+        long sb[16];
+
+        if (sc6(43, (i64) "/usr", (i64) sb, 0, 0, 0, 0) != 0) { put("statfs /usr failed\n"); quit(1); }
+    }
     put("static-ok\n");
     quit(0);
 }
