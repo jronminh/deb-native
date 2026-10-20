@@ -13,8 +13,8 @@
  * loader's libraries must be reachable from its own view (run under dn-tiny
  * and the law maps them, or set --root and the test uses host paths).
  */
-typedef unsigned long u64;
-typedef long i64;
+#include "../dn-tiny/policy.h"     /* the law (u64/i64, pol_readlink), -DDN_FREE */
+
 typedef unsigned int u32;
 typedef unsigned short u16;
 typedef unsigned char u8;
@@ -26,6 +26,9 @@ typedef unsigned char u8;
 #define SYS_exit 93
 #define SYS_mmap 222
 #define SYS_mprotect 226
+#define SYS_read 63
+#define SYS_readlinkat 78
+#define SYS_munmap 215
 
 #define COOKIE 0x9e1ab6c3d7f2a541UL
 
@@ -106,6 +109,13 @@ static i64 sc6c(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f, u64 cookie)
     register i64 x6 __asm__("x6") = (i64) cookie;
     __asm__ volatile("mov x5, x6\n\tsvc 0\n\tmov x5, xzr" : "+r"(x0), "+r"(x5) : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x6) : "memory");
     return x0;
+}
+
+/* the law's one syscall (policy.h): readlink of a host path, on the lane, so the
+ * walk the loader's hook makes costs no stop. */
+ssize_t pol_readlink(const char *host, char *buf, size_t n)
+{
+	return sc6c(SYS_readlinkat, AT_FDCWD, (i64) host, (i64) buf, (i64) n, 0, 0, COOKIE);
 }
 
 static u64 slen(const char *s) { u64 n = 0; while (s[n]) n++; return n; }
@@ -210,6 +220,170 @@ mapped:
     return load;
 }
 
+/* Set the law's root and read the tree's binds, so the loader's opens map
+ * through the same table the tracer uses.  Only with --root: without it the
+ * loader's opens go to the tracer untouched. */
+static void law_init(const char *root)
+{
+	char bp[1024 + 16], b[4096];
+	u64 rl = slen(root);
+
+	policy_root_set(root);
+	if (rl + 12 < sizeof bp) {
+		memcpy2(bp, root, rl);
+		memcpy2(bp + rl, "/boot/binds", 12);
+		long fd = sc6(SYS_openat, AT_FDCWD, (i64) bp, O_RDONLY, 0, 0, 0);
+		if (fd >= 0) {
+			long k = sc6(SYS_read, fd, (i64) b, sizeof b - 1, 0, 0, 0);
+			sc6(SYS_close, fd, 0, 0, 0, 0, 0);
+			if (k > 0) {
+				b[k] = '\0';
+				policy_binds_parse(b);
+			}
+		}
+	}
+}
+
+/* ---- patch the loader's own syscall sites (openat/faccessat) at birth ----
+ * The loader is mapped from anonymous memory, so the patch is a write into
+ * memory dn-exec owns -- no execmod, unlike the LD_AUDIT hook this replaces. */
+
+#define FRAME 272
+#define PBUF  512
+#define SITE  (FRAME + PBUF)
+
+static int wanted(unsigned n) { return n == 56 || n == 48; }   /* openat, faccessat */
+
+/* The hook: map the path (in x1) through the one law and mark the call with the
+ * lane cookie, so the filter lets the already-mapped call through without a stop. */
+static void exec_hook(unsigned long *r)
+{
+	long nr = (long) r[8];
+
+	if (wanted((unsigned) nr)) {
+		const char *path = (const char *) r[1];
+
+		if (path && path[0] == '/') {
+			char *host = (char *) r + FRAME;
+			int n = policy_path_nf(path, host, PBUF, 0);
+
+			if (n > 0)
+				r[1] = (unsigned long) host;
+		}
+		r[5] = (unsigned long) COOKIE;
+	}
+}
+
+static unsigned b_enc(void *from, void *to) { long d = ((char *) to - (char *) from) >> 2; return 0x14000000u | ((unsigned) d & 0x3ffffffu); }
+static unsigned sub_sp(unsigned imm) { return 0xd1000000u | ((imm & 0xfffu) << 10) | (31u << 5) | 31u; }
+static unsigned add_sp(unsigned imm) { return 0x91000000u | ((imm & 0xfffu) << 10) | (31u << 5) | 31u; }
+static unsigned stp(int a, int b, int off) { return 0xa9000000u | ((unsigned) (off / 8) & 0x7fu) << 15 | (unsigned) b << 10 | 31u << 5 | (unsigned) a; }
+static unsigned ldp(int a, int b, int off) { return 0xa9400000u | ((unsigned) (off / 8) & 0x7fu) << 15 | (unsigned) b << 10 | 31u << 5 | (unsigned) a; }
+static unsigned strx(int t, int off) { return 0xf9000000u | ((unsigned) (off / 8) << 10) | (31u << 5) | (unsigned) t; }
+static unsigned ldrx(int t, int off) { return 0xf9400000u | ((unsigned) (off / 8) << 10) | (31u << 5) | (unsigned) t; }
+static unsigned branch(unsigned op, const void *from, const void *to) { long d = ((const char *) to - (const char *) from) / 4; return op | ((unsigned) d & 0x3ffffffu); }
+
+static void flush(void *lo, void *hi)
+{
+	__asm__ volatile("dsb ish" ::: "memory");
+	for (char *p = (char *) ((unsigned long) lo & ~63UL); p < (char *) hi; p += 64)
+		__asm__ volatile("dc cvau, %0" :: "r"(p) : "memory");
+	__asm__ volatile("dsb ish" ::: "memory");
+	for (char *p = (char *) ((unsigned long) lo & ~63UL); p < (char *) hi; p += 64)
+		__asm__ volatile("ic ivau, %0" :: "r"(p) : "memory");
+	__asm__ volatile("dsb ish" ::: "memory");
+	__asm__ volatile("isb" ::: "memory");
+}
+
+static unsigned *emit_p;
+static void emit(unsigned i) { *emit_p++ = i; }
+
+/* The shared block: save x0..x28, nzcv and x30; call exec_hook; restore; make the
+ * call.  The per-site stubs branch here. */
+static void emit_common(void)
+{
+	unsigned *lit;
+	int i;
+
+	for (i = 0; i < 28; i += 2)
+		emit(stp(i, i + 1, i * 8));
+	emit(strx(28, 224));
+	emit(0xd53b4209u);                          /* mrs x9, nzcv */
+	emit(strx(9, 248));
+	emit(strx(30, 256));
+	emit(0x910003e0u);                          /* mov x0, sp */
+	lit = emit_p;
+	emit(0);                                    /* ldr x16, =exec_hook */
+	emit(0xd63f0200u);                          /* blr x16 */
+	emit(ldrx(9, 248));
+	emit(0xd51b4209u);                          /* msr nzcv, x9 */
+	emit(ldrx(30, 256));
+	for (i = 0; i < 28; i += 2)
+		emit(ldp(i, i + 1, i * 8));
+	emit(ldrx(28, 224));
+	emit(0xd4000001u);                          /* svc #0 */
+	emit(0xaa1f03e5u);                          /* mov x5, xzr */
+	emit(0xd65f03c0u);                          /* ret */
+	if ((unsigned long) emit_p & 4)
+		emit(0xd503201fu);                      /* nop: the literal is 8-aligned */
+	*lit = 0x58000000u | ((unsigned) (emit_p - lit) & 0x7ffff) << 5 | 16u;
+	*(void **) emit_p = (void *) exec_hook;
+	emit_p += 2;
+}
+
+/* Patch the openat/faccessat `mov x8,#nr; svc #0` sites in [lo, hi).  The same
+ * function maps a static program later: it is the one fast-path mechanism for
+ * whatever dn-exec maps. */
+static void patch_image(u64 lo, u64 hi)
+{
+	unsigned *sites[64];
+	char *page = 0;
+	unsigned *common, *stubs;
+	int ns = 0, i;
+
+	for (unsigned *q = (unsigned *) lo + 1; q < (unsigned *) hi && ns < 64; q++) {
+		if (*q != 0xd4000001u)
+			continue;
+		for (int k = 1; k <= 8 && q - k >= (unsigned *) lo; k++)   /* the mov is not always adjacent */
+			if ((q[-k] & 0xffe0001fu) == 0xd2800008u && wanted((q[-k] >> 5) & 0xffff)) { sites[ns++] = q; break; }
+	}
+	if (ns == 0)
+		return;
+
+	for (int k = 1; k <= 8 && page == 0; k++) {                    /* a stub page within B reach */
+		char *hint = (char *) (((unsigned long) hi + ((unsigned long) k << 21)) & ~0xfffffUL);
+		void *m = (void *) sc6(SYS_mmap, (i64) hint, 4096 * 4, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		if (m != (void *) -1 && (unsigned long) m > lo && (unsigned long) m - lo < (1UL << 27)) page = m;
+		else if (m != (void *) -1) sc6(SYS_munmap, (i64) m, 4096 * 4, 0, 0, 0, 0);
+	}
+	if (page == 0)
+		return;
+
+	emit_p = (unsigned *) page;
+	common = emit_p;
+	emit_common();
+	stubs = emit_p;
+	for (i = 0; i < ns; i++) {
+		emit(sub_sp(SITE));
+		emit(stp(29, 30, 232));
+		emit(branch(0x94000000u, emit_p, common));              /* bl common */
+		emit(ldp(29, 30, 232));
+		emit(add_sp(SITE));
+		emit(branch(0x14000000u, emit_p, (char *) sites[i] + 4));   /* b site+4 */
+	}
+	flush(page, emit_p);
+	if (sc6(SYS_mprotect, (i64) page, 4096 * 4, PROT_READ | PROT_EXEC, 0, 0, 0) != 0)
+		return;
+
+	u64 tlo = lo & ~4095UL, thi = (hi + 4095) & ~4095UL;        /* anonymous: write, then RX */
+	if (sc6(SYS_mprotect, (i64) tlo, thi - tlo, PROT_READ | PROT_WRITE | PROT_EXEC, 0, 0, 0) != 0)
+		return;
+	for (i = 0; i < ns; i++)
+		*sites[i] = b_enc(sites[i], (char *) stubs + (unsigned long) i * 24);
+	flush((void *) tlo, (void *) thi);
+	sc6(SYS_mprotect, (i64) tlo, thi - tlo, PROT_READ | PROT_EXEC, 0, 0, 0);
+}
+
 static char *push_str(char **sp, const char *s) {
     u64 n = slen(s) + 1;
     *sp -= n;
@@ -298,6 +472,7 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
         i += 2;
     }
     if (i >= argc) die("no program");
+    if (root[0]) law_init(root);
     const char *prog = argv[i];
     char path[4096];
     if (root[0]) {
@@ -339,6 +514,19 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
         load_base = map_image(lfd, &leh, lph, 0x50000000UL);
         if (load_base == ~0UL) die("map loader");
         entry = load_base + leh.e_entry;
+        if (root[0]) {
+            u64 lexe_lo = ~0UL, lexe_hi = 0;
+
+            for (int j = 0; j < leh.e_phnum; j++) {
+                if (lph[j].p_type != PT_LOAD || !(lph[j].p_flags & 1)) continue;
+                u64 s = load_base + align_down(lph[j].p_vaddr, PAGE);
+                u64 e = load_base + align_up(lph[j].p_vaddr + lph[j].p_memsz, PAGE);
+                if (s < lexe_lo) lexe_lo = s;
+                if (e > lexe_hi) lexe_hi = e;
+            }
+            if (lexe_lo != ~0UL)
+                patch_image(lexe_lo, lexe_hi);
+        }
         sc6(SYS_close, lfd, 0, 0, 0, 0, 0);
     }
     sc6(SYS_close, fd, 0, 0, 0, 0, 0);
@@ -347,9 +535,9 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
                  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (st < 0) die("map stack");
 
-    /* The L3 bootstrap: guest paths, not Android paths.  The shim/ldhook are
-     * opened by the loader through the law; ldhook's root comes from its own
-     * mapped host path. */
+    /* The L3 bootstrap: guest paths, not Android paths.  The shim is opened by
+     * the loader through the patched sites (the law + lane); the loader's own
+     * sites are patched at birth above, so no LD_AUDIT module is needed. */
     char *env2[MAX_VEC];
     int ne = 0;
     for (int e = 0; envp[e] && ne < MAX_VEC - 3; e++) {
@@ -358,7 +546,6 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
         env2[ne++] = envp[e];
     }
     env2[ne++] = "LD_PRELOAD=/usr/lib/deb-native/dn-lane.so";
-    env2[ne++] = "LD_AUDIT=/usr/lib/deb-native/dn-ldhook.so";
     env2[ne] = 0;
 
     u64 sp = build_stack((char *)((u64)st + STACK_SIZE), argc - i, argv + i, env2,
