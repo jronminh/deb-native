@@ -187,6 +187,14 @@ Conclusion: the static fast path is feasible and cleaner than the shim (no
 pattern check (Go deferred for now). This makes "patch the `svc` sites of the
 image `dn-exec` maps" the one mechanism for the loader and for static programs.
 
+Result (2026-10-20, p-dev): done. `patch_image` also runs for a static program
+(no `PT_INTERP`), so a freestanding static binary's `openat` sites are patched
+at birth. `tests/dn-exec/statopen.c` opens two guest paths: direct under
+`dn-tiny` 3 entry / 2 paths (the tracer maps them), via `dn-exec` 2 entry / 0
+paths (the hook maps them in-process). One pattern note: clang emits a small
+syscall number as `mov w8,#nr` (`movz` on the 32-bit register), so the scan now
+matches both `movz x8` and `movz w8`.
+
 ### Next: POC (loader fast path, re-homed into dn-exec)
 
 The first POC for this direction: move the loader-patching that `ldhook.c` does

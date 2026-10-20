@@ -220,6 +220,23 @@ mapped:
     return load;
 }
 
+/* the executable range [*lo, *hi) of the image mapped at `base`; 1 if any */
+static int exec_range(u64 base, const Ehdr *eh, const Phdr *ph, u64 *lo, u64 *hi)
+{
+	u64 l = ~0UL, h = 0;
+
+	for (int i = 0; i < eh->e_phnum; i++) {
+		if (ph[i].p_type != PT_LOAD || !(ph[i].p_flags & 1)) continue;
+		u64 s = base + align_down(ph[i].p_vaddr, PAGE);
+		u64 e = base + align_up(ph[i].p_vaddr + ph[i].p_memsz, PAGE);
+		if (s < l) l = s;
+		if (e > h) h = e;
+	}
+	if (l == ~0UL) return 0;
+	*lo = l; *hi = h;
+	return 1;
+}
+
 /* Set the law's root and read the tree's binds, so the loader's opens map
  * through the same table the tracer uses.  Only with --root: without it the
  * loader's opens go to the tracer untouched. */
@@ -344,8 +361,13 @@ static void patch_image(u64 lo, u64 hi)
 	for (unsigned *q = (unsigned *) lo + 1; q < (unsigned *) hi && ns < 64; q++) {
 		if (*q != 0xd4000001u)
 			continue;
-		for (int k = 1; k <= 8 && q - k >= (unsigned *) lo; k++)   /* the mov is not always adjacent */
-			if ((q[-k] & 0xffe0001fu) == 0xd2800008u && wanted((q[-k] >> 5) & 0xffff)) { sites[ns++] = q; break; }
+		for (int k = 1; k <= 8 && q - k >= (unsigned *) lo; k++) {   /* the mov is not always adjacent */
+			unsigned w = q[-k];
+			int x8 = (w & 0xffe0001fu) == 0xd2800008u;   /* movz x8,#imm */
+			int w8 = (w & 0xffe0001fu) == 0x52800008u;   /* movz w8,#imm (clang's freestanding form) */
+
+			if ((x8 || w8) && wanted((w >> 5) & 0xffff)) { sites[ns++] = q; break; }
+		}
 	}
 	if (ns == 0)
 		return;
@@ -496,6 +518,12 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
     u64 prog_entry = prog_base + eh.e_entry;
 
     u64 load_base = 0, entry = prog_entry;
+    if (!interp[0] && root[0]) {                    /* static: patch its own sites */
+        u64 plo, phi;
+
+        if (exec_range(prog_base, &eh, ph, &plo, &phi))
+            patch_image(plo, phi);
+    }
     if (interp[0]) {
         char ipath[4096];
         if (root[0]) {
@@ -515,16 +543,9 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
         if (load_base == ~0UL) die("map loader");
         entry = load_base + leh.e_entry;
         if (root[0]) {
-            u64 lexe_lo = ~0UL, lexe_hi = 0;
+            u64 lexe_lo, lexe_hi;
 
-            for (int j = 0; j < leh.e_phnum; j++) {
-                if (lph[j].p_type != PT_LOAD || !(lph[j].p_flags & 1)) continue;
-                u64 s = load_base + align_down(lph[j].p_vaddr, PAGE);
-                u64 e = load_base + align_up(lph[j].p_vaddr + lph[j].p_memsz, PAGE);
-                if (s < lexe_lo) lexe_lo = s;
-                if (e > lexe_hi) lexe_hi = e;
-            }
-            if (lexe_lo != ~0UL)
+            if (exec_range(load_base, &leh, lph, &lexe_lo, &lexe_hi))
                 patch_image(lexe_lo, lexe_hi);
         }
         sc6(SYS_close, lfd, 0, 0, 0, 0, 0);
