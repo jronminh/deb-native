@@ -611,6 +611,8 @@ int main(int argc, char **argv)
 			quiet = 1;
 		else if (!strcmp(argv[i], "--dnexec"))
 			exec_use_dnexec_set(1);
+		else if (!strcmp(argv[i], "--no-dnexec"))
+			exec_use_dnexec_set(0);
 	}
 	if (i < argc && !strcmp(argv[i], "--"))
 		i++;

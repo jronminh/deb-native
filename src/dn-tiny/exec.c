@@ -22,7 +22,7 @@
 #define DEPTH   4                 /* script -> interpreter script -> ... */
 
 unsigned long exec_n_rewritten;
-static int use_dnexec;
+static int use_dnexec = 1;      /* dn-exec by default, when the prefix ships it */
 void exec_use_dnexec_set(int v) { use_dnexec = v; }
 
 struct vec {                      /* an argv built in the tracer's memory */
