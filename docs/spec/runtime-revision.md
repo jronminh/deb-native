@@ -150,7 +150,7 @@ experiments in the history:
 | mechanism | level | reach | kernel | status |
 | --- | --- | --- | --- | --- |
 | vDSO (`clock_gettime`, `getcpu`) | 0 (no trap) | every program, already glibc | old | already used |
-| seccomp `RET_ERRNO` for denials | 1 | every program | 3.5 | not done: denials are answered at `SIGSYS` today |
+| seccomp `RET_ERRNO` for denials | 1 | every program | 3.5 | infeasible for the seccomp-TRAP'd denials: TRAP outranks ERRNO |
 | constant-action bitmap (nr-first ordering) | 1 | every program | 5.11+ | blocked by the cookie reading `args[5]` |
 | LD_PRELOAD shim (today) | 2 | dynamic glibc | - | narrow |
 | patch every `svc` (svc-hook) | 2 | dynamic + loader + generic `syscall()` | - | wider than the `mov x8; svc` pair; could replace ldhook |
@@ -165,8 +165,10 @@ experiments in the history:
 
 Conclusions:
 
-- The one clear, cheap win is level 1: answer the platform-denied syscalls with
-  `RET_ERRNO` in the filter instead of a `SIGSYS` stop (the 263 stops above).
+- Level 1 has no win for the app-denied syscalls: the app's filter returns
+  `SECCOMP_RET_TRAP`, which outranks `RET_ERRNO`, so dn-init's filter cannot
+  answer them without a stop.  The `SIGSYS` cost is inherent (the NETLINK_AUDIT
+  zero-stop works only because SELinux, not seccomp, refuses it).
 - Level 2 widens two ways, both "patch the `svc` sites of the image `dn-exec`
   maps": patch every `svc` (replaces ldhook, reaches the loader and generic
   `syscall()`), and patch a static program at birth (a fast path static programs
@@ -329,23 +331,29 @@ libc's cancellable `openat` 324, SIGSYS 263, fork/exec events 258, `execve` 195,
 `unlinkat` 79, shim ids 20. The second bench: every spawned process costs ~5
 stops (300 x `true` = 1548).
 
-The next target is therefore **process creation (`clone`/`fork`/`vfork`)** -- the
-other half of spawn, which `dn-exec` does not cover. Two levels:
+Process creation is the only other candidate, but it does not work as an
+emulated syscall, and the runtime already handles it:
 
-- Cheap: answer the platform-denied syscalls (`set_robust_list`, `clone3`,
-  `rseq`, `faccessat2`) in dn-init's seccomp filter with `SECCOMP_RET_ERRNO`,
-  so glibc's fallback costs no stop. Today they arrive as `SIGSYS` and cost a
-  ptrace round-trip each (the 263 above).
-- Deep: `dn-init` owns process creation itself (a pre-forked idle pool), so
-  spawn becomes "hand out a ready process + `dn-exec` maps the program".
+- `execve` was emulatable because the kernel's job (loading the ELF) is
+  replaceable by `mmap` + jump.  `clone`'s job -- making a process -- cannot be
+  done in userland: the kernel must create the process.  So there is no second
+  emulated syscall; there is only the spawn pair, of which `dn-exec` is the exec
+  half and the kernel's clone is the other half, observed by the tracer.
+- How clone/clone3/fork/vfork are handled today: none is in the seccomp filter;
+  clone/fork/vfork pass through, the tracer sees `PTRACE_EVENT_CLONE/FORK/VFORK`
+  and inherits the per-process state (`trace_exe_fork`); `clone3` and `vfork` are
+  TRAP'd by the app's filter and `policy_deny` answers `ENOSYS` by default, so
+  glibc falls back to `clone` (the runtime does not substitute `clone3`).
+- The remaining spawn cost is therefore the floor: one fork/clone event plus the
+  `SIGSYS` for the app-TRAP'd calls.  The `SIGSYS` cannot be zero-stopped: in
+  seccomp, `TRAP` outranks `ERRNO`, so dn-init's filter cannot override the app's
+  `TRAP` with `RET_ERRNO` (the NETLINK_AUDIT zero-stop works only because that one
+  is refused by SELinux, not by a seccomp TRAP).  A pre-forked idle pool would be
+  the only way lower, and it is deep and not worth it while spawn is not a
+  bottleneck.
 
-Note the correction recorded here: `dn-tiny` does **not** substitute `clone` for
-`clone3`. `policy_deny` has no `clone3` case; it answers `ENOSYS` by default and
-**glibc** falls back to `clone` -- on the SIGSYS slow path, not the fast path.
-
-`execve` could be emulated only because the kernel had already created the
-process (by exec'ing `dn-exec`); process creation itself still needs the kernel,
-so "emulating clone" means `dn-init` reusing a process it created earlier.
+Result (2026-10-20): the "second emulated syscall" does not exist.  Step 6 is
+closed as investigated, no win.
 
 ## Open decisions
 
@@ -354,8 +362,10 @@ so "emulating clone" means `dn-init` reusing a process it created earlier.
 2. Exec errno: the gate decides before rewriting (synchronous), or post-exec
    failures become exit 127?
 3. Context handoff: `DN_*` env holding fd numbers, or a single struct fd?
+   (Resolved in practice: the root is a reserved fd, `DN_ROOT_FD`.)
 4. libc `svc` patching: keep it in the shim, or move it to `dn-exec` at map time?
-5. Clone: level one (filter `RET_ERRNO`) or level two (process pool)?
+5. Clone: ~~level one (filter `RET_ERRNO`) or level two (process pool)?~~ closed
+   (investigated, no win -- see "Second syscall").
 6. Where `dn-exec`/shim live at a high targetSdk (APK lib vs fd), and 16 KB pages.
 
 ## Migration
@@ -375,8 +385,10 @@ against the old behaviour. Done: dn-exec patches the loader at birth
 4. **`dn-tiny` -> `dn-init`** -- rename, split `monitor/trace/exec` into
    `catch/apply+state/gate`.
 5. **Context handoff** -- `dn-init` hands root/ids/binds/gen down; the shim and
-   `dn-exec` stop self-discovering.
+   `dn-exec` stop self-discovering. (done: `DN_ROOT_FD`, fd 200.)
 6. **`clone` (partial)** -- `gate.c` owns spawn as the other birth half.
+   (closed: investigated, no win -- the kernel must create the process, and the
+   app's TRAP outranks `RET_ERRNO`, so the SIGSYS is the floor.)
 7. (later) the law as a read-only shared table.
 
 Step 1 is the core: it is what lets "one law, one patch" replace the three
