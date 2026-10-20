@@ -272,6 +272,14 @@ stopped calls are not gcc's bottleneck, and the userland exec is slightly
 heavier.  Against the recorded 2026-10-18 app-session number (13.1 s / 864 stops,
 with ldhook) both are in the same band.
 
+Follow-up (worth testing, not a confirmed win): map the *program* straight from
+the file (`mmap` on the fd, `offset = p_offset`), and keep only the images dn-exec
+must patch -- the loader, and a static program -- in anonymous `pread` memory.
+That drops the per-exec copy of a large dynamic binary, at no `execmod` cost
+(only the patched images are written).  The ~5% may also be noise or other
+overhead, so the right check is to isolate `map_image` on a 30 MB binary:
+file-mmap vs pread.
+
 ## Boot flow
 
 1. `boot.sh` cleans the environment, finds the root, and `exec dn-init` once
