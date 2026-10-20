@@ -179,15 +179,44 @@ static int read_elf(int fd, Ehdr *eh, Phdr *ph, char *interp, u64 icap) {
     return 0;
 }
 
-/* map one image (program or loader); returns the load base, 0 on failure */
-static u64 map_image(int fd, const Ehdr *eh, const Phdr *ph, u64 hint) {
-    u64 lo = ~0UL, hi = 0;
+/* map one image (program or loader); returns the load base, 0 on failure.
+ * `patchable`: the caller will rewrite svc sites in this image's text, so its
+ * pages must come from an owned anonymous region, not file-backed ones. */
+static u64 map_image(int fd, const Ehdr *eh, const Phdr *ph, u64 hint, int patchable) {
+    u64 lo = ~0UL, hi = 0, lo_off = 0, file_hi = 0;
     for (int i = 0; i < eh->e_phnum; i++) {
         if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0) continue;
-        if (ph[i].p_vaddr < lo) lo = ph[i].p_vaddr;
+        if (ph[i].p_vaddr < lo) { lo = ph[i].p_vaddr; lo_off = ph[i].p_offset; }
         if (ph[i].p_vaddr + ph[i].p_memsz > hi) hi = ph[i].p_vaddr + ph[i].p_memsz;
+        if (ph[i].p_vaddr + ph[i].p_filesz > file_hi) file_hi = ph[i].p_vaddr + ph[i].p_filesz;
     }
     if (lo == ~0UL || hi <= lo) return ~0UL;
+
+    /* A single file-backed overlay can stand in for every segment's file data
+     * -- not one mmap per PT_LOAD segment -- only if every segment keeps the
+     * same (p_vaddr - p_offset) as the lowest one; two segments sharing a page
+     * would otherwise clobber each other's data under separate MAP_FIXED
+     * calls. True of any ELF a linker produces (segments sit in the file in
+     * the same relative layout as in memory); checked anyway, not assumed.
+     * The overlay covers only [lo, file_hi), the part backed by real file
+     * bytes -- a page straddling file_hi is zero-filled in its tail by the
+     * kernel (the usual short-mmap behaviour), but a whole page entirely
+     * beyond file_hi is not: touching it would SIGBUS, so bss beyond that is
+     * left on the anonymous reservation below, never overlaid. */
+    int file_backed = !patchable && (lo_off & (PAGE - 1)) == (lo & (PAGE - 1));
+    if (file_backed) {
+        for (int i = 0; i < eh->e_phnum; i++) {
+            if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0) continue;
+            if (ph[i].p_vaddr - lo != ph[i].p_offset - lo_off) { file_backed = 0; break; }
+            /* a segment's own bss gap (memsz > filesz) must be the highest
+             * file data in the image -- otherwise a later segment's real
+             * file bytes sit past it at the same file-to-vaddr shift, and
+             * the single overlay would feed them into what must read zero. */
+            if (ph[i].p_memsz > ph[i].p_filesz && ph[i].p_vaddr + ph[i].p_filesz != file_hi) {
+                file_backed = 0; break;
+            }
+        }
+    }
 
     u64 base = 0, load = 0;
     if (eh->e_type == 2) {                       /* ET_EXEC: fixed */
@@ -213,14 +242,27 @@ static u64 map_image(int fd, const Ehdr *eh, const Phdr *ph, u64 hint) {
     }
 
 mapped:
+    if (file_backed && file_hi > lo) {
+        u64 addr = load + align_down(lo, PAGE);
+        u64 len = align_up(file_hi, PAGE) - align_down(lo, PAGE);
+        if ((u64)sc6(SYS_mmap, (i64)addr, (i64)len, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_FIXED, fd, (i64)align_down(lo_off, PAGE)) != addr)
+            return ~0UL;
+        /* the file may hold real bytes past file_hi (section headers, a
+         * build-id, anything after the last PT_LOAD's filesz) -- never trust
+         * the kernel's beyond-EOF zero-fill for the bss tail; zero it here,
+         * same as a real ELF loader does. */
+        if (file_hi & (PAGE - 1))
+            memset2((void *)(load + file_hi), 0, align_up(file_hi, PAGE) - file_hi);
+    }
     for (int i = 0; i < eh->e_phnum; i++) {
         if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0) continue;
         u64 dst = load + ph[i].p_vaddr;
-        if (ph[i].p_filesz) {
+        if (!file_backed && ph[i].p_filesz) {
             if (sc6(SYS_pread64, fd, (i64)dst, (i64)ph[i].p_filesz, ph[i].p_offset, 0, 0) != (i64)ph[i].p_filesz)
                 return ~0UL;
         }
-        if (ph[i].p_memsz > ph[i].p_filesz)
+        if (ph[i].p_memsz > ph[i].p_filesz && !file_backed)
             memset2((void *)(dst + ph[i].p_filesz), 0, ph[i].p_memsz - ph[i].p_filesz);
         int prot = 0;
         if (ph[i].p_flags & 4) prot |= PROT_READ;
@@ -391,7 +433,7 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
     Ehdr eh; Phdr ph[64]; char interp[4096];
     if (read_elf(fd, &eh, ph, interp, sizeof interp) < 0) die("bad ELF");
 
-    u64 prog_base = map_image(fd, &eh, ph, 0x40000000UL);
+    u64 prog_base = map_image(fd, &eh, ph, 0x40000000UL, !interp[0] && root[0] != 0);
     if (prog_base == ~0UL) die("map program");
     u64 prog_entry = prog_base + eh.e_entry;
 
@@ -417,7 +459,7 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
         if (lfd < 0) die("open loader");
         Ehdr leh; Phdr lph[64];
         if (read_elf(lfd, &leh, lph, 0, 0) < 0) die("bad loader");
-        load_base = map_image(lfd, &leh, lph, 0x50000000UL);
+        load_base = map_image(lfd, &leh, lph, 0x50000000UL, root[0] != 0);
         if (load_base == ~0UL) die("map loader");
         entry = load_base + leh.e_entry;
         if (root[0]) {
