@@ -1,4 +1,4 @@
-/* lane.c -- dn-lane.so, the shim of dn-tiny: the exec gate preloads it into every
+/* lane.c -- dn-lane.so, the shim of dn-init: the exec gate preloads it into every
  * glibc program it starts (ld.so --preload).  It does the tracer's path work inside
  * the program, for the calls that only read, so that they cost no stop:
  *
@@ -12,7 +12,7 @@
  *   getuid, geteuid, getresuid, ...      answered from the ids the tracer gave once
  *   euidaccess, eaccess                  access(), when the real and effective ids agree
  *
- * A path is mapped by the one law, policy.c, which this file links in (built -DDN_LIBC):
+ * A path is mapped by the one law, law.c, which this file links in (built -DDN_LIBC):
  * a guest path is the prefix's, except the host directories the law leaves as they
  * are; an absolute link target is the prefix's too.  The call is then issued on the
  * host path with the lane cookie in x5 (lane.h; set for the svc only), which the
@@ -20,14 +20,14 @@
  * writes, and any case this file does not handle (a path on a deleted directory's fd,
  * flags it does not know), goes to the real function and through the tracer as before.
  * The law's readlink goes through the lane too (pol_readlink), and its answers are
- * cached; the cache is dropped when the generation in var/lib/deb-native/dn-tiny.gen
+ * cached; the cache is dropped when the generation in var/lib/deb-native/dn-init.gen
  * moves (a symlinkat, unlinkat, linkat or rename by any process of any session).
  *
  * libc's own internal calls (fopen's open, the loader's) do not come through these
  * symbols and stay with the tracer.
  *
  * Built against the prefix's glibc: cc -O2 -shared -fPIC -DDN_LIBC -o dn-lane.so
- * lane.c policy.c */
+ * lane.c law.c */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <errno.h>
@@ -43,7 +43,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #include "lane.h"
-#include "policy.h"                     /* the law, shared with the tracer */
+#include "law.h"                     /* the law, shared with the tracer */
 
 #define LANE (((long) DN_LANE_HI << 32) | (long) DN_LANE_LO)
 
@@ -106,7 +106,7 @@ static long lane_svc(long nr, long a, long b, long c, long d, long e)
 #define lane_rawc(nr, a, b, c, d, e) \
 	lane_raw(nr, (long) (a), (long) (b), (long) (c), (long) (d), (long) (e))
 
-/* the law's one syscall (policy.h): readlink of a host path, on the lane, so the
+/* the law's one syscall (law.h): readlink of a host path, on the lane, so the
  * walk costs no stop.  The raw result, as the kernel would give it. */
 ssize_t pol_readlink(const char *host, char *buf, size_t n)
 {
@@ -237,7 +237,7 @@ __attribute__((constructor)) static void lane_init(void)
 		}
 	}
 	strcpy(p, rootbuf);
-	strcat(p, "/var/lib/deb-native/dn-tiny.gen");
+	strcat(p, "/var/lib/deb-native/dn-init.gen");
 	fd = lane_call(SYS_openat, AT_FDCWD, p, O_RDONLY | O_CLOEXEC, 0, 0L);
 	if (fd >= 0) {
 		void *m = mmap(NULL, 4096, PROT_READ, MAP_SHARED, (int) fd, 0);
@@ -271,7 +271,7 @@ __attribute__((constructor)) static void lane_init(void)
 	patch_libc();
 }
 
-/* ---- the law, in guest terms (policy.c, shared with the tracer) ------------- */
+/* ---- the law, in guest terms (law.c, shared with the tracer) ------------- */
 /* the host path of an absolute guest path, as the law maps it; a host path the
  * law leaves alone is copied as it is.  0, or -errno. */
 static int lane_host_of(const char *in, int nofollow, char *host, size_t cap)
@@ -317,7 +317,7 @@ static int seq_check(unsigned *seq, unsigned s)
 	return __atomic_load_n(seq, __ATOMIC_RELAXED) == s;
 }
 
-/* the readlink cache is policy.c's now (lc_readlink), shared with the tracer */
+/* the readlink cache is law.c's now (lc_readlink), shared with the tracer */
 
 /* ---- the working directory: asked once, dropped by chdir/fchdir ---------- */
 static unsigned cwd_seq, cwd_epoch;     /* the epoch moves with every chdir */
@@ -424,7 +424,7 @@ int fchdir(int fd)
 	return r;
 }
 
-/* ---- resolving (policy.c's law) ------------------------------------------- */
+/* ---- resolving (law.c's law) ------------------------------------------- */
 
 /* the host path of a directory fd, as the kernel names it; its length, or 0 */
 static size_t fd_host(int fd, char *out, size_t cap)
@@ -452,7 +452,7 @@ static size_t fd_host(int fd, char *out, size_t cap)
  * on the lane as (*at, host)), 0 when this file does not handle it (the real function,
  * through the tracer), or -errno.
  *
- * The path is mapped by the law (policy.c): an absolute guest path resolved to a
+ * The path is mapped by the law (law.c): an absolute guest path resolved to a
  * host path; a relative one from the working directory or from the directory fd's
  * guest path.  A directory outside the prefix is a host directory: its paths stay. */
 static int lane_at(int dirfd, const char *path, int nofollow, char *host, size_t cap, int *at)

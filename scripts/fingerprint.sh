@@ -6,7 +6,7 @@
 #   scripts/fingerprint.sh PREFIX
 set -u
 P=$(CDPATH= cd -- "${1:?usage: fingerprint.sh PREFIX}" && pwd)
-DN=$P/usr/lib/deb-native/dn-tiny
+DN=$P/usr/lib/deb-native/dn-init
 [ -x "$DN" ] || { echo "no runtime at $DN" >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
@@ -45,7 +45,7 @@ case "$st" in
 esac
 nm=$(g name)
 case "$nm" in
-	*ld-linux*|*dn-tiny*|*dn-lane*) echo "FAIL name = '$nm' (the runtime)"; fail=1 ;;
+	*ld-linux*|*dn-init*|*dn-lane*) echo "FAIL name = '$nm' (the runtime)"; fail=1 ;;
 	'') echo "FAIL name is empty"; fail=1 ;;
 	*) echo "ok   name = '$nm'" ;;
 esac

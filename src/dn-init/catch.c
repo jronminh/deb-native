@@ -1,6 +1,6 @@
-/* monitor.c -- the catcher: the ancestor of every process in the prefix.
+/* catch.c -- the catcher: the ancestor of every process in the prefix.
  *
- *   dn-tiny [-m bare|regs|full] [-t ROOT] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]
+ *   dn-init [-m bare|regs|full] [-t ROOT] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]
  *
  * It installs one seccomp filter built from the policy's rows, traces the whole
  * tree through ptrace's automatic attach, and at each stop hands the stopped
@@ -25,10 +25,10 @@
 #include <linux/prctl.h>
 #include <linux/ptrace.h>
 #include <linux/seccomp.h>
-#include "exec.h"
+#include "gate.h"
 #include "mon.h"
-#include "policy.h"
-#include "trace.h"
+#include "law.h"
+#include "apply.h"
 #include "lane.h"
 
 #define NT_PRSTATUS 1
@@ -559,7 +559,7 @@ static void stats(i64 ns)
 	unsigned i;
 #endif
 
-	put(2, "dn-tiny: enter="); putu(2, n_enter);
+	put(2, "dn-init: enter="); putu(2, n_enter);
 	put(2, " exit="); putu(2, n_exit);
 	put(2, " event="); putu(2, n_event);
 	put(2, " sig="); putu(2, n_sig);
@@ -570,7 +570,7 @@ static void stats(i64 ns)
 	put(2, "  "); putms(2, ns); put(2, "s  (filter "); putu(2, policy_count()); put(2, " syscalls)\n");
 #ifndef DN_HOST_ADB
 	if (n_sigsys) {
-		put(2, "dn-tiny: answered for the platform's filter:");
+		put(2, "dn-init: answered for the platform's filter:");
 		for (i = 0; i < 512; i++)
 			if (deny_count[i]) { put(2, " "); putu(2, i); put(2, "x"); putu(2, deny_count[i]); }
 		put(2, "\n");
@@ -604,7 +604,7 @@ int main(int argc, char **argv)
 			else if (!strcmp(p, "root"))
 				initial_root = 1;
 			else {
-				put(2, "dn-tiny: --initial is user or root\n");
+				put(2, "dn-init: --initial is user or root\n");
 				return 2;
 			}
 		} else if (!strcmp(argv[i], "-q"))
@@ -617,7 +617,7 @@ int main(int argc, char **argv)
 	if (i < argc && !strcmp(argv[i], "--"))
 		i++;
 	if (i >= argc || (mode == M_FULL && root == NULL)) {
-		put(2, "usage: dn-tiny [-m bare|regs|full] [-t ROOT] [--initial user|root] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]\n");
+		put(2, "usage: dn-init [-m bare|regs|full] [-t ROOT] [--initial user|root] [-c CPU] [-s USEC] [-q] -- PROGRAM [ARG...]\n");
 		return 2;
 	}
 	if (root != NULL)
@@ -625,7 +625,7 @@ int main(int argc, char **argv)
 
 	pid = sys_fork();                        /* a raw clone: no libc, so no set_robust_list in the child */
 	if (pid < 0) {
-		put(2, "dn-tiny: clone failed\n");
+		put(2, "dn-init: clone failed\n");
 		return 1;
 	}
 	if (pid == 0) {
@@ -633,11 +633,11 @@ int main(int argc, char **argv)
 		sys_ptrace(PTRACE_TRACEME, 0, 0, 0);
 		sys_kill(sys_getpid(), SIGSTOP_);        /* let the tracer set options first */
 		if (install_filter() < 0) {
-			put(2, "dn-tiny: seccomp failed\n");
+			put(2, "dn-init: seccomp failed\n");
 			sys_exit(126);
 		}
 		sys_execv(argv[i], argv + i);
-		put(2, "dn-tiny: cannot execute "); put(2, argv[i]); put(2, "\n");
+		put(2, "dn-init: cannot execute "); put(2, argv[i]); put(2, "\n");
 		sys_exit(127);
 	}
 

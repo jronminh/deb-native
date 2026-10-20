@@ -1,8 +1,8 @@
-/* trace.c -- the applier.  It has no `if (syscall == ...)`: the row says where
+/* apply.c -- the applier.  It has no `if (syscall == ...)`: the row says where
  * the path is or what to fake, the policy says what it becomes, the monitor
  * moves the bytes. */
-#include "exec.h"
-#include "trace.h"
+#include "gate.h"
+#include "apply.h"
 
 unsigned long trace_n_rewritten;
 
@@ -1013,7 +1013,7 @@ static void link_by_copy(struct tracee *t)
 }
 
 /* ---- /proc/<pid>/status: the kernel's own, with the runtime's traces gone ----
- * TracerPid is dn-tiny and Seccomp is 2; a plain process has neither.  The file
+ * TracerPid is dn-init and Seccomp is 2; a plain process has neither.  The file
  * is per-process and changes, so it is generated at open into a file under
  * var/lib/deb-native and the open is pointed there. ---------------------------- */
 static int uitoa(char *p, unsigned v)
@@ -2346,7 +2346,7 @@ static void link_size(const char *host, u64 *size)
 
 /* ---- the owner store: chown is kept in user.dn.owner ("UID:GID"), and every
  * stat reads it back (the file's real owner is the app's).  The read and its
- * parse live in the law (policy.c), shared with the shim and dn-exec. --------- */
+ * parse live in the law (law.c), shared with the shim and dn-exec. --------- */
 
 #define OWN_ATTR "user.dn.owner"
 

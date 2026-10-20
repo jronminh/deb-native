@@ -1,12 +1,12 @@
 #!/bin/sh
-# Build a prefix: a Debian arm64 tree that boots under dn-tiny (docs/building.md).
+# Build a prefix: a Debian arm64 tree that boots under dn-init (docs/building.md).
 # Run in Termux, as the Termux user; no root, no proot at run time.
 #
 #   1. debootstrap --foreign: fetch and unpack the base packages (Termux's
 #      debootstrap; its stage-two script is fixed first, see below)
-#   2. put the runtime in the tree: usr/lib/deb-native/dn-tiny, boot/boot.sh,
+#   2. put the runtime in the tree: usr/lib/deb-native/dn-init, boot/boot.sh,
 #      boot/init.sh
-#   3. debootstrap --second-stage under dn-tiny: the packages' scripts run as
+#   3. debootstrap --second-stage under dn-init: the packages' scripts run as
 #      they would on Debian
 #   4. apt sources, then the shim (dn-lane.so) compiled in the tree against its
 #      own glibc, then the chosen packages
@@ -29,7 +29,7 @@
 #                      the app runtime, then the adb one is put in place
 #   --runtime DIR      the app runtime used to build (default: build/)
 #   --runtime-adb DIR  the adb runtime for --host adb (default: build-adb/,
-#                      built when it holds no dn-tiny)
+#                      built when it holds no dn-init)
 #   --name NAME        the prefix's name in boot/version (default: DEST's name)
 #   --no-shim          no dn-lane.so: every path call stops in the tracer
 #                      (slower; for comparison or a toolchain-free build)
@@ -40,7 +40,7 @@
 #   --keep-toolchain   keep gcc and libc6-dev after building the shim (the dev
 #                      and full sets keep them anyway)
 #
-#   DN_TINY_FLAGS      dn-tiny's options for the build (default: -s 500, poll
+#   DN_TINY_FLAGS      dn-init's options for the build (default: -s 500, poll
 #                      for the next stop: the second stage stops a lot)
 #
 # Needs: debootstrap (pkg install debootstrap), the runtime's own build
@@ -116,14 +116,14 @@ DEST=$(CDPATH= cd -- "$DEST" && pwd)
 # The build always runs under the app runtime: the second stage and the shim
 # are built in Termux, where Android's app seccomp filter is active.  An adb
 # prefix only swaps in the shell/ADB runtime once everything is built.
-if [ ! -x "$RUNTIME/dn-tiny" ]; then
+if [ ! -x "$RUNTIME/dn-init" ]; then
   say "building the app runtime"
   sh "$ROOT/scripts/build-runtime.sh" --host app "$RUNTIME"
 fi
 [ "$(cat "$RUNTIME/host" 2>/dev/null || echo app)" = app ] ||
   die "the runtime in $RUNTIME is not the app runtime (see --runtime)"
 if [ "$HOST" = adb ]; then
-  if [ ! -x "$RUNTIME_ADB/dn-tiny" ]; then
+  if [ ! -x "$RUNTIME_ADB/dn-init" ]; then
     say "building the adb runtime"
     sh "$ROOT/scripts/build-runtime.sh" --host adb "$RUNTIME_ADB"
   fi
@@ -150,7 +150,7 @@ debootstrap $KEYARG --foreign --arch=arm64 --variant="$VARIANT" "$SUITE" "$DEST"
 
 # Termux's debootstrap replaces chown, useradd, usermod, groupadd, chage, chfn,
 # dpkg-statoverride and others with empty files in the second stage (they fail
-# under proot).  They work under dn-tiny: keep them.  It also names its own
+# under proot).  They work under dn-init: keep them.  It also names its own
 # prefix absolutely (/data/data/com.termux/files/usr), a path the tree does not
 # have (the narrowed host rows): point every one at the tree's own /usr, and its
 # fallback directory at /debootstrap (where these copies are).
@@ -164,20 +164,20 @@ done
 
 # ---- 2. the runtime in the tree
 mkdir -p "$DEST/usr/lib/deb-native" "$DEST/boot"
-cp "$RUNTIME/dn-tiny" "$DEST/usr/lib/deb-native/dn-tiny"
+cp "$RUNTIME/dn-init" "$DEST/usr/lib/deb-native/dn-init"
 cp "$ROOT/scripts/prefix/boot.sh" "$ROOT/scripts/prefix/init.sh" "$DEST/boot/"
-chmod 755 "$DEST/usr/lib/deb-native/dn-tiny" "$DEST/boot/boot.sh" "$DEST/boot/init.sh"
+chmod 755 "$DEST/usr/lib/deb-native/dn-init" "$DEST/boot/boot.sh" "$DEST/boot/init.sh"
 # The user tools that create an account: say that the account is virtual.
 mkdir -p "$DEST/usr/local/sbin"
 cp "$ROOT/scripts/prefix/virtual-user" "$DEST/usr/local/sbin/useradd"
 cp "$ROOT/scripts/prefix/virtual-user" "$DEST/usr/local/sbin/adduser"
 chmod 755 "$DEST/usr/local/sbin/useradd" "$DEST/usr/local/sbin/adduser"
 
-# ---- 3. the second stage, under dn-tiny
-say "debootstrap, second stage (under dn-tiny)"
+# ---- 3. the second stage, under dn-init
+say "debootstrap, second stage (under dn-init)"
 # shellcheck disable=SC2086
 if ! env -i HOME=/root TERM=dumb PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 \
-     "$DEST/usr/lib/deb-native/dn-tiny" -q $DN_TINY_FLAGS --initial root -t "$DEST" -- /bin/sh /debootstrap/debootstrap --second-stage; then
+     "$DEST/usr/lib/deb-native/dn-init" -q $DN_TINY_FLAGS --initial root -t "$DEST" -- /bin/sh /debootstrap/debootstrap --second-stage; then
   tail -n 30 "$DEST/debootstrap/debootstrap.log" >&2 2>/dev/null || true
   die "the second stage failed (log: $DEST/debootstrap/debootstrap.log)"
 fi
@@ -232,13 +232,13 @@ if [ "$SHIM" = 1 ]; then
   say "the shim: dn-lane.so, built in the tree against its glibc"
   run apt-get install -y --no-install-recommends gcc libc6-dev
   mkdir -p "$DEST/tmp/dn-lane"
-  # the shim is lane.c, and the law (policy.c) it shares with the tracer, built
+  # the shim is lane.c, and the law (law.c) it shares with the tracer, built
   # against the tree's glibc (-DDN_LIBC: the types, the strings and pol_readlink)
-  cp "$ROOT/src/dn-tiny/lane.c" "$ROOT/src/dn-tiny/lane.h" \
-     "$ROOT/src/dn-tiny/policy.c" "$ROOT/src/dn-tiny/policy.h" "$DEST/tmp/dn-lane/"
+  cp "$ROOT/src/dn-init/lane.c" "$ROOT/src/dn-init/lane.h" \
+     "$ROOT/src/dn-init/law.c" "$ROOT/src/dn-init/law.h" "$DEST/tmp/dn-lane/"
   if [ ! -f "$RUNTIME/gen/policy-rows.inc" ]; then
     mkdir -p "$RUNTIME/gen"
-    python3 "$ROOT/src/dn-tiny/gen_rows.py" "$RUNTIME/gen/policy-rows.inc"
+    python3 "$ROOT/src/dn-init/gen_rows.py" "$RUNTIME/gen/policy-rows.inc"
   fi
   cp "$RUNTIME/gen/policy-rows.inc" "$DEST/tmp/dn-lane/"
   # the shared cancellable svc (glibc's __syscall_cancel_arch): its offset is
@@ -258,7 +258,7 @@ if [ "$SHIM" = 1 ]; then
     fi
   fi
   run gcc -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC $CANCEL $HOSTFLAG -o /usr/lib/deb-native/dn-lane.so \
-      /tmp/dn-lane/lane.c /tmp/dn-lane/policy.c
+      /tmp/dn-lane/lane.c /tmp/dn-lane/law.c
   rm -rf "$DEST/tmp/dn-lane"
   if [ "$KEEP_TC" = 0 ]; then
     run apt-get purge -y --autoremove gcc libc6-dev
@@ -274,8 +274,8 @@ run apt-get clean
 
 # ---- the host profile: the runtime the prefix boots
 if [ "$HOST" = adb ]; then
-  cp "$RUNTIME_ADB/dn-tiny" "$DEST/usr/lib/deb-native/dn-tiny"
-  chmod 755 "$DEST/usr/lib/deb-native/dn-tiny"
+  cp "$RUNTIME_ADB/dn-init" "$DEST/usr/lib/deb-native/dn-init"
+  chmod 755 "$DEST/usr/lib/deb-native/dn-init"
   printf '/sdcard\t/storage/emulated/0\tro\n' >> "$DEST/boot/binds"
 fi
 

@@ -23,7 +23,7 @@ usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
 P=$(CDPATH= cd -- "$1" && pwd) || exit 2
 shift
 SUITE=${1:-all}
-DN=$P/usr/lib/deb-native/dn-tiny
+DN=$P/usr/lib/deb-native/dn-init
 INIT=${DN_INITIAL:-root}                 # the check set and the old rows are root's
 [ -x "$DN" ] || { echo "run.sh: no runtime at $DN" >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

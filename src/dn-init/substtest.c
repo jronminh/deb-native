@@ -1,5 +1,5 @@
 /* substtest.c -- freestanding guest program: calls the syscalls the policy
- * substitutes or fakes, prints what it saw.  Meant to run under dn-tiny with
+ * substitutes or fakes, prints what it saw.  Meant to run under dn-init with
  * guest paths; the same binary natively shows what the kernel itself answers. */
 typedef unsigned long u64;
 typedef long i64;

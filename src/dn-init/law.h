@@ -1,4 +1,4 @@
-/* policy.h -- what the catcher and the applier are told; the only place that
+/* law.h -- what the catcher and the applier are told; the only place that
  * knows which syscall means what. */
 #ifndef POLICY_H
 #define POLICY_H

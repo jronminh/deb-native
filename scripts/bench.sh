@@ -12,7 +12,7 @@
 
 set -u
 P=$(cd "${1:?usage: bench.sh PREFIX [workload ...]}" && pwd); shift
-DN=$P/usr/lib/deb-native/dn-tiny
+DN=$P/usr/lib/deb-native/dn-init
 [ -x "$DN" ] || { echo "no runtime at $DN" >&2; exit 1; }
 
 run() {

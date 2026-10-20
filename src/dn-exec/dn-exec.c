@@ -10,10 +10,10 @@
  *
  * PROGRAM is a guest path when --root is given, a host path otherwise.
  * Dynamic programs use the PT_INTERP resolved under --root; for the POC the
- * loader's libraries must be reachable from its own view (run under dn-tiny
+ * loader's libraries must be reachable from its own view (run under dn-init
  * and the law maps them, or set --root and the test uses host paths).
  */
-#include "../dn-tiny/policy.h"     /* the law (u64/i64, pol_readlink), -DDN_FREE */
+#include "../dn-init/law.h"     /* the law (u64/i64, pol_readlink), -DDN_FREE */
 #include "patch.h"                  /* the svc-site patcher */
 
 typedef unsigned int u32;
@@ -114,7 +114,7 @@ static i64 sc6c(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f, u64 cookie)
     return x0;
 }
 
-/* the law's one syscall (policy.h): readlink of a host path, on the lane, so the
+/* the law's one syscall (law.h): readlink of a host path, on the lane, so the
  * walk the loader's hook makes costs no stop. */
 ssize_t pol_readlink(const char *host, char *buf, size_t n)
 {

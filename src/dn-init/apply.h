@@ -1,8 +1,8 @@
-/* trace.h -- the applier: carries out what the policy says at a stop. */
+/* apply.h -- the applier: carries out what the policy says at a stop. */
 #ifndef TRACE_H
 #define TRACE_H
 #include "mon.h"
-#include "policy.h"
+#include "law.h"
 
 #define EXE_LEN 128
 
@@ -49,11 +49,11 @@ void trace_synth_init(void);
  * root test session.  Behaviour is classified per syscall from the process's
  * current euid, not from this seed (spec/identity.md). */
 void trace_identity_init(unsigned uid, unsigned gid);
-/* the euid a setuid-bit exec will commit, applied on the exec event (exec.c) */
+/* the euid a setuid-bit exec will commit, applied on the exec event (gate.c) */
 void trace_euid_next(pid_t pid, unsigned euid);
-/* the process's current fake ids, for exec.c's DN_IDS hint */
+/* the process's current fake ids, for gate.c's DN_IDS hint */
 void trace_ids_of(pid_t pid, unsigned out[6]);
-/* the stored owner of a host path, 0 when there is none (exec.c's setuid gate) */
+/* the stored owner of a host path, 0 when there is none (gate.c's setuid gate) */
 int trace_stored_owner(const char *host, unsigned *u, unsigned *g);
 
 /* at syscall entry; may change the tracee's argument registers */

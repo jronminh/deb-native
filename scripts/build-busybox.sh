@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build a busybox bundle: dn-tiny + busybox-static + a program or two, with no
+# Build a busybox bundle: dn-init + busybox-static + a program or two, with no
 # Debian userland and no apt (docs/spec/variants.md, "A worked example").
 #
 # Usage: scripts/build-busybox.sh [OPTION...] BUILDER DEST
@@ -10,11 +10,11 @@
 #                      each name is both the Debian package and the binary
 #   --packages LIST    extra packages to install in the builder first
 #   --runtime DIR      build-runtime.sh's output (default: build/, built if
-#                      it holds no dn-tiny)
+#                      it holds no dn-init)
 #   --no-shim          do not ship dn-lane.so (busybox is static; a dynamic
 #                      program needs it)
 #
-# The bundle holds only what it needs: dn-tiny, busybox-static, the programs and
+# The bundle holds only what it needs: dn-init, busybox-static, the programs and
 # their library closure, the loader, and a boot.sh/init.sh that run under busybox
 # sh (no bash).  Run in Termux.
 set -eu
@@ -35,7 +35,7 @@ done
 BUILDER=$(CDPATH= cd -- "$1" && pwd) || exit 2
 DEST=$2
 [ -x "$BUILDER/boot/boot.sh" ] || { echo "build-busybox: $BUILDER is not a prefix (no boot/boot.sh)" >&2; exit 2; }
-[ -x "$BUILDER/usr/lib/deb-native/dn-tiny" ] || { echo "build-busybox: no dn-tiny in $BUILDER" >&2; exit 2; }
+[ -x "$BUILDER/usr/lib/deb-native/dn-init" ] || { echo "build-busybox: no dn-init in $BUILDER" >&2; exit 2; }
 [ ! -e "$DEST" ] || { echo "build-busybox: $DEST already exists" >&2; exit 2; }
 
 TMP=${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}/build-busybox.$$
@@ -43,7 +43,7 @@ mkdir -p "$TMP"
 trap 'rm -rf "$TMP"' EXIT
 LIBDIR=usr/lib/aarch64-linux-gnu
 
-[ -x "$RUNTIME/dn-tiny" ] || sh "$ROOT/scripts/build-runtime.sh" "$RUNTIME"
+[ -x "$RUNTIME/dn-init" ] || sh "$ROOT/scripts/build-runtime.sh" "$RUNTIME"
 
 # ---- the packages, then the program's closure, in the builder ---------------
 echo "build-busybox: installing busybox-static $PACKAGES $PROGRAMS in the builder"
@@ -77,7 +77,7 @@ while read -r tag path; do
   esac
 done < "$TMP/manifest"
 
-cp "$RUNTIME/dn-tiny" "$DEST/usr/lib/deb-native/dn-tiny"
+cp "$RUNTIME/dn-init" "$DEST/usr/lib/deb-native/dn-init"
 if [ "$SHIM" = 1 ]; then
   cp "$BUILDER/usr/lib/deb-native/dn-lane.so" "$DEST/usr/lib/deb-native/dn-lane.so"
 fi
@@ -100,7 +100,7 @@ INIT
 
 cat > "$DEST/boot/boot.sh" <<'BOOT'
 #!/system/bin/sh
-# The bundle's entry: dn-tiny + busybox, this directory's parent is the root.
+# The bundle's entry: dn-init + busybox, this directory's parent is the root.
 root=$(CDPATH= cd -- "${0%/*}/.." && pwd) || exit 1
 unset LD_PRELOAD LD_LIBRARY_PATH
 cd "$root" || exit 1
@@ -113,11 +113,11 @@ exec env -i \
   LANG=C.UTF-8 \
   TERM="${TERM:-dumb}" \
   TZ="${tz:-UTC}" \
-  "$root/usr/lib/deb-native/dn-tiny" ${DN_TINY_FLAGS:-} -t "$root" -- /bin/busybox sh /boot/init.sh "$@"
+  "$root/usr/lib/deb-native/dn-init" ${DN_TINY_FLAGS:-} -t "$root" -- /bin/busybox sh /boot/init.sh "$@"
 BOOT
 
 chmod +x "$DEST/boot/boot.sh" "$DEST/boot/init.sh" \
-         "$DEST/bin/busybox" "$DEST/usr/lib/deb-native/dn-tiny" 2>/dev/null || true
+         "$DEST/bin/busybox" "$DEST/usr/lib/deb-native/dn-init" 2>/dev/null || true
 [ "$SHIM" = 1 ] && chmod +x "$DEST/usr/lib/deb-native/dn-lane.so" 2>/dev/null || true
 for p in $PROGRAMS; do [ -f "$DEST/usr/bin/$p" ] && chmod +x "$DEST/usr/bin/$p"; done
 

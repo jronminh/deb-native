@@ -35,7 +35,7 @@ The kit is copied into `PREFIX/tmp/dn-bench` on each run, so a prefix needs
 `gcc` for the checks.  `reg.sh`, `fr.sh`, `lua.sh`, `t.sh` and `exec200.sh` run
 under the prefix's `sh`.
 
-The runner seeds its own `dn-tiny` runs as **root** (`--initial root`): the
+The runner seeds its own `dn-init` runs as **root** (`--initial root`): the
 checks (`chown`, `setresuid`) and the rows in `docs/performance.md` are root's.
 Set `DN_INITIAL=user` to measure the real-user session instead; a prefix's
 `boot.sh` seeds the real user by default (see `docs/spec/identity.md`).

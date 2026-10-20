@@ -9,7 +9,7 @@
 # including /proc/self/cmdline and status, so a host path there fails the run.
 set -u
 P=$(CDPATH= cd -- "${1:?usage: coverage.sh PREFIX}" && pwd)
-DN=$P/usr/lib/deb-native/dn-tiny
+DN=$P/usr/lib/deb-native/dn-init
 [ -x "$DN" ] || { echo "no runtime at $DN" >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 

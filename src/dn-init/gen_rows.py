@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate policy-rows.inc: dn-tiny's traced set.  A syscall is caught only when
+"""Generate policy-rows.inc: dn-init's traced set.  A syscall is caught only when
 the tracer does something with it -- maps a path, runs the exec gate, answers it
 at entry (fake root), rewrites its result at exit, or drops a copy the tracer
 keeps (the link cache, a working directory) -- because a caught call costs

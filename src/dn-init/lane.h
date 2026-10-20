@@ -1,4 +1,4 @@
-/* lane.h -- the shim's lane, shared by the tracer's filter (monitor.c) and the shim
+/* lane.h -- the shim's lane, shared by the tracer's filter (catch.c) and the shim
  * (lane.c), and nothing else: it includes no header, so a libc build can use it.
  *
  * A call the shim makes itself, its path already resolved, carries this value in x5

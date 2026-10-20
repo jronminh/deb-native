@@ -1,4 +1,4 @@
-/* exec.c -- the exec gate: what to run when the program asks to execve().
+/* gate.c -- the exec gate: what to run when the program asks to execve().
  *
  * The kernel cannot start most of what is in the prefix as it stands: a script's
  * `#!/bin/sh` and a glibc ELF's PT_INTERP (/lib/ld-linux-aarch64.so.1) name
@@ -14,9 +14,9 @@
  * tree's own and finds the libraries through the tree's ld.so.cache.
  */
 #include <linux/elf.h>
-#include "exec.h"
-#include "policy.h"
-#include "trace.h"
+#include "gate.h"
+#include "law.h"
+#include "apply.h"
 
 #define MAXARGS 256
 #define DEPTH   4                 /* script -> interpreter script -> ... */

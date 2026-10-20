@@ -1,4 +1,4 @@
-/* exec.h -- the exec gate, a part of the applier. */
+/* gate.h -- the exec gate, a part of the applier. */
 #ifndef EXEC_H
 #define EXEC_H
 #include "mon.h"

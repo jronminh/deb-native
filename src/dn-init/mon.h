@@ -3,7 +3,7 @@
 #ifndef MON_H
 #define MON_H
 
-/* The per-process state (trace.h) is keyed by the full pid in a hash: there is
+/* The per-process state (apply.h) is keyed by the full pid in a hash: there is
  * no fixed slot table and no pid_max assumption. */
 #include "sys.h"
 

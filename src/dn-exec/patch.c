@@ -1,8 +1,8 @@
 /* patch.c -- patch the svc sites of an image dn-exec maps (the loader, a static
  * program), so the syscalls made from that image are mapped through the one law
  * and re-issued on the lane -- no tracer stop.  One mechanism, whichever code
- * location the svc sits in.  Freestanding, linked with the law (policy.c). */
-#include "policy.h"
+ * location the svc sits in.  Freestanding, linked with the law (law.c). */
+#include "law.h"
 #include "patch.h"
 #include <stdint.h>
 

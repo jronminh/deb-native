@@ -1,5 +1,5 @@
-/* policy.c -- the table and the law, in their smallest form. */
-#include "policy.h"
+/* law.c -- the table and the law, in their smallest form. */
+#include "law.h"
 #include <fcntl.h>
 #include <sys/mman.h>
 
@@ -61,7 +61,7 @@ static const char *root;
 static size_t root_len;
 static char preload[512], dnexec[512];
 
-/* ---- the link cache (policy.h).  An entry is valid while its generation is the
+/* ---- the link cache (law.h).  An entry is valid while its generation is the
  * shared one; moving the generation drops every entry at once.  A seqlock lets
  * the shim's threads share it (the tracer is single-threaded and pays nothing). -- */
 #define LC_SLOTS 4096
@@ -86,7 +86,7 @@ static void links_init(void)
 	i64 m;
 
 	links_gen = NULL;
-	if (cat2(p, sizeof p, root, "/var/lib/deb-native/dn-tiny.gen") <= 0)
+	if (cat2(p, sizeof p, root, "/var/lib/deb-native/dn-init.gen") <= 0)
 		return;
 	fd = (int) sc(56, -100, (i64) p, 02 | 0100, 0600, 0, 0);          /* openat O_RDWR|O_CREAT */
 	if (fd < 0)
@@ -585,7 +585,7 @@ void policy_set_root(const char *r)
 		if (k > 0) {
 			buf[k] = '\0';
 			if (policy_binds_parse(buf) < 0) {
-				put(2, "dn-tiny: bad boot/binds\n");
+				put(2, "dn-init: bad boot/binds\n");
 				sys_exit(1);
 			}
 		}

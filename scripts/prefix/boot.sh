@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# The prefix's entry, boot/boot.sh: start dn-tiny, the tracer, as the tree's root
+# The prefix's entry, boot/boot.sh: start dn-init, the tracer, as the tree's root
 # process, against this prefix and its init (docs/building.md, "The prefix").
 #
 # The host runs it from anywhere; the prefix root is this file's directory's
@@ -7,7 +7,7 @@
 # shell (there is no /bin/sh on the device); `sh boot/boot.sh` works too.  Any
 # arguments are the command to run in the prefix (default: an interactive shell).
 #
-#   DN_TINY_FLAGS   extra dn-tiny options; the default is -s 500 (poll 500 us
+#   DN_TINY_FLAGS   extra dn-init options; the default is -s 500 (poll 500 us
 #                   for the next stop: faster when work spawns or stops a lot,
 #                   a few percent slower on a parallel build).  "-s 0" sleeps.
 root=$(CDPATH= cd -- "${0%/*}/.." && pwd) || exit 1
@@ -80,7 +80,7 @@ if [ -n "$envfile" ]; then
       done < "$e"
       rm -f "$e"
       unset DN_BOOT_ENV DN_BOOT_ROOT DN_BOOT_FLAGS DN_BOOT_INITIAL
-      exec "$r/usr/lib/deb-native/dn-tiny" -q -s 500 $f \
+      exec "$r/usr/lib/deb-native/dn-init" -q -s 500 $f \
         --initial "$i" -t "$r" -- /usr/bin/bash /boot/init.sh "$@"
     ' sh "$@"
 fi
@@ -95,5 +95,5 @@ exec env -i \
   COLORTERM="$COLORTERM" \
   TZ="${tz:-UTC}" \
   DN_REAL_UID="${real_uid:-}" DN_REAL_GID="${real_gid:-}" \
-  "$root/usr/lib/deb-native/dn-tiny" -q -s 500 ${DN_TINY_FLAGS:-} --initial "$initial" \
+  "$root/usr/lib/deb-native/dn-init" -q -s 500 ${DN_TINY_FLAGS:-} --initial "$initial" \
   -t "$root" -- /usr/bin/bash /boot/init.sh "$@"

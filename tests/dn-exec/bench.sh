@@ -7,7 +7,7 @@ set -eu
 P=$(CDPATH= cd -- "$1" && pwd)
 REPS=${2:-2}
 SRC=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-TINY=$SRC/build/dn-tiny
+TINY=$SRC/build/dn-init
 TMP=$(mktemp -d "$P/tmp/dnbench.XXXXXX") || exit 1
 trap 'rm -rf "$TMP"' EXIT
 

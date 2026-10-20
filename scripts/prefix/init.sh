@@ -1,7 +1,7 @@
 #!/bin/sh
-# The prefix's init: dn-tiny, the tree's root process, runs it (boot/boot.sh):
+# The prefix's init: dn-init, the tree's root process, runs it (boot/boot.sh):
 #
-#   dn-tiny -t ROOT -- /usr/bin/bash /boot/init.sh [COMMAND [ARG...]]
+#   dn-init -t ROOT -- /usr/bin/bash /boot/init.sh [COMMAND [ARG...]]
 #
 # Everything here uses guest paths: to the runtime the tree is "/".  It sets up
 # the environment, then runs the command (default: an interactive shell).
@@ -13,7 +13,7 @@ export PATH
 # knobs are dropped; init.sh uses them for /etc/passwd and $HOME.
 real_uid=${DN_REAL_UID:-}
 real_gid=${DN_REAL_GID:-}
-# The host's environment reaches the tree through dn-tiny: drop the host's
+# The host's environment reaches the tree through dn-init: drop the host's
 # deb-native knobs and its locale (the tree ships no locales but C.UTF-8).
 for v in $(env | sed -n 's/^\(DN_[A-Za-z0-9_]*\)=.*/\1/p'); do
   unset "$v"

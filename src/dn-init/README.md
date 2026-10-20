@@ -1,17 +1,17 @@
-# dn-tiny and dn-lane.so
+# dn-init and dn-lane.so
 
-The runtime: `dn-tiny`, a tracer with no libc (one static aarch64 executable of
+The runtime: `dn-init`, a tracer with no libc (one static aarch64 executable of
 about 72 KB), and `dn-lane.so`, the shim it preloads into every glibc program.
 How they work together: [`docs/architecture.md`](../../docs/architecture.md).
 
 | file | part |
 | --- | --- |
-| `monitor.c` | the catcher: builds the seccomp filter from the policy's rows, runs the wait loop, reads and writes the tracee's registers and memory |
-| `trace.c` | the applier: carries out what a row says (map a path, fake an answer, answer at entry, copy for a link, answer a call the platform killed) |
-| `exec.c` | the exec gate: glibc programs and scripts started through the prefix's loader, with the shim preloaded |
-| `policy.c`, `policy.h` | the table and the law: which syscalls, where their paths are, how a path is resolved in the prefix, what a killed call is told. Linked into both engines -- the tracer as it is, the shim `-DDN_LIBC` |
+| `catch.c` | the catcher: builds the seccomp filter from the policy's rows, runs the wait loop, reads and writes the tracee's registers and memory |
+| `apply.c` | the applier: carries out what a row says (map a path, fake an answer, answer at entry, copy for a link, answer a call the platform killed) |
+| `gate.c` | the exec gate: glibc programs and scripts started through the prefix's loader, with the shim preloaded |
+| `law.c`, `law.h` | the table and the law: which syscalls, where their paths are, how a path is resolved in the prefix, what a killed call is told. Linked into both engines -- the tracer as it is, the shim `-DDN_LIBC` |
 | `gen_rows.py` | writes the rows at build time: a syscall is caught only when the tracer acts on it, hottest first |
-| `mon.h`, `trace.h`, `exec.h` | what the parts offer each other |
+| `mon.h`, `apply.h`, `gate.h` | what the parts offer each other |
 | `sys.c`, `sys.h` | raw syscalls, `_start`, the few string functions |
 | `lane.c`, `lane.h` | the shim, and the lane cookie the filter and the shim share |
 | `ldhook.c` | the loader hook (an `LD_AUDIT` module): patches the loader's own path calls to the lane, mapping through the law (`-DDN_FREE`) so the loader's startup costs no stop |
@@ -20,14 +20,14 @@ How they work together: [`docs/architecture.md`](../../docs/architecture.md).
 
 ## Build
 
-`scripts/build-runtime.sh` builds `dn-tiny`, `dn-substtest` and `dn-census` with
+`scripts/build-runtime.sh` builds `dn-init`, `dn-substtest` and `dn-census` with
 any aarch64 C compiler. `dn-lane.so` is a glibc library, built inside a prefix
-with the prefix's own `gcc`, and links the law (`policy.c`, with the generated
+with the prefix's own `gcc`, and links the law (`law.c`, with the generated
 rows) as well as the shim:
 
 ```sh
 gcc -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC -Igen \
-    -o /usr/lib/deb-native/dn-lane.so lane.c policy.c
+    -o /usr/lib/deb-native/dn-lane.so lane.c law.c
 ```
 
 (`gen/policy-rows.inc` is written by `build-runtime.sh`; `scripts/build-prefix.sh`
@@ -36,7 +36,7 @@ does it all; [`docs/building.md`](../../docs/building.md)).
 ## Run
 
 ```sh
-dn-tiny [-q] [-s USEC] [-m bare|regs|full] [-c CPU] -t ROOT -- PROGRAM [ARG...]
+dn-init [-q] [-s USEC] [-m bare|regs|full] [-c CPU] -t ROOT -- PROGRAM [ARG...]
 ```
 
 | option | |
