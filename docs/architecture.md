@@ -11,9 +11,10 @@ what a program may rely on, at what fidelity and cost, is
 ## Contents
 
 - [The problem](#the-problem)
-- [Two parts: the tracer and the shim](#two-parts-the-tracer-and-the-shim)
-- [The tracer: dn-tiny](#the-tracer-dn-tiny)
+- [Three engines: the tracer, the shim and dn-exec](#three-engines-the-tracer-the-shim-and-dn-exec)
+- [The tracer: dn-init](#the-tracer-dn-init)
 - [The shim: dn-lane.so](#the-shim-dn-laneso)
+- [dn-exec: birth-time patching for the loader and static programs](#dn-exec-birth-time-patching-for-the-loader-and-static-programs)
 - [The law: guest paths and host paths](#the-law-guest-paths-and-host-paths)
 - [Identity: fake root](#identity-fake-root)
 - [What Android refuses](#what-android-refuses)
@@ -35,63 +36,72 @@ deb-native installs Debian's packages unmodified into a directory (the prefix)
 and makes each program see that directory as `/`, by changing what its syscalls
 say, never what is on disk.
 
-## Two parts: the tracer and the shim
+## Three engines: the tracer, the shim and dn-exec
 
 ```
 a glibc program in the prefix
  ├── its libc calls (open, stat, realpath, getuid, ...) ─► dn-lane.so, in process
  ├── libc's own calls (opendir, fopen, locale, ...)     ─► dn-lane.so, through libc's
  │                                                         patched svc sites
- └── everything else, and every static program         ─► the kernel, through
-                                                            dn-tiny's seccomp filter:
+ ├── the loader's own opens, and a static program's     ─► dn-exec, through the
+ │   own path syscalls, at birth                           sites it patched before
+ │                                                         the jump
+ └── everything else                                   ─► the kernel, through
+                                                            dn-init's seccomp filter:
                                                             most calls pass, the
                                                             ones that need the law
-                                                            stop in dn-tiny
+                                                            stop in dn-init
 ```
 
-- **`dn-tiny`** (`src/dn-tiny/`, about 2,000 lines, no libc) is the tree's root
+- **`dn-init`** (`src/dn-init/`, about 2,000 lines, no libc) is the tree's root
   process. It starts every program under `ptrace` with a seccomp filter and
   handles the syscalls that need a path mapped, an identity faked or an answer
   the platform will not give. It works for any program, static or dynamic.
-- **`dn-lane.so`** is preloaded into every glibc program `dn-tiny` starts. It does
-  the same path work inside the process, for the calls that only read, so they
-  cost no stop. A call the shim does not take still reaches `dn-tiny`: the shim
-  makes things faster, never different.
+- **`dn-lane.so`** is preloaded into every dynamic glibc program `dn-init` (via
+  `dn-exec`) starts. It does the same path work inside the process, for the
+  calls that only read, so they cost no stop.
+- **`dn-exec`** (`src/dn-exec/`) is the userland exec the gate hands every
+  program to. While it maps the loader (or a static program's own image) into
+  memory, it also patches that image's own syscall sites, the same way the shim
+  patches libc's -- so the loader's bootstrap opens and a static program's path
+  calls get a fast path too, with no dynamic linker involved.
 
-A stop in the tracer costs 30-600 us on the Android 12 phone, most of it the
-kernel waking a sleeping core; the same call answered in the shim costs about
-1 us. The shim takes the frequent calls; the tracer keeps the rare ones and is
-the net for everything.
+A call none of the three take still reaches `dn-init`: each engine makes things
+faster, never different. A stop in the tracer costs 30-600 us on the Android 12
+phone, most of it the kernel waking a sleeping core; the same call answered
+in-process costs about 1 us. The fast paths take the frequent calls; the tracer
+keeps the rare ones and is the net for everything.
 
-## The tracer: dn-tiny
+## The tracer: dn-init
 
 - **The filter.** A classic BPF program built from the policy's rows
-  (`src/dn-tiny/gen_rows.py` generates them): a syscall is caught only when the
+  (`src/dn-init/gen_rows.py` generates them): a syscall is caught only when the
   tracer does something with it, and only a row whose result is rewritten asks
   for the exit stop. One JGE tree holds every row: a number no row lists is a few
   comparisons from `ALLOW`, and a row the lane also lists tests the cookie in its
   own leaf. Everything else is `ALLOW`. A few answers need no tracer at all: a
   `NETLINK_AUDIT` socket gets `EPROTONOSUPPORT` from the filter itself.
-- **The lane.** A call carrying the lane cookie in `x5` (`src/dn-tiny/lane.h`)
+- **The lane.** A call carrying the lane cookie in `x5` (`src/dn-init/lane.h`)
   passes the filter without a stop, if it is one of the shim's read-only calls
   (`readlinkat`, `newfstatat`, `fstat`, `faccessat`, `statx`, the `getxattr` and
   `listxattr` pairs, `getcwd`, and `openat` without a flag that writes). Mutating
-  calls always reach the tracer, so its caches stay right.
+  calls always reach the tracer, so its caches stay right. `dn-exec`'s own
+  patched sites (below) take the same lane.
 - **Answers at entry.** Where the result is only data (`readlinkat`,
   `newfstatat`, `statx`, the identity calls), the tracer makes the call itself on
   the host path, fixes the result and skips the syscall: no exit stop.
-- **The exec gate.** An `execve` of a glibc program is rewritten to run the
-  program's own `PT_INTERP` -- the tree's loader, whatever it is called
-  (`/lib/ld-linux-aarch64.so.1`, `/lib64/...`) -- as `loader --preload dn-lane.so
-  --argv0 NAME PROGRAM`. The loader, and the shim it preloads (the runtime's
-  own), are host paths; the program is **the tree's own** path, so the loader
-  opens it through the law like any program, and the loader finds the libraries
-  through the tree's `ld.so.cache` (their paths are the tree's too). Scripts go
-  through their interpreter the same way. `/proc/<pid>/exe` is answered with the
-  program, not the loader.
+- **The exec gate.** An `execve` is classified (a glibc ELF's `PT_INTERP`, a
+  static ELF, or a `#!` script) and rewritten to run **`dn-exec`** on the
+  program, instead of the program directly. `dn-exec`, and the shim it may
+  preload, are host paths; the program is **the tree's own** path, so `dn-exec`
+  (for a dynamic program, its loader) opens it through the law like any
+  program, and the loader finds the libraries through the tree's `ld.so.cache`
+  (their paths are the tree's too). Scripts go through their interpreter the
+  same way. `/proc/<pid>/exe` is answered with the program, not `dn-exec` or
+  the loader.
 - **Per-session state**: the fake ids of each process, the program each process
   runs, the working directory, a cache of `readlink` answers whose generation
-  lives in `var/lib/deb-native/dn-tiny.gen` (shared by every session on the
+  lives in `var/lib/deb-native/dn-init.gen` (shared by every session on the
   prefix; any link change moves it), and the copies made for hard links.
 - **`-s USEC`** polls for the next stop before sleeping. A sleeping tracer lets
   its core drop to a low clock, and every stop pays to wake it.
@@ -119,6 +129,49 @@ the net for everything.
 - **The cookie.** The shim issues its own `svc` with the cookie in `x5` and
   clears `x5` after it, so a later call libc makes by itself never carries it.
 
+## dn-exec: birth-time patching for the loader and static programs
+
+`dn-exec` (`src/dn-exec/`) is a freestanding userland exec: the gate hands it
+every program instead of letting the kernel `execve` it directly. It maps the
+program's `PT_LOAD` segments (and, for a dynamic program, the tree's loader)
+itself, builds the stack and `auxv` the kernel would have built, and jumps --
+`execve` replaced by `mmap` + jump, not emulated.
+
+Because it does its own mapping, `dn-exec` holds the image in memory **before**
+making it executable, and can patch it there -- the same `mov x8,#nr; svc #0`
+window-scan the shim uses on `libc.so.6`, as its own copy
+(`src/dn-exec/patch.c`; not yet the shim's literal code, though unifying the
+two is an open step of the runtime rebuild below), applied to:
+
+- **the loader's own `openat`/`faccessat` sites**, patched at birth, before the
+  jump: a write into memory `dn-exec` already owns, no `LD_AUDIT`, no
+  self-discovery, no `execmod`;
+- **a static program's own path syscalls** (`openat`, `faccessat`, and
+  `statfs`/`truncate`, read from whichever register the syscall keeps its path
+  in) -- the one case the shim cannot reach at all, since there is no dynamic
+  linker to preload a shim into. A write open or a relative path is left to the
+  tracer, as the shim does, so the cookie is never set on a call the hook did
+  not map.
+
+This is the same lane, not a second one: the patched stub maps the path through
+the one law, issues the real call with the cookie in `x5`, and the filter lets
+it through exactly as it does for the shim. A wrong site, or a program past
+`dn-exec`'s own reach (its `stat`/`readlink`/`getcwd`/`xattr` result fix-ups are
+deliberately not duplicated here -- they stay in the shared law), falls back to
+a plain `svc`, which the tracer answers.
+
+This also replaced the prefix's older loader fast path, an `LD_AUDIT` module
+(`dn-ldhook.so`) that patched the loader's syscall sites at *run* time instead
+of at birth. `dn-exec` absorbs that work with no separate module and no
+`execmod`: measured on `p-dev`, 100 x `true` spawn costs 306 entry stops via
+`dn-exec`, against 406 for a plain kernel `execve` and 706 for the old
+`LD_AUDIT` path. `dn-ldhook.so`/`ldhook.c` no longer exist in the tree.
+
+`dn-exec` is the newest engine here, landed as part of an in-progress
+rebuild of the runtime's foundation (`docs/spec/runtime-revision.md`); not
+every step of that rebuild is done yet, but the birth-time patch for the loader
+and for static programs described above is merged and measured on `main`.
+
 ## The law: guest paths and host paths
 
 - A guest path is the prefix's: `/usr/bin/ls` is `ROOT/usr/bin/ls`.
@@ -137,7 +190,7 @@ the net for everything.
   target, `/proc/self/fd/N`) is mapped back to the guest's.
 - A call on a real directory fd: the guest path of the directory the fd names,
   then the name from there; a host directory's paths stay.
-- A bind's mount point is an empty directory `dn-tiny` makes at boot; a `rename`
+- A bind's mount point is an empty directory `dn-init` makes at boot; a `rename`
   or `link` between two rows answers `EXDEV`, as between two mounts; a write to a
   `ro` row answers `EROFS`.
 - The mount view is the table too: `/proc/mounts`, `/proc/self/mounts`,
@@ -163,10 +216,13 @@ the net for everything.
 - `/dev/shm` is the tree's, not the host's: the law maps it to `ROOT/run/shm`
   (created 1777 by `init.sh`), so `shm_open` works as files on both hosts even
   though the phone's `/dev` has no writable shm.
-- The law lives once, in `policy.c`, and both engines read it: the tracer links
-  it as it is, the shim builds it `-DDN_LIBC` (the types, the strings and
-  `pol_readlink` from libc and the lane), the loader hook builds it `-DDN_FREE`
-  (own strings). See `spec/plan.md`, Phase 0.
+- The law lives once, in `policy.c`, and every engine reads it: the tracer
+  links it as it is, the shim builds it `-DDN_LIBC` (the types, the strings and
+  `pol_readlink` from libc and the lane), `dn-exec` builds it `-DDN_FREE` (own
+  strings, no libc). Three builds of one source, not three laws -- unifying
+  them into one table the tracer owns and the others read is an open step of
+  the runtime rebuild (`docs/spec/runtime-revision.md`, "The law becomes
+  data"). See `spec/plan.md`, Phase 0.
 
 ## Identity: fake root
 
@@ -237,7 +293,7 @@ Android (in `ls -l`, in a leaky `/proc` file) is a bug. A program
 that looks on purpose finds out, and that is accepted:
 
 - `uname`, `/proc/version`, `/proc/cpuinfo`: the phone's kernel;
-- `/proc/self/status`: `TracerPid` is `dn-tiny`, `Seccomp` is 2;
+- `/proc/self/status`: `TracerPid` is `dn-init`, `Seccomp` is 2;
 - `/dev`: `binder`, `ashmem`;
 - SELinux: `/sys/fs/selinux`, and an `EACCES` where Debian would allow;
 - the time a call takes when it stops in the tracer.
@@ -254,8 +310,8 @@ leaves to the host.
 
 **One prefix, one boot.** A prefix is booted by its host (an app, Termux), never
 from inside another prefix: a seccomp filter cannot be removed, so a tree
-started under another tree's `dn-tiny` would carry that tree's filter. Several
-prefixes can run at once, each under its own `dn-tiny`; they share nothing.
+started under another tree's `dn-init` would carry that tree's filter. Several
+prefixes can run at once, each under its own `dn-init`; they share nothing.
 
 ## Inherited from Android
 
@@ -285,20 +341,21 @@ runtime's.)
 - The kernel's own refusals stay: SELinux answers `EACCES` where Debian would
   allow (`/sys/fs/selinux`, parts of `/sys`), and `PPid`/`getppid()` name the
   tracer (a structural residue; `docs/spec/phase2.md`, "An accepted residue").
-- `ld.so`'s own opens (the program, the shim, the libraries) are removed by the
-  loader hook when a prefix ships it (`--ldhook`); without it they stop in the
-  tracer.
+- `ld.so`'s own opens (the program, the shim, the libraries) are patched by
+  `dn-exec` at birth now (see above); a site it cannot place, or one outside a
+  `dn-exec`-run program (there is none, today), still stops in the tracer.
 
 ## The core and the variants
 
-The runtime is the **core**: `dn-tiny`, the shim, and the law. It is the
-invariant, and it knows nothing of dpkg, apt or Debian -- a tree with a loader,
-its libraries and a program is enough ([`spec/mapped-kernel.md`](spec/mapped-kernel.md)).
-A **variant** is a tree and its boot glue. The Debian a `build-prefix.sh` makes
-is the reference, and a busybox image, a single-program bundle or a "bare app"
-are others on the same axis: the core takes no part in choosing one and asks
-none of them what it is. What the variant decides is whether there is a shim (a
-static tree, busybox or Go, needs only `dn-tiny`) and how it boots. Two places
+The runtime is the **core**: `dn-init`, `dn-exec`, the shim, and the law. It is
+the invariant, and it knows nothing of dpkg, apt or Debian -- a tree with a
+loader, its libraries and a program is enough
+([`spec/mapped-kernel.md`](spec/mapped-kernel.md)). A **variant** is a tree and
+its boot glue. The Debian a `build-prefix.sh` makes is the reference, and a
+busybox image, a single-program bundle or a "bare app" are others on the same
+axis: the core takes no part in choosing one and asks none of them what it is.
+What the variant decides is whether there is a shim (a static tree, busybox or
+Go, needs only `dn-init` and `dn-exec`) and how it boots. Two places
 of the core still lean Debian -- the loader named in `policy.c` and `boot.sh`'s
 `/usr/bin/bash` -- and both are open (`TODO.md`, "Beyond Debian, and bundles").
 What the app around a prefix supplies -- the session, the boot inputs, the
