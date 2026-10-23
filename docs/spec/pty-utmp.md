@@ -117,4 +117,6 @@ the fake ids and modes a Debian system expects (`utmp` group for `/run/utmp`,
 The Linux pty/devpts documentation and `termios(3)`; glibc's `utmp`/`utmpx`
 interfaces for the record layout; `script(1)`, `screen`, `tmux`, `who`, `last`,
 and `sshd` as the clients.  There is no userspace PTY substitute; the probe of
-`/dev/ptmx` is the decision.
+`/dev/ptmx` is the decision.  Checked 2026-10-22: Gramine's feature doc
+([`prior-art.md`](../reference/prior-art.md)) has no PTY/tty mention at all,
+so the library-OS precedent has nothing to offer here either.

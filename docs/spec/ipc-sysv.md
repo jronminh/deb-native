@@ -161,4 +161,7 @@ shared memory": Winlator's `sysvshm_server` (socket + `SCM_RIGHTS`),
 `pelya/android-shmem` (ashmem; the X/MIT-SHM case), `lassik/shm_open_anon`
 (the fd-passing rule), and `termux/proot-distro#19` (the msg/sem-before-shm
 order).  The kernel semantics are the `shm*`/`sem*`/`msg*` man pages; the
-workloads are Xvfb with MIT-SHM, PostgreSQL, and Steam.
+workloads are Xvfb with MIT-SHM, PostgreSQL, and Steam.  Gramine was checked
+too (same page): it implements none of `shm*`/`sem*`/`msg*`, so there is no
+library-OS broker design to borrow here -- the ones above are the only real
+sources.

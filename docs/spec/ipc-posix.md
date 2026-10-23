@@ -123,3 +123,7 @@ documentation; the `/dev/shm` mapping in `src/dn-tiny/policy.c` and the director
 in `scripts/prefix/init.sh`; `lassik/shm_open_anon` for fd-passing; the SysV
 broker design in [`ipc-sysv.md`](ipc-sysv.md) for the queue state.  The shm
 target is a Wayland `wl_shm` client; the queue target is a `mq_notify` test.
+Gramine ([`prior-art.md`](../reference/prior-art.md), "System V IPC and
+shared memory") does not implement `mq_*` either, and its own POSIX shm is
+restricted to accelerator use cases -- its shm restriction matches the P1
+choice here, but mqueue (P2/P3) has no library-OS design to borrow from it.
