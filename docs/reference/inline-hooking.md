@@ -16,6 +16,7 @@ Sources the text calls unchecked are summaries, not silicon. Checked 2026-10-16.
 - [The mechanics of a patch on arm64](#the-mechanics-of-a-patch-on-arm64)
 - [Trampoline construction](#trampoline-construction)
 - [The instruction cache, W^X, and Android](#the-instruction-cache-wx-and-android)
+- [Hardware CFI: BTI and PAC, a forward risk](#hardware-cfi-bti-and-pac-a-forward-risk)
 - [The memory model and the barriers](#the-memory-model-and-the-barriers)
 - [Thread-safety of a live patch](#thread-safety-of-a-live-patch)
 - [Dynamic binary instrumentation: where inline hooking sits](#dynamic-binary-instrumentation-where-inline-hooking-sits)
@@ -164,6 +165,35 @@ back to disk. The ordinary in-memory patch is unaffected
 Android 10 only and was removed in Android 11
 ([XOM](https://source.android.com/docs/security/test/execute-only-memory)).
 
+## Hardware CFI: BTI and PAC, a forward risk
+
+Checked 2026-10-22, not measured on either phone: neither the S10e (4.14) nor
+the S23 FE (5.10) is new enough silicon to raise this, but a future device
+could.
+
+- **BTI** (Branch Target Identification, ARMv8.5) requires an indirect branch
+  (`BR`/`BLR`) to land on a `BTI`-marked instruction, or the core faults. The
+  stub's `blr x16` into `lane_hook_entry` (`syscall-patching.md`) is exactly
+  such a branch; if a kernel ever enables BTI enforcement for this process, the
+  hook entry point needs a `bti c` (or `paciasp`, which doubles as one) at its
+  first instruction, or the jump faults.
+- **PAC** (Pointer Authentication, ARMv8.3) signs the link register on entry
+  (`paciasp`) and checks it before `ret` (`autiasp`); it protects the backward
+  edge, where BTI protects the forward one. A documented failure mode from the
+  arm64 BPF trampoline work: when a trampoline calls back into a function whose
+  prologue re-signs the link register, the two signatures can disagree and
+  `autiasp` faults on return, unless the callee's entry is `bti c` rather than
+  a full `paciasp` ([BPF arm64 trampoline](#bpf-pac)). The shim's stub does not
+  sign or check anything today, so it is unaffected while PAC is off; the
+  question is whether the *glibc the stub patches* is itself built with PAC
+  return signing, which would put a `paciasp`/`autiasp` pair inside the few
+  instructions the window search steps over.
+- Neither mechanism is on by default for an Android app process on either
+  phone here; the check is `/proc/cpuinfo` features (`paca`/`pacg`, `bti`) and
+  whether the libc the prefix ships was built `-mbranch-protection=standard`.
+  Worth a row in `device-census.md` in the next device census, not a design
+  change today.
+
 ## The memory model and the barriers
 
 AArch64 is weakly ordered: two memory accesses may become visible to another
@@ -207,6 +237,18 @@ known, accepted race on 32-bit/Thumb and none on 64-bit ([shadowhook](#shadowhoo
 frida-gum, for some paths, suspends threads, and its release notes record a
 fixed suspend deadlock and a careful RW → commit → RX → i-cache-flush ordering
 ([frida-gum](#frida-gum)).
+
+The Linux kernel had the same argument about its own `ftrace` call sites on
+arm64 ([arm64 ftrace thread](#ftrace-arm64), 2015): Li Bin proposed dropping
+`stop_machine` when swapping a site between `NOP` and `BL`, since the
+architecture names `NOP`, `B` and `BL` among the instructions safe to modify
+concurrently (the ARM ARM section "Concurrent modification and execution of
+instructions", cited directly in the thread). Will Deacon agreed on the
+atomicity but kept a narrower concern: the instruction being read for
+validation could itself change between the read and the write (module
+unload racing the patch), which is a sequencing question, not an atomicity
+one -- the same class of care the shim's own patch-while-running accepts
+by never reading back what it is about to overwrite.
 
 ## Dynamic binary instrumentation: where inline hooking sits
 
@@ -266,6 +308,22 @@ long-jump support when a trampoline and its target exceed the branch range
 - **ASC-Hook**: rewrites the pair (the load of `x8` and the `svc`), and names the
   open question the shim shares: is `x8` correct when a jump lands inside the
   pair ([`prior-art.md`](prior-art.md)).
+- **SaBRe** (x86-64, RISC-V; Imperial College, [SaBRe](#sabre)): load-time
+  rewriting of syscalls, the vDSO, and named function prologues, after the
+  binary is mapped but before it runs. Trampolines handle the call site
+  directly, "more than 99.99% of the time" by the authors' own count; a signal
+  handler is the fallback for the sites a trampoline cannot cover. Reported
+  overhead 0.2-4.3%. No arm64 port found. The split (trampoline first, signal
+  as the net) is the same shape as the shim and the tracer, one layer down.
+- **E9Patch / E9Syscall** (x86-64; NUS, PLDI 2020, [E9Patch](#e9patch)):
+  a static rewriter that inserts a trampoline without moving or relocating any
+  other instruction, by punning spare byte-level space (padding, jump-target
+  slack) instead of disassembling control flow. E9Syscall is the syscall-hook
+  built on it: a direct call to the hook, no `ptrace` and no signal handler on
+  the hot path. The "preserve every other jump target" idea is one answer to
+  the shim's "a wrong site pick" risk (`syscall-patching.md`): never touch an
+  instruction unless its length and position are certain not to move anything
+  else.
 
 ## Engines to read
 
@@ -360,3 +418,19 @@ The technique:
 - <a id="valgrind"></a>Valgrind, *Design and implementation* —
   <https://valgrind.org/docs/manual/design-impl.html>
 - <a id="dynamorio"></a>DynamoRIO — <https://github.com/DynamoRIO/dynamorio>
+- <a id="sabre"></a>Arras et al., *SaBRe: load-time selective binary
+  rewriting*, STTT 2022 (Springer, doi 10.1007/s10009-021-00644-w) —
+  <https://srg.doc.ic.ac.uk/publications/22-sabre-sttt.html>
+- <a id="e9patch"></a>Duck, Gao, Roychoudhury, *Binary Rewriting without
+  Control Flow Recovery*, PLDI 2020 —
+  <https://www.comp.nus.edu.sg/~abhik/pdf/PLDI20.pdf>; the tool and
+  E9Syscall — <https://github.com/GJDuck/e9patch>
+- <a id="bpf-pac"></a>LKML, *[PATCH bpf-next v6 3/4] bpf, arm64: Implement
+  bpf_arch_text_poke() for arm64* (the `bti c`/`paciasp`/`autiasp` trampoline
+  mismatch) — <https://lkml.iu.edu/hypermail/linux/kernel/2207.0/08449.html>
+- <a id="ftrace-arm64"></a>LKML, *[PATCH] arm64: ftrace: stop using
+  kstop_machine to enable/disable tracing* (Li Bin, reviewed by Will Deacon),
+  2015 — <https://lkml.iu.edu/hypermail/linux/kernel/1512.0/03128.html>, the
+  atomicity objection and reply —
+  <https://lkml.iu.edu/hypermail/linux/kernel/1512.0/01226.html>,
+  <https://lkml.iu.edu/hypermail/linux/kernel/1512.0/02351.html>
