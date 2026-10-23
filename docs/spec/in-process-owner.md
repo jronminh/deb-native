@@ -29,9 +29,9 @@ Total cost is stops x cost per stop. Polling already took the largest cut off
 the cost per stop; what is left there is small and has a floor. The rest has to
 come from not stopping.
 
-A measurement still owed: `stopbench` under `-s 500` with the tracer resuming at
-once vs mapping as usual. The difference is the tracer's work; if it is ~1 us
-the claim above is measured, not argued.
+A measurement still owed (E14b, [Gate 0](#gate-0-prove-before-code)): the
+tracer's work split from its wake; if the work is ~1 us the claim above is
+measured, not argued.
 
 ## The four ways to catch a syscall
 
@@ -179,13 +179,75 @@ work can stay in the handler: SUD/Wine-style in-place emulation plus
 Systrap-style site patching. No arm64 project doing exactly that combination
 for compatibility was found (2026-10-23).
 
-## Next: E14
+## Plan: gates
 
-Measure the in-process `SIGSYS` path on the S10e before building on it: a
-freestanding loop of `mkdirat` under a `RET_TRAP` filter, a handler that maps
-the path and re-issues the call with the marker, against `dn-tiny -s 500`'s
-~17 us. Below ~5 us per call makes the direction worth a POC; the only cost
-figure today is Nexpoline's x86 table.
+Done in full this is the largest change since PRoot was dropped, so it goes in
+gates, the way `dn-exec` went in (`loader-poc.md`): each gate has a pass or stop
+criterion, is A/B'd interleaved against the previous build (the phone varies
+10-20% between runs), and keeps a flag back to the old behaviour.
+
+### Gate 0: prove before code
+
+Cheap experiments that can stop the direction before any runtime change.
+
+- **E14, the cost of `SIGSYS`.** A freestanding loop of `mkdirat` under a
+  `RET_TRAP` filter; the handler maps the path and re-issues the call with the
+  marker. On the S10e and the S23 FE, against `dn-tiny -s 500`'s ~17 us.
+  Pass: below ~5 us per call. Fail stops this proposal; the only figure today is
+  Nexpoline's x86 table.
+- **E14b, the tracer's work vs its wake.** `stopbench` under `-s 500` with the
+  tracer resuming at once vs mapping as usual. The difference is the tracer's
+  own work; ~1 us confirms "the wake, not the work".
+- **E15, `SIGSYS` kept live.** A test program that blocks `SIGSYS` with
+  `rt_sigprocmask` and replaces it with `rt_sigaction`. Pass: the handler keeps
+  it unblocked and installed, and the program sees the mask and action it set.
+- **dn-ng only: `PROT_EXEC` from app data.** At `targetSdk 36`, can the app's
+  process `mmap` a file in its own data directory `PROT_EXEC`? `dn-exec` depends
+  on it; if refused, the tree's programs must live in a read-only location.
+
+### Gate 1: the handler beside the tracer, one row
+
+`dn-exec` installs the handler; the handler owns only `getdents64` (the largest
+remaining stop source, a path-only call). The tracer still catches everything
+else. Pass: byte-identical output on the `AGENTS.md` set, `find`'s stops drop
+by about one per directory, and `--no-handler` restores the old behaviour
+exactly.
+
+### Gate 2: the lane set
+
+The handler takes the path calls the shim takes today; the shim stays. Compare
+row by row, shim vs handler: stops, wall, output.
+
+### Gate 3: the exec gate in the process
+
+Shebang, permission, identity and the context are decided in the caller, which
+then execs `dn-exec` directly; the tracer stops taking fork/clone events.
+Tests: the spawn bench (300 x `true`), the Lua build, a `vfork` child that
+`chdir`s, a threaded program, `sudo`/`su`/`passwd`.
+
+### Gate 4: the handler patches sites
+
+On a `PROT_EXEC` `mmap`/`mprotect` trap (or a site's first trap, Systrap-style),
+the handler patches the new image's `svc` sites. Compare against the shim. Test
+without `execmod` as well: every call must still be answered, through `SIGSYS`.
+
+### Gate 5: one table, no shim
+
+The shim is deleted; one table generates the filter, the handler's rows and the
+contract's matrix.
+
+### The tracer as the coverage check
+
+In an audit mode the tracer counts, per row, every syscall that still reaches
+it. A row owned by the handler that still shows calls at the tracer is a leak.
+Coverage is then a number, not a belief; it is also why the tracer stays after
+it has almost no daily work.
+
+### Tests to add
+
+Beyond the `AGENTS.md` set: a static program, a musl program, a Go program, a
+program that clears `LD_PRELOAD`, a program that uses `SIGSYS` itself (the
+fallback path), and a signal arriving while the handler runs.
 
 ## Open questions
 
