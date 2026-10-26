@@ -1,6 +1,7 @@
 #!/bin/sh
 # The fingerprint probe: print KEY=value for the kernel, the hardware and the
-# runtime's traces, so scripts/fingerprint.sh can compare them (docs/spec/phase2.md).
+# runtime's traces, so scripts/measure/fingerprint.sh can compare them
+# (docs/spec/phase2.md).
 
 echo "uname_s=$(uname -s 2>/dev/null)"
 echo "uname_r=$(uname -r 2>/dev/null)"

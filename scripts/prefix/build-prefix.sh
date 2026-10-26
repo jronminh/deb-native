@@ -11,11 +11,11 @@
 #   4. apt sources, then the chosen packages
 #
 # Nothing is compiled here: the three runtime artifacts come from a runtime
-# build (scripts/build-runtime.sh, scripts/build-shim.sh), so this needs no
+# build (scripts/runtime/build-runtime.sh, scripts/runtime/build-shim.sh), so this needs no
 # compiler in the tree -- a minimal prefix has none.  A runtime that lacks one
 # of them is refused rather than installed.
 #
-# Usage: scripts/build-prefix.sh [OPTION...] DEST
+# Usage: scripts/prefix/build-prefix.sh [OPTION...] DEST
 #   --set NAME         a suggested package set (default: minimal)
 #                        minimal  the debootstrap base and apt
 #                        dev      + build-essential git curl ca-certificates
@@ -39,13 +39,13 @@
 #   DN_TINY_FLAGS      dn-init's options for the build (default: -s 500, poll
 #                      for the next stop: the second stage stops a lot)
 #
-# The shim's own switches (--cancel, --libc) live in scripts/build-shim.sh now;
+# The shim's own switches (--cancel, --libc) live in scripts/runtime/build-shim.sh now;
 # --no-shim and --keep-toolchain are gone with the in-tree build.
 #
 # Needs: debootstrap (pkg install debootstrap), a built runtime, network.
 # DEST must not exist yet.
 set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 say() { printf '\n== %s\n' "$*"; }
 die() { echo "build-prefix: $*" >&2; exit 1; }
 
@@ -63,8 +63,8 @@ while [ $# -gt 0 ]; do
     --runtime-adb) RUNTIME_ADB=$2; shift 2 ;;
     --host) HOST=$2; shift 2 ;;
     --name) NAME=$2; shift 2 ;;
-    --no-shim) die "--no-shim is gone: a prefix always carries the shim. A tree without one is a variant's business (scripts/build-busybox.sh)" ;;
-    --cancel) die "--cancel moved to scripts/build-shim.sh: the shim is built with the runtime now, and its offset belongs to that build" ;;
+    --no-shim) die "--no-shim is gone: a prefix always carries the shim. A tree without one is a variant's business (scripts/prefix/build-busybox.sh)" ;;
+    --cancel) die "--cancel moved to scripts/runtime/build-shim.sh: the shim is built with the runtime now, and its offset belongs to that build" ;;
     --keep-toolchain) die "--keep-toolchain is gone: the shim is no longer built in the tree, so no toolchain is installed or purged. Use --packages gcc if you want one" ;;
     -h|--help) sed -n '2,/^set -eu/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
     -*) echo "build-prefix: unknown option $1" >&2; exit 2 ;;
@@ -113,14 +113,14 @@ DEST=$(CDPATH= cd -- "$DEST" && pwd)
 # prefix only swaps in the shell/ADB runtime once everything is built.
 if [ ! -x "$RUNTIME/dn-init" ]; then
   say "building the app runtime"
-  sh "$ROOT/scripts/build-runtime.sh" --host app "$RUNTIME"
+  sh "$ROOT/scripts/runtime/build-runtime.sh" --host app "$RUNTIME"
 fi
 [ "$(cat "$RUNTIME/host" 2>/dev/null || echo app)" = app ] ||
   die "the runtime in $RUNTIME is not the app runtime (see --runtime)"
 if [ "$HOST" = adb ]; then
   if [ ! -x "$RUNTIME_ADB/dn-init" ]; then
     say "building the adb runtime"
-    sh "$ROOT/scripts/build-runtime.sh" --host adb "$RUNTIME_ADB"
+    sh "$ROOT/scripts/runtime/build-runtime.sh" --host adb "$RUNTIME_ADB"
   fi
   [ "$(cat "$RUNTIME_ADB/host" 2>/dev/null)" = adb ] ||
     die "the runtime in $RUNTIME_ADB is not the adb runtime (see --runtime-adb)"
@@ -162,8 +162,8 @@ done
 # than installed: without dn-exec the gate answers policy_dnexec() with an empty
 # path and silently falls back to the loader, and without the shim every path
 # call stops in the tracer.  A tree must run what it says it runs.
-[ -x "$RUNTIME/dn-exec" ] || die "$RUNTIME has no dn-exec; rebuild the runtime (scripts/build-runtime.sh)"
-[ -f "$RUNTIME/dn-lane.so" ] || die "$RUNTIME has no dn-lane.so; build it with scripts/build-shim.sh"
+[ -x "$RUNTIME/dn-exec" ] || die "$RUNTIME has no dn-exec; rebuild the runtime (scripts/runtime/build-runtime.sh)"
+[ -f "$RUNTIME/dn-lane.so" ] || die "$RUNTIME has no dn-lane.so; build it with scripts/runtime/build-shim.sh"
 mkdir -p "$DEST/usr/lib/deb-native" "$DEST/boot"
 cp "$RUNTIME/dn-init" "$RUNTIME/dn-exec" "$RUNTIME/dn-lane.so" "$DEST/usr/lib/deb-native/"
 cp "$ROOT/scripts/prefix/boot.sh" "$ROOT/scripts/prefix/init.sh" "$DEST/boot/"
@@ -246,8 +246,8 @@ run apt-get clean
 # ---- the host profile: the runtime the prefix boots
 if [ "$HOST" = adb ]; then
   # lane.c has one host-dependent site, so the adb prefix needs its own shim:
-  # scripts/build-shim.sh --host adb into $RUNTIME_ADB.
-  [ -f "$RUNTIME_ADB/dn-lane.so" ] || die "an adb prefix needs a shim built with --host adb (scripts/build-shim.sh --cross --host adb)"
+  # scripts/runtime/build-shim.sh --host adb into $RUNTIME_ADB.
+  [ -f "$RUNTIME_ADB/dn-lane.so" ] || die "an adb prefix needs a shim built with --host adb (scripts/runtime/build-shim.sh --cross --host adb)"
   cp "$RUNTIME_ADB/dn-init" "$RUNTIME_ADB/dn-lane.so" "$DEST/usr/lib/deb-native/"
   chmod 755 "$DEST/usr/lib/deb-native/dn-init"
   printf '/sdcard\t/storage/emulated/0\tro\n' >> "$DEST/boot/binds"

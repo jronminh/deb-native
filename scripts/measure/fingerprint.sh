@@ -3,14 +3,14 @@
 # prefix shows must be the host's own (the truth), the runtime's traces must be
 # gone, and the Debian identity must be the tree's.
 #
-#   scripts/fingerprint.sh PREFIX
+#   scripts/measure/fingerprint.sh PREFIX
 set -u
 P=$(CDPATH= cd -- "${1:?usage: fingerprint.sh PREFIX}" && pwd)
 DN=$P/usr/lib/deb-native/dn-init
 [ -x "$DN" ] || { echo "no runtime at $DN" >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-cp "$HERE/fingerprint/probe.sh" "$P/tmp/dn-fingerprint.sh" || exit 1
+cp "$HERE/fingerprint-probe.sh" "$P/tmp/dn-fingerprint.sh" || exit 1
 out=$(DN_INITIAL=root "$P/boot/boot.sh" sh /tmp/dn-fingerprint.sh 2>&1)
 printf '%s\n' "$out"
 rm -f "$P/tmp/dn-fingerprint.sh"

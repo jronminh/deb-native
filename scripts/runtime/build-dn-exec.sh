@@ -5,13 +5,13 @@
 # directly.  No DN_HOST_ADB: dn-exec reads the law for paths only, and the one
 # host-dependent part of it (policy_deny) is the tracer's.
 #
-# Usage: scripts/build-dn-exec.sh [OUT]      (default: build/dn-exec)
+# Usage: scripts/runtime/build-dn-exec.sh [OUT]      (default: build/dn-exec)
 #   CC   the compiler (default: clang)
 #   GEN  the directory holding policy-rows.inc (default: build/gen, generated
 #        here when it holds none); build-runtime.sh passes its own OUT/gen.
 set -eu
 
-SRC="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+SRC="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 OUT="${1:-$SRC/build/dn-exec}"
 CC="${CC:-clang}"
 GEN="${GEN:-$SRC/build/gen}"

@@ -2,7 +2,7 @@
 # Build a busybox bundle: dn-init + busybox-static + a program or two, with no
 # Debian userland and no apt (docs/spec/variants.md, "A worked example").
 #
-# Usage: scripts/build-busybox.sh [OPTION...] BUILDER DEST
+# Usage: scripts/prefix/build-busybox.sh [OPTION...] BUILDER DEST
 #   BUILDER            an existing Debian prefix that has apt and the shim (the
 #                      builder; apt stays here, it does not enter the bundle)
 #   DEST               where to make the bundle (must not exist yet)
@@ -18,7 +18,7 @@
 # their library closure, the loader, and a boot.sh/init.sh that run under busybox
 # sh (no bash).  Run in Termux.
 set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 RUNTIME=$ROOT/build PROGRAMS=fastfetch PACKAGES= SHIM=1
 while [ $# -gt 0 ]; do
   case $1 in
@@ -43,7 +43,7 @@ mkdir -p "$TMP"
 trap 'rm -rf "$TMP"' EXIT
 LIBDIR=usr/lib/aarch64-linux-gnu
 
-[ -x "$RUNTIME/dn-init" ] || sh "$ROOT/scripts/build-runtime.sh" "$RUNTIME"
+[ -x "$RUNTIME/dn-init" ] || sh "$ROOT/scripts/runtime/build-runtime.sh" "$RUNTIME"
 
 # ---- the packages, then the program's closure, in the builder ---------------
 echo "build-busybox: installing busybox-static $PACKAGES $PROGRAMS in the builder"

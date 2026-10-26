@@ -10,7 +10,7 @@ OUT="$SRC/build/dn-exec-test"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-"$SRC/scripts/build-dn-exec.sh" "$OUT/dn-exec" >/dev/null
+"$SRC/scripts/runtime/build-dn-exec.sh" "$OUT/dn-exec" >/dev/null
 clang -O2 -static -nostdlib -ffreestanding -fno-builtin -fno-stack-protector \
     -fno-pic -Wl,-e,_start -Wl,--build-id=none \
     -o "$OUT/hello" "$SRC/tests/dn-exec/hello.c"

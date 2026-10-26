@@ -1,7 +1,7 @@
 #!/bin/sh
 # Deploy a prefix tarball over ADB and boot it at the Android shell uid.
 #
-#   scripts/adb-deploy.sh [--port PORT] [--dest DIR] [--no-run] PREFIX.tar.gz
+#   scripts/host/adb-deploy.sh [--port PORT] [--dest DIR] [--no-run] PREFIX.tar.gz
 #
 # The prefix must be built with `build-prefix.sh --host adb`: it carries the
 # adb runtime (no app-domain seccomp answers) and `boot/version` says host=adb.

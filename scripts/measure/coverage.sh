@@ -2,7 +2,7 @@
 # The coverage test (docs/spec/coverage.md): run the probe inside a prefix, print
 # the tree's view of every surface, and fail on a line that leaks the host frame.
 #
-#   scripts/coverage.sh PREFIX
+#   scripts/measure/coverage.sh PREFIX
 #
 # A leak is the prefix's own path, Android's data/storage/sdcard, the tracer, or
 # any /data/... path.  The probe reads every surface the checklist names,
@@ -13,7 +13,7 @@ DN=$P/usr/lib/deb-native/dn-init
 [ -x "$DN" ] || { echo "no runtime at $DN" >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-cp "$HERE/coverage/probe.sh" "$P/tmp/dn-coverage-probe.sh" || exit 1
+cp "$HERE/coverage-probe.sh" "$P/tmp/dn-coverage-probe.sh" || exit 1
 out=$(DN_INITIAL=root "$P/boot/boot.sh" sh /tmp/dn-coverage-probe.sh 2>&1)
 printf '%s\n' "$out"
 rm -f "$P/tmp/dn-coverage-probe.sh"

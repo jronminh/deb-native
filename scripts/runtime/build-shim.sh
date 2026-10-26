@@ -11,7 +11,7 @@
 #                       No prefix needed at all; the ABI floor is whatever glibc
 #                       that toolchain carries.
 #
-# Usage: scripts/build-shim.sh --in-prefix PREFIX | --cross [OPTION...] [OUT]
+# Usage: scripts/runtime/build-shim.sh --in-prefix PREFIX | --cross [OPTION...] [OUT]
 #   OUT                 default: build/dn-lane.so
 #   --host app|adb      the host profile (default app): lane.c has one
 #                       -DDN_HOST_ADB site, so the two differ
@@ -33,7 +33,7 @@
 # Writes OUT and OUT.manifest (host, cc, cancel offset, the libc sha256).
 set -eu
 
-SRC="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+SRC="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 IN_PREFIX=
 CROSS=0
 HOST=app
@@ -87,7 +87,7 @@ if [ "$CANCEL" = 1 ]; then
   [ -n "$LIBC" ] || die "--cancel needs --libc PATH (the target tree's libc)"
   [ -f "$LIBC" ] || die "no such libc: $LIBC"
   command -v python3 >/dev/null 2>&1 || die "python3 not found (it reads the offset)"
-  off=$(python3 "$SRC/scripts/find-cancellable.py" "$LIBC" 2>/dev/null) || off=
+  off=$(python3 "$SRC/scripts/runtime/find-cancellable.py" "$LIBC" 2>/dev/null) || off=
   [ -n "$off" ] || die "no cancellable svc found in $LIBC"
   off=${off##*offset }
   off=${off%% *}
@@ -173,7 +173,7 @@ if [ -n "$libc" ] && command -v sha256sum >/dev/null 2>&1; then
 fi
 
 cat > "$OUT.manifest" <<M
-# dn-lane.so: what it was built against (scripts/build-shim.sh)
+# dn-lane.so: what it was built against (scripts/runtime/build-shim.sh)
 host=$HOST
 cc=$CCNAME
 cancel=${off:-0}

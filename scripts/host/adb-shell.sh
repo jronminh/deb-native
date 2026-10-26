@@ -44,7 +44,7 @@ EOF
 fi
 
 adb -s "$DEV" shell "[ -x '$PREFIX/boot/boot.sh' ]" >/dev/null 2>&1 || {
-  echo "dn-adb: no prefix at $PREFIX (use --prefix or scripts/adb-deploy.sh)" >&2
+  echo "dn-adb: no prefix at $PREFIX (use --prefix or scripts/host/adb-deploy.sh)" >&2
   exit 1
 }
 HOST=$(adb -s "$DEV" shell "sed -n 's/^host=//p' '$PREFIX/boot/version' 2>/dev/null" | tr -d '\r')

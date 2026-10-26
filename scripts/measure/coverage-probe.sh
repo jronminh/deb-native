@@ -1,7 +1,7 @@
 #!/bin/sh
 # The coverage probe: print the tree's view of every surface a program can read a
-# coordinate from (docs/spec/coverage.md).  Run by scripts/coverage.sh inside a
-# prefix; every line is compared against the host frame there.
+# coordinate from (docs/spec/coverage.md).  Run by scripts/measure/coverage.sh
+# inside a prefix; every line is compared against the host frame there.
 
 echo "## env"
 env | sort 2>/dev/null
