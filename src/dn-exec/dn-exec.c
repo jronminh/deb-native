@@ -40,7 +40,7 @@ typedef unsigned char u8;
 
 #define AT_FDCWD (-100)
 #define O_RDONLY 0
-#define O_DIRECTORY 0x10000
+#define O_DIRECTORY 0x4000  /* the aarch64 kernel ABI value (bionic and this glibc agree); NOT the generic-Linux 0x10000 */
 #define PROT_READ 1
 #define PROT_WRITE 2
 #define PROT_EXEC 4
@@ -481,11 +481,15 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
      * sites are patched at birth above, so no LD_AUDIT module is needed.  The
      * root is handed to the shim as a reserved fd (DN_ROOT_FD), not a path, so
      * no Android path leaks into the program's environment. */
+    int have_root = 0;
     if (root[0]) {
         int rfd = (int) sc6(SYS_openat, AT_FDCWD, (i64) root, O_RDONLY | O_DIRECTORY, 0, 0, 0);
 
         if (rfd >= 0) {
-            sc6(SYS_dup3, rfd, ROOT_FD, 0, 0, 0, 0);
+            /* only when the dup3 lands: an fd number the shim cannot open is a
+             * lie, and the shim would read whatever else sits at ROOT_FD. */
+            if (sc6(SYS_dup3, rfd, ROOT_FD, 0, 0, 0, 0) >= 0)
+                have_root = 1;
             sc6(SYS_close, rfd, 0, 0, 0, 0, 0);
         }
     }
@@ -498,7 +502,7 @@ __attribute__((used)) void dn_main(u64 *init_sp) {
         env2[ne++] = envp[e];
     }
     env2[ne++] = "LD_PRELOAD=/usr/lib/deb-native/dn-lane.so";
-    if (root[0])
+    if (have_root)
         env2[ne++] = "DN_ROOT_FD=200";
     env2[ne] = 0;
 
