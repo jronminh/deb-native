@@ -4,12 +4,16 @@
 #
 #   1. debootstrap --foreign: fetch and unpack the base packages (Termux's
 #      debootstrap; its stage-two script is fixed first, see below)
-#   2. put the runtime in the tree: usr/lib/deb-native/dn-init, boot/boot.sh,
-#      boot/init.sh
+#   2. put the runtime in the tree: usr/lib/deb-native/{dn-init,dn-exec,dn-lane.so},
+#      boot/boot.sh, boot/init.sh
 #   3. debootstrap --second-stage under dn-init: the packages' scripts run as
 #      they would on Debian
-#   4. apt sources, then the shim (dn-lane.so) compiled in the tree against its
-#      own glibc, then the chosen packages
+#   4. apt sources, then the chosen packages
+#
+# Nothing is compiled here: the three runtime artifacts come from a runtime
+# build (scripts/build-runtime.sh, scripts/build-shim.sh), so this needs no
+# compiler in the tree -- a minimal prefix has none.  A runtime that lacks one
+# of them is refused rather than installed.
 #
 # Usage: scripts/build-prefix.sh [OPTION...] DEST
 #   --set NAME         a suggested package set (default: minimal)
@@ -31,25 +35,22 @@
 #   --runtime-adb DIR  the adb runtime for --host adb (default: build-adb/,
 #                      built when it holds no dn-init)
 #   --name NAME        the prefix's name in boot/version (default: DEST's name)
-#   --no-shim          no dn-lane.so: every path call stops in the tracer
-#                      (slower; for comparison or a toolchain-free build)
-#   --cancel           patch glibc's shared cancellable svc at its build-time
-#                      offset (find-cancellable.py): 204 fewer stops in the Lua
-#                      build, about 1% slower (the hook taxes every cancellable
-#                      call); off by default
-#   --keep-toolchain   keep gcc and libc6-dev after building the shim (the dev
-#                      and full sets keep them anyway)
 #
 #   DN_TINY_FLAGS      dn-init's options for the build (default: -s 500, poll
 #                      for the next stop: the second stage stops a lot)
 #
-# Needs: debootstrap (pkg install debootstrap), the runtime's own build
-# needs (clang or gcc, python3), network.  DEST must not exist yet.
+# The shim's own switches (--cancel, --libc) live in scripts/build-shim.sh now;
+# --no-shim and --keep-toolchain are gone with the in-tree build.
+#
+# Needs: debootstrap (pkg install debootstrap), a built runtime, network.
+# DEST must not exist yet.
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+say() { printf '\n== %s\n' "$*"; }
+die() { echo "build-prefix: $*" >&2; exit 1; }
 
 SET=minimal PACKAGES= SUITE=trixie MIRROR=http://deb.debian.org/debian VARIANT=minbase DISTRO=auto
-RUNTIME=$ROOT/build RUNTIME_ADB=$ROOT/build-adb HOST=app NAME= SHIM=1 CANCEL_PATCH=0 KEEP_TC=0
+RUNTIME=$ROOT/build RUNTIME_ADB=$ROOT/build-adb HOST=app NAME=
 while [ $# -gt 0 ]; do
   case $1 in
     --set) SET=$2; shift 2 ;;
@@ -62,9 +63,9 @@ while [ $# -gt 0 ]; do
     --runtime-adb) RUNTIME_ADB=$2; shift 2 ;;
     --host) HOST=$2; shift 2 ;;
     --name) NAME=$2; shift 2 ;;
-    --no-shim) SHIM=0; shift ;;
-    --cancel) CANCEL_PATCH=1; shift ;;
-    --keep-toolchain) KEEP_TC=1; shift ;;
+    --no-shim) die "--no-shim is gone: a prefix always carries the shim. A tree without one is a variant's business (scripts/build-busybox.sh)" ;;
+    --cancel) die "--cancel moved to scripts/build-shim.sh: the shim is built with the runtime now, and its offset belongs to that build" ;;
+    --keep-toolchain) die "--keep-toolchain is gone: the shim is no longer built in the tree, so no toolchain is installed or purged. Use --packages gcc if you want one" ;;
     -h|--help) sed -n '2,/^set -eu/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
     -*) echo "build-prefix: unknown option $1" >&2; exit 2 ;;
     *) break ;;
@@ -76,8 +77,6 @@ case $HOST in
   app|adb) ;;
   *) echo "build-prefix: --host is app or adb" >&2; exit 2 ;;
 esac
-HOSTFLAG=
-[ "$HOST" = adb ] && HOSTFLAG=-DDN_HOST_ADB
 
 case $SET in
   minimal) SET_PKGS= ;;
@@ -86,17 +85,13 @@ case $SET in
                   openssh-client wget vim-tiny unzip xz-utils man-db htop" ;;
   *) echo "build-prefix: --set is minimal, dev or full" >&2; exit 2 ;;
 esac
-case $SET in minimal) ;; *) KEEP_TC=1 ;; esac
 
 DN_TINY_FLAGS=${DN_TINY_FLAGS--s 500}
 export DN_TINY_FLAGS
-# the build's own commands (debootstrap's second stage, apt, the shim) run as root:
+# the build's own commands (debootstrap's second stage, apt) run as root:
 # the built prefix still boots as the app's real uid by default
 DN_INITIAL=root
 export DN_INITIAL
-
-say() { printf '\n== %s\n' "$*"; }
-die() { echo "build-prefix: $*" >&2; exit 1; }
 
 command -v debootstrap >/dev/null 2>&1 || die "debootstrap not found (pkg install debootstrap)"
 if [ "$DISTRO" = auto ]; then
@@ -163,14 +158,17 @@ for f in "$DEST"/debootstrap/*; do
 done
 
 # ---- 2. the runtime in the tree
-# dn-exec is the gate's userland exec.  Without the file the gate answers
-# policy_dnexec() with an empty path and silently falls back to the loader, so a
-# runtime that lacks it is refused here: a tree must run what it says it runs.
+# All three artifacts, and a runtime that is missing one is refused here rather
+# than installed: without dn-exec the gate answers policy_dnexec() with an empty
+# path and silently falls back to the loader, and without the shim every path
+# call stops in the tracer.  A tree must run what it says it runs.
 [ -x "$RUNTIME/dn-exec" ] || die "$RUNTIME has no dn-exec; rebuild the runtime (scripts/build-runtime.sh)"
+[ -f "$RUNTIME/dn-lane.so" ] || die "$RUNTIME has no dn-lane.so; build it with scripts/build-shim.sh"
 mkdir -p "$DEST/usr/lib/deb-native" "$DEST/boot"
-cp "$RUNTIME/dn-init" "$RUNTIME/dn-exec" "$DEST/usr/lib/deb-native/"
+cp "$RUNTIME/dn-init" "$RUNTIME/dn-exec" "$RUNTIME/dn-lane.so" "$DEST/usr/lib/deb-native/"
 cp "$ROOT/scripts/prefix/boot.sh" "$ROOT/scripts/prefix/init.sh" "$DEST/boot/"
 chmod 755 "$DEST/usr/lib/deb-native/dn-init" "$DEST/usr/lib/deb-native/dn-exec" \
+          "$DEST/usr/lib/deb-native/dn-lane.so" \
           "$DEST/boot/boot.sh" "$DEST/boot/init.sh"
 # The user tools that create an account: say that the account is virtual.
 mkdir -p "$DEST/usr/local/sbin"
@@ -233,42 +231,10 @@ run() { "$DEST/boot/boot.sh" "$@"; }
 say "apt update"
 run apt-get update
 
-if [ "$SHIM" = 1 ]; then
-  say "the shim: dn-lane.so, built in the tree against its glibc"
-  run apt-get install -y --no-install-recommends gcc libc6-dev
-  mkdir -p "$DEST/tmp/dn-lane"
-  # the shim is lane.c, and the law (law.c) it shares with the tracer, built
-  # against the tree's glibc (-DDN_LIBC: the types, the strings and pol_readlink)
-  cp "$ROOT/src/dn-init/lane.c" "$ROOT/src/dn-init/lane.h" \
-     "$ROOT/src/dn-init/law.c" "$ROOT/src/dn-init/law.h" "$DEST/tmp/dn-lane/"
-  if [ ! -f "$RUNTIME/gen/policy-rows.inc" ]; then
-    mkdir -p "$RUNTIME/gen"
-    python3 "$ROOT/src/dn-init/gen_rows.py" "$RUNTIME/gen/policy-rows.inc"
-  fi
-  cp "$RUNTIME/gen/policy-rows.inc" "$DEST/tmp/dn-lane/"
-  # the shared cancellable svc (glibc's __syscall_cancel_arch): its offset is
-  # found here, from the tree's own libc, because at run time `mov x8, x6` is
-  # not unique.  One patch covers open, read, write and the rest; without it
-  # that path stops in the tracer
-  CANCEL=
-  if [ "$CANCEL_PATCH" = 1 ]; then
-    if off=$(python3 "$ROOT/scripts/find-cancellable.py" \
-             "$DEST/usr/lib/aarch64-linux-gnu/libc.so.6" 2>/dev/null); then
-      off=${off##*offset }
-      off=${off%% *}
-      CANCEL="-DDN_CANCEL_OFF=$off"
-      say "the cancellable svc: ${off} (one patch for open, read, write, ...)"
-    else
-      say "the cancellable svc: not found; that path stays with the tracer"
-    fi
-  fi
-  run gcc -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC $CANCEL $HOSTFLAG -o /usr/lib/deb-native/dn-lane.so \
-      /tmp/dn-lane/lane.c /tmp/dn-lane/law.c
-  rm -rf "$DEST/tmp/dn-lane"
-  if [ "$KEEP_TC" = 0 ]; then
-    run apt-get purge -y --autoremove gcc libc6-dev
-  fi
-fi
+# The shim is not built here: it is a runtime artifact, linked against a glibc,
+# and build-shim.sh builds it once for every tree (--in-prefix or --cross).  A
+# prefix copies it in step 2 like the rest, so this build needs no compiler in
+# the tree -- a minimal prefix has none.
 
 if [ -n "$(echo $SET_PKGS $PACKAGES)" ]; then
   say "packages: $(echo $SET_PKGS $PACKAGES)"
@@ -279,7 +245,10 @@ run apt-get clean
 
 # ---- the host profile: the runtime the prefix boots
 if [ "$HOST" = adb ]; then
-  cp "$RUNTIME_ADB/dn-init" "$DEST/usr/lib/deb-native/dn-init"
+  # lane.c has one host-dependent site, so the adb prefix needs its own shim:
+  # scripts/build-shim.sh --host adb into $RUNTIME_ADB.
+  [ -f "$RUNTIME_ADB/dn-lane.so" ] || die "an adb prefix needs a shim built with --host adb (scripts/build-shim.sh --cross --host adb)"
+  cp "$RUNTIME_ADB/dn-init" "$RUNTIME_ADB/dn-lane.so" "$DEST/usr/lib/deb-native/"
   chmod 755 "$DEST/usr/lib/deb-native/dn-init"
   printf '/sdcard\t/storage/emulated/0\tro\n' >> "$DEST/boot/binds"
 fi
@@ -299,9 +268,10 @@ version=$VER
 arch=aarch64
 host=$HOST
 suite=$SUITE
-shim=$SHIM
+shim=1
 dnexec=1
-cancel=$CANCEL_PATCH
+shim_cancel=$( sed -n 's/^cancel=//p' "$RUNTIME/dn-lane.so.manifest" 2>/dev/null || echo unknown )
+shim_libc_sha256=$( sed -n 's/^libc_sha256=//p' "$RUNTIME/dn-lane.so.manifest" 2>/dev/null || echo unknown )
 built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 size=$(du -sm "$DEST" | cut -f1)
 V

@@ -14,7 +14,6 @@ How they work together: [`docs/architecture.md`](../../docs/architecture.md).
 | `mon.h`, `apply.h`, `gate.h` | what the parts offer each other |
 | `sys.c`, `sys.h` | raw syscalls, `_start`, the few string functions |
 | `lane.c`, `lane.h` | the shim, and the lane cookie the filter and the shim share |
-| `ldhook.c` | the loader hook (an `LD_AUDIT` module): patches the loader's own path calls to the lane, mapping through the law (`-DDN_FREE`) so the loader's startup costs no stop |
 | `substtest.c` | a guest program that calls the faked and substituted syscalls and prints what it is told |
 | `census.c` | tries every syscall number and reports which ones the platform kills ([`docs/reference/device-census.md`](../../docs/reference/device-census.md)) |
 
@@ -22,17 +21,17 @@ How they work together: [`docs/architecture.md`](../../docs/architecture.md).
 
 `scripts/build-runtime.sh` builds `dn-init`, `dn-exec`, `dn-substtest` and
 `dn-census` with any aarch64 C compiler (`dn-exec`, a static PIE, through
-`scripts/build-dn-exec.sh`). `dn-lane.so` is a glibc library, built inside a prefix
-with the prefix's own `gcc`, and links the law (`law.c`, with the generated
-rows) as well as the shim:
+`scripts/build-dn-exec.sh`). `dn-lane.so` is a glibc library and links the law
+(`law.c`, with the generated rows) as well as the shim; `scripts/build-shim.sh`
+builds it, either inside a prefix with that prefix's own `gcc` or with
+`aarch64-linux-gnu-gcc --cross`:
 
 ```sh
-gcc -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC -Igen \
-    -o /usr/lib/deb-native/dn-lane.so lane.c law.c
+scripts/build-shim.sh --in-prefix ~/p-dev      # or: --cross
 ```
 
 (`gen/policy-rows.inc` is written by `build-runtime.sh`; `scripts/build-prefix.sh`
-does it all; [`docs/building.md`](../../docs/building.md)).
+copies the three binaries into a tree; [`docs/building.md`](../../docs/building.md)).
 
 ## Run
 

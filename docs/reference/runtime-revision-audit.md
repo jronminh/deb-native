@@ -108,9 +108,10 @@ a second bug the earlier failure had hidden. The whole suite passes on `p-dev`.
 Fixed since: `build-runtime.sh` builds `dn-exec` (through `build-dn-exec.sh`,
 into the same `OUT`) and `build-prefix.sh` installs it, refusing a runtime that
 lacks it -- a missing `dn-exec` used to mean a silent fallback to the loader
-path.  Still stale, left to the documentation pass: `scripts/build-runtime.sh`'s
-header comment and `docs/building.md` describe building and shipping
-`dn-ldhook.so`.
+path.  The shim has moved out of the tree build too (`scripts/build-shim.sh`),
+which is why `build-runtime.sh`'s header no longer describes an `LD_AUDIT`
+module at all.  Still stale, left to the documentation pass:
+`docs/building.md`, which is the 0.9 text.
 
 ## Theoretical, not reproduced: `exec_range()` merges disjoint executable segments
 
