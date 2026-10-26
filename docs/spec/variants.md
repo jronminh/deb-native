@@ -46,7 +46,7 @@ nowhere ([`../reference/from-scratch.md`](../reference/from-scratch.md)).
 
 ## A worked example: the busybox bundle
 
-A ~7 MB tree, made by `scripts/build-busybox.sh` from a `dev` builder:
+A ~7 MB tree, made by `scripts/prefix/build-busybox.sh` from a `dev` builder:
 `dn-tiny`, `busybox-static` (271 applet symlinks, so a tool that calls another by
 name -- `tar` calls `gzip` -- finds it), `fastfetch` (glibc) and the loader with
 `libc`/`libm`/`libyyjson`. It has no Debian userland and no `bash` -- its

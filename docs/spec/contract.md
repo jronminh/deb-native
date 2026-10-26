@@ -261,8 +261,8 @@ promise is the same
 - **`syscalls-by-kernel.md`** is the version delta.
 - **`syscall-classes.md`** is the per-call transform/placement/validation.
 - **This page** is the promise: level, fidelity, strategy, proof.
-- Every *promised* row has a test (`tests/bench`, `scripts/coverage.sh`,
-  `scripts/fingerprint.sh`); a row without one is *best-effort* by definition.
+- Every *promised* row has a test (`tests/bench`, `scripts/measure/coverage.sh`,
+  `scripts/measure/fingerprint.sh`); a row without one is *best-effort* by definition.
 - When a row changes, all four move together.  A feature request starts here:
   find the row, argue the level, add the test.
 

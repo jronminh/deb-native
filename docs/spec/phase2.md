@@ -71,7 +71,7 @@ finds the tracer, a program that does not ask does not.
 
 ## The fingerprint test
 
-`scripts/fingerprint.sh PREFIX`, the mirror of the coverage test: it reads the
+`scripts/measure/fingerprint.sh PREFIX`, the mirror of the coverage test: it reads the
 kernel and hardware and **requires them to be the host's** (the same kernel), and
 requires the runtime's traces to be gone -- `TracerPid` 0, no `Seccomp`, no
 SELinux label, no `android` string -- while the Debian identity is the tree's

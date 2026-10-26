@@ -50,7 +50,7 @@ step checked as `AGENTS.md` says, in Termux and in the app:
    - **`boot/env`** (done): one `NAME` a line keeps the host's value, one
      `NAME=VALUE` sets it; `boot.sh` reads it as data (never sources it) and a
      bad name refuses the boot.  It overrides the defaults it names.
-   - The coverage test (`scripts/coverage.sh`) no longer flags the working
+   - The coverage test (`scripts/measure/coverage.sh`) no longer flags the working
      directory or the environment.
 2. **The SELinux label** (done): `security.selinux` reads as absent -- `getxattr`
    answers `ENODATA` (`-61`), `listxattr`/`llistxattr` drop it and report the
@@ -177,7 +177,7 @@ step checked as `AGENTS.md` says, in Termux and in the app:
 
 - **Keep it small and fast as it grows**: the runtime is about 72 KB (`dn-tiny`)
   and 77 KB (`dn-lane.so`), and a program in it feels native. Every feature that comes
-  (a new bind, IPC, a `/proc` file) must leave that so. `scripts/bench.sh` runs real
+  (a new bind, IPC, a `/proc` file) must leave that so. `scripts/measure/bench.sh` runs real
   workloads (a stat storm, links, a git workflow, Python, a tar round trip, a
   spawn loop); the lane test, the regression set and the Lua build's wall now
   live in `tests/bench/` (`run.sh` prints the rows of `docs/performance.md`,
@@ -388,7 +388,7 @@ when a prefix should draw with the GPU:
 The runtime knows nothing of dpkg or apt: a tree with a loader, its libraries
 and a program is enough. The variants worth building, a worked busybox bundle and
 what each still names Debian: [`spec/variants.md`](docs/spec/variants.md). The
-busybox bundle is built and runs (`scripts/build-busybox.sh`: 7 MB, no Debian
+busybox bundle is built and runs (`scripts/prefix/build-busybox.sh`: 7 MB, no Debian
 userland, its own `boot.sh` under `busybox sh`). A from-source tree (LFS native),
 built by a prefix as its host: that and the from-scratch references are in
 [`reference/from-scratch.md`](docs/reference/from-scratch.md).
@@ -481,7 +481,7 @@ command in a prefix) to prove the path, and whether it becomes
 ## Building a prefix
 
 - **The ADB host** (done 2026-10-18): `build-runtime.sh --host adb`,
-  `build-prefix.sh --host adb`, `scripts/adb-deploy.sh`, `scripts/adb-shell.sh`
+  `build-prefix.sh --host adb`, `scripts/host/adb-deploy.sh`, `scripts/host/adb-shell.sh`
   (`dn-adb`), the uid reconcile and the `/sdcard` bind; see
   [`docs/spec/adb-host.md`](docs/spec/adb-host.md).
   Open: the self-hosted `adbwire`/`dsh` bridge (no PC) and autostart.

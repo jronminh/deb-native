@@ -12,19 +12,19 @@ prebuilt: users build the runtime and their prefix themselves
 - `src/dn-init/` — `dn-init`, the tracer (no libc): the tree's root process,
   `ptrace` + a seccomp filter, the exec gate, the law (`law.c`). Its `lane.c` is
   the source of `dn-lane.so`, the shim preloaded into dynamic glibc programs
-  (`-DDN_LIBC`), which `scripts/build-shim.sh` builds.
+  (`-DDN_LIBC`), which `scripts/runtime/build-shim.sh` builds.
 - `src/dn-exec/` — `dn-exec`, the userland exec the gate hands every program
   to: maps the loader (or a static program's image) itself and patches its
   syscall sites at birth, before the jump.
   [`docs/architecture.md`](docs/architecture.md) is how the three fit
   together.
-- `scripts/build-runtime.sh` — builds `dn-init` and `dn-exec` (any aarch64
+- `scripts/runtime/build-runtime.sh` — builds `dn-init` and `dn-exec` (any aarch64
   compiler; python3 for the rows).
-- `scripts/build-shim.sh` — builds `dn-lane.so`: `--in-prefix PREFIX` with that
+- `scripts/runtime/build-shim.sh` — builds `dn-lane.so`: `--in-prefix PREFIX` with that
   prefix's own gcc, or `--cross` with `aarch64-linux-gnu-gcc`. The shim is a
   runtime artifact, so a prefix build only copies it; the ABI floor is whatever
   glibc it linked against, recorded beside the artifact.
-- `scripts/build-prefix.sh` — builds a prefix in Termux: debootstrap's first
+- `scripts/prefix/build-prefix.sh` — builds a prefix in Termux: debootstrap's first
   stage, the second stage under `dn-init`, apt, packages. Nothing is compiled
   in the tree, so a minimal prefix needs no toolchain.
 - `scripts/prefix/` — `boot.sh` (the entry) and `init.sh` (the tree's init),
@@ -53,14 +53,14 @@ on the device.
 ## Build and test
 
 ```sh
-scripts/build-runtime.sh                     # build/dn-init, build/dn-exec
-scripts/build-shim.sh --cross                # build/dn-lane.so
-scripts/build-prefix.sh --set dev ~/work/p   # a fresh prefix, end to end
+scripts/runtime/build-runtime.sh                     # build/dn-init, build/dn-exec
+scripts/runtime/build-shim.sh --cross                # build/dn-lane.so
+scripts/prefix/build-prefix.sh --set dev ~/work/p   # a fresh prefix, end to end
 ```
 
 To test a runtime change without a new prefix, copy `build/dn-init` (and
 `build/dn-exec`) into an existing prefix's `usr/lib/deb-native/`, and rebuild
-the shim with `scripts/build-shim.sh --in-prefix` over it (`docs/building.md`,
+the shim with `scripts/runtime/build-shim.sh --in-prefix` over it (`docs/building.md`,
 "Updating the
 runtime in a prefix"). Then run what the change touches, with and without the
 shim, and compare against the previous build interleaved: the phone's timings
@@ -82,7 +82,7 @@ session (`adb shell input text ...`) and read its output from a file.
 
 Editing in VSCodium on the Windows PC. The PC now cross-compiles what is
 freestanding: `gcc-aarch64-linux-gnu` in WSL Debian builds `dn-init`,
-`dn-exec` and, with `scripts/build-shim.sh --cross`, `dn-lane.so`. Anything
+`dn-exec` and, with `scripts/runtime/build-shim.sh --cross`, `dn-lane.so`. Anything
 that has to *run* still happens on the phone -- a prefix's second stage, every
 test suite -- driven from the PC over `adb`/SSH, through either of two hosts
 ([`docs/spec/hosts.md`](docs/spec/hosts.md)). Either way: `adb`, `git`, `gh`
@@ -98,9 +98,9 @@ manifest and `--max-glibc` refuses a build above what the tree can load.)
   no Termux, no SSH, and none of the broken-`PATH` problem below, since the
   shell's own environment is untouched by Termux's glibc tech preview. Once
   built, this is the simpler of the two for actually driving a prefix from
-  the PC: `scripts/adb-shell.sh` (install once as `dn-adb`) or raw
+  the PC: `scripts/host/adb-shell.sh` (install once as `dn-adb`) or raw
   `adb shell 'cd /data/local/tmp/NAME && ./boot/boot.sh ...'`. Its one catch:
-  `scripts/build-prefix.sh --host adb` still runs debootstrap's second stage on
+  `scripts/prefix/build-prefix.sh --host adb` still runs debootstrap's second stage on
   the device under the **app** runtime, and swaps in the adb `dn-init` and
   shim at the end -- both built with `--host adb`, since the shim has one
   host-dependent site -- so the phone is unavoidable for building, just not
@@ -149,7 +149,7 @@ Setting up the Termux host over SSH:
   the tree's actual `VERSION` and binaries by hand after a patch, the way
   `built`/`size` stay pinned to the original debootstrap. Smaller throwaway
   prefixes (e.g. an alternate host or suite) are disposable -- delete them
-  once done; `scripts/build-prefix.sh` remakes one in a few minutes.
+  once done; `scripts/prefix/build-prefix.sh` remakes one in a few minutes.
 - PowerShell quoting over this chain (PC shell -> `ssh.exe` -> Termux's
   `bash`) is fragile: nested double quotes and shell metacharacters
   (`(`, `)`, `|`) in one command have been silently dropped or

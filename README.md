@@ -37,13 +37,16 @@ What Android *hides* is mapped or answered; what the kernel *lacks* is refused
 ([`contract.md`](docs/spec/contract.md)).  That is the contract that lets an
 unmodified tree run.
 
-- **`dn-tiny`**, a tracer with no libc, runs every program in the prefix under
+- **`dn-init`**, a tracer with no libc, runs every program in the prefix under
   `ptrace` behind a seccomp filter.  The syscalls that need it get their paths
   mapped into the prefix, root faked, or an answer the host hides.
-- **`dn-lane.so`**, a shim compiled in the prefix against its own glibc, does
-  the same work inside each program for the calls that only read, including
-  libc's own (its `svc` sites are patched at load), so they cost no stop.
-- **One law** (`policy.c`) is shared by both; two path models would disagree.
+- **`dn-lane.so`**, a shim preloaded into each dynamic program, does the same
+  work in-process for the calls that only read, including libc's own (its `svc`
+  sites are patched at load), so they cost no stop.
+- **`dn-exec`**, a userland exec, maps the loader itself and patches the
+  loader's -- or a static program's -- syscall sites at birth.  It replaces the
+  kernel's `execve` for every program the tree starts.
+- **One law** (`law.c`) is shared by all three; two path models would disagree.
 - A **host** supplies what the framework owns: the session, boot inputs,
   Android APIs, and later display/input/audio through the device table.
 
@@ -93,11 +96,13 @@ In Termux, on an `arm64` phone:
 pkg install git clang python debootstrap
 git clone https://github.com/jronminh/deb-native
 cd deb-native
-scripts/build-prefix.sh ~/debian          # builds the runtime, then the prefix
+scripts/runtime/build-runtime.sh                 # dn-init, dn-exec
+scripts/runtime/build-shim.sh --cross            # dn-lane.so (or --in-prefix P)
+scripts/prefix/build-prefix.sh ~/debian          # the tree, from those three
 ~/debian/boot/boot.sh                     # a root shell in Debian
 ```
 
-`scripts/build-prefix.sh --set dev ~/debian` adds a toolchain, `git`, `curl`
+`scripts/prefix/build-prefix.sh --set dev ~/debian` adds a toolchain, `git`, `curl`
 and `python3`; `--packages "..."` adds anything else. Everything is in
 [`docs/building.md`](docs/building.md).
 
@@ -128,13 +133,12 @@ Emulation proposals (T2/T3): [`spec/ipc-sysv.md`](docs/spec/ipc-sysv.md),
 
 | path | |
 | --- | --- |
-| `src/dn-tiny/` | the runtime: the tracer and the shim ([`README`](src/dn-tiny/README.md)) |
-| `scripts/build-runtime.sh` | builds `dn-tiny` |
-| `scripts/build-prefix.sh` | builds a prefix in Termux |
-| `scripts/build-busybox.sh` | builds a busybox bundle, a tiny non-Debian tree ([`spec/variants.md`](docs/spec/variants.md)) |
-| `scripts/adb-deploy.sh` | deploys an ADB-hosted prefix over `adb` ([`spec/adb-host.md`](docs/spec/adb-host.md)) |
-| `scripts/adb-shell.sh` | `dn-adb`: enters an ADB-hosted prefix (refuses without adb) |
-| `scripts/prefix/` | the prefix's `boot.sh` and `init.sh`, and the virtual-user wrappers |
+| `src/dn-init/` | the tracer, the exec gate, and the shim's source ([`README`](src/dn-init/README.md)) |
+| `src/dn-exec/` | the userland exec ([`architecture.md`](docs/architecture.md)) |
+| `scripts/runtime/` | builds the runtime: `build-runtime.sh`, `build-shim.sh` |
+| `scripts/prefix/` | builds a tree: `build-prefix.sh`, `build-busybox.sh`, and the `boot.sh`/`init.sh` it copies |
+| `scripts/host/` | the ADB host: `adb-deploy.sh`, `adb-shell.sh` (`dn-adb`) ([`spec/adb-host.md`](docs/spec/adb-host.md)) |
+| `scripts/measure/` | `bench.sh`, `coverage.sh`, `fingerprint.sh` and their probes |
 | `tests/bench/` | the bench and check set behind `docs/performance.md` |
 | `docs/` | building, architecture, performance, spec, reference |
 

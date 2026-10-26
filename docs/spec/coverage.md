@@ -74,7 +74,7 @@ mapped, so a program cannot find the host frame through an unmapped reader.
 
 ## The test
 
-`scripts/coverage.sh PREFIX` copies `scripts/coverage/probe.sh` into the prefix,
+`scripts/measure/coverage.sh PREFIX` copies `scripts/measure/coverage-probe.sh` into the prefix,
 runs it (it prints the tree's view of each surface above), and fails on any line
 that holds the host frame -- the prefix's own path, `/data/data`, the shared
 storage, the tracer.  Run it interleaved with the regression set and the bench.

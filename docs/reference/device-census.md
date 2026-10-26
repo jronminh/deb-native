@@ -18,7 +18,7 @@ refuses".
 ## Method
 
 `src/dn-tiny/census.c`, a freestanding aarch64 program (no libc, 88 lines, 2.5 KB;
-built by `scripts/build-runtime.sh` as `dn-census`) forks, with a raw
+built by `scripts/runtime/build-runtime.sh` as `dn-census`) forks, with a raw
 `clone`, once per syscall; the child makes the call with zero arguments and exits
 with the errno, and the parent reports how the child ended. Zero arguments make
 the call fail harmlessly (`EFAULT`, `EINVAL`). A death by signal 31 is the

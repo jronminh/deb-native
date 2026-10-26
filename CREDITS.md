@@ -20,7 +20,7 @@ it follows, and the license of each part.
 
 - <https://github.com/termux/termux-packages> — the host the prefix is built in
   and run from, its compilers, and its `debootstrap` package, whose first stage
-  `scripts/build-prefix.sh` uses to fetch and unpack the base packages.
+  `scripts/prefix/build-prefix.sh` uses to fetch and unpack the base packages.
 - Without Termux there is no project.
 
 ## Debian

@@ -29,8 +29,8 @@ source, one law, the same rows.
 ## Build
 
 ```sh
-scripts/build-runtime.sh --host adb build-adb          # the shell/ADB runtime
-scripts/build-prefix.sh --host adb \
+scripts/runtime/build-runtime.sh --host adb build-adb          # the shell/ADB runtime
+scripts/prefix/build-prefix.sh --host adb \
     --runtime build --runtime-adb build-adb --set minimal ~/p-adb
 ```
 
@@ -52,7 +52,7 @@ written for the real uid at boot (builder 10323 -> shell 2000).
 ## Deploy
 
 ```sh
-scripts/adb-deploy.sh --port 39063 ~/p-adb.tar.gz
+scripts/host/adb-deploy.sh --port 39063 ~/p-adb.tar.gz
 ```
 
 It connects, pushes the tarball, extracts under `/data/local/tmp/<name>`,
@@ -70,10 +70,10 @@ The first boot may take a moment (init.sh writes passwd/group for uid 2000).
 
 ## Enter the shell
 
-`scripts/adb-shell.sh` is the wrapper; install it once as `dn-adb`:
+`scripts/host/adb-shell.sh` is the wrapper; install it once as `dn-adb`:
 
 ```sh
-ln -sf "$PWD/scripts/adb-shell.sh" ~/.local/bin/dn-adb
+ln -sf "$PWD/scripts/host/adb-shell.sh" ~/.local/bin/dn-adb
 DN_ADB_PORT=39063 dn-adb                  # an interactive shell in the prefix
 DN_ADB_PORT=39063 dn-adb -c 'id; pwd'     # one command
 dn-adb --prefix /data/local/tmp/p-adb     # another prefix
@@ -139,10 +139,10 @@ from the app except the app lifecycle and data directory.
 
 ## Files
 
-- `scripts/build-runtime.sh --host adb` -- the shell/ADB runtime
-- `scripts/build-prefix.sh --host adb` -- the prefix profile
-- `scripts/adb-deploy.sh` -- push, extract, check, boot
-- `scripts/adb-shell.sh` -- `dn-adb`, the guarded shell wrapper
+- `scripts/runtime/build-runtime.sh --host adb` -- the shell/ADB runtime
+- `scripts/prefix/build-prefix.sh --host adb` -- the prefix profile
+- `scripts/host/adb-deploy.sh` -- push, extract, check, boot
+- `scripts/host/adb-shell.sh` -- `dn-adb`, the guarded shell wrapper
 - `scripts/prefix/init.sh` -- the uid reconcile
 - the two gates and the app-only answers:
   [`../reference/seccomp-gates.md`](../reference/seccomp-gates.md),

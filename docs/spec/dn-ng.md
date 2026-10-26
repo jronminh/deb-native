@@ -209,7 +209,7 @@ The decision is by test, not by preference.  In both cases:
 
 ## The prefix image
 
-- Built by `scripts/build-prefix.sh` outside the app, then packed as
+- Built by `scripts/prefix/build-prefix.sh` outside the app, then packed as
   `assets/bootstrap.tar.gz` (one suite per APK).  The image is data; it never
   contains the runtime or the shim unless the shim placement chooses that.
 - The tree is unpacked into `files/` once; a fresh install or a data wipe

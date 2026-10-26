@@ -105,7 +105,7 @@ and 263 `SIGSYS` stops from the app's own filter (`set_robust_list`, `clone3`),
 The Lua build is one axis: a compile, dominated by one heavy process, with a
 few `exec`s. It hides three others: a workload that is nothing but `stat` and
 `readlink`, one that moves links, and one that spawns many short processes.
-`scripts/bench.sh PREFIX` runs such workloads, each its own run of the runtime,
+`scripts/measure/bench.sh PREFIX` runs such workloads, each its own run of the runtime,
 so the stops attribute to one workload:
 
 | workload | what it does | wall | entry stops |
@@ -136,7 +136,7 @@ Two things it shows that the Lua build hides:
 
 - `tests/bench/run.sh PREFIX [bench|check|all]` prints these rows (wall and
   stops) and runs the lane test, the regression set and the Lua build's wall;
-  `scripts/bench.sh PREFIX [workload ...]` runs the second bench above.
+  `scripts/measure/bench.sh PREFIX [workload ...]` runs the second bench above.
 - `dn-tiny` without `-q` prints one line at exit: entry and exit stops, events,
   signals, paths mapped, calls answered at entry, execs, `SIGSYS` answers, the
   time, and which syscalls the platform killed.

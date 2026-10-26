@@ -19,18 +19,18 @@ How they work together: [`docs/architecture.md`](../../docs/architecture.md).
 
 ## Build
 
-`scripts/build-runtime.sh` builds `dn-init`, `dn-exec`, `dn-substtest` and
+`scripts/runtime/build-runtime.sh` builds `dn-init`, `dn-exec`, `dn-substtest` and
 `dn-census` with any aarch64 C compiler (`dn-exec`, a static PIE, through
-`scripts/build-dn-exec.sh`). `dn-lane.so` is a glibc library and links the law
-(`law.c`, with the generated rows) as well as the shim; `scripts/build-shim.sh`
+`scripts/runtime/build-dn-exec.sh`). `dn-lane.so` is a glibc library and links the law
+(`law.c`, with the generated rows) as well as the shim; `scripts/runtime/build-shim.sh`
 builds it, either inside a prefix with that prefix's own `gcc` or with
 `aarch64-linux-gnu-gcc --cross`:
 
 ```sh
-scripts/build-shim.sh --in-prefix ~/p-dev      # or: --cross
+scripts/runtime/build-shim.sh --in-prefix ~/p-dev      # or: --cross
 ```
 
-(`gen/policy-rows.inc` is written by `build-runtime.sh`; `scripts/build-prefix.sh`
+(`gen/policy-rows.inc` is written by `build-runtime.sh`; `scripts/prefix/build-prefix.sh`
 copies the three binaries into a tree; [`docs/building.md`](../../docs/building.md)).
 
 ## Run

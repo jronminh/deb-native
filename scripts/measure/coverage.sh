@@ -20,8 +20,11 @@ rm -f "$P/tmp/dn-coverage-probe.sh"
 
 echo
 echo "== leak check =="
-# the host frame: the prefix path, Android's app data and shared storage, the tracer
-leaks=$(printf '%s\n' "$out" | grep -nE "$P|/data/data/|/data/user/|/storage/emulated|/sdcard/|termux|ANDROID_|BOOTCLASSPATH|EXTERNAL_STORAGE|LD_PRELOAD|LD_LIBRARY_PATH" || true)
+# the host frame: the prefix path, Android's app data and shared storage, the
+# tracer.  Paths, not variable names: LD_PRELOAD must name the tree's own shim
+# (/usr/lib/deb-native/dn-lane.so) for the fast path to exist, and a host path in
+# any variable is caught by the $P and /data/data/ patterns anyway.
+leaks=$(printf '%s\n' "$out" | grep -nE "$P|/data/data/|/data/user/|/storage/emulated|/sdcard/|termux|ANDROID_|BOOTCLASSPATH|EXTERNAL_STORAGE" || true)
 if [ -n "$leaks" ]; then
 	printf '%s\n' "$leaks"
 	echo "LEAKS: the lines above show the host (maps is the known hole)"
