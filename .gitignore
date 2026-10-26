@@ -6,3 +6,6 @@ __pycache__/
 
 # The adb-host runtime (scripts/build-runtime.sh --host adb)
 /build-adb/
+
+# Personal Claude Code permission overrides
+/.claude/settings.local.json
