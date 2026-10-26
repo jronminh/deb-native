@@ -53,14 +53,15 @@ a glibc program in the prefix
                                                             stop in dn-init
 ```
 
-- **`dn-init`** (`src/dn-init/`, about 2,000 lines, no libc) is the tree's root
+- **`dn-init`** (`src/catch.c`, `apply.c`, `gate.c`, `law.c`, `sys.c`; no libc) is
+  the tree's root
   process. It starts every program under `ptrace` with a seccomp filter and
   handles the syscalls that need a path mapped, an identity faked or an answer
   the platform will not give. It works for any program, static or dynamic.
 - **`dn-lane.so`** is preloaded into every dynamic glibc program `dn-init` (via
   `dn-exec`) starts. It does the same path work inside the process, for the
   calls that only read, so they cost no stop.
-- **`dn-exec`** (`src/dn-exec/`) is the userland exec the gate hands every
+- **`dn-exec`** (`src/dn-exec.c`) is the userland exec the gate hands every
   program to. While it maps the loader (or a static program's own image) into
   memory, it also patches that image's own syscall sites, the same way the shim
   patches libc's -- so the loader's bootstrap opens and a static program's path
@@ -75,13 +76,13 @@ keeps the rare ones and is the net for everything.
 ## The tracer: dn-init
 
 - **The filter.** A classic BPF program built from the policy's rows
-  (`src/dn-init/gen_rows.py` generates them): a syscall is caught only when the
+  (`src/gen_rows.py` generates them): a syscall is caught only when the
   tracer does something with it, and only a row whose result is rewritten asks
   for the exit stop. One JGE tree holds every row: a number no row lists is a few
   comparisons from `ALLOW`, and a row the lane also lists tests the cookie in its
   own leaf. Everything else is `ALLOW`. A few answers need no tracer at all: a
   `NETLINK_AUDIT` socket gets `EPROTONOSUPPORT` from the filter itself.
-- **The lane.** A call carrying the lane cookie in `x5` (`src/dn-init/lane.h`)
+- **The lane.** A call carrying the lane cookie in `x5` (`src/lane.h`)
   passes the filter without a stop, if it is one of the shim's read-only calls
   (`readlinkat`, `newfstatat`, `fstat`, `faccessat`, `statx`, the `getxattr` and
   `listxattr` pairs, `getcwd`, and `openat` without a flag that writes). Mutating
@@ -131,7 +132,7 @@ keeps the rare ones and is the net for everything.
 
 ## dn-exec: birth-time patching for the loader and static programs
 
-`dn-exec` (`src/dn-exec/`) is a freestanding userland exec: the gate hands it
+`dn-exec` (`src/dn-exec.c`) is a freestanding userland exec: the gate hands it
 every program instead of letting the kernel `execve` it directly. It maps the
 program's `PT_LOAD` segments (and, for a dynamic program, the tree's loader)
 itself, builds the stack and `auxv` the kernel would have built, and jumps --
@@ -140,7 +141,7 @@ itself, builds the stack and `auxv` the kernel would have built, and jumps --
 Because it does its own mapping, `dn-exec` holds the image in memory **before**
 making it executable, and can patch it there -- the same `mov x8,#nr; svc #0`
 window-scan the shim uses on `libc.so.6`, as its own copy
-(`src/dn-exec/patch.c`; not yet the shim's literal code, though unifying the
+(`src/patch.c`; not yet the shim's literal code, though unifying the
 two is an open step of the runtime rebuild below), applied to:
 
 - **the loader's own `openat`/`faccessat` sites**, patched at birth, before the

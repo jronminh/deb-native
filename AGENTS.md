@@ -9,15 +9,15 @@ Termux.  The three hosts are [`docs/spec/hosts.md`](docs/spec/hosts.md). Nothing
 prebuilt: users build the runtime and their prefix themselves
 ([`docs/building.md`](docs/building.md)). There is no CI.
 
-- `src/dn-init/` — `dn-init`, the tracer (no libc): the tree's root process,
-  `ptrace` + a seccomp filter, the exec gate, the law (`law.c`). Its `lane.c` is
-  the source of `dn-lane.so`, the shim preloaded into dynamic glibc programs
-  (`-DDN_LIBC`), which `scripts/runtime/build-shim.sh` builds.
-- `src/dn-exec/` — `dn-exec`, the userland exec the gate hands every program
-  to: maps the loader (or a static program's image) itself and patches its
-  syscall sites at birth, before the jump.
-  [`docs/architecture.md`](docs/architecture.md) is how the three fit
-  together.
+- `src/` — the runtime's source, flat by choice: `dn-init` (the tracer, no libc:
+  the tree's root process, `ptrace` + a seccomp filter, the exec gate, the law),
+  `lane.c` (the shim `dn-lane.so`, built `-DDN_LIBC`), and `dn-exec.c` (the
+  userland exec the gate hands every program to: maps the loader or a static
+  program's image and patches its syscall sites at birth).
+  [`docs/architecture.md`](docs/architecture.md) is how the three fit together;
+  [`src/README.md`](src/README.md) is the file map.  No subdirectory per engine:
+  the law, the rows and the lane cookie are shared, so splitting would only move
+  include paths.
 - `scripts/runtime/build-runtime.sh` — builds `dn-init` and `dn-exec` (any aarch64
   compiler; python3 for the rows).
 - `scripts/runtime/build-shim.sh` — builds `dn-lane.so`: `--in-prefix PREFIX` with that

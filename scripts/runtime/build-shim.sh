@@ -78,7 +78,7 @@ HOSTFLAG=
 mkdir -p "$(dirname "$OUT")" "$GEN"
 if [ ! -f "$GEN/policy-rows.inc" ]; then
   command -v python3 >/dev/null 2>&1 || die "python3 not found (it generates the rows)"
-  python3 "$SRC/src/dn-init/gen_rows.py" "$GEN/policy-rows.inc"
+  python3 "$SRC/src/gen_rows.py" "$GEN/policy-rows.inc"
 fi
 ROWS=$GEN/policy-rows.inc
 
@@ -103,8 +103,8 @@ if [ "$CROSS" = 1 ]; then
   say "the shim: dn-lane.so, cross-compiled with $CCNAME"
   # shellcheck disable=SC2086
   "$CC" -O2 -Wall -Wextra -shared -fPIC -DDN_LIBC $CANCELFLAG $HOSTFLAG \
-      -I"$SRC/src/dn-init" -I"$GEN" \
-      -o "$OUT" "$SRC/src/dn-init/lane.c" "$SRC/src/dn-init/law.c"
+      -I"$SRC/src" -I"$GEN" \
+      -o "$OUT" "$SRC/src/lane.c" "$SRC/src/law.c"
 else
   P=$(CDPATH= cd -- "$IN_PREFIX" && pwd) || die "no such prefix: $IN_PREFIX"
   [ -x "$P/boot/boot.sh" ] || die "$P has no boot/boot.sh"
@@ -113,8 +113,8 @@ else
   say "the shim: dn-lane.so, built inside $P against its glibc"
   rm -rf "$T"
   mkdir -p "$T"
-  cp "$SRC/src/dn-init/lane.c" "$SRC/src/dn-init/lane.h" \
-     "$SRC/src/dn-init/law.c" "$SRC/src/dn-init/law.h" "$T/"
+  cp "$SRC/src/lane.c" "$SRC/src/lane.h" \
+     "$SRC/src/law.c" "$SRC/src/law.h" "$T/"
   cp "$ROWS" "$T/policy-rows.inc"
   # gcc runs inside the tree, so the paths it is given are the tree's
   # shellcheck disable=SC2086

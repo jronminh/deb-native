@@ -1,21 +1,26 @@
-# dn-init and dn-lane.so
+# The runtime's source
 
-The runtime: `dn-init`, a tracer with no libc (one static aarch64 executable of
-about 72 KB), and `dn-lane.so`, the shim it preloads into every glibc program.
-How they work together: [`docs/architecture.md`](../../docs/architecture.md).
+One flat directory: the three engines (`dn-init`, `dn-lane.so`, `dn-exec`), the
+one law they share, and the programs that test and measure them.  The directory
+is deliberately not split by engine -- the law (`law.c`/`law.h`), the rows, and
+the lane cookie (`lane.h`) belong to more than one, so a subdirectory per engine
+would only move include paths around.  How the pieces work together:
+[`docs/architecture.md`](../docs/architecture.md).
 
 | file | part |
 | --- | --- |
 | `catch.c` | the catcher: builds the seccomp filter from the policy's rows, runs the wait loop, reads and writes the tracee's registers and memory |
 | `apply.c` | the applier: carries out what a row says (map a path, fake an answer, answer at entry, copy for a link, answer a call the platform killed) |
-| `gate.c` | the exec gate: glibc programs and scripts started through the prefix's loader, with the shim preloaded |
-| `law.c`, `law.h` | the table and the law: which syscalls, where their paths are, how a path is resolved in the prefix, what a killed call is told. Linked into both engines -- the tracer as it is, the shim `-DDN_LIBC` |
+| `gate.c` | the exec gate: glibc programs and scripts started through `dn-exec`, with the shim preloaded |
+| `dn-exec.c` | the userland exec: maps the loader (or a static program's image), patches its syscall sites at birth, builds the stack and auxv, jumps |
+| `patch.c`, `patch.h` | the svc-site patcher: the window scan and the hook stub `dn-exec` writes into an image |
+| `law.c`, `law.h` | the table and the law: which syscalls, where their paths are, how a path is resolved in the prefix, what a killed call is told. Compiled three ways -- the tracer as it is, the shim `-DDN_LIBC`, `dn-exec` `-DDN_FREE` |
 | `gen_rows.py` | writes the rows at build time: a syscall is caught only when the tracer acts on it, hottest first |
 | `mon.h`, `apply.h`, `gate.h` | what the parts offer each other |
 | `sys.c`, `sys.h` | raw syscalls, `_start`, the few string functions |
 | `lane.c`, `lane.h` | the shim, and the lane cookie the filter and the shim share |
 | `substtest.c` | a guest program that calls the faked and substituted syscalls and prints what it is told |
-| `census.c` | tries every syscall number and reports which ones the platform kills ([`docs/reference/device-census.md`](../../docs/reference/device-census.md)) |
+| `census.c` | tries every syscall number and reports which ones the platform kills ([`docs/reference/device-census.md`](../docs/reference/device-census.md)) |
 
 ## Build
 
@@ -31,7 +36,7 @@ scripts/runtime/build-shim.sh --in-prefix ~/p-dev      # or: --cross
 ```
 
 (`gen/policy-rows.inc` is written by `build-runtime.sh`; `scripts/prefix/build-prefix.sh`
-copies the three binaries into a tree; [`docs/building.md`](../../docs/building.md)).
+copies the three binaries into a tree; [`docs/building.md`](../docs/building.md)).
 
 ## Run
 

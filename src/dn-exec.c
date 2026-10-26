@@ -1,19 +1,19 @@
 /*
  * dn-exec -- a userland exec for the prefix.
  *
- * The POC (docs/spec/loader-poc.md): map the program's PT_LOAD segments and,
- * for a dynamic program, the tree's PT_INTERP loader, build the stack and
- * auxv the kernel would build, and jump.  Freestanding, no libc.
+ * Map the program's PT_LOAD segments and, for a dynamic program, the tree's
+ * PT_INTERP loader, build the stack and auxv the kernel would build, and jump.
+ * The exec gate (gate.c) hands every program here; docs/spec/runtime-revision.md
+ * is the design.  Freestanding, no libc.
  *
  * Usage:
  *   dn-exec [--root DIR] PROGRAM [ARG...]
  *
  * PROGRAM is a guest path when --root is given, a host path otherwise.
- * Dynamic programs use the PT_INTERP resolved under --root; for the POC the
- * loader's libraries must be reachable from its own view (run under dn-init
- * and the law maps them, or set --root and the test uses host paths).
+ * Dynamic programs use the PT_INTERP resolved under --root: run under dn-init
+ * and the law maps its libraries, or set --root and the test uses host paths.
  */
-#include "../dn-init/law.h"     /* the law (u64/i64, pol_readlink), -DDN_FREE */
+#include "law.h"                    /* the law (u64/i64, pol_readlink), -DDN_FREE */
 #include "patch.h"                  /* the svc-site patcher */
 
 typedef unsigned int u32;

@@ -133,8 +133,7 @@ Emulation proposals (T2/T3): [`spec/ipc-sysv.md`](docs/spec/ipc-sysv.md),
 
 | path | |
 | --- | --- |
-| `src/dn-init/` | the tracer, the exec gate, and the shim's source ([`README`](src/dn-init/README.md)) |
-| `src/dn-exec/` | the userland exec ([`architecture.md`](docs/architecture.md)) |
+| `src/` | the runtime's source, flat: tracer, shim, `dn-exec`, the law ([`README`](src/README.md), [`architecture.md`](docs/architecture.md)) |
 | `scripts/runtime/` | builds the runtime: `build-runtime.sh`, `build-shim.sh` |
 | `scripts/prefix/` | builds a tree: `build-prefix.sh`, `build-busybox.sh`, and the `boot.sh`/`init.sh` it copies |
 | `scripts/host/` | the ADB host: `adb-deploy.sh`, `adb-shell.sh` (`dn-adb`) ([`spec/adb-host.md`](docs/spec/adb-host.md)) |

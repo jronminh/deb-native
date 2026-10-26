@@ -18,12 +18,12 @@ GEN="${GEN:-$SRC/build/gen}"
 
 mkdir -p "$(dirname "$OUT")" "$GEN"
 if [ ! -f "$GEN/policy-rows.inc" ]; then
-    python3 "$SRC/src/dn-init/gen_rows.py" "$GEN/policy-rows.inc"
+    python3 "$SRC/src/gen_rows.py" "$GEN/policy-rows.inc"
 fi
 
 # shellcheck disable=SC2086
 "$CC" -O2 -static-pie -nostdlib -ffreestanding -fno-builtin \
     -fno-stack-protector -fPIE -DDN_FREE -Wl,-e,_start -Wl,--build-id=none \
-    -I"$SRC/src/dn-init" -I"$GEN" \
-    -o "$OUT" "$SRC/src/dn-exec/dn-exec.c" "$SRC/src/dn-exec/patch.c" "$SRC/src/dn-init/law.c"
+    -I"$SRC/src" -I"$GEN" \
+    -o "$OUT" "$SRC/src/dn-exec.c" "$SRC/src/patch.c" "$SRC/src/law.c"
 echo "built $OUT"

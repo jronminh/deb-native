@@ -1,8 +1,8 @@
 # Runtime-revision audit
 
 An audit of the 94-commit "runtime revision" (`docs/spec/runtime-revision.md`,
-`dn-tiny` -> `dn-init` + `dn-exec`), done by reading `src/dn-exec/` and
-`src/dn-init/` against the device and, where practical, confirming with small
+`dn-tiny` -> `dn-init` + `dn-exec`), done by reading `src/` and
+`src/` against the device and, where practical, confirming with small
 programs and `tests/bench/run.sh` on `/data/data/com.termux/files/p-dev`
 (gcc-14). One bug was already found and fixed before this audit started
 (`14ffb27`, the bss-tail overlay); this is what else turned up.
@@ -14,7 +14,7 @@ attempted or achieved.
 
 ## Confirmed: `O_DIRECTORY`'s wrong value breaks the `DN_ROOT_FD` handoff
 
-`src/dn-exec/dn-exec.c:43` defined `O_DIRECTORY` as `0x10000` (the value most
+`src/dn-exec.c:43` defined `O_DIRECTORY` as `0x10000` (the value most
 people remember from the generic/x86 Linux ABI). On this device's actual
 aarch64 kernel ABI the real value is `0x4000`; `0x10000` makes the kernel
 return `EINVAL`. Confirmed three ways:
@@ -27,10 +27,10 @@ return `EINVAL`. Confirmed three ways:
   tracer (`gcc`+a one-line program printing `O_DIRECTORY` from `<fcntl.h>`):
   also `0x4000`.
 
-Used at `src/dn-exec/dn-exec.c:485`: `openat(AT_FDCWD, root,
+Used at `src/dn-exec.c:485`: `openat(AT_FDCWD, root,
 O_RDONLY|O_DIRECTORY, ...)`, whose fd is `dup3`'d to `ROOT_FD` (200,
 `dn-exec.c:37,488`) for the shim to read as `DN_ROOT_FD`
-(`src/dn-init/lane.c:178-209`, `own_root()`). With the wrong constant the
+(`src/lane.c:178-209`, `own_root()`). With the wrong constant the
 `openat` always failed, the `dup3` was skipped, yet `dn-exec.c:502` still set
 `DN_ROOT_FD=200` in the child's environment unconditionally (gated only on
 `root[0]`, not on the open having succeeded). The shim's `own_root()` then
@@ -41,7 +41,7 @@ thing `docs/spec/runtime-revision.md` calls "resolved in practice" (handing the
 root down as a reserved fd instead of self-discovery) has never actually run on
 this device.
 
-Fix: `src/dn-exec/dn-exec.c:43`, `0x10000` -> `0x4000`, and the env entry is
+Fix: `src/dn-exec.c:43`, `0x10000` -> `0x4000`, and the env entry is
 written only after the `dup3` succeeds (next paragraph). After the fix:
 `openat`+`dup3` both succeed under the real tracer (instrumented build,
 `rfd=3`/`dup3=200`); `tests/bench/run.sh check` passes (the one `shm: FAIL` is
@@ -64,9 +64,9 @@ on `p-dev`: `dn-exec --root P /usr/bin/env` lists `DN_ROOT_FD=200`, and
 
 ## Theoretical, not reproduced: fork/vfork/clone event-ordering race
 
-`src/dn-init/catch.c:531-537` processes `PTRACE_EVENT_FORK/VFORK/CLONE`
+`src/catch.c:531-537` processes `PTRACE_EVENT_FORK/VFORK/CLONE`
 (reported on the *parent*) by calling `trace_exe_fork(parent, child)`
-(`src/dn-init/apply.c:2056-2069`), which copies the parent's ids/exe state onto
+(`src/apply.c:2056-2069`), which copies the parent's ids/exe state onto
 the child's `pid_state`. Separately, `catch.c:540-548` (the "signal-delivery
 stop" branch, which is where the *child's own* initial SIGSTOP is handled)
 calls the `EXP(p)` macro (`catch.c:55`:
@@ -115,9 +115,9 @@ module at all.  Still stale, left to the documentation pass:
 
 ## Theoretical, not reproduced: `exec_range()` merges disjoint executable segments
 
-`src/dn-exec/dn-exec.c:279-293` (`exec_range`) unions every `PF_X` `PT_LOAD`
+`src/dn-exec.c:279-293` (`exec_range`) unions every `PF_X` `PT_LOAD`
 segment of a mapped image into one `[lo, hi)` span, which
-`patch_image()` (`src/dn-exec/patch.c:136`) then scans uniformly for `svc`
+`patch_image()` (`src/patch.c:136`) then scans uniformly for `svc`
 sites (called from `dn-exec.c:444-445` and `468-469`). If an image ever has
 two executable segments with a non-executable gap between them, the scanner
 would walk that gap as if it were code, risking a false-positive `svc`-site
