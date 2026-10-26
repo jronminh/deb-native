@@ -105,10 +105,12 @@ a child's environment, and the `find` step now runs from the tree's root --
 from the host's cwd it died on "Failed to restore initial working directory",
 a second bug the earlier failure had hidden. The whole suite passes on `p-dev`.
 
-Still stale, not touched here: `scripts/build-runtime.sh`'s header comment and
-`docs/building.md` describe building and shipping `dn-ldhook.so`;
-`build-runtime.sh` does not build `dn-exec` either (`build-dn-exec.sh` does),
-although `AGENTS.md` says it does.
+Fixed since: `build-runtime.sh` builds `dn-exec` (through `build-dn-exec.sh`,
+into the same `OUT`) and `build-prefix.sh` installs it, refusing a runtime that
+lacks it -- a missing `dn-exec` used to mean a silent fallback to the loader
+path.  Still stale, left to the documentation pass: `scripts/build-runtime.sh`'s
+header comment and `docs/building.md` describe building and shipping
+`dn-ldhook.so`.
 
 ## Theoretical, not reproduced: `exec_range()` merges disjoint executable segments
 

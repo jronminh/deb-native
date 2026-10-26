@@ -163,10 +163,15 @@ for f in "$DEST"/debootstrap/*; do
 done
 
 # ---- 2. the runtime in the tree
+# dn-exec is the gate's userland exec.  Without the file the gate answers
+# policy_dnexec() with an empty path and silently falls back to the loader, so a
+# runtime that lacks it is refused here: a tree must run what it says it runs.
+[ -x "$RUNTIME/dn-exec" ] || die "$RUNTIME has no dn-exec; rebuild the runtime (scripts/build-runtime.sh)"
 mkdir -p "$DEST/usr/lib/deb-native" "$DEST/boot"
-cp "$RUNTIME/dn-init" "$DEST/usr/lib/deb-native/dn-init"
+cp "$RUNTIME/dn-init" "$RUNTIME/dn-exec" "$DEST/usr/lib/deb-native/"
 cp "$ROOT/scripts/prefix/boot.sh" "$ROOT/scripts/prefix/init.sh" "$DEST/boot/"
-chmod 755 "$DEST/usr/lib/deb-native/dn-init" "$DEST/boot/boot.sh" "$DEST/boot/init.sh"
+chmod 755 "$DEST/usr/lib/deb-native/dn-init" "$DEST/usr/lib/deb-native/dn-exec" \
+          "$DEST/boot/boot.sh" "$DEST/boot/init.sh"
 # The user tools that create an account: say that the account is virtual.
 mkdir -p "$DEST/usr/local/sbin"
 cp "$ROOT/scripts/prefix/virtual-user" "$DEST/usr/local/sbin/useradd"
@@ -295,6 +300,7 @@ arch=aarch64
 host=$HOST
 suite=$SUITE
 shim=$SHIM
+dnexec=1
 cancel=$CANCEL_PATCH
 built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 size=$(du -sm "$DEST" | cut -f1)
