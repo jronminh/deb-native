@@ -182,7 +182,8 @@ for compatibility was found (2026-10-23).
 ## Plan: gates
 
 Done in full this is the largest change since PRoot was dropped, so it goes in
-gates, the way `dn-exec` went in (`loader-poc.md`): each gate has a pass or stop
+gates, the way `dn-exec` went in (a staged POC, now
+[`runtime-revision.md`](runtime-revision.md)): each gate has a pass or stop
 criterion, is A/B'd interleaved against the previous build (the phone varies
 10-20% between runs), and keeps a flag back to the old behaviour.
 
