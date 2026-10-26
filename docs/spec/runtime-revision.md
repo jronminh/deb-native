@@ -443,7 +443,6 @@ copies of the fix-up, and it unblocks a full static metadata fast path.
 
 ## References
 
-- `loader-poc.md` -- the `dn-exec` POC and its L0-L6 stages.
 - `mapped-kernel.md`, `phase2.md`, `contract.md` -- ideas three and four.
 - `docs/performance.md` -- the stop attribution this builds on.
 - `docs/reference/feature-inventory.md` -- the feature inventory.

@@ -1,9 +1,10 @@
 # Coverage: every reader of a coordinate
 
-Phase 1 of [`plan.md`](plan.md) maps each place a program can read a coordinate
-(a path, an id, a descriptor, the mount view) to the tree's view.  This is the
-checklist: one row per reader, so a hole is visible.  "Done" means the tracer
-(and the shim where it applies) answers the tree's value; the test is per row.
+Phase 1 ([`mapped-kernel.md`](mapped-kernel.md), "What this orders") maps each
+place a program can read a coordinate (a path, an id, a descriptor, the mount
+view) to the tree's view.  This is the checklist: one row per reader, so a
+hole is visible.  "Done" means the tracer (and the shim where it applies)
+answers the tree's value; the test is per row.
 
 The idea of the phase: a value is mapped only when **every** reader of it is
 mapped, so a program cannot find the host frame through an unmapped reader.

@@ -290,7 +290,7 @@ promise is the same
 
 In the repository: [`mapped-kernel.md`](mapped-kernel.md),
 [`../reference/syscall-security.md`](../reference/syscall-security.md),
-[`plan.md`](plan.md), [`phase2.md`](phase2.md), [`coverage.md`](coverage.md),
+[`phase2.md`](phase2.md), [`coverage.md`](coverage.md),
 [`identity.md`](identity.md),
 [`../reference/syscall-classes.md`](../reference/syscall-classes.md),
 [`../reference/device-census.md`](../reference/device-census.md),

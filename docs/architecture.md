@@ -222,7 +222,7 @@ and for static programs described above is merged and measured on `main`.
   strings, no libc). Three builds of one source, not three laws -- unifying
   them into one table the tracer owns and the others read is an open step of
   the runtime rebuild (`docs/spec/runtime-revision.md`, "The law becomes
-  data"). See `spec/plan.md`, Phase 0.
+  data"). See `spec/mapped-kernel.md`, "What this orders", step 1.
 
 ## Identity: fake root
 

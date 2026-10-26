@@ -364,5 +364,5 @@ path.
 [`../architecture.md`](../architecture.md) (the law), [`contract.md`](contract.md),
 [`host.md`](host.md), [`hosts.md`](hosts.md), [`devices.md`](devices.md),
 [`../reference/syscall-security.md`](../reference/syscall-security.md),
-[`loader-poc.md`](loader-poc.md) (the `dn-exec` POC plan),
+[`runtime-revision.md`](runtime-revision.md) (the `dn-exec` birth-time patch),
 [`../building.md`](../building.md), TODO, "A prefix in any app".

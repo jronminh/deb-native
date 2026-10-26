@@ -1,7 +1,7 @@
 # Phase 2: show the real kernel, hide the runtime
 
-Phase 1 ([`plan.md`](plan.md), [`coverage.md`](coverage.md)) maps every coordinate
-the kernel can carry.  Phase 2 answers the values the kernel *fixes* and a mapping
+Phase 1 ([`coverage.md`](coverage.md), [`mapped-kernel.md`](mapped-kernel.md))
+maps every coordinate the kernel can carry.  Phase 2 answers the values the kernel *fixes* and a mapping
 cannot carry.  Its rule is the model's: **map over fake, fake is the residue,
 refuse when a fake would be a lie** -- and here the residue is small.
 

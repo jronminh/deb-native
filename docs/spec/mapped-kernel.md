@@ -141,4 +141,4 @@ loader hook, the cancellable patch) is that fourth step: not wasted, just not
 the root.
 
 The roadmap that carries this out -- the two phases, mapping then disguising --
-is [`plan.md`](plan.md).
+is [`coverage.md`](coverage.md) (phase 1) and [`phase2.md`](phase2.md) (phase 2).
