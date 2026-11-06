@@ -1,6 +1,8 @@
 # The ADB host: a prefix without an app
 
-Status: **implemented and tested** (2026-10-18) on the S10e, Android 12.
+Status: **implemented and tested** (2026-10-18) on the S10e, Android 12; the
+runtime of `6a52137` also boots on a Sharp 701SH, Android 10, kernel 4.4
+(2026-11-06, a minimal tree; see "A second device" below).
 The runtime is the same; the host is different: instead of an app, the prefix
 lives in `/data/local/tmp` and is driven from a PC over `adb shell`.  This is
 **one of the hosts** -- Termux, a custom app and the dn-ng APK are the others
@@ -106,6 +108,36 @@ interactive path uses `adb shell -t`, so a real terminal gets a PTY.
 So the **seccomp gate is gone**, while the kernel's own gates stay: version,
 config, SELinux/capabilities.  The adb host gains `/sdcard` and loses nothing
 from the app except the app lifecycle and data directory.
+
+## A second device: Android 10, kernel 4.4 (2026-11-06)
+
+Sharp 701SH: SDM660 (Snapdragon 660), Android 10 (SDK 29), kernel 4.4.205,
+4 KB pages, 3 GB; `adb shell` is `u:r:shell:s0` with `Seccomp: 0`, as on the
+S10e.  The tree is not a Debian prefix but a minimal one built off-device
+(the dn-cluster repository's `tools/build-node-tree.sh`): the adb `dn-init`,
+`dn-exec` and shim of `6a52137` built with clang 19 (see #12 for gcc),
+`busybox-static`, and the cross toolchain's glibc 2.41.  What passed, the S10e
+alongside:
+
+| test | 701SH | S10e |
+| --- | --- | --- |
+| boot, `id` | `uid=2000(user)` | `uid=2000(user)` |
+| static and dynamic glibc programs | run | run |
+| the shim | mapped (`/proc/PID/maps`) | mapped |
+| busybox: pipes, `tar czf`, `nc` over loopback, `taskset` | pass | pass |
+| `mkfifo` (in the tree, and natively in `/data/local/tmp`) | `EACCES` both | works both |
+
+TCP loopback ping-pong, 64 bytes, 5k round trips, µs per round trip, `-s 500`:
+
+| | native | `send`/`recv` | `write`/`read` | `sendmsg`/`recvmsg` |
+| --- | --- | --- | --- | --- |
+| 701SH | 100–113 | 411 | 112 | 459 |
+| S10e | 175–185 | 321 | 199 | 323 |
+
+A traced stop costs about 50–60 µs on the 701SH against about 24 µs on the
+S10e (six stops per round trip).  `mkfifo` is the release's SELinux policy,
+not the runtime: Android 10 refuses it to `shell` as Android 16 does.  A full
+prefix and the `AGENTS.md` checks are not run there yet.
 
 ## Limits
 

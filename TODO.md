@@ -22,7 +22,16 @@ the numbers: [`docs/performance.md`](docs/performance.md).
   bypass classes and rules are in
   [`docs/reference/syscall-security.md`](docs/reference/syscall-security.md);
   the prefix is a compatibility layer, not an isolation boundary.
-- **Another phone**, and Termux from F-Droid as a user gets it.
+- **`dn-exec` needs clang** ([#12](https://github.com/jronminh/deb-native/issues/12)):
+  gcc ignores `naked` on aarch64 and inlines `jump_to`, whose bare `x0`/`x1`
+  then branch into the stack. `build-runtime.sh` falls back to gcc silently,
+  and the PC workflow in `AGENTS.md` names gcc. Make `jump_to`/`_start`
+  top-level asm (or constrain the operands), or refuse gcc; either way check
+  `<jump_to>:` in the build.
+- **Another phone**, and Termux from F-Droid as a user gets it.  The ADB host
+  runs on a Sharp 701SH (Android 10, kernel 4.4.205, SDM660) in a minimal tree
+  (`docs/spec/adb-host.md`, "A second device"); a full prefix and the checks
+  are not run there.
 - **dn-shell**: stage 5 (prefixes) is next -- it does not run a prefix's
   `boot/boot.sh` yet, and will write the prefix's `boot/binds` before (see "The
   boundary"); its spec still describes `.dn/contract`. The host contract is
