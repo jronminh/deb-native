@@ -66,6 +66,7 @@ adds about 0.1 s).  Details: [`docs/architecture.md`](docs/architecture.md),
 | **emulators** | roadmap | same-arch emulators as apps; CPU emulation lives in the app |
 | **APK on high Android** | legacy app at `targetSdk 28` | [dn-ng](docs/spec/dn-ng.md): APK-only, `targetSdk 36` |
 | **isolation** | VM path | AVF, seL4/CHERI |
+| **clusters** | the ADB host on two phones (dn-cluster, private) | many stock phones over adb, one tree each ([`hosts.md`](docs/spec/hosts.md)) |
 
 The security research behind this boundary — and the bypasses a host has to
 respect — is in

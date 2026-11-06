@@ -54,12 +54,21 @@ runtime has no app-domain answers; the kernel's own gates (version, config,
 SELinux/capabilities) remain.  The deployment, the `dn-adb` wrapper, the
 `/sdcard` bind and the measurements are in [`adb-host.md`](adb-host.md).
 
+The ADB host is also the base of a cluster: dn-cluster (a separate, private
+repository) runs one tree per stock, unrooted phone over adb, with a Linux
+master as the client of every node. What it relies on from this host: no app
+filter, `oom_score_adj` -1000 and no phantom-process killer for shell
+processes, and the network path costing nothing under the runtime (its own
+measurements, 2026-11-06). What it has to work around: a tree lives only as
+long as adbd, and nothing starts it at boot.
+
 ## Choosing
 
 - **Develop on the phone, no PC**: Termux.
 - **A product with an app UI/session**: custom app.
 - **One APK on a high `targetSdk`**: dn-ng (proposal).
 - **A PC, a headless phone, CI, or another device as the terminal**: ADB.
+- **Many phones as one cluster**: ADB, one tree per node, driven by a master.
 
 The same **tree** can move between hosts with `tar`/`adb push` and the uid
 reconcile in `init.sh`, but the **runtime build** must match the realm: app for
