@@ -361,6 +361,16 @@ audio and TUN are separate proposals under `docs/spec/devices/`; DRM is a
 study.  Not in 0.9.0 and not part of T1.  D0-D2 (mechanism, fbdev, evdev) need neither T2 nor T3.
 A tagged device fd is the one exception to "`ioctl` is never stopped".
 
+- **A first user that needs it**: dn-cluster (a private repository) runs one
+  tree per phone over the ADB host and reaches the phones' accelerators
+  through the tree's doors. Measured there on two phones (2026-11-06):
+  `/dev/kgsl-3d0` is `crw-rw-rw-` to the shell (a `pass` row for Turnip), the
+  Qualcomm V4L2 codec nodes are `system:camera` 0660 and closed to the shell
+  (a `broker` row whose provider uses MediaCodec through `app_process`, as
+  scrcpy does), and `/dev/adsprpc-smd` is readable only. `boot/dev` with
+  `pass`, `broker` and `refuse`, and a provider's lifecycle, are what it
+  would build on.
+
 ## Graphics (later)
 
 What the Steam-on-Android projects of 2026 do (Droid-Deck/DroidDeck,
