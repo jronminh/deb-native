@@ -163,9 +163,10 @@ prefix and the `AGENTS.md` checks are not run there yet.
   `stat` (no shim) does too.  `ssh-agent`/`ssh-add` and `tmux` are checked.
 - `CONFIG_USER_NS` is off kernel-wide; namespaces, overlayfs, FUSE and mount
   stay refused.  Containers are a VM, not this host.
-- The **self-hosted** variant (`adbwire`/`dsh` from
-  [`termux-adb-bridge`](https://github.com/jronminh/termux-adb-bridge)) is the
-  no-PC option: one Wireless-Debugging pairing, then a shell-uid daemon.  It was
+- The **self-hosted** variant is the no-PC option: the phone pairs with itself
+  over Wireless debugging, then starts a shell-uid daemon
+  ([FOA shell-UID daemon](https://github.com/jronminh/fhs-on-android/blob/41aa9de48314e67fea80f7a6348b7864349a0185/methods/shell-uid-daemon.md#pairing-from-the-phone);
+  its [key boundary](https://github.com/jronminh/fhs-on-android/blob/41aa9de48314e67fea80f7a6348b7864349a0185/methods/shell-uid-daemon.md#the-paired-key-is-the-boundary)).  It was
   vendored in the old `prefix/` fork (`d9fa544`) and dropped with it
   (`66982d9`); it is not needed for the PC-hosted model, and it raises the
   privilege/lifetime risk.
