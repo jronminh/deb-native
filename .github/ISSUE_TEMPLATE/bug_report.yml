@@ -1,0 +1,49 @@
+name: Bug report
+description: Something installed wrong, ran wrong, or broke.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Most bugs here come down to the prefix and how a
+        program was run, so the fields below matter. The known gaps are listed
+        in [architecture.md](https://github.com/jronminh/deb-native/blob/main/docs/architecture.md#known-gaps).
+  - type: input
+    id: version
+    attributes:
+      label: deb-native version / commit
+      description: The release tag, or the output of `git rev-parse --short HEAD`.
+      placeholder: 0.10.0-pre-alpha, or a commit
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version, Termux source
+      placeholder: Pixel 7, Android 14; Termux from F-Droid v0.118
+    validations:
+      required: true
+  - type: textarea
+    id: version-file
+    attributes:
+      label: The prefix's boot/version
+      description: Paste `cat PREFIX/boot/version`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What you ran, and what happened
+      description: The exact command, the result, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: shim
+    attributes:
+      label: Without the shim
+      description: The same command with `usr/lib/deb-native/dn-lane.so` moved aside, and inside the prefix with `DN_LANE_PATCH=0`, if you can.
+      render: text
+    validations:
+      required: false

@@ -1,0 +1,118 @@
+#!/bin/sh
+# The prefix's init: dn-init, the tree's root process, runs it (boot/boot.sh):
+#
+#   dn-init -t ROOT -- /usr/bin/bash /boot/init.sh [COMMAND [ARG...]]
+#
+# Everything here uses guest paths: to the runtime the tree is "/".  It sets up
+# the environment, then runs the command (default: an interactive shell).
+set -eu
+umask 022                          # as on Debian; the app's is 077
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+# The app's real uid/gid (the only real kernel identity), kept before the DN_*
+# knobs are dropped; init.sh uses them for /etc/passwd and $HOME.
+real_uid=${DN_REAL_UID:-}
+real_gid=${DN_REAL_GID:-}
+guest_user=user
+guest_home=/home/$guest_user
+# The host's environment reaches the tree through dn-init: drop the host's
+# deb-native knobs and its locale (the tree ships no locales but C.UTF-8).
+for v in $(env | sed -n 's/^\(DN_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  unset "$v"
+done
+unset LC_ALL LANGUAGE
+LANG=C.UTF-8
+export LANG
+# glibc reads C.UTF-8 file by file, trying the directory C.UTF-8/ before
+# C.utf8/ for every category of every process; under the tracer each failed
+# open is a stop.  localedef will not put C.utf8 in the archive, so the
+# spelling glibc tries first is made to exist.
+if [ -d /usr/lib/locale/C.utf8 ] && [ ! -e /usr/lib/locale/C.UTF-8 ] && [ ! -L /usr/lib/locale/C.UTF-8 ]; then
+  ln -s C.utf8 /usr/lib/locale/C.UTF-8 2>/dev/null || true
+fi
+# Android's filter kills rseq, and glibc registers it in every process: a
+# SIGSYS stop each, for nothing.  Turn the registration off.
+# Android's filter kills rseq (glibc registers it in every process), and the
+# shim's initial-exec hook_stack leaves too little static TLS for libjemalloc
+# (tmux); raise the surplus enough for both.
+GLIBC_TUNABLES=${GLIBC_TUNABLES:+$GLIBC_TUNABLES:}glibc.pthread.rseq=0:glibc.rtld.optional_static_tls=2048
+export GLIBC_TUNABLES
+# No tty and no dialog/hterm here: debconf would otherwise probe Dialog,
+# Readline and Teletype first and print a warning for each before falling back.
+DEBIAN_FRONTEND=noninteractive
+export DEBIAN_FRONTEND
+# One real uid: the host's (the app's, or the ADB shell's).  Its /etc/passwd,
+# group and shadow lines are virtual identity; a prefix built under another
+# host carries that host's `user` line, so reconcile it before adding one.
+if [ -n "$real_uid" ]; then
+  [ -n "$real_gid" ] || real_gid=$real_uid
+  old_uid=$(getent passwd user 2>/dev/null | cut -d: -f3)
+  if [ -n "$old_uid" ] && [ "$old_uid" != "$real_uid" ]; then
+    sed -i '/^user:/d' /etc/passwd
+    [ -f /etc/shadow ] && sed -i '/^user:/d' /etc/shadow
+    sed -i '/^user:/d' /etc/group
+  fi
+  if ! getent passwd "$real_uid" >/dev/null 2>&1; then
+    printf 'user:x:%s:%s:user:%s:/bin/bash\n' "$real_uid" "$real_gid" "$guest_home" >> /etc/passwd
+  fi
+  if ! getent group "$real_gid" >/dev/null 2>&1; then
+    printf 'user:x:%s:\n' "$real_gid" >> /etc/group
+  fi
+  if [ -f /etc/shadow ] && ! getent shadow user >/dev/null 2>&1; then
+    printf 'user:!:20000:0:99999:7:::\n' >> /etc/shadow
+  fi
+fi
+# A copy extracted by an unprivileged user loses the setuid bits; the build
+# records them in boot/setuid, and this restores them on every boot.
+if [ -f /boot/setuid ]; then
+  while IFS= read -r f; do
+    [ -n "$f" ] && chmod 4755 "/$f" 2>/dev/null || true
+  done < /boot/setuid
+fi
+# A prefix built under another host can carry the builder's ownership on the
+# account files.  Make the virtual owner Debian's (the real inode stays the
+# builder's; the view is the contract the prefix promises).
+if command -v sudo >/dev/null 2>&1; then
+  sudo -n chown root:root /etc/passwd /etc/group 2>/dev/null || true
+  sudo -n chown root:shadow /etc/shadow /etc/gshadow 2>/dev/null || true
+  sudo -n chmod 644 /etc/passwd /etc/group 2>/dev/null || true
+  sudo -n chmod 640 /etc/shadow /etc/gshadow 2>/dev/null || true
+fi
+if [ "$(id -u)" = "0" ]; then
+  HOME=/root
+else
+  HOME=$guest_home
+  USER=$guest_user
+  LOGNAME=$guest_user
+  export USER LOGNAME
+  mkdir -p "$HOME" 2>/dev/null || true
+fi
+export HOME
+TMPDIR=/tmp
+export TMPDIR
+mkdir -p "$TMPDIR"
+chmod 1777 "$TMPDIR" 2>/dev/null || true
+# POSIX shm: the law maps /dev/shm to this tree directory (the host's /dev has no
+# writable shm), on both hosts.
+mkdir -p /run/shm
+chmod 1777 /run/shm 2>/dev/null || true
+
+# A resolver for glibc: Android provides no /etc/resolv.conf.  A link that
+# does not resolve in the tree is replaced.
+if [ ! -e /etc/resolv.conf ]; then
+  rm -f /etc/resolv.conf
+  printf 'nameserver 8.8.8.8\n' > /etc/resolv.conf
+fi
+# Debian's standard "do not start a service on install" hook.
+if [ ! -e /usr/sbin/policy-rc.d ]; then
+  mkdir -p /usr/sbin
+  printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+  chmod 755 /usr/sbin/policy-rc.d
+fi
+
+if [ $# -gt 0 ]; then
+  exec "$@"
+fi
+# An interactive shell starts in the home directory, as on Debian (~).
+cd "$HOME" 2>/dev/null || true
+exec /usr/bin/bash -i

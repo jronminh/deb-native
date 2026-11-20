@@ -1,0 +1,9 @@
+#!/bin/sh
+# Installed as useradd and adduser: a user made here is virtual.  One kernel uid
+# is all the app has; the name lives in /etc/passwd and the files carry their
+# owner in user.dn.owner, but there is no Android account and no second uid.
+echo "dn: users and groups here are virtual: one kernel uid (the app's), no Android account" >&2
+case ${0##*/} in
+adduser) exec /usr/sbin/adduser "$@" ;;
+*)       exec /usr/sbin/useradd "$@" ;;
+esac

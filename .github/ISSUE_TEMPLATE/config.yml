@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Q&A / questions
+    url: https://github.com/jronminh/deb-native/discussions
+    about: Setup questions, ideas and general talk — not for bug reports.
+  - name: Documentation
+    url: https://github.com/jronminh/deb-native/blob/main/docs/building.md
+    about: Building and running a prefix.

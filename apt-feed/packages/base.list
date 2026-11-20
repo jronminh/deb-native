@@ -1,0 +1,11 @@
+# Base set every Debian package assumes (main's bootstrap-base.sh set).
+# One Debian package name per line; the build adds dependency closures.
+mawk
+base-files
+base-passwd
+dash
+debianutils
+debconf
+cdebconf
+openssl
+ca-certificates

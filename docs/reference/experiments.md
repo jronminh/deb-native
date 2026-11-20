@@ -1,0 +1,422 @@
+# Experiments: the runtime, measured
+
+A log of small experiments on one device, with the method, so a number can be
+re-checked and a claim can be told from a guess. It feeds [`TODO.md`](../../TODO.md)
+and the reference pages ([`inline-hooking.md`](inline-hooking.md),
+[`prior-art.md`](prior-art.md), [`device-census.md`](device-census.md)).
+
+## Contents
+
+- [Context](#context)
+- [E1: the cost of a stop, and the filter's tax](#e1-the-cost-of-a-stop-and-the-filters-tax)
+- [E2: the kernel's stop paths available here](#e2-the-kernels-stop-paths-available-here)
+- [E3: execmem and execmod](#e3-execmem-and-execmod)
+- [E4: where the loader's stops are](#e4-where-the-loaders-stops-are)
+- [E5: patching the loader — sites and reach](#e5-patching-the-loader--sites-and-reach)
+- [E6: is there a hook early enough?](#e6-is-there-a-hook-early-enough)
+- [E7: patching the loader, a proof of concept](#e7-patching-the-loader-a-proof-of-concept)
+- [E8: the Lua build's stops, by syscall](#e8-the-lua-builds-stops-by-syscall)
+- [E9: locating the cancellable path](#e9-locating-the-cancellable-path)
+- [E10: the cancellable-svc patch, tried and rejected](#e10-the-cancellable-svc-patch-tried-and-rejected)
+- [E11: the cost of a stop is the tracer's core waking](#e11-the-cost-of-a-stop-is-the-tracers-core-waking)
+- [E12: the in-process catcher via seccomp TRAP, and why it breaks](#e12-the-in-process-catcher-via-seccomp-trap-and-why-it-breaks)
+- [E13: the cookie replaced by a gate page and the instruction pointer](#e13-the-cookie-replaced-by-a-gate-page-and-the-instruction-pointer)
+- [What follows](#what-follows)
+
+## Context
+
+Samsung SM-G970W (S10e), Android 12, kernel 4.14.190, Termux in
+`untrusted_app_27` (targetSdk 28). The runs use a Debian prefix (`$PREFIX` in this note)
+whose shim is `usr/lib/deb-native/dn-lane.so` (loaded through the
+exec gate's `ld.so --preload`). The runtime is `build/dn-tiny` from 2026-10-16
+(the number-first filter). Timing on this phone varies 10-20% between runs;
+each number below is a range over interleaved runs unless said otherwise.
+
+## E1: the cost of a stop, and the filter's tax
+
+Two freestanding aarch64 programs (`src` in the work tree, not in the repo yet):
+`bench` loops `getpid` (a number in no row, stopped for no one) and `stopbench`
+loops `mkdirat` on a missing path (number 34, in the rows: one entry stop, a
+mapped path, `ENOENT`).
+
+| what | calls | time | per call |
+| --- | --- | --- | --- |
+| `getpid`, native (no tracer) | 1,000,000 | 265-275 ms | ~270 ns |
+| `getpid`, under `dn-tiny` | 1,000,000 | 345-367 ms | ~350 ns |
+| `mkdirat`, `dn-tiny -s 500` | 200,000 | 3.5-4.2 s | **~18-21 us** |
+| `mkdirat`, `dn-tiny` (sleeping) | 200,000 | 27.8-32.5 s | **~140-160 us** |
+
+So the seccomp filter's tax on every call is about **80 ns** (350 minus 270), and
+one stop costs **~19 us** polling and **~150 us** sleeping — a stop is 250-2000
+times the filter's tax, which is why the number of stops is the thing to reduce.
+The stop figure includes the path mapping and the real syscall, not just the
+context switch.
+
+## E2: the kernel's stop paths available here
+
+- **`SECCOMP_RET_USER_NOTIF`** (a supervisor on a listener fd, kernel 5.0+):
+  `seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_NEW_LISTENER, prog)`
+  returns **`EINVAL`** on kernel 4.14. The plain filter (no flag) returns 0, so
+  seccomp itself works. The Android 16 phone is kernel 5.10, at or above the
+  5.0 floor, so it should have `USER_NOTIF`; untested there.
+- **Syscall User Dispatch** (kernel 5.11+): `prctl(PR_SET_SYSCALL_USER_DISPATCH)`
+  returns **`EINVAL`** on 4.14. Neither phone has it (5.10 is below 5.11).
+
+So on the S10e the only stop paths are ptrace (`SECCOMP_RET_TRACE`, what
+`dn-tiny` uses) and `SIGSYS` (`SECCOMP_RET_TRAP`, what Android's filter does);
+`USER_NOTIF` can only be tried on the S23 FE (kernel 5.10).
+
+## E3: execmem and execmod
+
+In the Termux domain (`untrusted_app_27`, targetSdk 28), by raw `mprotect`:
+
+| transition | result |
+| --- | --- |
+| anonymous `RW` -> `mprotect RX` (execmem) | OK |
+| anonymous `RWX` mmap directly | OK |
+| libc text -> `RWX` (execmod) | OK, restorable to `RX` |
+| libc text -> `RW` (execmod) | OK, restorable to `RX` |
+
+So both the anonymous trampoline page and the in-place patch of a library's text
+are permitted here: the shim's technique works in this domain. The open question
+is a targetSdk 29+ app (`TODO.md`, "A prefix in any app").
+
+Method note: the transition must be done with a raw syscall and restored before
+any libc call, or the page holding the running code loses its `X` and the process
+faults. The first attempt here did exactly that and crashed; the working test
+toggles the text page with `svc` and calls libc only after restoring `RX`.
+
+## E4: where the loader's stops are
+
+`dn-tiny -t ROOT -- PROG` directly (no `init.sh`), stops counted from its own
+line, the shim on and off (the shim off = its file renamed aside):
+
+| program | shim on | shim off | saved |
+| --- | --- | --- | --- |
+| `true` | 5 | 4 | -1 |
+| `gcc --version` | 5 | 5 | 0 |
+| `sed -n 1p` | 12 | - | - |
+| `git --version` | 9 | 33 | 24 |
+| `python3 -c pass` | 15 | 108 | 93 |
+| `dpkg -l` | 83 | 91 | 8 |
+
+Reading: every process pays a **startup floor of ~4-9 stops** for the loader
+opening the program, the shim and the libraries — all **before the shim's
+constructor runs**, so the shim answers none of them (it only adds one, for its
+own load: `true` 5 vs 4). The floor grows with the number of linked libraries
+(`git` 9, `true`/`gcc` 5). A late `dlopen` also goes through the loader:
+`python3 -c 'ctypes.CDLL("libm.so.6")'` is 2 stops over `python3 -c pass`.
+
+So the `ld.so` count in the Lua build (1082, `performance.md`) is this
+per-process floor summed over the build's many execs (gcc spawns cc1, as, ld),
+not one process.
+
+## E5: patching the loader — sites and reach
+
+The same pattern the shim patches in libc (`mov x8,#nr; svc`, `lane.c`) exists
+in the loader. Counting them in the test prefix:
+
+| object | `svc` sites (all) | path sites of interest |
+| --- | --- | --- |
+| `ld-linux-aarch64.so.1` | 40 | `openat` x3, `newfstatat` x1, `fstat` x1 |
+| `libc.so.6` | 325 | `openat` x2, `faccessat` x1, `newfstatat` x4, `statx` x1, `readlinkat` x2, `fstat` x2, `getcwd` x1, `execve` x1, `unlinkat` x3, `chdir` x1 |
+
+The loader carries its own copies of the opens (it is self-contained), so they
+are patchable the same way. The ±128 MB question (a `B`'s reach) is answered at
+run time, with the shim's own near-memory step: a stub page within range is
+available — ld.so text at `0x7e6645c000`, an `mmap` at `0x7e66600000` (+1680 KB);
+libc text at `0x7e661a0000`, an `mmap` at `0x7e66490000` (+3008 KB). Both in
+reach.
+
+So the mechanics are fine; the blocker is **when** a patch runs (E6).
+
+## E6: is there a hook early enough?
+
+The shim is a preloaded object: its constructor runs after the loader has opened
+everything (E4). A hook that runs earlier is `LD_AUDIT`, whose module the loader
+loads and calls back during loading. A freestanding audit module (no libc, or it
+would pull libc in first) that prints the lines of `/proc/self/maps`:
+
+```
+audit: la_version   maps lines=14  libc=0  shim=0  program=1
+audit: la_preinit   maps lines=27  libc=1  shim=1  program=1
+```
+
+At `la_version`, **libc and the shim are not yet mapped**; the loader calls it
+before it opens them. So a freestanding `LD_AUDIT` module could patch the
+loader's `openat`/`newfstatat` sites at `la_version`, before the loader makes
+those opens — the per-process startup stops the shim cannot reach. The cost is
+the module's own load (one open, one stop) against the several it could save.
+
+## E7: patching the loader, a proof of concept
+
+A freestanding `LD_AUDIT` module (`ldhook.c` in the work tree, not in the repo).
+At `la_version` it finds ld.so's `r-xp` segment in `/proc/self/maps`, scans it
+for `mov x8,#56; svc` (its three `openat` sites), maps a stub page within a
+`B`'s reach, and replaces each `svc` with a `B` to a stub that sets the lane
+cookie in `x5`, re-issues the `svc`, and branches back to the instruction after
+the original `svc`. The tracer's filter sees the cookie and lets the call
+through with no stop.
+
+The loader's paths were **host paths** then — the exec gate passed the program
+and the library path as host paths (`exec.c`) — so the stub needed no path law:
+it only added the cookie. (The gate now hands those as the tree's own paths, so
+this stub is wrong: it must map them through the law.) Stops, `dn-tiny -t ROOT --
+PROG`, the shim present:
+
+| program | before | after |
+| --- | --- | --- |
+| `true` | 5 | 4 |
+| `git --version` | 9 | 6 |
+| `python3 -c pass` | 15 | 11 |
+
+The net is the loader's opens removed (two for `true`, four to five for `git`)
+minus one for loading the module itself. Patching the `newfstatat` and `fstat`
+sites as well changed nothing on these three small programs.
+
+**On a real build** (the Lua 5.4.7 build, `make -j1 linux`, 152-159 execs, three
+interleaved pairs):
+
+| | stops | wall |
+| --- | --- | --- |
+| before | 1666 (every run) | 11.41-11.49 s |
+| after | 834 (every run) | 10.62-11.01 s |
+
+The loader's stops fall by exactly 832 — its startup floor (E4) removed for
+every one of the build's execs — and the wall time drops ~5%. The stop reduction
+is deterministic; the wall gain is smaller than 832 stops at ~19 us would
+explain, so part of it is the tracer's per-stop work (path mapping, the context
+switches) rather than the stop itself. This is the "many small gains" case: each
+exec saves a few stops, and a build has hundreds of execs.
+
+Two bugs were found and fixed on the way, both worth remembering:
+
+- The stub's back-branch was written as `*stub++ = b_enc(stub, ...)`; the
+  `stub` inside the expression is the **post-increment** value, so the branch
+  was four bytes short and landed on the `svc` site itself — now holding the
+  `B` — an infinite loop. Fixed with a named temporary for the origin.
+- The cookie's high two 16-bit halves were swapped in the `movz`/`movk`
+  sequence (`0x9e1ab6c3d7f2a541` needs `movk hw=2 = 0xb6c3, hw=3 = 0x9e1a`), so
+  the filter never matched and the calls still stopped.
+
+E7's module assumed the loader's paths were host paths, so it only added the
+cookie.  The gate now hands those paths as the tree's own (Phase 0 step 2), so
+`src/dn-tiny/ldhook.c` grew into the shim's shape: a shared block that saves the
+registers, calls a hook which maps the path through the one law (`policy.c`, built
+`-DDN_FREE`) and sets the cookie, restores, and makes the call.  Measured: the Lua
+build falls from 1670 entry stops to 848 (`paths` 1355 -> 533), and `true` from 46
+to 28; the regression set, threads/vfork, `substtest` and `git` stay clean.  It
+needs `execmod` and maps its stub page with `execmem`.
+
+## E8: the Lua build's stops, by syscall
+
+A temporary counter in the tracer (the syscall number at each entry stop; the
+`mon_read` the tracer already has, to name the path), then reverted. The Lua
+build, 1666 stops:
+
+| syscall | stops | |
+| --- | --- | --- |
+| `openat` (56) | 1265 | 1146 read, 119 write |
+| `execve` (221) | 159 | one per exec, the gate |
+| `faccessat` (48) | 127 | |
+| `unlinkat` (35) | 79 | writes |
+| rest | 36 | `getresuid`/`getresgid`, `chdir`, `statfs`, `fchmodat`, `mkdirat` |
+
+With E7 (the loader patched, 834 stops): `openat` 452 (341 read, 111 write),
+`execve` 152, `faccessat` 121, `unlinkat` 75.
+
+What the reads are, from the paths (a `open` read stop named its path):
+
+- **The loader's opens** — the program, the shim, each library, `cc1`, `as`,
+  `ld`, as **host paths**. E7 removes ~805 of them.
+- **The program's own opens** — as **guest paths** (`/etc/hostname`). These split
+  by how the call is made: `open()` (the symbol) is interposed by the shim and
+  answered in-process, **no stop**; `fopen()` (glibc's internal cancellable path)
+  is **not** patched by the shim, so it **stops**. A minimal `open()` program
+  shows no stop for its file; a minimal `fopen()` program shows one.
+
+So the ~341 program read stops left after E7 are the shim's unpatched
+**cancellable path** — the number `performance.md` gives (324). The shim leaves
+it because `pthread_cancel` reads the program counter there.
+
+**The ceiling:** of `openat`, only the writes (119) must stop (they change the
+tree); the rest are reads, answerable in-process. So `openat` could go from 1265
+to ~119.
+
+**Improvement points (fewer stops):**
+
+1. **The cancellable-path stub** (`TODO.md`, "libc's cancellable path"), ~324-341
+   stops a build. Located in E9; its stub must keep the program counter in the
+   cancellation range. Not a one-line change.
+2. E7 (the loader) — done.
+3. `faccessat` (127) is the same libc-internal family.
+
+## E9: locating the cancellable path
+
+Disassembled the prefix's `libc.so.6` (`llvm-objdump -d`). The cancellable
+wrappers set the number in **x6** and branch to one function:
+
+| symbol | does |
+| --- | --- |
+| `open64` (0xe3540) | `mov x6, #56`, args, `bl 0x828ec` |
+| `read` (0xe3e00) | `mov x6, #63`, args, `b 0x828ec` |
+| `write` (0xe48e0) | `mov x6, #64`, ... |
+
+`0x828ec` is `__syscall_cancel_arch`; inside, at `0x82868`, `mov x8, x6`
+(`0xaa0603e8`), and a single `svc #0` at `0x828d8` serves **every** cancellable
+syscall. So the shim's adjacent `mov x8,#nr; svc` pattern cannot match it (the
+`mov` is from `x6`, and instructions sit in between), and one patch of that one
+`svc` would cover all cancellable calls — `lane_hook` already reads `x8`.
+
+Locating it at run time is hard: `mov x8,x6` appears ten times in libc, and the
+function is not an exported symbol. So it is found at **build time**, from the
+known libc: [`scripts/runtime/find-cancellable.py`](../../scripts/runtime/find-cancellable.py)
+looks for the one `mov x8,x6` with an `svc` within 30 instructions (on this
+prefix's libc 2.41 it prints `offset 0x828d8`; on `ld.so` it reports none). The
+offset can be handed to the shim instead of a runtime scan.
+
+The remaining open problem is the passthrough: for a call the shim does not
+answer, the stub's own `svc` runs with the program counter outside the
+cancellation range, which is what `pthread_cancel` reads.
+
+## E10: the cancellable-svc patch, tried and rejected
+
+The fix E9 points at: patch the loader's cancellable `svc` as well, found at run
+time by the `mov x8,x6` + `svc`-within-30 heuristic (the shim already reads `x8`
+at call time, so the same stub works).
+
+It does work. The Lua build's stops fall **1666 -> 1463 (-203)** and the wall
+~14.25 -> ~14.15 s (interleaved); a minimal `fopen` program loses one stop
+(`op2` 6->5, `sed` 12->11); and a `pthread_cancel` test still cancels
+(`cancelled=1`). It is **not shipped**, for three reasons:
+
+- The site is glibc's **internal** `__syscall_cancel_arch` (the number in `x6`),
+  with no stable contract. A heuristic that mis-identifies it could patch the
+  wrong `svc`; the shim's other sites degrade to a plain `svc` when picked
+  wrongly, but a shared generic one does not.
+- That `svc` is shared, so every cancellable call (`read`, `write`, ...) now runs
+  through `lane_hook`, a small tax on the calls it does not answer.
+- The win is ~1% of one build.
+
+`scripts/find-cancellable.py` keeps the build-time way (it fails loudly when the
+libc does not match) if the ~1% is ever wanted; the run-time heuristic is
+reverted. The decision sits in `TODO.md`, "libc's cancellable path".
+
+## E11: the cost of a stop is the tracer's core waking
+
+A stop is the tracer's core waking to handle it. `stopbench` (40k `mkdirat`
+stops), `-c N` pins the tracer (the tracee inherits, so both land on N):
+
+| config | time |
+| --- | --- |
+| no `-s`, unpinned | 4272 ms |
+| no `-s`, pin cpu0-3 (little) | 2397-2580 ms |
+| no `-s`, pin cpu4/5 | 2382-2399 ms |
+| no `-s`, pin cpu6/7 (big) | 6333-6461 ms |
+| **`-s 500`, unpinned** | **695-737 ms** |
+| `-s 500`, pin cpu1 | 2473-2487 ms |
+
+And over 200k stops: idle no-`-s` 23.6 s vs `-s 500` 3.4 s (7x). Spamming all
+eight cores with busy threads made it **worse** (no-`-s` 25.3 s, `-s` 18.9 s):
+the load contends with the tracer. Only at `nice 19` did the spam help the
+sleeping case (no-`-s` 23.6 -> 18.6 s, +21%) — keeping the cores at a high clock
+— while still ruining `-s` (3.4 -> 15.5 s).
+
+What it says:
+
+- The lever is **keeping the tracer's own core awake**: `-s` (poll) does it and
+  is the best measured (17 us/stop). Nothing else comes close.
+- Pinning **hurts** the `-s` case (0.70 -> 2.5 s): it takes away the scheduler's
+  freedom to place the tracer well.
+- On this big.LITTLE (S10e: cpu0-3 little 1.78 GHz, cpu4-6 2.42, cpu7 prime
+  2.84), a **big core is the worst** place to wake a sleeping tracer (6.4 s vs
+  2.4 s on a little): the little cluster is always on, a big core is
+  power-collapsed and pays to come back.
+- The tracer's work is tiny — one core is plenty — so **do not spam** cores.
+
+Tuning on the same axis (40k stops): the `-s` value is near-optimal at **500**
+(`off` 8.5 s; `-s 50` 0.86, `100` 1.18, `250` 0.81, **`500` 0.74**, `1000` 0.76,
+`2000` 0.96 s). And `nice` on the tracer (0 to -20) changed nothing (~0.77 s):
+the scheduler's placement dominates, not the niceness. So the shape and its value
+are settled: **unpinned, `-s` around 500**; the only untried lever is an ADPF
+hint session from the app (below the tracer).
+
+Pinning the **tracee** as well (a temporary build that pins the child, so the
+tracer on cpu0 and the tracee on cpu1) made `-s` worse: 0.78 -> 1.94 s. Left
+free, the scheduler co-locates the tracer and the tracee (one little core) and
+`-s` keeps that core awake — the best of all. So the advice is: **unpinned, with
+`-s`**. `TODO.md`, "Who sets the floor", already points at CPU placement; this is
+what the placement measures.
+
+## E12: the in-process catcher via seccomp TRAP, and why it breaks
+
+Mechanism 2 of the in-process idea (`TODO.md`): the shim installs its own
+seccomp filter that `TRAP`s a read-only `openat` not from the lane, with a
+`SIGSYS` handler that resolves the path and answers it in-process (writing the
+result into the ucontext); the tracer delivers the `SIGSYS(nr=56)` instead of
+answering it.
+
+A dynamic program started **directly** works (`sed`, `true`, `openat` answered
+in-process), but the **Lua build dies at once** (`mkdir` killed by `SIGSYS`,
+"Bad system call"). The cause is the risk the charter named: a seccomp filter
+**survives `exec`**, a signal handler does **not** (`exec` resets it to the
+default). So a program exec'd from a shimmed parent (`bash` -> `mkdir`) inherits
+the `TRAP(56)` filter, but the shim installs its handler only in its
+constructor — **after** ld.so has opened libc. The loader's read-only `openat` in
+that window traps with no handler, and `SIGSYS`'s default action kills the
+process.
+
+It does not fit the exec model as is: to use it the tracer would have to
+**answer** `openat` until the shim's handler is up and hand off after (a
+handshake), or the filter must not outlive `exec` (it always does). Reverted; the
+finding is recorded in `TODO.md`, "In-process".
+
+## E13: the cookie replaced by a gate page and the instruction pointer
+
+The lane marker was a magic value in `x5` (the cookie); the filter ALLOWed a call
+with `args[5]` equal to it. It is replaced by an **IP rule** (the in-process
+experiment): the shim maps a `svc #0; ret` gate page at `DN_GATE`
+(`0x100000000`) and issues every resolved call from it; the filter ALLOWs a call
+whose `instruction_pointer` is in that page (`seccomp_data.instruction_pointer`),
+with **no register cookie**.
+
+It works and is behaviourally the same: the Lua build is **1666 stops** (the
+cookie's number) and ~11.8 s, `true` is 5, and `sed` and the built `lua` run. So
+the marker can be a **code address** instead of a value — cheaper to reason
+about, and it fits the in-process direction (it is the old `ld-dn`'s `P_GATE`;
+SUD's allowed range is the kernel's form of the same idea). The cost is one 4 KB
+gate mapping per process, and the rule that **every resolved call must go through
+the gate** (a call that did not would be TRACEd, i.e. one stop, not wrong).
+
+Unlike SUD, it needs no kernel 5.11: `instruction_pointer` is in `seccomp_data`
+on 4.14.
+
+The code, for the record (its branch has been dropped; this is what it did):
+
+- `lane.h`: `#define DN_GATE 0x100000000UL`.
+- `lane.c`: once in the constructor, `mmap` the page at `DN_GATE`, write `svc #0`
+  (`0xd4000001`) and `ret` (`0xd65f03c0`), clear the cache, `mprotect` it RX; and
+  `lane_raw` calls it (`blr x16`, x16 the gate) instead of `mov x5, #cookie; svc`.
+- `monitor.c`: no lane list and no cookie; the filter loads the high half of
+  `instruction_pointer`, then the low half, and ALLOWs a call inside the page;
+  anything else falls to the rows' tree.
+
+Against the cookie, on the S10e: the same stops, and no measurable difference in
+a `getpid` loop or in the lane's own calls. Its gain is the filter's **size** —
+182 instructions against the cookie's 288 (199 once the cookie's per-leaf blocks
+are folded into shared ones, the same lean-filter idea applied to the cookie
+instead of dropped). Its costs: a 4 KB gate a process, and `instruction_pointer`
+is read on **every** syscall, which defeats the kernel's per-number filter cache
+(5.11+); the cookie is read only for a lane row, so every other number stays
+cacheable. So it is a lateral move — kept here as a record — not on `main`.
+
+## What follows
+
+The loader's startup stops can be removed by a freestanding audit module that
+patches the loader (E7). Left before this is real: patch the `newfstatat` and
+`fstat` sites too; decide whether the program's own opens (not only the loader's)
+can take the same lane, which would need the path law in the module; and measure
+a full build (the Lua build's 1082 loader stops) rather than a single program.
+
+Until then, the startup stops are simply paid; they are small per process and
+become visible only across many execs.

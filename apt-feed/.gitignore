@@ -1,0 +1,7 @@
+# Build output and secrets never enter git.
+/build/
+/dist/
+*.deb
+keys/*
+!keys/README.md
+!keys/*.pub.asc
